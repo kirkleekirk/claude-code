@@ -142,6 +142,24 @@ sound and tile is generated at runtime, which is why the whole thing is about
 - Bump `CACHE` in `sw.js` when you ship changes or returning players will keep
   the cached build.
 - `window.__ST` is the live game state in the console.
+- `node tools/audit-maps.mjs [seedCount]` walks both maps headlessly and fails
+  on unreachable floor, wall stubs, dead doors, sealed loot and props inside
+  walls. Run it after touching `world.js` — procedural layouts strand rooms in
+  ways that are easy to miss by eye and obvious to a flood fill.
+
+### Map invariants
+
+Two rules keep the geometry honest, both enforced in `world.js`:
+
+- **Carving never seals.** Every walkable tile is marked in `map.carved`, and a
+  room's wall ring refuses to build over a carved tile. Without this a corridor
+  bricks up the very doorway it just made.
+- **Everything is reachable.** `BK.ensureConnected` flood-fills the finished map
+  from the spawn and repairs anything stranded — first by removing a blocking
+  prop wedged in the gap, then by knocking a doorway through. `BK.tidyGeometry`
+  then removes doors that open into walls and lone wall tiles left standing in
+  open floor. Rubble and closed doors count as passable, since the player can
+  clear or open them.
 
 ---
 

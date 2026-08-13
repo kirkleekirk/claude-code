@@ -19,6 +19,9 @@
       vis: new Float32Array(n),
       blocked: new Uint8Array(n),
       opaque: new Uint8Array(n),
+      // Tiles deliberately carved as walkable space. Later wall rings refuse to
+      // build over these, so a corridor can never brick up the room it serves.
+      carved: new Uint8Array(n),
       props: [],
       zones: [],          // named areas, for the location readout
       radZones: [],       // {x,y,r,strength}
@@ -79,9 +82,31 @@
   BK.fillRect = fillRect;
 
   // Carve a room: floor inside, wall ring around it.
+  //
+  // The ring is laid down first but skips any tile already carved as walkable,
+  // so rooms and corridors carved earlier keep their floors and their openings.
+  // Without that guard, every corridor's own ring seals the doorways it just
+  // made, and the map falls apart into unreachable pockets.
   function room(m, x, y, w, h, floor, wall) {
-    fillRect(m, x - 1, y - 1, w + 2, h + 2, floor, wall);
-    fillRect(m, x, y, w, h, floor, W.NONE);
+    for (let j = y - 1; j <= y + h; j++) {
+      for (let i = x - 1; i <= x + w; i++) {
+        if (!BK.inBounds(m, i, j)) continue;
+        if (i >= x && i < x + w && j >= y && j < y + h) continue;   // interior
+        const k = idx(m, i, j);
+        if (m.carved[k]) continue;                                  // never seal walkable space
+        if (floor !== undefined) m.floor[k] = floor;
+        if (wall !== undefined) m.wall[k] = wall;
+      }
+    }
+    for (let j = y; j < y + h; j++) {
+      for (let i = x; i < x + w; i++) {
+        if (!BK.inBounds(m, i, j)) continue;
+        const k = idx(m, i, j);
+        if (floor !== undefined) m.floor[k] = floor;
+        m.wall[k] = W.NONE;
+        m.carved[k] = 1;
+      }
+    }
   }
   BK.room = room;
 
@@ -97,8 +122,13 @@
     }
   }
 
+  // A gap in a wall. Marked carved so nothing built later can fill it back in.
   function doorway(m, x, y) {
-    if (BK.inBounds(m, x, y)) { const k = idx(m, x, y); m.wall[k] = W.NONE; if (!m.floor[k]) m.floor[k] = F.CONCRETE; }
+    if (!BK.inBounds(m, x, y)) return;
+    const k = idx(m, x, y);
+    m.wall[k] = W.NONE;
+    if (!m.floor[k]) m.floor[k] = F.CONCRETE;
+    m.carved[k] = 1;
   }
 
   function addProp(m, p) {
@@ -108,6 +138,145 @@
     return p;
   }
   BK.addProp = addProp;
+
+  // ========================================================= connectivity ==
+  // Procedural layouts strand rooms: a sofa lands in the only doorway, two
+  // buildings share a wall, a crater eats a porch. Rather than trusting the
+  // generators to never do that, walk the finished map and repair it.
+  //
+  // Doors and rubble are treated as passable here — the player can open or
+  // clear them — so only permanent blockage counts as stranded.
+
+  function passableGrid(m) {
+    const n = m.w * m.h;
+    const pass = new Uint8Array(n);
+    for (let i = 0; i < n; i++) pass[i] = (m.wall[i] === W.NONE && m.floor[i] !== F.VOID) ? 1 : 0;
+    for (const p of m.props) {
+      if (!p.blocks || p.kind === 'door' || p.kind === 'rubble') continue;
+      for (let dy = 0; dy < (p.h || 1); dy++) {
+        for (let dx = 0; dx < (p.w || 1); dx++) {
+          const x = p.x + dx, y = p.y + dy;
+          if (BK.inBounds(m, x, y)) pass[idx(m, x, y)] = 0;
+        }
+      }
+    }
+    return pass;
+  }
+
+  function floodFrom(m, pass, sx, sy) {
+    const seen = new Uint8Array(m.w * m.h);
+    const start = idx(m, Math.floor(sx), Math.floor(sy));
+    if (!pass[start]) return seen;
+    const stack = [start];
+    seen[start] = 1;
+    while (stack.length) {
+      const i = stack.pop();
+      const x = i % m.w, y = (i / m.w) | 0;
+      if (x > 0) step(i - 1);
+      if (x < m.w - 1) step(i + 1);
+      if (y > 0) step(i - m.w);
+      if (y < m.h - 1) step(i + m.w);
+      function step(ni) { if (!seen[ni] && pass[ni]) { seen[ni] = 1; stack.push(ni); } }
+    }
+    return seen;
+  }
+
+  // Cosmetic cleanup after the layout settles: a door that opens into a wall
+  // and a lone wall tile stranded in open floor both read as broken geometry
+  // even though neither blocks the player.
+  BK.tidyGeometry = function (m) {
+    let fixed = 0;
+
+    const walkable = (x, y) => BK.inBounds(m, x, y) &&
+      m.wall[idx(m, x, y)] === W.NONE && m.floor[idx(m, x, y)] !== F.VOID;
+
+    // doors need somewhere to go on both sides
+    m.props = m.props.filter((p) => {
+      if (p.kind !== 'door') return true;
+      const sides = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+        .filter(([dx, dy]) => walkable(p.x + dx, p.y + dy)).length;
+      if (sides >= 2) return true;
+      fixed++;
+      return false;
+    });
+
+    // a wall tile with open floor on all four sides is a leftover pillar
+    for (let y = 1; y < m.h - 1; y++) {
+      for (let x = 1; x < m.w - 1; x++) {
+        const k = idx(m, x, y);
+        if (m.wall[k] === W.NONE) continue;
+        if (walkable(x + 1, y) && walkable(x - 1, y) && walkable(x, y + 1) && walkable(x, y - 1)) {
+          m.wall[k] = W.NONE;
+          if (!m.floor[k]) m.floor[k] = F.CONCRETE;
+          fixed++;
+        }
+      }
+    }
+    return fixed;
+  };
+
+  BK.ensureConnected = function (m, sx, sy) {
+    let repairs = 0;
+    for (let pass_ = 0; pass_ < 12; pass_++) {
+      const pass = passableGrid(m);
+      const reach = floodFrom(m, pass, sx, sy);
+
+      // collect one stranded pocket
+      let seed = -1;
+      for (let i = 0; i < pass.length; i++) if (pass[i] && !reach[i]) { seed = i; break; }
+      if (seed < 0) break;
+
+      const pocket = floodFrom(m, pass, seed % m.w, (seed / m.w) | 0);
+
+      // 1. cheapest fix: a blocking prop wedged in the gap between the pocket
+      //    and somewhere reachable. Drop it and the space opens up on its own.
+      let freed = false;
+      for (const p of m.props.slice()) {
+        if (!p.blocks || p.kind === 'door' || p.kind === 'rubble' || p.kind === 'container') continue;
+        let touchesPocket = false, touchesReached = false;
+        for (let dy = -1; dy <= (p.h || 1); dy++) {
+          for (let dx = -1; dx <= (p.w || 1); dx++) {
+            const x = p.x + dx, y = p.y + dy;
+            if (!BK.inBounds(m, x, y)) continue;
+            const k = idx(m, x, y);
+            if (pocket[k]) touchesPocket = true;
+            if (reach[k]) touchesReached = true;
+          }
+        }
+        if (touchesPocket && touchesReached) {
+          m.props = m.props.filter(q => q !== p);
+          freed = true; repairs++;
+          break;
+        }
+      }
+      if (freed) continue;
+
+      // 2. otherwise knock a doorway through the thinnest wall between the
+      //    pocket and the reachable side.
+      let cut = null;
+      for (let y = 1; y < m.h - 1 && !cut; y++) {
+        for (let x = 1; x < m.w - 1; x++) {
+          const k = idx(m, x, y);
+          if (m.wall[k] === W.NONE) continue;
+          const n1 = k - 1, n2 = k + 1, n3 = k - m.w, n4 = k + m.w;
+          const hitsPocket = pocket[n1] || pocket[n2] || pocket[n3] || pocket[n4];
+          const hitsReach = reach[n1] || reach[n2] || reach[n3] || reach[n4];
+          if (hitsPocket && hitsReach) { cut = { x: x, y: y }; break; }
+        }
+      }
+      if (cut) {
+        doorway(m, cut.x, cut.y);
+        m.props = m.props.filter(p => !(p.blocks && p.x === cut.x && p.y === cut.y));
+        repairs++;
+        continue;
+      }
+
+      // 3. nothing adjoins it — this pocket is walled off by more than one
+      //    tile. Give up on it rather than tunnelling through the whole map.
+      break;
+    }
+    return repairs;
+  };
 
   // ================================================================ BUNKER ==
   BK.buildBunker = function () {
@@ -156,14 +325,15 @@
     addProp(m, { kind: 'door', sprite: 'door', x: 8, y: 17, open: true, blocks: false, opaque: false, dir: 'v', label: 'DORM DOOR' });
     addProp(m, { kind: 'door', sprite: 'door', x: 29, y: 14, open: true, blocks: false, opaque: false, dir: 'v', label: 'UTILITY DOOR' });
 
-    // Rubble sealing the sub-level — clearable with scrap and sweat
-    for (let y = 26; y <= 29; y++) addProp(m, { kind: 'rubble', sprite: 'rubble', x: 30, y: y, blocks: true, opaque: true, hp: 100, label: 'COLLAPSED PASSAGE' });
+    // Rubble sealing the sub-level — clearable with scrap and sweat.
+    // These sit in the corridor itself (x30, y27-28), not in the wall ring.
+    for (let y = 27; y <= 28; y++) addProp(m, { kind: 'rubble', sprite: 'rubble', x: 30, y: y, blocks: true, opaque: true, hp: 100, label: 'COLLAPSED PASSAGE' });
 
     // Scenery
     addProp(m, { kind: 'debris', sprite: 'barrel', x: 33, y: 12, blocks: true, opaque: false });
     addProp(m, { kind: 'debris', sprite: 'barrel', x: 34, y: 13, blocks: true, opaque: false });
-    addProp(m, { kind: 'debris', sprite: 'crate', x: 11, y: 26, blocks: true, opaque: false });
-    addProp(m, { kind: 'debris', sprite: 'crate', x: 12, y: 26, blocks: true, opaque: false });
+    addProp(m, { kind: 'debris', sprite: 'crate', x: 11, y: 27, blocks: true, opaque: false });
+    addProp(m, { kind: 'debris', sprite: 'crate', x: 12, y: 27, blocks: true, opaque: false });
     addProp(m, { kind: 'debris', sprite: 'pipe', x: 16, y: 5, blocks: false, opaque: false });
     addProp(m, { kind: 'poster', sprite: 'poster', x: 10, y: 13, blocks: false, opaque: false, label: 'CIVIL DEFENSE POSTER',
       note: { title: 'CIVIL DEFENSE POSTER', body: 'DUCK. COVER. HOLD. Remain below grade for fourteen days. Your Civil Defense Warden is your friend.' } });
@@ -174,6 +344,9 @@
     BK.rebuildGrids(m);
     m.spawn = { x: 18.5, y: 16.5 };
     m.exitTo = { map: 'surface', at: 'hatch' };
+    BK.ensureConnected(m, m.spawn.x, m.spawn.y);
+    BK.tidyGeometry(m);
+    BK.rebuildGrids(m);
     return m;
   };
 
@@ -295,6 +468,11 @@
     BK.rebuildGrids(m);
     m.spawn = { x: mall.x + 12.5, y: mall.y + 4.5 };
     m.hatch = { x: mall.x + 12, y: mall.y + 3 };
+    // Craters, overlapping lots and unlucky furniture placement all strand
+    // rooms. Walk the finished town and open anything that got sealed in.
+    BK.ensureConnected(m, m.spawn.x, m.spawn.y);
+    BK.tidyGeometry(m);
+    BK.rebuildGrids(m);
     return m;
   };
 
@@ -324,6 +502,22 @@
   BK.rollLoot = rollLoot;
 
   // ------------------------------------------------------ lot generators ---
+  // A tile is a threshold if it, or an orthogonal neighbour, is a gap in a wall
+  // line — the one square you must not drop a refrigerator onto.
+  function nearDoorway(m, x, y) {
+    for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const i = x + dx, j = y + dy;
+      if (!BK.inBounds(m, i, j)) continue;
+      const k = idx(m, i, j);
+      if (m.wall[k] !== W.NONE) continue;
+      // a gap with wall on both sides along either axis is a doorway
+      const hor = BK.wallAt(m, i - 1, j) !== W.NONE && BK.wallAt(m, i + 1, j) !== W.NONE;
+      const ver = BK.wallAt(m, i, j - 1) !== W.NONE && BK.wallAt(m, i, j + 1) !== W.NONE;
+      if (hor || ver) return true;
+    }
+    return false;
+  }
+
   function furnishInterior(m, x, y, w, h, rng, style) {
     const spots = [];
     for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) spots.push({ x: i, y: j });
@@ -333,6 +527,7 @@
     for (const s of spots) {
       if (placed >= count) break;
       if (BK.isBlockedRaw(m, s.x, s.y)) continue;
+      if (nearDoorway(m, s.x, s.y)) continue;
       const near = (s.x === x || s.x === x + w - 1 || s.y === y || s.y === y + h - 1);
       const roll = rng();
       if (near && roll < 0.55) {
@@ -388,10 +583,18 @@
     room(m, bx, by, bw, bh, F.LINO, W.BRICK);
     const name = rng.pick(SHOP_NAMES);
     m.zones.push({ name: name, x: bx, y: by, w: bw, h: bh });
-    // storefront glass
-    for (let i = 1; i < bw - 1; i++) m.wall[idx(m, bx + i, by + bh)] = rng.chance(0.35) ? W.NONE : W.WINDOW;
+    // Storefront glass. Openings are contiguous runs of smashed window rather
+    // than a per-tile coin flip, which used to leave single panes standing in
+    // the middle of an open frontage like little pillars.
+    for (let i = 1; i < bw - 1; i++) m.wall[idx(m, bx + i, by + bh)] = W.WINDOW;
     const dx = bx + Math.floor(bw / 2);
     doorway(m, dx, by + bh);
+    const smashes = rng.irange(1, 2);
+    for (let n = 0; n < smashes; n++) {
+      const start = rng.irange(1, Math.max(1, bw - 4));
+      const run = rng.irange(2, 3);
+      for (let i = start; i < Math.min(start + run, bw - 1); i++) doorway(m, bx + i, by + bh);
+    }
     // back room
     const backY = by + bh - 4;
     fillRect(m, bx, backY, bw, 1, undefined, W.DRYWALL);

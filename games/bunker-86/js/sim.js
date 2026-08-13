@@ -382,6 +382,15 @@
     const map = st.maps[e.map];
     let moved = false;
 
+    // Insurance against ever being wedged inside geometry — a cleared wall, a
+    // prop dropped underfoot, a bad save. Being unable to move is never fun.
+    if (BK.isBlocked(map, Math.floor(e.x), Math.floor(e.y))) {
+      const spot = BK.nearestFree(map, e.x, e.y, 10);
+      e.x = spot.x + 0.5; e.y = spot.y + 0.5;
+      e.path = null;
+      if (e === st.player) BK.log(st, 'You squeeze back out into the open.', 'warn');
+    }
+
     if (e.input && (e.input.x || e.input.y)) {
       // Joystick: screen-space input mapped into the iso plane.
       const ix = e.input.x, iy = e.input.y;
@@ -1125,6 +1134,18 @@
     });
     st.entities = st.crew.slice();
     st.player = st.crew.find(c => c.id === data.playerId && c.alive) || st.crew.find(c => c.alive) || st.crew[0];
+
+    // A save written against an older map can drop somebody inside a wall.
+    // Put anyone stuck back on the nearest floor tile rather than trapping them.
+    for (const c of st.crew) {
+      const m = st.maps[c.map] || st.maps.bunker;
+      if (!m) continue;
+      if (BK.isBlocked(m, Math.floor(c.x), Math.floor(c.y))) {
+        const spot = BK.nearestFree(m, c.x, c.y, 14);
+        c.x = spot.x + 0.5; c.y = spot.y + 0.5;
+        c.path = null; c.act = null;
+      }
+    }
     BK.Horror.reset(st);
     return st;
   };

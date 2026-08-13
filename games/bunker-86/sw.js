@@ -1,5 +1,5 @@
 /* BUNKER '86 — offline cache. Bump CACHE when shipping changes. */
-const CACHE = 'bunker86-v1';
+const CACHE = 'bunker86-v2';
 const ASSETS = [
   './',
   './index.html',
