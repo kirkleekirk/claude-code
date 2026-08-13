@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#05070c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="BUNKER '86 — an isometric survival sim in the long dark after the bombs.">
+<title>BUNKER '86</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ===================================================== TITLE ===== -->
+  <section id="title" class="screen">
+    <div class="title-glow"></div>
+    <div class="title-inner">
+      <div class="title-sup">RAD SPRINGS CIVIL DEFENSE — SHELTER 14</div>
+      <h1 class="title-main">BUNKER<span>'86</span></h1>
+      <div class="title-sub">KEEP THEM ALIVE. COUNT THEM TWICE.</div>
+      <div class="title-btns">
+        <button id="btn-continue" class="btn big hidden">CONTINUE</button>
+        <button id="btn-new" class="btn big primary">NEW SHELTER</button>
+        <button id="btn-help-title" class="btn big">HOW TO PLAY</button>
+      </div>
+      <div class="title-foot">Best with headphones. Turn the lights off.</div>
+    </div>
+  </section>
+
+  <!-- ==================================================== INTRO ====== -->
+  <section id="intro" class="screen hidden">
+    <div class="intro-text" id="intro-text"></div>
+    <button id="btn-intro-skip" class="btn">CONTINUE ▸</button>
+  </section>
+
+  <!-- ===================================================== GAME ====== -->
+  <section id="game" class="screen hidden">
+
+    <div id="stage">
+      <canvas id="view"></canvas>
+      <div id="crt-overlay"></div>
+      <div id="damage-vig"></div>
+      <div id="toast-wrap"></div>
+    </div>
+
+    <!-- ---------------------------------------------- top HUD ------- -->
+    <header id="hud-top">
+      <div class="hud-row">
+        <div class="clock">
+          <span id="hud-day">DAY 1</span>
+          <span id="hud-time">7:00 PM</span>
+        </div>
+        <div id="hud-place">THE SHELTER</div>
+        <button id="btn-speed" class="chip">▶ 1×</button>
+      </div>
+      <div class="hud-row res-row" id="hud-res"></div>
+      <div class="hud-row meters">
+        <div class="meter" title="Power"><label>PWR</label><div class="bar"><i id="m-power"></i></div></div>
+        <div class="meter" title="Dread"><label>???</label><div class="bar dread"><i id="m-dread"></i></div></div>
+      </div>
+    </header>
+
+    <!-- --------------------------------------------- active crew ---- -->
+    <div id="hud-active">
+      <div class="who">
+        <span id="act-name">—</span>
+        <span id="act-state" class="tag"></span>
+      </div>
+      <div class="mini-needs" id="act-needs"></div>
+      <div class="vitals">
+        <div class="vital"><label>HP</label><div class="bar hp"><i id="v-hp"></i></div></div>
+        <div class="vital"><label>RAD</label><div class="bar rad"><i id="v-rad"></i></div></div>
+        <div class="vital"><label>SAN</label><div class="bar san"><i id="v-san"></i></div></div>
+      </div>
+    </div>
+
+    <!-- ------------------------------------------------ controls ---- -->
+    <div id="stick-zone">
+      <div id="stick-base"><div id="stick-knob"></div></div>
+    </div>
+
+    <div id="action-cluster">
+      <button id="btn-torch" class="round" title="Flashlight">🔦</button>
+      <button id="btn-run" class="round" title="Run">»</button>
+      <button id="btn-act" class="round primary"><span id="act-label">·</span></button>
+    </div>
+
+    <!-- -------------------------------------------------- tabs ------ -->
+    <nav id="tabs">
+      <button data-panel="crew">CREW</button>
+      <button data-panel="build">BUILD</button>
+      <button data-panel="log">RADIO</button>
+      <button data-panel="menu">MENU</button>
+    </nav>
+
+    <!-- ------------------------------------------------ panels ------ -->
+    <div id="panel" class="hidden">
+      <div class="panel-head">
+        <h2 id="panel-title">CREW</h2>
+        <button id="panel-close" class="btn small">CLOSE ✕</button>
+      </div>
+      <div id="panel-body"></div>
+    </div>
+
+    <!-- ------------------------------------------- build placer ----- -->
+    <div id="placer" class="hidden">
+      <div id="placer-name">—</div>
+      <div class="placer-btns">
+        <button id="placer-ok" class="btn primary">PLACE</button>
+        <button id="placer-cancel" class="btn">CANCEL</button>
+      </div>
+      <div class="placer-hint">Drag the world to aim. Tap PLACE to bolt it down.</div>
+    </div>
+  </section>
+
+  <!-- ================================================== MODALS ======= -->
+  <div id="modal-wrap" class="hidden">
+    <div id="modal">
+      <div id="modal-kicker" class="kicker"></div>
+      <h3 id="modal-title"></h3>
+      <div id="modal-body"></div>
+      <div id="modal-choices"></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="js/util.js"></script>
+<script src="js/data.js"></script>
+<script src="js/world.js"></script>
+<script src="js/art.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/render.js"></script>
+<script src="js/horror.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
