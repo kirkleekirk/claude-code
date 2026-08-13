@@ -4485,7 +4485,22 @@ button:active { transform: translateY(1px); }
     for (const id in data.maps) {
       const m = st.maps[id], d = data.maps[id];
       m.seen = unrle(d.seen, m.w * m.h);
-      m.props = d.props;
+      // Walls come from the regenerated map, props from the save. A save
+      // written against older geometry can leave props embedded in wall that
+      // did not used to be there — drop those rather than render them inside it.
+      m.props = d.props.filter(pr => {
+        if (pr.kind === 'poster' || pr.kind === 'sign' || pr.kind === 'fixture') return true;
+        for (let dy = 0; dy < (pr.h || 1); dy++) {
+          for (let dx = 0; dx < (pr.w || 1); dx++) {
+            const x = pr.x + dx, y = pr.y + dy;
+            if (!BK.inBounds(m, x, y)) return false;
+            if (m.wall[BK.idx(m, x, y)] === BK.W.NONE) return true;   // at least one tile is open
+          }
+        }
+        return false;
+      });
+      BK.rebuildGrids(m);
+      BK.ensureConnected(m, m.spawn.x, m.spawn.y);
       BK.rebuildGrids(m);
     }
     st.objects = st.maps.bunker.props.filter(p => p.kind === 'furniture');
