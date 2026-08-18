@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Desktop / CI build.
+
+    This project exists so the shared gameplay sources in ../src can be compiled and
+    verified on a non-Windows machine. MonoGame re-implements the XNA 4.0 API surface
+    almost exactly, so a clean build here is a strong signal that the same sources will
+    build under XNA Game Studio 4.0 for the Xbox 360 target.
+
+    It is NOT the shipping Xbox 360 build. See ../BUILD.md.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RollForward>Major</RollForward>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>4</LangVersion>
+    <AssemblyName>CastleMinerZ</AssemblyName>
+    <RootNamespace>CastleMinerZ</RootNamespace>
+    <DefineConstants>$(DefineConstants);MONOGAME;DESKTOP</DefineConstants>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../src/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MonoGame.Framework.DesktopGL" Version="3.8.1.303" />
+  </ItemGroup>
+
+</Project>

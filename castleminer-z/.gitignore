@@ -1,0 +1,19 @@
+# Build output
+bin/
+obj/
+*.user
+*.suo
+*.cachefile
+
+# Content pipeline intermediates
+content/obj/
+content/bin/
+
+# Desktop verification build
+desktop/bin/
+desktop/obj/
+tests/bin/
+tests/obj/
+
+# Local saves produced by the desktop build and the test suite
+world.sav
