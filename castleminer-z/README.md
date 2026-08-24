@@ -12,6 +12,58 @@ The only way to get better gear is to go somewhere that wants you dead.
 
 ---
 
+## Running it
+
+You need the **.NET 8 SDK** and nothing else. No XNA, no Visual Studio, no content build,
+no shader compiler, no assets to download — every texture, sound and glyph in the game is
+generated in code at startup.
+
+```bash
+cd castleminer-z
+tools/run.sh
+```
+
+(or `dotnet run --project desktop/CastleMinerZ.Desktop.csproj` if you prefer)
+
+![The world](docs/screenshot-world.png)
+
+### Controls on a keyboard
+
+| Input | Action |
+|---|---|
+| `W` `A` `S` `D` | Move |
+| Mouse | Look |
+| Left click | Mine / attack / fire |
+| Right click | Place block |
+| `Space` / `Shift` / `Ctrl` | Jump / sprint / crouch |
+| `1`–`8` or scroll | Hotbar |
+| `R` / `F` | Reload / flashlight |
+| `Tab` / `C` | Inventory / crafting |
+| `Esc` | Pause |
+
+A plugged-in controller works too, with the Xbox mapping below.
+
+---
+
+## The three builds
+
+| Build | Runs on | Needs | For |
+|---|---|---|---|
+| `desktop/` | Windows, macOS, Linux | .NET 8 SDK | **Playing it.** This is the one above. |
+| `CastleMinerZ.Xbox360` | Xbox 360 | Windows + VS2010 + XNA GS 4.0 + a dev console | The original target |
+| `CastleMinerZ.Windows` | Windows | VS2010 + XNA GS 4.0 | XNA iteration without a console |
+
+All three compile the same engine from `src/`. See [BUILD.md](BUILD.md).
+
+The desktop build renders through the framework's built-in effects rather than the custom
+`Voxel.fx`, because compiling a shader for MonoGame needs a tool that does not run
+everywhere — and needing it would defeat the point of a build you can just launch. The
+trade is small and specific: no flashlight cone, no water surface animation, and the
+day/night cycle re-meshes as the sun moves instead of being free. Everything else — the
+world, the lighting model, the gameplay — is identical, because it is the same code.
+
+---
+
 ## What's in it
 
 **World**
@@ -113,6 +165,13 @@ distance, walk away, and it is still there — and it is the only thing the save
 stores about terrain. Everything you did not touch is reproduced from the seed, which
 is what keeps a heavily explored world down to a few hundred kilobytes.
 
+**The game has almost no content.** Every texture, every sound effect and the font are
+generated in code at startup, and the only asset the build pipeline touches is the shader.
+That removes the whole class of problems where a content build fails on somebody else's
+machine — no font that has to be installed to bake glyphs from, no atlas whose tile order
+can drift out of step with the registries, no binaries of unclear origin in the repository.
+It is also what lets the desktop build launch with nothing installed but the SDK.
+
 **No MSAA.** The 360 has 10 MB of EDRAM, which holds a 720p colour and depth buffer
 without tiling. Turning on multisampling forces predicated tiling, which means
 submitting the entire scene twice. For a renderer whose cost is dominated by chunk draw
@@ -127,11 +186,11 @@ castleminer-z/
   CastleMinerZ.sln                 VS2010 solution (Xbox 360 + Windows + content)
   CastleMinerZ.Xbox360/            Xbox 360 game project — the shipping target
   CastleMinerZ.Windows/            Windows game project, same sources by link
-  content/                         XNA content project and all source assets
+  content/                         XNA content project -- one shader, nothing else
     CastleMinerZContent.contentproj
     Shaders/Voxel.fx               Terrain and water, vs_3_0 / ps_3_0
-    Textures/ Audio/ Fonts/        Generated assets (see tools/)
   src/                             The entire engine and game, shared by both projects
+    Assets/                        Generated art, audio and font -- the whole content set
     Core/                          Constants, pooling, input, settings
     World/                         Chunks, generation, lighting, meshing, streaming
     Entities/                      Player, enemies, dragon, projectiles, drops
@@ -139,43 +198,50 @@ castleminer-z/
     Graphics/                      Camera, terrain renderer, sky, entities, particles
     UI/                            Screen stack, HUD, menus, inventory and crafting
     Save/  Net/  Audio/            Persistence, LIVE co-op, sound
-  tools/                           Asset generators and the compile-check script
-  desktop/                         MonoGame project used to compile-verify on CI
+  tools/                           run.sh, screenshot.sh, check.sh
+  desktop/                         MonoGame project -- the build you can actually run
   tests/                           Headless engine test suite
 ```
 
 ---
 
-## Building
-
-See [BUILD.md](BUILD.md). Short version: open `CastleMinerZ.sln` in Visual Studio 2010
-with XNA Game Studio 4.0 installed, pick the `Xbox 360` platform, and deploy.
-
----
 
 ## Verification status
 
-Being straight about what has and has not been run:
+- **It runs.** Every screenshot in this README was captured by rendering the actual game
+  headlessly, through `tools/screenshot.sh` (Xvfb plus software OpenGL). The game also has
+  a `--dump-assets` switch that writes its generated art out as PNGs.
+- **122 assertions pass** in `tests/`, headless: noise determinism, terrain
+  well-formedness, distance-gated ore, lighting propagation and unwinding, mesh winding and
+  packing bounds, raycasting, player collision and step-up, inventory and crafting
+  arithmetic, edit persistence across chunk eviction, save/load round trips, a full session
+  loop driven by synthetic input, and the code/content couplings that have no compile-time
+  check.
+- **Not run on an Xbox 360.** Building that configuration needs Windows, Visual Studio 2010
+  and XNA Game Studio 4.0; deploying needs a dev-unlocked console. None of that exists in
+  the environment this was written in, so `Voxel.fx`, the XNA content build and the
+  on-console frame rate are unverified. The engine underneath them is the same code the
+  desktop build runs.
 
-- **Compiles clean** against the XNA 4.0 API surface, at C# language level 4 (what
-  VS2010 accepts), verified through the MonoGame-based project in `desktop/`.
-- **110 assertions pass** in `tests/`, headless: noise determinism, terrain
-  well-formedness, distance-gated ore, lighting propagation and unwinding, mesh packing
-  bounds, raycasting, player collision and step-up, inventory and crafting arithmetic,
-  edit persistence across chunk eviction, a save/load round trip, and a run of the whole
-  session loop — walking, mining, and a night's worth of enemy spawning — driven by
-  synthetic input. A further set checks the couplings that have no compile-time check:
-  every atlas tile index a registry references against a manifest of the tiles the
-  generator actually draws, and the two shared constants in `Voxel.fx` against their C#
-  counterparts.
-- **Not run on hardware.** Building the Xbox 360 configuration needs Windows, Visual
-  Studio 2010 and XNA Game Studio 4.0; deploying to a console needs a dev-unlocked
-  360. None of that exists in the environment this was written in, so the shader, the
-  content build and the on-console frame rate are unverified. The `desktop/` project
-  compiles the same sources but does not ship the built content, so it is a compile
-  check, not a playable build.
+Four bugs were found by actually running it, none of which the test suite could have
+caught on its own:
 
-One bug the test suite caught during development, as an illustration of what it covers:
-sections below the terrain were reporting full sunlight, because the sunlight column
-pass exited early and left their light arrays unallocated — and "unallocated" is a
-memory optimisation that means *full sky*, which is only true above ground.
+- The **GPU upload step was never called**. Chunks generated, lit and meshed correctly and
+  then sat in the completed queue forever, because uploading needs a graphics device and
+  the headless tests have none. The world was invisible.
+- **Terrain rendered inside-out.** The quads are wound counter-clockwise as seen from
+  outside, which is the natural way to author and verify them — and is back-facing under
+  the graphics default. You could see through the ground into the caves below. There is now
+  a unit test that checks the winding of all six faces, and the index buffer reverses the
+  triangles in one place with the reasoning written down.
+- **Every glyph rendered as a solid white box.** The font's transparent texels were white
+  with zero alpha, and the UI blends with premultiplied alpha, where the source colour is
+  *added* — so "transparent" painted solid white.
+- **A machine with no audio device crashed the game on startup**, which would have hit real
+  players, not just headless capture.
+
+![Main menu](docs/screenshot-menu.png)
+![Death screen](docs/screenshot-death.png)
+
+The death screen above is not staged: night fell, zombies spawned and killed the player,
+and the drop-on-death rule emptied the hotbar.

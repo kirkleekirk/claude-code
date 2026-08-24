@@ -131,7 +131,7 @@ namespace CastleMinerZ.UI
                 else
                 {
                     Manager.DrawShadowedText(entry.Text, new Vector2(centreX - 210, y), colour);
-                    Vector2 size = Manager.Font != null ? Manager.Font.MeasureString(entry.Value) : Vector2.Zero;
+                    Vector2 size = Manager.MeasureText(entry.Value);
                     Manager.DrawShadowedText(entry.Value, new Vector2(centreX + 210 - size.X, y), colour);
                 }
 

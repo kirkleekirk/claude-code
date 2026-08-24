@@ -201,7 +201,7 @@ namespace CastleMinerZ.UI
             if (left.Length > 0) Manager.DrawShadowedText(left, new Vector2(safe.X + 20, safe.Y + 24), Theme.TextDim);
             if (right.Length > 0)
             {
-                Vector2 size = Manager.Font != null ? Manager.Font.MeasureString(right) : Vector2.Zero;
+                Vector2 size = Manager.MeasureText(right);
                 Manager.DrawShadowedText(right, new Vector2(safe.Right - 20 - size.X, safe.Y + 24), Theme.TextDim);
             }
         }
@@ -324,7 +324,7 @@ namespace CastleMinerZ.UI
                 int held = inventory.CountOf(id);
 
                 string text = held + "/" + required;
-                Vector2 size = Manager.Font != null ? Manager.Font.MeasureString(text) : Vector2.Zero;
+                Vector2 size = Manager.MeasureText(text);
 
                 x -= (int)size.X;
                 Manager.DrawShadowedText(text, new Vector2(x, row.Y + 12),

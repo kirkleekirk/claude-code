@@ -16,7 +16,7 @@ namespace CastleMinerZ.Items
         private static bool _initialised;
 
         /// <summary>Icon atlas is 16x16 tiles, matching the block atlas layout.</summary>
-        public const int IconAtlasTilesPerRow = 16;
+        public const int IconAtlasTilesPerRow = Assets.TextureFactory.TilesPerRow;
 
         public static void Initialise()
         {

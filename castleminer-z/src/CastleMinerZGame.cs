@@ -1,9 +1,9 @@
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Content;
 using Microsoft.Xna.Framework.Graphics;
 #if XBOX360
 using Microsoft.Xna.Framework.GamerServices;
 #endif
+using CastleMinerZ.Assets;
 using CastleMinerZ.Core;
 using CastleMinerZ.Graphics;
 using CastleMinerZ.Net;
@@ -45,6 +45,7 @@ namespace CastleMinerZ
         private Texture2D _particleTexture;
         private Texture2D _pixel;
         private Effect _voxelEffect;
+        private PixelFont _font;
 
         private PlayerCommand _command;
         private float _animationTime;
@@ -56,6 +57,34 @@ namespace CastleMinerZ
         private int _fpsFrames;
 
         public float FramesPerSecond { get; private set; }
+
+        // ---- Automated capture -------------------------------------------------
+        // Used by tools/screenshot.sh to prove the renderer works without a human at the
+        // controls. Harmless in a normal run: all three fields stay at their defaults.
+
+        /// <summary>When set, start a world immediately instead of showing the title screen.</summary>
+        public int AutoStartSeed = int.MinValue;
+
+        /// <summary>Where to write a screenshot, or null for none.</summary>
+        public string ScreenshotPath;
+
+        /// <summary>Frame number at which to take the screenshot and exit.</summary>
+        public int ScreenshotFrame = -1;
+
+        /// <summary>Game seconds to simulate before capturing, so terrain has time to stream in.</summary>
+        public float WarmUpSeconds;
+
+        /// <summary>Camera pitch to force in capture mode, in radians.</summary>
+        public float CapturePitch;
+        public bool HasCapturePitch;
+
+        /// <summary>Time of day to force in capture mode: 0 is midnight, 0.5 noon.</summary>
+        public float CaptureTime = -1.0f;
+
+        /// <summary>When set, write the generated art out as PNGs and exit.</summary>
+        public string DumpAssetsPath;
+
+        private int _frameCounter;
 
         public CastleMinerZGame()
         {
@@ -134,18 +163,21 @@ namespace CastleMinerZ
             _pixel.SetData(new Color[] { Color.White });
             _screens.Pixel = _pixel;
 
-            _blockAtlas = LoadTexture("Textures/blocks");
-            _itemAtlas = LoadTexture("Textures/items");
-            _particleTexture = LoadTexture("Textures/particle");
+            // All art, audio and text is generated here rather than loaded. Nothing in the
+            // game is a content-pipeline asset except the shader, and only the XNA builds
+            // need that one.
+            _blockAtlas = TextureFactory.CreateBlockAtlas(GraphicsDevice);
+            _itemAtlas = TextureFactory.CreateItemAtlas(GraphicsDevice);
+            _particleTexture = TextureFactory.CreateParticle(GraphicsDevice);
             _screens.BlockAtlas = _blockAtlas;
             _screens.ItemAtlas = _itemAtlas;
 
-            _screens.Font = LoadFont("Fonts/Hud");
-            _screens.TitleFont = LoadFont("Fonts/Title");
+            _font = new PixelFont();
+            _font.Build(GraphicsDevice);
+            _screens.Font = _font;
 
-            _voxelEffect = Content.Load<Effect>("Shaders/Voxel");
-
-            _audio.LoadContent(Content);
+            _voxelEffect = LoadVoxelEffect();
+            _audio.Initialise();
             _sky.LoadContent(GraphicsDevice);
             _worldRenderer.LoadContent(GraphicsDevice, _voxelEffect, _blockAtlas);
             _entityRenderer.LoadContent(GraphicsDevice, _blockAtlas, _itemAtlas);
@@ -153,47 +185,43 @@ namespace CastleMinerZ
             _screens.UpdateSafeArea();
             ApplySettings();
 
-            _screens.Reset(new MainMenuScreen());
+            if (DumpAssetsPath != null)
+            {
+                DumpGeneratedAssets();
+                return;
+            }
+
+            if (AutoStartSeed != int.MinValue) StartNewGame(AutoStartSeed);
+            else _screens.Reset(new MainMenuScreen());
         }
 
-        private Texture2D LoadTexture(string name)
+        /// <summary>
+        /// Loads the terrain shader on the XNA builds. The MonoGame configuration renders
+        /// with the framework's built-in effects and has no shader to load, which is what
+        /// removes its content build entirely.
+        /// </summary>
+        private Effect LoadVoxelEffect()
         {
-            try
-            {
-                return Content.Load<Texture2D>(name);
-            }
-            catch (ContentLoadException)
-            {
-                // Missing art should not be fatal -- a magenta placeholder makes it obvious
-                // which asset failed to build without taking the whole game down.
-                Texture2D placeholder = new Texture2D(GraphicsDevice, 16, 16);
-                Color[] pixels = new Color[16 * 16];
-                for (int i = 0; i < pixels.Length; i++) pixels[i] = new Color(255, 0, 255);
-                placeholder.SetData(pixels);
-                return placeholder;
-            }
-        }
-
-        private SpriteFont LoadFont(string name)
-        {
-            try
-            {
-                return Content.Load<SpriteFont>(name);
-            }
-            catch (ContentLoadException)
-            {
-                return null;
-            }
+#if MONOGAME
+            return null;
+#else
+            return Content.Load<Effect>("Shaders/Voxel");
+#endif
         }
 
         // ---- Session lifecycle ------------------------------------------------
 
         public void StartNewGame()
         {
+            StartNewGame((int)System.DateTime.Now.Ticks);
+        }
+
+        public void StartNewGame(int seed)
+        {
             DisposeSession();
 
-            int seed = (int)System.DateTime.Now.Ticks;
             _session = new GameSession(seed, _settings, _audio, _network);
+            _session.Particles.LoadContent(GraphicsDevice, _particleTexture);
             _session.PlacePlayerAtSpawn(true);
 
             _screens.Reset(new HudScreen(_session));
@@ -210,6 +238,7 @@ namespace CastleMinerZ
 
             DisposeSession();
             _session = new GameSession(seed, _settings, _audio, _network);
+            _session.Particles.LoadContent(GraphicsDevice, _particleTexture);
 
             if (!_save.Load(_session))
             {
@@ -316,7 +345,28 @@ namespace CastleMinerZ
 
             if (_session != null)
             {
+                // Capture mode fast-forwards the simulation so terrain and lighting have
+                // settled before the shot is taken.
+                if (CaptureTime >= 0.0f)
+                {
+                    _session.World.TimeOfDay = CaptureTime;
+                    CaptureTime = -1.0f;
+                }
+
+                if (WarmUpSeconds > 0.0f)
+                {
+                    float step = 1.0f / 30.0f;
+                    while (WarmUpSeconds > 0.0f)
+                    {
+                        _session.Update(step, _command, false);
+                        UploadFinishedGeometry();
+                        WarmUpSeconds -= step;
+                    }
+                    WarmUpSeconds = 0.0f;
+                }
+
                 _session.Update(dt, _command, _screens.GamePaused);
+                UploadFinishedGeometry();
                 UpdateCamera();
                 _audio.SetListener(_camera.Position, _camera.Right);
             }
@@ -324,6 +374,19 @@ namespace CastleMinerZ
             _screens.Update(dt, _input);
 
             base.Update(gameTime);
+        }
+
+        /// <summary>
+        /// Moves finished chunk geometry onto the GPU.
+        ///
+        /// This has to happen here rather than inside the session, because it is the only
+        /// step of the chunk pipeline that touches the graphics device and therefore the
+        /// only one that must run on the thread that owns it.
+        /// </summary>
+        private void UploadFinishedGeometry()
+        {
+            if (_session == null) return;
+            _session.World.Worker.UploadFinishedMeshes(GraphicsDevice, World.ChunkWorker.MeshJobsPerFrame);
         }
 
         private void UpdateFpsCounter(float dt)
@@ -370,6 +433,10 @@ namespace CastleMinerZ
         {
             Entities.LocalPlayer player = _session.Player;
 
+            // In capture mode the player is aimed as well as the camera, so the block
+            // cursor agrees with what the shot shows.
+            if (HasCapturePitch) player.Pitch = CapturePitch;
+
             _camera.Position = player.EyePosition;
             _camera.Yaw = player.Yaw;
             _camera.Pitch = player.Pitch - player.RecoilPitch;
@@ -413,6 +480,9 @@ namespace CastleMinerZ
             _screens.Batch.End();
 
             base.Draw(gameTime);
+
+            _frameCounter++;
+            if (ScreenshotPath != null && _frameCounter >= ScreenshotFrame) CaptureAndExit();
         }
 
         /// <summary>
@@ -447,6 +517,76 @@ namespace CastleMinerZ
             return horizon;
         }
 
+        /// <summary>
+        /// Writes the procedurally generated art to disk as PNGs.
+        ///
+        /// The generators are the single source of truth for the game's art, so this is how
+        /// the one asset that has to exist as a file -- the Xbox title thumbnail -- gets
+        /// produced, and how the atlases can be inspected by eye.
+        /// </summary>
+        private void DumpGeneratedAssets()
+        {
+            System.IO.Directory.CreateDirectory(DumpAssetsPath);
+
+            SavePng(_blockAtlas, "blocks.png");
+            SavePng(_itemAtlas, "items.png");
+            SavePng(_particleTexture, "particle.png");
+            SavePng(_font.Texture, "font.png");
+
+            using (Texture2D thumbnail = TextureFactory.CreateThumbnail(GraphicsDevice))
+            {
+                SavePng(thumbnail, "GameThumbnail.png");
+            }
+
+            System.Console.WriteLine("assets written to " + DumpAssetsPath);
+            Exit();
+        }
+
+        private void SavePng(Texture2D texture, string name)
+        {
+            if (texture == null) return;
+            string path = System.IO.Path.Combine(DumpAssetsPath, name);
+            using (System.IO.Stream stream = System.IO.File.Create(path))
+            {
+                texture.SaveAsPng(stream, texture.Width, texture.Height);
+            }
+        }
+
+        /// <summary>Writes the back buffer to a PNG and quits. Capture mode only.</summary>
+        private void CaptureAndExit()
+        {
+            int width = GraphicsDevice.PresentationParameters.BackBufferWidth;
+            int height = GraphicsDevice.PresentationParameters.BackBufferHeight;
+
+            Color[] pixels = new Color[width * height];
+            GraphicsDevice.GetBackBufferData(pixels);
+
+            using (Texture2D shot = new Texture2D(GraphicsDevice, width, height))
+            {
+                shot.SetData(pixels);
+                using (System.IO.Stream stream = System.IO.File.Create(ScreenshotPath))
+                {
+                    shot.SaveAsPng(stream, width, height);
+                }
+            }
+
+            if (_session != null)
+            {
+                Entities.LocalPlayer player = _session.Player;
+                System.Console.WriteLine("player " + player.Position
+                    + "  surface " + _session.World.SurfaceHeight((int)player.Position.X, (int)player.Position.Z)
+                    + "  sky " + _session.World.GetSkyLight((int)player.Position.X, (int)player.Position.Y, (int)player.Position.Z)
+                    + "  sun " + _session.World.SunIntensity.ToString("0.00"));
+                System.Console.WriteLine("columns " + _session.World.LoadedColumnCount
+                    + "  sections drawn " + _worldRenderer.DrawnSections
+                    + "  triangles " + _worldRenderer.DrawnTriangles
+                    + "  meshed " + _session.World.Worker.SectionsMeshed);
+            }
+            System.Console.WriteLine("screenshot written to " + ScreenshotPath);
+            ScreenshotPath = null;
+            Exit();
+        }
+
         protected override void OnExiting(object sender, System.EventArgs args)
         {
             DisposeSession();
@@ -457,6 +597,7 @@ namespace CastleMinerZ
         {
             _worldRenderer.Dispose();
             if (_pixel != null) _pixel.Dispose();
+            if (_font != null) _font.Dispose();
             base.UnloadContent();
         }
 

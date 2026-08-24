@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using Microsoft.Xna.Framework;
+using CastleMinerZ.Assets;
 using CastleMinerZ.Items;
 using CastleMinerZ.World;
 
@@ -30,38 +32,27 @@ namespace CastleMinerZ.Tests
                 return;
             }
 
-            CheckAtlasManifest(Path.Combine(root, "content", "Textures", "atlas.manifest"));
+            CheckAtlasTiles();
             CheckShaderConstants(Path.Combine(root, "content", "Shaders", "Voxel.fx"));
             CheckAssetsExist(root);
+            CheckGlyphTable();
         }
 
-        private static void CheckAtlasManifest(string path)
+        private static void CheckAtlasTiles()
         {
-            if (!File.Exists(path))
-            {
-                Harness.Check(false, "atlas.manifest exists (run tools/make_atlas.py)");
-                return;
-            }
+            Harness.CheckEqual(TextureFactory.TilesPerRow, BlockRegistry.AtlasTilesPerRow,
+                "block atlas grid matches the generator");
+            Harness.CheckEqual(TextureFactory.TilesPerRow, ItemRegistry.IconAtlasTilesPerRow,
+                "icon atlas grid matches the generator");
 
-            Dictionary<string, string> values = ReadKeyValues(path);
-
-            int tilesPerRow = int.Parse(values["tiles_per_row"], CultureInfo.InvariantCulture);
-            Harness.CheckEqual(BlockRegistry.AtlasTilesPerRow, tilesPerRow,
-                "block atlas tiles-per-row matches the generator");
-            Harness.CheckEqual(ItemRegistry.IconAtlasTilesPerRow, tilesPerRow,
-                "icon atlas tiles-per-row matches the generator");
-
-            List<int> blockTiles = ParseList(values["blocks"]);
-            List<int> itemTiles = ParseList(values["items"]);
-
-            // Every face of every block must land on a tile the generator drew.
+            // Every face of every block must land on a tile the generator actually draws.
             string missingBlock = null;
             for (byte id = 1; id < Block.Count && missingBlock == null; id++)
             {
                 BlockDefinition block = BlockRegistry.Get(id);
                 for (int face = 0; face < Face.Count; face++)
                 {
-                    if (!blockTiles.Contains(block.FaceTiles[face]))
+                    if (!TextureFactory.IsBlockTileDrawn(block.FaceTiles[face]))
                     {
                         missingBlock = block.Name + " face " + face + " -> tile " + block.FaceTiles[face];
                         break;
@@ -70,7 +61,7 @@ namespace CastleMinerZ.Tests
             }
             Harness.Check(missingBlock == null,
                 "every block face points at a drawn atlas tile"
-                + (missingBlock == null ? "" : " (" + missingBlock + " is missing)"));
+                + (missingBlock == null ? "" : " (" + missingBlock + ")"));
 
             string missingItem = null;
             for (int id = 1; id < 256 && missingItem == null; id++)
@@ -79,16 +70,16 @@ namespace CastleMinerZ.Tests
                 if (Item.IsBlock((byte)id)) continue;   // blocks draw from the terrain atlas
 
                 ItemDefinition item = ItemRegistry.Get((byte)id);
-                if (!itemTiles.Contains(item.IconTile))
+                if (!TextureFactory.IsItemTileDrawn(item.IconTile))
                 {
                     missingItem = item.Name + " -> icon " + item.IconTile;
                 }
             }
             Harness.Check(missingItem == null,
                 "every item icon points at a drawn atlas tile"
-                + (missingItem == null ? "" : " (" + missingItem + " is missing)"));
+                + (missingItem == null ? "" : " (" + missingItem + ")"));
 
-            // Two different tools sharing an icon means one of them was assigned wrong.
+            // Two items sharing an icon means one of them was assigned wrong.
             Dictionary<int, string> seen = new Dictionary<int, string>();
             string duplicate = null;
             for (int id = 1; id < 256 && duplicate == null; id++)
@@ -139,14 +130,12 @@ namespace CastleMinerZ.Tests
 
         private static void CheckAssetsExist(string root)
         {
+            // The game has almost no asset files left: everything but the shader and the
+            // console's title thumbnail is generated in code.
             string[] required =
             {
-                "content/Textures/blocks.png",
-                "content/Textures/items.png",
-                "content/Textures/particle.png",
                 "content/Shaders/Voxel.fx",
-                "content/Fonts/Hud.spritefont",
-                "content/Fonts/Title.spritefont",
+                "content/CastleMinerZContent.contentproj",
                 "CastleMinerZ.Xbox360/GameThumbnail.png",
             };
 
@@ -157,26 +146,29 @@ namespace CastleMinerZ.Tests
                     missing = required[i];
             }
             Harness.Check(missing == null,
-                "every asset the content project references exists"
+                "every asset file the build references exists"
                 + (missing == null ? "" : " (" + missing + " is missing)"));
 
-            // The sound manager names its assets by path; all fourteen must be present or
-            // the corresponding effect silently plays nothing.
-            string[] sounds =
-            {
-                "break", "place", "hit", "hurt", "gunshot", "shotgun", "laser",
-                "explosion", "pickup", "zombie", "skeleton", "dragon",
-                "menu_move", "menu_select"
-            };
+            Harness.CheckEqual(14, (int)SoundId.Count,
+                "the SoundId enum matches the number of synthesised effects");
+        }
 
-            int found = 0;
-            for (int i = 0; i < sounds.Length; i++)
-            {
-                if (File.Exists(Path.Combine(root, "content", "Audio", sounds[i] + ".wav"))) found++;
-            }
-            Harness.CheckEqual(sounds.Length, found, "every sound effect exists");
-            Harness.CheckEqual(sounds.Length, (int)SoundId.Count,
-                "the SoundId enum and the generated sound set are the same size");
+        /// <summary>
+        /// The font is data, and data can be mistyped. A glyph with a short row would throw
+        /// while rasterising, on a machine that may not have a console attached.
+        /// </summary>
+        private static void CheckGlyphTable()
+        {
+            PixelFont font = new PixelFont();
+            Vector2 size = font.Measure("ABC", 2);
+
+            Harness.CheckNear(PixelFont.Advance * 3 * 2, size.X, 0.01f, "text width scales with the glyph advance");
+            Harness.CheckNear(PixelFont.LineHeight * 2, size.Y, 0.01f, "single-line text is one line high");
+
+            Vector2 twoLines = font.Measure("AB\nCDE", 1);
+            Harness.CheckNear(PixelFont.Advance * 3, twoLines.X, 0.01f, "multi-line width is the longest line");
+            Harness.CheckNear(PixelFont.LineHeight * 2, twoLines.Y, 0.01f, "multi-line height counts the lines");
+            Harness.CheckNear(0.0f, font.Measure(null, 2).X, 0.01f, "null text measures as empty");
         }
 
         // ---- Helpers ----------------------------------------------------------

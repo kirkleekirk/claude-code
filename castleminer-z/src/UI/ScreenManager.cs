@@ -60,8 +60,17 @@ namespace CastleMinerZ.UI
 
         public GraphicsDevice Device;
         public SpriteBatch Batch;
-        public SpriteFont Font;
-        public SpriteFont TitleFont;
+
+        /// <summary>The one font in the game. Body text and titles differ only by scale.</summary>
+        public Assets.PixelFont Font;
+
+        /// <summary>Integer scale for body text. Sized so the HUD is readable at 720p on a television.</summary>
+        public int TextScale = 2;
+
+        /// <summary>Integer scale for titles and banners.</summary>
+        public int TitleScale = 4;
+
+        private static readonly Vector2 ShadowOffset = new Vector2(1.0f, 1.0f);
 
         /// <summary>1x1 white texture, for rectangles and bars.</summary>
         public Texture2D Pixel;
@@ -185,34 +194,47 @@ namespace CastleMinerZ.UI
             DrawBorder(rect, 2, Theme.PanelEdge);
         }
 
-        public void DrawText(string text, Vector2 position, Color colour)
+        /// <summary>Size of a string in body text.</summary>
+        public Vector2 MeasureText(string text)
         {
-            if (Font == null || text == null) return;
-            Batch.DrawString(Font, text, position, colour);
+            return Font == null ? Vector2.Zero : Font.Measure(text, TextScale);
         }
 
-        /// <summary>Text with a one-pixel drop shadow, which is what makes it legible over the world.</summary>
+        public Vector2 MeasureTitle(string text)
+        {
+            return Font == null ? Vector2.Zero : Font.Measure(text, TitleScale);
+        }
+
+        public void DrawText(string text, Vector2 position, Color colour)
+        {
+            if (Font == null) return;
+            Font.Draw(Batch, text, position, colour, TextScale);
+        }
+
+        /// <summary>Text with a drop shadow, which is what keeps it legible over the world.</summary>
         public void DrawShadowedText(string text, Vector2 position, Color colour)
         {
-            if (Font == null || text == null) return;
-            Batch.DrawString(Font, text, position + new Vector2(1.5f, 1.5f), new Color(0, 0, 0, 190));
-            Batch.DrawString(Font, text, position, colour);
+            if (Font == null) return;
+            // A one-pixel shadow at any scale. Offsetting by the full scale makes the text
+            // read as bold and smeared rather than as outlined.
+            Font.Draw(Batch, text, position + ShadowOffset, new Color(0, 0, 0, 200), TextScale);
+            Font.Draw(Batch, text, position, colour, TextScale);
         }
 
         public void DrawTextCentred(string text, float centreX, float y, Color colour)
         {
-            if (Font == null || text == null) return;
-            Vector2 size = Font.MeasureString(text);
+            if (Font == null) return;
+            Vector2 size = Font.Measure(text, TextScale);
             DrawShadowedText(text, new Vector2(centreX - size.X * 0.5f, y), colour);
         }
 
         public void DrawTitleCentred(string text, float centreX, float y, Color colour)
         {
-            SpriteFont font = TitleFont != null ? TitleFont : Font;
-            if (font == null || text == null) return;
-            Vector2 size = font.MeasureString(text);
-            Batch.DrawString(font, text, new Vector2(centreX - size.X * 0.5f + 2, y + 2), new Color(0, 0, 0, 190));
-            Batch.DrawString(font, text, new Vector2(centreX - size.X * 0.5f, y), colour);
+            if (Font == null) return;
+            Vector2 size = Font.Measure(text, TitleScale);
+            Vector2 position = new Vector2(centreX - size.X * 0.5f, y);
+            Font.Draw(Batch, text, position + new Vector2(2.0f, 2.0f), new Color(0, 0, 0, 200), TitleScale);
+            Font.Draw(Batch, text, position, colour, TitleScale);
         }
 
         /// <summary>
@@ -261,7 +283,7 @@ namespace CastleMinerZ.UI
             if (stack.Count > 1)
             {
                 string count = stack.Count.ToString();
-                Vector2 size = Font != null ? Font.MeasureString(count) : Vector2.Zero;
+                Vector2 size = MeasureText(count);
                 DrawShadowedText(count, new Vector2(rect.Right - size.X - 3, rect.Bottom - size.Y - 1), Theme.Text);
             }
         }

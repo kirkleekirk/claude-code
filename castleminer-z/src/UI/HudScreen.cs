@@ -191,13 +191,13 @@ namespace CastleMinerZ.UI
             string text = loaded + " / " + player.ReserveRounds;
             Color colour = loaded == 0 ? Theme.TextBad : Theme.Text;
 
-            Vector2 size = Manager.Font != null ? Manager.Font.MeasureString(text) : Vector2.Zero;
+            Vector2 size = Manager.MeasureText(text);
             Manager.DrawShadowedText(text, new Vector2(safe.Right - size.X, safe.Bottom - size.Y - 8), colour);
 
             if (player.IsReloading)
             {
                 string reloading = "RELOADING";
-                Vector2 reloadSize = Manager.Font != null ? Manager.Font.MeasureString(reloading) : Vector2.Zero;
+                Vector2 reloadSize = Manager.MeasureText(reloading);
                 Manager.DrawShadowedText(reloading,
                     new Vector2(safe.Right - reloadSize.X, safe.Bottom - size.Y - 30), Theme.TextDim);
             }

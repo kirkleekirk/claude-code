@@ -57,6 +57,17 @@ namespace CastleMinerZ.World
         private static readonly int[] Affinity = { 3, 4, 5 };
 #endif
 
+        /// <summary>
+        /// Mesh jobs submitted per frame. The MonoGame path re-meshes the world as the sun
+        /// moves, so it gets a much larger budget -- a desktop has the cores to spare and a
+        /// slow sweep would show as chunks visibly changing brightness one at a time.
+        /// </summary>
+#if MONOGAME
+        public const int MeshJobsPerFrame = 48;
+#else
+        public const int MeshJobsPerFrame = 6;
+#endif
+
         public ChunkWorker(World world, WorldGenerator generator)
         {
             _world = world;
@@ -310,14 +321,130 @@ namespace CastleMinerZ.World
             }
         }
 
-        private static void Upload(GraphicsDevice device, Chunk section, MeshBuilder builder)
+        private void Upload(GraphicsDevice device, Chunk section, MeshBuilder builder)
         {
+#if MONOGAME
+            float sun = _world.SunIntensity;
+            section.OpaqueVertices = UploadExpanded(device, section, section.OpaqueVertices, builder.Opaque, builder.OpaqueCount, sun);
+            section.AlphaVertices = UploadExpanded(device, section, section.AlphaVertices, builder.Alpha, builder.AlphaCount, sun);
+#else
             section.OpaqueVertices = UploadBuffer(device, section.OpaqueVertices, builder.Opaque, builder.OpaqueCount);
-            section.OpaqueQuadCount = builder.OpaqueCount / 4;
-
             section.AlphaVertices = UploadBuffer(device, section.AlphaVertices, builder.Alpha, builder.AlphaCount);
+#endif
+            section.OpaqueQuadCount = builder.OpaqueCount / 4;
             section.AlphaQuadCount = builder.AlphaCount / 4;
         }
+
+#if MONOGAME
+        /// <summary>Scratch for vertex expansion. Reused; only the main thread touches it.</summary>
+        private VertexPositionColorTexture[] _expanded = new VertexPositionColorTexture[8192];
+
+        /// <summary>
+        /// Diagnostic: ignore baked lighting and draw everything at full brightness. Makes
+        /// it possible to tell a geometry problem from a lighting one in a screenshot.
+        /// </summary>
+        public static bool FullBright;
+
+        /// <summary>Warm tint for torch and lava light. Mirrors TorchColour in Voxel.fx.</summary>
+        private static readonly Vector3 TorchColour = new Vector3(1.0f, 0.76f, 0.48f);
+
+        /// <summary>Flat per-face shading, indexed by face. Mirrors FaceShade in Voxel.fx.</summary>
+        private static readonly float[] FaceShade = { 0.72f, 0.72f, 0.52f, 1.0f, 0.86f, 0.86f };
+
+        /// <summary>
+        /// Expands packed voxel vertices into a format the framework's built-in effects can
+        /// draw: world-space positions, real UVs, and lighting folded into the vertex
+        /// colour. This is the work Voxel.fx does on the GPU in the XNA build, done on the
+        /// CPU instead because MonoGame cannot compile that shader without extra tooling.
+        ///
+        /// The cost is that sun intensity is baked in, so the world has to be re-meshed as
+        /// the day advances -- see World.RebakeLightingIfSunMoved.
+        /// </summary>
+        private VertexBuffer UploadExpanded(GraphicsDevice device, Chunk section, VertexBuffer existing,
+            VoxelVertex[] packed, int count, float sunIntensity)
+        {
+            if (count == 0)
+            {
+                if (existing != null) existing.Dispose();
+                return null;
+            }
+
+            if (_expanded.Length < count) _expanded = new VertexPositionColorTexture[count * 2];
+
+            Vector3 origin = section.Bounds.Min;
+            Vector3 foliage = section.Column.FoliageTint;
+            const float tileSize = 1.0f / BlockRegistry.AtlasTilesPerRow;
+            const float inset = 0.5f / (BlockRegistry.AtlasTilesPerRow * 16.0f);
+
+            for (int i = 0; i < count; i++)
+            {
+                Vector4 position = packed[i].Position.ToVector4();
+                Vector4 tile = packed[i].TileCorner.ToVector4();
+                Color light = packed[i].Light;
+
+                _expanded[i].Position = new Vector3(
+                    origin.X + position.X * (1.0f / ChunkMesher.Q),
+                    origin.Y + position.Y * (1.0f / ChunkMesher.Q),
+                    origin.Z + position.Z * (1.0f / ChunkMesher.Q));
+
+                // Pull each corner half a texel toward the middle of its tile, exactly as
+                // the shader does, so neighbouring tiles cannot bleed in.
+                float u = (tile.X + tile.Z) * tileSize + (0.5f - tile.Z) * (2.0f * inset);
+                float v = (tile.Y + tile.W) * tileSize + (0.5f - tile.W) * (2.0f * inset);
+                _expanded[i].TextureCoordinate = new Vector2(u, v);
+
+                float blockLight = light.R / 255.0f;
+                float skyLight = light.G / 255.0f * sunIntensity;
+                float tintAmount = light.B / 255.0f;
+                float ao = light.A / 255.0f;
+
+                float shade = ao * FaceShade[(int)position.W];
+
+                float r = Saturate(skyLight + TorchColour.X * blockLight);
+                float g = Saturate(skyLight + TorchColour.Y * blockLight);
+                float b = Saturate(skyLight + TorchColour.Z * blockLight);
+
+                if (r < 0.05f) r = 0.05f;
+                if (g < 0.05f) g = 0.05f;
+                if (b < 0.05f) b = 0.05f;
+
+                r *= shade;
+                g *= shade;
+                b *= shade;
+
+                // Foliage tint multiplies the texture in the shader; folding it into the
+                // vertex colour gives the same result, because the fixed-function path also
+                // multiplies texture by vertex colour.
+                if (tintAmount > 0.0f)
+                {
+                    r *= 1.0f + (foliage.X - 1.0f) * tintAmount;
+                    g *= 1.0f + (foliage.Y - 1.0f) * tintAmount;
+                    b *= 1.0f + (foliage.Z - 1.0f) * tintAmount;
+                }
+
+                // Alpha stays opaque so the texture's own alpha drives both the cutout test
+                // and the water blend.
+                _expanded[i].Color = FullBright ? Color.White : new Color(r, g, b, 1.0f);
+            }
+
+            VertexBuffer buffer = existing;
+            if (buffer == null || buffer.VertexCount < count || buffer.VertexCount > count * 2 + 256)
+            {
+                if (buffer != null) buffer.Dispose();
+                buffer = new VertexBuffer(device, VertexPositionColorTexture.VertexDeclaration, count, BufferUsage.WriteOnly);
+            }
+
+            buffer.SetData(_expanded, 0, count);
+            return buffer;
+        }
+
+        private static float Saturate(float v)
+        {
+            if (v < 0.0f) return 0.0f;
+            if (v > 1.0f) return 1.0f;
+            return v;
+        }
+#endif
 
         /// <summary>
         /// Reuses the existing buffer when it is a reasonable fit. Constantly creating and

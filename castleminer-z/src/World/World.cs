@@ -122,6 +122,31 @@ namespace CastleMinerZ.World
             while (_timeOfDay >= 1.0f) _timeOfDay -= 1.0f;
         }
 
+#if MONOGAME
+        private float _bakedSunIntensity = -1.0f;
+
+        /// <summary>
+        /// Re-meshes the world when the sun has moved far enough to matter.
+        ///
+        /// Only the MonoGame configuration needs this. The XNA build stores sky light per
+        /// vertex and scales it in the shader, so its day/night cycle is free; here the
+        /// lighting is folded into vertex colours at upload, so the geometry has to be
+        /// rebuilt as the light changes. The threshold trades a dozen sweeps across a
+        /// twenty-minute day against never seeing the world update in steps.
+        /// </summary>
+        public void RebakeLightingIfSunMoved()
+        {
+            float sun = SunIntensity;
+            if (_bakedSunIntensity >= 0.0f && System.Math.Abs(sun - _bakedSunIntensity) < 0.06f) return;
+
+            _bakedSunIntensity = sun;
+            for (int i = 0; i < _columnList.Count; i++)
+            {
+                if (_columnList[i].State >= ColumnState.Generated) _columnList[i].MarkAllSectionsDirty();
+            }
+        }
+#endif
+
         // ---- Column access ----------------------------------------------------
 
         public ChunkColumn GetColumn(int cx, int cz)

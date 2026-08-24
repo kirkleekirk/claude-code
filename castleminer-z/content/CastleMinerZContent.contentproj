@@ -2,18 +2,13 @@
 <!--
   XNA Game Studio 4.0 content project.
 
-  Two processor choices here are deliberate rather than default:
+  It builds exactly one asset: the terrain shader. Every texture, sound and glyph in the
+  game is generated in code at startup (see src/Assets), which means there is nothing else
+  here to build, nothing to keep in step with the registries by hand, and no font that has
+  to be installed on the build machine.
 
-  * The atlases are built as uncompressed Color, not DXT. DXT compresses in 4x4
-    blocks, and this atlas packs 16x16 tiles edge to edge with no gutters, so block
-    compression would bleed neighbouring tiles into each other along every tile
-    seam. At 256 KB apiece the uncompressed textures are cheap enough not to argue
-    about.
-
-  * The particle sprite turns premultiplication off, because the particle system
-    draws with BlendState.NonPremultiplied. Everything else is drawn with
-    BlendState.AlphaBlend, which in XNA 4.0 expects premultiplied alpha, so those
-    assets keep the processor default.
+  The MonoGame configuration does not use this project at all -- it renders with the
+  framework's built-in effects, so it has no content build whatsoever.
 -->
 <Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
@@ -31,81 +26,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Reference Include="Microsoft.Xna.Framework.Content.Pipeline.AudioImporters, Version=4.0.0.0, Culture=neutral, PublicKeyToken=842cf8be1de50553, processorArchitecture=MSIL" />
     <Reference Include="Microsoft.Xna.Framework.Content.Pipeline.EffectImporter, Version=4.0.0.0, Culture=neutral, PublicKeyToken=842cf8be1de50553, processorArchitecture=MSIL" />
-    <Reference Include="Microsoft.Xna.Framework.Content.Pipeline.FBXImporter, Version=4.0.0.0, Culture=neutral, PublicKeyToken=842cf8be1de50553, processorArchitecture=MSIL" />
-    <Reference Include="Microsoft.Xna.Framework.Content.Pipeline.TextureImporter, Version=4.0.0.0, Culture=neutral, PublicKeyToken=842cf8be1de50553, processorArchitecture=MSIL" />
-    <Reference Include="Microsoft.Xna.Framework.Content.Pipeline.XImporter, Version=4.0.0.0, Culture=neutral, PublicKeyToken=842cf8be1de50553, processorArchitecture=MSIL" />
   </ItemGroup>
 
-  <!-- Textures -->
-  <ItemGroup>
-    <Compile Include="Textures\blocks.png">
-      <Name>blocks</Name>
-      <Importer>TextureImporter</Importer>
-      <Processor>TextureProcessor</Processor>
-      <ProcessorParameters_TextureFormat>Color</ProcessorParameters_TextureFormat>
-      <ProcessorParameters_GenerateMipmaps>False</ProcessorParameters_GenerateMipmaps>
-      <ProcessorParameters_ColorKeyEnabled>False</ProcessorParameters_ColorKeyEnabled>
-    </Compile>
-    <Compile Include="Textures\items.png">
-      <Name>items</Name>
-      <Importer>TextureImporter</Importer>
-      <Processor>TextureProcessor</Processor>
-      <ProcessorParameters_TextureFormat>Color</ProcessorParameters_TextureFormat>
-      <ProcessorParameters_GenerateMipmaps>False</ProcessorParameters_GenerateMipmaps>
-      <ProcessorParameters_ColorKeyEnabled>False</ProcessorParameters_ColorKeyEnabled>
-    </Compile>
-    <Compile Include="Textures\particle.png">
-      <Name>particle</Name>
-      <Importer>TextureImporter</Importer>
-      <Processor>TextureProcessor</Processor>
-      <ProcessorParameters_TextureFormat>Color</ProcessorParameters_TextureFormat>
-      <ProcessorParameters_GenerateMipmaps>False</ProcessorParameters_GenerateMipmaps>
-      <ProcessorParameters_ColorKeyEnabled>False</ProcessorParameters_ColorKeyEnabled>
-      <ProcessorParameters_PremultiplyAlpha>False</ProcessorParameters_PremultiplyAlpha>
-    </Compile>
-  </ItemGroup>
-
-  <!-- Shaders -->
   <ItemGroup>
     <Compile Include="Shaders\Voxel.fx">
       <Name>Voxel</Name>
       <Importer>EffectImporter</Importer>
       <Processor>EffectProcessor</Processor>
     </Compile>
-  </ItemGroup>
-
-  <!-- Fonts -->
-  <ItemGroup>
-    <Compile Include="Fonts\Hud.spritefont">
-      <Name>Hud</Name>
-      <Importer>FontDescriptionImporter</Importer>
-      <Processor>FontDescriptionProcessor</Processor>
-    </Compile>
-    <Compile Include="Fonts\Title.spritefont">
-      <Name>Title</Name>
-      <Importer>FontDescriptionImporter</Importer>
-      <Processor>FontDescriptionProcessor</Processor>
-    </Compile>
-  </ItemGroup>
-
-  <!-- Audio -->
-  <ItemGroup>
-    <Compile Include="Audio\break.wav"><Name>break</Name><Importer>WavImporter</Importer><Processor>SoundEffectProcessor</Processor></Compile>
-    <Compile Include="Audio\place.wav"><Name>place</Name><Importer>WavImporter</Importer><Processor>SoundEffectProcessor</Processor></Compile>
-    <Compile Include="Audio\hit.wav"><Name>hit</Name><Importer>WavImporter</Importer><Processor>SoundEffectProcessor</Processor></Compile>
-    <Compile Include="Audio\hurt.wav"><Name>hurt</Name><Importer>WavImporter</Importer><Processor>SoundEffectProcessor</Processor></Compile>
-    <Compile Include="Audio\gunshot.wav"><Name>gunshot</Name><Importer>WavImporter</Importer><Processor>SoundEffectProcessor</Processor></Compile>
-    <Compile Include="Audio\shotgun.wav"><Name>shotgun</Name><Importer>WavImporter</Importer><Processor>SoundEffectProcessor</Processor></Compile>
-    <Compile Include="Audio\laser.wav"><Name>laser</Name><Importer>WavImporter</Importer><Processor>SoundEffectProcessor</Processor></Compile>
-    <Compile Include="Audio\explosion.wav"><Name>explosion</Name><Importer>WavImporter</Importer><Processor>SoundEffectProcessor</Processor></Compile>
-    <Compile Include="Audio\pickup.wav"><Name>pickup</Name><Importer>WavImporter</Importer><Processor>SoundEffectProcessor</Processor></Compile>
-    <Compile Include="Audio\zombie.wav"><Name>zombie</Name><Importer>WavImporter</Importer><Processor>SoundEffectProcessor</Processor></Compile>
-    <Compile Include="Audio\skeleton.wav"><Name>skeleton</Name><Importer>WavImporter</Importer><Processor>SoundEffectProcessor</Processor></Compile>
-    <Compile Include="Audio\dragon.wav"><Name>dragon</Name><Importer>WavImporter</Importer><Processor>SoundEffectProcessor</Processor></Compile>
-    <Compile Include="Audio\menu_move.wav"><Name>menu_move</Name><Importer>WavImporter</Importer><Processor>SoundEffectProcessor</Processor></Compile>
-    <Compile Include="Audio\menu_select.wav"><Name>menu_select</Name><Importer>WavImporter</Importer><Processor>SoundEffectProcessor</Processor></Compile>
   </ItemGroup>
 
   <Import Project="$(MSBuildExtensionsPath)\Microsoft\XNA Game Studio\v4.0\Microsoft.Xna.GameStudio.ContentPipeline.targets" />

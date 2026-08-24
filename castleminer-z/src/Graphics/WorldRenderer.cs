@@ -9,11 +9,23 @@ namespace CastleMinerZ.Graphics
     /// <summary>
     /// Draws the voxel world.
     ///
-    /// Two passes: opaque terrain front to back so the hierarchical z-buffer rejects most
-    /// of the hidden geometry before it is shaded, then water and glass back to front with
-    /// blending on. Every section shares one static index buffer -- the quad index pattern
-    /// is identical for all of them, and giving each chunk its own would cost tens of
-    /// megabytes for nothing.
+    /// Two passes: opaque terrain front to back so the depth buffer rejects most hidden
+    /// geometry before it is shaded, then water and glass back to front with blending on.
+    /// Every section shares one static index buffer -- the quad index pattern is identical
+    /// for all of them, and giving each chunk its own would cost tens of megabytes.
+    ///
+    /// There are two renderer configurations:
+    ///
+    ///   XNA (Xbox 360 / Windows) uses the custom Voxel.fx. Vertices stay in their packed
+    ///   12-byte form and the shader unpacks them, scales sky light by the sun, applies the
+    ///   flashlight cone and animates water.
+    ///
+    ///   MonoGame uses the built-in AlphaTestEffect and BasicEffect instead, because
+    ///   compiling an effect for MonoGame needs a shader compiler that does not run
+    ///   everywhere. Vertices are expanded at upload and lighting is baked, which costs the
+    ///   flashlight and instant day/night -- see ChunkWorker for how the day/night cycle is
+    ///   handled instead. This is the configuration that lets the game run with nothing
+    ///   installed but the .NET SDK.
     /// </summary>
     public sealed class WorldRenderer
     {
@@ -21,10 +33,16 @@ namespace CastleMinerZ.Graphics
         private const int MaxQuadsPerSection = Constants.BlocksPerSection * 6;
 
         private GraphicsDevice _device;
-        private Effect _effect;
         private Texture2D _atlas;
         private IndexBuffer _sharedIndices;
 
+#if MONOGAME
+        // Alpha test rather than plain BasicEffect for the opaque pass: leaves and torches
+        // are cutouts, and without a clip they would draw their transparent texels as solid.
+        private AlphaTestEffect _terrainEffect;
+        private BasicEffect _waterEffect;
+#else
+        private Effect _effect;
         private EffectParameter _pViewProjection;
         private EffectParameter _pChunkOrigin;
         private EffectParameter _pFogColour;
@@ -36,6 +54,7 @@ namespace CastleMinerZ.Graphics
         private EffectParameter _pFlashlightDirection;
         private EffectParameter _pAtlas;
         private EffectParameter _pWaterTime;
+#endif
 
         private readonly List<Chunk> _visibleOpaque = new List<Chunk>(512);
         private readonly List<Chunk> _visibleAlpha = new List<Chunk>(128);
@@ -52,9 +71,26 @@ namespace CastleMinerZ.Graphics
         public void LoadContent(GraphicsDevice device, Effect voxelEffect, Texture2D atlas)
         {
             _device = device;
-            _effect = voxelEffect;
             _atlas = atlas;
 
+#if MONOGAME
+            _terrainEffect = new AlphaTestEffect(device);
+            _terrainEffect.VertexColorEnabled = true;
+            _terrainEffect.Texture = atlas;
+            _terrainEffect.AlphaFunction = CompareFunction.Greater;
+            _terrainEffect.ReferenceAlpha = 128;
+            _terrainEffect.FogEnabled = true;
+            _terrainEffect.World = Matrix.Identity;
+
+            _waterEffect = new BasicEffect(device);
+            _waterEffect.VertexColorEnabled = true;
+            _waterEffect.TextureEnabled = true;
+            _waterEffect.LightingEnabled = false;
+            _waterEffect.Texture = atlas;
+            _waterEffect.FogEnabled = true;
+            _waterEffect.World = Matrix.Identity;
+#else
+            _effect = voxelEffect;
             _pViewProjection = _effect.Parameters["ViewProjection"];
             _pChunkOrigin = _effect.Parameters["ChunkOrigin"];
             _pFogColour = _effect.Parameters["FogColour"];
@@ -66,14 +102,21 @@ namespace CastleMinerZ.Graphics
             _pFlashlightDirection = _effect.Parameters["FlashlightDirection"];
             _pAtlas = _effect.Parameters["AtlasTexture"];
             _pWaterTime = _effect.Parameters["WaterTime"];
-
+#endif
             BuildSharedIndexBuffer();
         }
 
         /// <summary>
         /// One index buffer of quad triangles, reused by every chunk. Sections index into
-        /// their own vertex buffer, so the pattern 0,1,2, 0,2,3 repeated is all any of them
-        /// ever needs.
+        /// their own vertex buffer, so one repeating pattern serves all of them.
+        ///
+        /// The pattern is 0,2,1 / 0,3,2 rather than the more obvious 0,1,2 / 0,2,3. The
+        /// mesher authors its corner tables counter-clockwise as seen from outside the
+        /// block, which is the natural convention to read and to verify with a cross
+        /// product -- but it is the *back*-facing order under the graphics default of
+        /// culling counter-clockwise faces. Reversing the triangles here adapts the one to
+        /// the other in a single place, instead of writing all six corner tables backwards
+        /// and hoping the next person can still check them.
         /// </summary>
         private void BuildSharedIndexBuffer()
         {
@@ -85,11 +128,11 @@ namespace CastleMinerZ.Graphics
                 int v = q * 4;
                 int i = q * 6;
                 indices[i + 0] = v + 0;
-                indices[i + 1] = v + 1;
-                indices[i + 2] = v + 2;
+                indices[i + 1] = v + 2;
+                indices[i + 2] = v + 1;
                 indices[i + 3] = v + 0;
-                indices[i + 4] = v + 2;
-                indices[i + 5] = v + 3;
+                indices[i + 4] = v + 3;
+                indices[i + 5] = v + 2;
             }
 
             _sharedIndices = new IndexBuffer(_device, IndexElementSize.ThirtyTwoBits, indices.Length, BufferUsage.WriteOnly);
@@ -101,29 +144,47 @@ namespace CastleMinerZ.Graphics
         {
             DrawnSections = 0;
             DrawnTriangles = 0;
-            if (_effect == null) return;
+            if (_device == null) return;
 
             CollectVisible(world, camera);
 
             _device.Indices = _sharedIndices;
             _device.SamplerStates[0] = AtlasSampler;
 
+            Vector2 fogRange = ComputeFogRange(world);
+
+#if MONOGAME
+            _terrainEffect.View = camera.View;
+            _terrainEffect.Projection = camera.Projection;
+            _terrainEffect.FogColor = fogColour.ToVector3();
+            _terrainEffect.FogStart = fogRange.X;
+            _terrainEffect.FogEnd = fogRange.Y;
+
+            _waterEffect.View = camera.View;
+            _waterEffect.Projection = camera.Projection;
+            _waterEffect.FogColor = fogColour.ToVector3();
+            _waterEffect.FogStart = fogRange.X;
+            _waterEffect.FogEnd = fogRange.Y;
+#else
             _pViewProjection.SetValue(camera.ViewProjection);
             _pFogColour.SetValue(fogColour.ToVector3());
-            _pFogRange.SetValue(ComputeFogRange(world));
+            _pFogRange.SetValue(fogRange);
             _pSunIntensity.SetValue(world.SunIntensity);
             _pCameraPosition.SetValue(camera.Position);
             _pFlashlight.SetValue(flashlightOn ? 1.0f : 0.0f);
             _pFlashlightDirection.SetValue(camera.Forward);
             if (_pAtlas != null) _pAtlas.SetValue(_atlas);
             if (_pWaterTime != null) _pWaterTime.SetValue(animationTime);
+#endif
 
             // ---- Opaque, nearest first ----
             _device.BlendState = BlendState.Opaque;
             _device.DepthStencilState = DepthStencilState.Default;
             _device.RasterizerState = RasterizerState.CullCounterClockwise;
 
+#if !MONOGAME
             _effect.CurrentTechnique = _effect.Techniques["Terrain"];
+#endif
             OrderByDistance(_visibleOpaque, camera.Position, true);
             for (int i = 0; i < _visibleOpaque.Count; i++) DrawSection(_visibleOpaque[i], false);
 
@@ -131,7 +192,9 @@ namespace CastleMinerZ.Graphics
             _device.BlendState = BlendState.AlphaBlend;
             _device.DepthStencilState = DepthStencilState.DepthRead;
 
+#if !MONOGAME
             _effect.CurrentTechnique = _effect.Techniques["Water"];
+#endif
             OrderByDistance(_visibleAlpha, camera.Position, false);
             for (int i = 0; i < _visibleAlpha.Count; i++) DrawSection(_visibleAlpha[i], true);
 
@@ -183,12 +246,19 @@ namespace CastleMinerZ.Graphics
             if (buffer == null || quads == 0) return;
             if (quads > MaxQuadsPerSection) quads = MaxQuadsPerSection;
 
-            _pChunkOrigin.SetValue(section.Bounds.Min);
-            _pFoliageTint.SetValue(section.Column.FoliageTint);
-
             _device.SetVertexBuffer(buffer);
 
-            EffectPassCollection passes = _effect.CurrentTechnique.Passes;
+#if MONOGAME
+            // Positions are already in world space and lighting is already baked, so there
+            // is nothing per-chunk to set here.
+            Effect effect = alpha ? (Effect)_waterEffect : _terrainEffect;
+#else
+            _pChunkOrigin.SetValue(section.Bounds.Min);
+            _pFoliageTint.SetValue(section.Column.FoliageTint);
+            Effect effect = _effect;
+#endif
+
+            EffectPassCollection passes = effect.CurrentTechnique.Passes;
             for (int p = 0; p < passes.Count; p++)
             {
                 passes[p].Apply();

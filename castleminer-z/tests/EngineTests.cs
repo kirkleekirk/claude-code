@@ -26,6 +26,7 @@ namespace CastleMinerZ.Tests
             TerrainIsWellFormed();
             LightingBehaves();
             MesherProducesValidGeometry();
+            MesherWindingFacesOutward();
             RaycastFindsSurface();
             PlayerPhysicsSettleOnGround();
             InventoryMath();
@@ -336,6 +337,84 @@ namespace CastleMinerZ.Tests
             {
                 world.Shutdown();
             }
+        }
+
+        // -------------------------------------------------------------------
+
+        /// <summary>
+        /// Every quad the mesher emits must be wound counter-clockwise as seen from
+        /// outside the block, so that its cross-product normal points along the face
+        /// direction. Get this backwards and the rasteriser culls exactly the faces that
+        /// should be visible: the world renders inside-out, and you see through the ground
+        /// into the caves below it.
+        /// </summary>
+        private static void MesherWindingFacesOutward()
+        {
+            Harness.Suite("Mesh winding");
+
+            byte[] blocks = new byte[ChunkMesher.PadVolume];
+            byte[] light = new byte[ChunkMesher.PadVolume];
+
+            for (int i = 0; i < blocks.Length; i++)
+            {
+                blocks[i] = Block.Air;
+                light[i] = Chunk.SkyLightByte;
+            }
+
+            // One solid block in open air: exactly six visible faces.
+            blocks[ChunkMesher.PadIndex(8, 8, 8)] = Block.Stone;
+
+            MeshBuilder builder = new MeshBuilder();
+            ChunkMesher.Build(blocks, light, builder);
+
+            Harness.CheckEqual(24, builder.OpaqueCount, "an isolated block emits six quads");
+            if (builder.OpaqueCount != 24) return;
+
+            Vector3[] expected =
+            {
+                new Vector3(-1, 0, 0),
+                new Vector3(1, 0, 0),
+                new Vector3(0, -1, 0),
+                new Vector3(0, 1, 0),
+                new Vector3(0, 0, -1),
+                new Vector3(0, 0, 1)
+            };
+
+            bool[] seen = new bool[6];
+
+            for (int quad = 0; quad < 6; quad++)
+            {
+                Vector4 p0 = builder.Opaque[quad * 4 + 0].Position.ToVector4();
+                Vector4 p1 = builder.Opaque[quad * 4 + 1].Position.ToVector4();
+                Vector4 p2 = builder.Opaque[quad * 4 + 2].Position.ToVector4();
+
+                int face = (int)p0.W;
+                if (face < 0 || face > 5)
+                {
+                    Harness.Check(false, "quad " + quad + " has a valid face index");
+                    continue;
+                }
+                seen[face] = true;
+
+                Vector3 a = new Vector3(p0.X, p0.Y, p0.Z);
+                Vector3 b = new Vector3(p1.X, p1.Y, p1.Z);
+                Vector3 c = new Vector3(p2.X, p2.Y, p2.Z);
+
+                // Right-hand rule: counter-clockwise from outside gives the outward normal.
+                Vector3 normal = Vector3.Cross(b - a, c - a);
+                if (normal.LengthSquared() > 0.0f) normal.Normalize();
+
+                float agreement = Vector3.Dot(normal, expected[face]);
+                Harness.Check(agreement > 0.9f,
+                    "face " + face + " winds outward (normal . expected = " + agreement.ToString("0.00") + ")");
+            }
+
+            bool allFaces = true;
+            for (int i = 0; i < 6; i++)
+            {
+                if (!seen[i]) allFaces = false;
+            }
+            Harness.Check(allFaces, "all six face directions are emitted");
         }
 
         // -------------------------------------------------------------------

@@ -48,16 +48,20 @@ namespace CastleMinerZ.Graphics
 
         public CubeBatch()
         {
+            // 0,2,1 / 0,3,2 rather than 0,1,2 / 0,2,3: the corner table below is authored
+            // counter-clockwise from outside, which is back-facing under the default cull
+            // mode. Reversing the triangles here keeps the table readable. Same reasoning as
+            // WorldRenderer.BuildSharedIndexBuffer.
             for (int q = 0; q < MaxQuads; q++)
             {
                 int v = q * 4;
                 int i = q * 6;
                 _indices[i + 0] = (short)(v + 0);
-                _indices[i + 1] = (short)(v + 1);
-                _indices[i + 2] = (short)(v + 2);
+                _indices[i + 1] = (short)(v + 2);
+                _indices[i + 2] = (short)(v + 1);
                 _indices[i + 3] = (short)(v + 0);
-                _indices[i + 4] = (short)(v + 2);
-                _indices[i + 5] = (short)(v + 3);
+                _indices[i + 4] = (short)(v + 3);
+                _indices[i + 5] = (short)(v + 2);
             }
         }
 

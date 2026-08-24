@@ -1,3 +1,5 @@
+using CastleMinerZ.Assets;
+
 namespace CastleMinerZ.World
 {
     /// <summary>
@@ -12,42 +14,42 @@ namespace CastleMinerZ.World
         private static readonly BlockDefinition[] Defs = new BlockDefinition[256];
         private static bool _initialised;
 
-        /// <summary>Atlas is 16x16 tiles of 16x16 texels.</summary>
-        public const int AtlasTilesPerRow = 16;
+        /// <summary>Atlas is 16x16 tiles of 16x16 texels, as laid out by the generator.</summary>
+        public const int AtlasTilesPerRow = TextureFactory.TilesPerRow;
         public const float AtlasTileSize = 1.0f / AtlasTilesPerRow;
 
-        // Atlas tile indices. Kept in sync with tools/make_atlas.py, which generates
-        // Content/Textures/blocks.png from this same ordering.
-        private const byte TStone = 0;
-        private const byte TDirt = 1;
-        private const byte TGrassTop = 2;
-        private const byte TGrassSide = 3;
-        private const byte TCobble = 4;
-        private const byte TSand = 5;
-        private const byte TSandstoneTop = 6;
-        private const byte TSandstoneSide = 7;
-        private const byte TGravel = 8;
-        private const byte TSnow = 9;
-        private const byte TIce = 10;
-        private const byte TLogTop = 11;
-        private const byte TLogSide = 12;
-        private const byte TPlanks = 13;
-        private const byte TLeaves = 14;
-        private const byte TWater = 15;
-        private const byte TLava = 16;
-        private const byte TBedrock = 17;
-        private const byte TCoalOre = 18;
-        private const byte TIronOre = 19;
-        private const byte TGoldOre = 20;
-        private const byte TDiamondOre = 21;
-        private const byte TDragonOre = 22;
-        private const byte TTorch = 23;
-        private const byte TGlass = 24;
-        private const byte TStoneBrick = 25;
-        private const byte TObsidian = 26;
-        private const byte THellStone = 27;
-        private const byte TExplosiveTop = 28;
-        private const byte TExplosiveSide = 29;
+        // Atlas tile indices. The generator that draws the atlas is the single definition;
+        // these aliases exist only so the table below reads well.
+        private const byte TStone = (byte)TextureFactory.TStone;
+        private const byte TDirt = (byte)TextureFactory.TDirt;
+        private const byte TGrassTop = (byte)TextureFactory.TGrassTop;
+        private const byte TGrassSide = (byte)TextureFactory.TGrassSide;
+        private const byte TCobble = (byte)TextureFactory.TCobble;
+        private const byte TSand = (byte)TextureFactory.TSand;
+        private const byte TSandstoneTop = (byte)TextureFactory.TSandstoneTop;
+        private const byte TSandstoneSide = (byte)TextureFactory.TSandstoneSide;
+        private const byte TGravel = (byte)TextureFactory.TGravel;
+        private const byte TSnow = (byte)TextureFactory.TSnow;
+        private const byte TIce = (byte)TextureFactory.TIce;
+        private const byte TLogTop = (byte)TextureFactory.TLogTop;
+        private const byte TLogSide = (byte)TextureFactory.TLogSide;
+        private const byte TPlanks = (byte)TextureFactory.TPlanks;
+        private const byte TLeaves = (byte)TextureFactory.TLeaves;
+        private const byte TWater = (byte)TextureFactory.TWater;
+        private const byte TLava = (byte)TextureFactory.TLava;
+        private const byte TBedrock = (byte)TextureFactory.TBedrock;
+        private const byte TCoalOre = (byte)TextureFactory.TCoalOre;
+        private const byte TIronOre = (byte)TextureFactory.TIronOre;
+        private const byte TGoldOre = (byte)TextureFactory.TGoldOre;
+        private const byte TDiamondOre = (byte)TextureFactory.TDiamondOre;
+        private const byte TDragonOre = (byte)TextureFactory.TDragonOre;
+        private const byte TTorch = (byte)TextureFactory.TTorch;
+        private const byte TGlass = (byte)TextureFactory.TGlass;
+        private const byte TStoneBrick = (byte)TextureFactory.TStoneBrick;
+        private const byte TObsidian = (byte)TextureFactory.TObsidian;
+        private const byte THellStone = (byte)TextureFactory.THellStone;
+        private const byte TExplosiveTop = (byte)TextureFactory.TExplosiveTop;
+        private const byte TExplosiveSide = (byte)TextureFactory.TExplosiveSide;
 
         public static void Initialise()
         {

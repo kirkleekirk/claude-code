@@ -1,115 +1,143 @@
 # Building CastleMiner Z
 
-There are three separate builds in this repository, and they exist for different
-reasons. Only the first one produces something you can play on a console.
+There are three builds in this repository, for three different reasons.
 
-| Build | Where it runs | What it is for |
-|---|---|---|
-| `CastleMinerZ.Xbox360` | Xbox 360 | The shipping target |
-| `CastleMinerZ.Windows` | Windows | Iterating without a devkit |
-| `desktop/` + `tests/` | Anywhere with .NET 8 | Compile checking and engine tests |
+| Build | Runs on | Needs | Purpose |
+|---|---|---|---|
+| `desktop/` | Windows, macOS, Linux | .NET 8 SDK | Playing and testing it |
+| `CastleMinerZ.Xbox360` | Xbox 360 | Windows, VS2010, XNA GS 4.0, dev console | The original target |
+| `CastleMinerZ.Windows` | Windows | VS2010, XNA GS 4.0 | XNA iteration without a console |
+
+All three compile the same sources from `src/`.
 
 ---
 
-## 1. Xbox 360 (the real build)
+## 1. Desktop — the one you can just run
+
+```bash
+tools/run.sh
+```
+
+That is the whole procedure. It needs the [.NET 8 SDK](https://dot.net) and nothing else:
+no XNA, no Visual Studio, no content pipeline, no shader compiler, no asset downloads.
+
+The reason it is that simple is that the game has essentially no content. Textures, sound
+effects and the font are all generated in code at startup by `src/Assets`, and the desktop
+renderer uses the framework's built-in `AlphaTestEffect` and `BasicEffect` rather than the
+custom `Voxel.fx`. MonoGame can only compile an effect through a tool that needs Wine on
+anything but Windows, and requiring that would have defeated the purpose.
+
+What the desktop renderer gives up against the XNA one:
+
+- **No flashlight cone.** It is a per-pixel effect with no fixed-function equivalent.
+- **No water surface animation.** Same reason.
+- **Day/night costs a re-mesh.** The XNA build stores sky light per vertex and scales it in
+  the shader, so a full day is free. Here the lighting is folded into vertex colours at
+  upload, so the world is rebuilt when the sun has moved far enough to matter. The
+  threshold and mesh budget are in `ChunkWorker`.
+
+Everything else is identical, because it is the same engine.
+
+### Useful switches
+
+`tools/run.sh` passes arguments through to the game:
+
+```bash
+tools/run.sh --seed 4242            # start a specific world immediately, skipping the menu
+tools/run.sh --debug                # frame rate, queue depths, draw counts, pool occupancy
+tools/run.sh --fullbright           # ignore baked lighting, to separate geometry faults from lighting ones
+tools/run.sh --dump-assets ./art    # write the generated textures and font out as PNGs
+```
+
+### Rendering without a display
+
+`tools/screenshot.sh` runs the game under Xvfb with software OpenGL and writes a PNG. This
+is how the renderer is verified on a machine with no GPU and no window server, and how the
+screenshots in the README were produced.
+
+```bash
+tools/screenshot.sh out.png                             # title screen
+tools/screenshot.sh out.png --seed 4242 --warmup 12     # a world, twelve seconds in
+tools/screenshot.sh out.png --seed 1 --time 0.05        # the same world at night
+```
+
+---
+
+## 2. Xbox 360 — the real target
 
 ### Prerequisites
 
 XNA Game Studio 4.0 was retired by Microsoft, so this is a period-correct toolchain:
 
-- Windows (7 through 11; XNA 4.0 installs on modern Windows with the community
-  installer, and natively on 7)
+- Windows (7 through 11; XNA 4.0 installs on modern Windows with the community installer)
 - **Visual Studio 2010** — XNA Game Studio 4.0 does not integrate with later versions
 - **XNA Game Studio 4.0** ([refresh installer](https://www.microsoft.com/download/details.aspx?id=23714))
-- The **Kootenay** and **Pericles** fonts, which XNA Game Studio installs. These are the
-  faces the two `.spritefont` descriptions ask for, and they are licensed for
-  redistribution in XNA games — which is what makes it legal to bake their glyphs into
-  the title.
 - To deploy to a retail console: an **Xbox 360 dev-unlocked** with the XNA Game Studio
   Connect app, paired to the development machine
+
+There is no font or texture prerequisite. The content project builds exactly one asset —
+`content/Shaders/Voxel.fx` — so there is nothing to install and nothing to go missing.
 
 ### Steps
 
 1. Open `CastleMinerZ.sln` in Visual Studio 2010.
 2. Set the solution platform to **Xbox 360**.
 3. Set **CastleMinerZ.Xbox360** as the startup project.
-4. Connect the console: *Tools → Options → XNA Game Studio → Xbox 360 → Add Device*,
-   and enter the key from XNA Game Studio Connect on the console.
-5. Build and run (F5). The content project builds first and deploys with the game.
+4. Connect the console: *Tools → Options → XNA Game Studio → Xbox 360 → Add Device*, and
+   enter the key from XNA Game Studio Connect on the console.
+5. Build and run (F5).
 
-### If the content build fails
-
-- *"Font 'Kootenay' not found"* — XNA Game Studio's fonts were not installed. Either
-  install them, or change `<FontName>` in `content/Fonts/*.spritefont` to any TrueType
-  face present on the build machine. The pipeline rasterises glyphs at build time, so
-  the console never needs the font itself.
-- *"Effect compilation failed"* — `content/Shaders/Voxel.fx` targets `vs_3_0` / `ps_3_0`,
-  which requires the **HiDef** profile. Check that `<XnaProfile>HiDef</XnaProfile>` is
-  still set in the game project.
+If the effect fails to compile, check that `<XnaProfile>HiDef</XnaProfile>` is still set in
+the game project — `Voxel.fx` targets `vs_3_0` / `ps_3_0`, which Reach does not allow.
 
 ---
 
-## 2. Windows
+## 3. Windows (XNA)
 
-Same solution, platform **x86**, startup project **CastleMinerZ.Windows**. Same engine
-sources, linked from `../src`; the differences are compile-time:
-
-- Mouse and keyboard input alongside the pad
-- A larger default view radius (10 columns rather than 6)
-- No processor affinity for the worker threads
-- Saves to a plain file next to the executable rather than through a storage device
+Same solution, platform **x86**, startup project **CastleMinerZ.Windows**. Differences from
+the console build are compile-time: mouse and keyboard input, a larger default view radius,
+no processor affinity on the workers, and saves to a plain file rather than through the
+storage device selector.
 
 ---
 
-## 3. Compile check and tests (no Windows needed)
-
-The engine below the renderer — generation, lighting, meshing, physics, inventory,
-crafting, saving — is plain managed code with no device dependency. That half can be
-built and exercised anywhere, which is how this codebase is verified without a console.
-
-Requires the [.NET 8 SDK](https://dot.net). MonoGame re-implements the XNA 4.0 API
-almost exactly, so a clean build here is a strong signal the same sources build under
-XNA Game Studio 4.0.
+## Tests
 
 ```bash
-# Compile the whole game against the XNA API surface
-./tools/check.sh
-
-# Run the headless engine and content test suite (110 assertions)
-dotnet run --project tests/CastleMinerZ.Tests.csproj
+dotnet run --project tests/CastleMinerZ.Tests.csproj      # 122 assertions
+./tools/check.sh                                          # compile check only
 ```
 
-Both projects pin `<LangVersion>4</LangVersion>`, which is what the VS2010 C# compiler
-accepts. That is a deliberate guard rail: without it, it is very easy to write modern
-C# that builds locally and then fails on the actual target.
+Everything below the renderer — generation, lighting, meshing, physics, inventory,
+crafting, saving — has no device dependency, so the suite exercises it directly.
 
-The `desktop/` project builds the code but not the content — MonoGame uses its own
-content pipeline, and the `.xnb` files it wants are not the ones XNA produces. It is a
-compile check, not a playable build.
+Both the desktop and test projects pin `<LangVersion>4</LangVersion>`, which is what the
+VS2010 C# compiler accepts. That is a deliberate guard rail: without it, it is very easy to
+write modern C# that builds locally and then fails on the actual target.
+
+What the tests cannot cover is anything that needs a graphics device. That gap is real —
+the first time this was actually run, chunk geometry was being built correctly and then
+never uploaded to the GPU, and every test still passed. `tools/screenshot.sh` exists to
+close it.
 
 ---
 
-## Regenerating the assets
+## Regenerating the art
 
-Every texture and sound in the game is generated by a script, so there are no binary
-assets of unclear origin in the repository and anyone can reproduce them exactly.
-Both scripts are pure Python 3 with no third-party packages.
+The art is generated by the game itself, so there is nothing to run as a build step. To
+inspect it, or to regenerate the console's title thumbnail:
 
 ```bash
-python3 tools/make_atlas.py    # content/Textures/*.png + the Xbox thumbnail
-python3 tools/make_sounds.py   # content/Audio/*.wav
+tools/run.sh --dump-assets ./art
 ```
 
-Both are deterministic — the random number generators are seeded — so regenerating
-produces byte-identical output and does not churn the repository.
+This writes the block atlas, the item icon atlas, the particle sprite, the font sheet and
+`GameThumbnail.png`. The generators are seeded, so the output is identical on every run and
+on every platform.
 
-If you change the tile ordering in `tools/make_atlas.py`, the tile index constants at
-the top of `src/World/BlockRegistry.cs` (blocks) and the `IconTile` values in
-`src/Items/ItemRegistry.cs` (items) have to move with it. The generator writes a
-manifest of the tiles it drew, and the test suite checks every registry entry against
-it, so a mismatch fails the tests rather than showing up in-game as a block wearing the
-wrong texture. The tests also check that `POSITION_SCALE` and `TILE_SIZE` in
-`Voxel.fx` still agree with `ChunkMesher.Q` and the atlas grid.
+`src/Assets/TextureFactory.cs` is the single definition of the atlas layout — the block and
+item registries alias its tile constants rather than restating them, and a test checks that
+every tile a registry references is one the generator actually draws.
 
 ---
 
@@ -117,18 +145,15 @@ wrong texture. The tests also check that `POSITION_SCALE` and `TILE_SIZE` in
 
 If the frame rate is not holding, these are the knobs, roughly in order of effect:
 
-1. **View radius** (`Constants.ViewRadiusColumns`, default 6, exposed in Options).
-   Resident chunk memory grows with the square of this, and so does the visible draw
-   call count.
-2. **World height** (`Constants.SectionsPerColumn`, default 8 → 128 blocks). Dropping to
-   6 saves a quarter of the voxel memory and speeds up every column's lighting pass.
-3. **Mesh jobs submitted per frame** (`SubmitDirtySections`, currently 6) and **columns
-   integrated per frame** (currently 2). Lighting a column is the expensive part of
-   integration; lowering this trades a slower-filling world for a smoother one.
-4. **Enemy population budget** (`EnemyManager.PopulationBudget`). Thirty creatures is
-   about a thousand quads, which is nothing, but their AI and physics are not free.
+1. **View radius** (`Constants.ViewRadiusColumns`, default 6, exposed in Options). Resident
+   chunk memory grows with the square of this, and so does the visible draw call count.
+2. **World height** (`Constants.SectionsPerColumn`, default 8 → 128 blocks). Dropping to 6
+   saves a quarter of the voxel memory and speeds up every column's lighting pass.
+3. **Mesh jobs per frame** (`ChunkWorker.MeshJobsPerFrame`) and **columns integrated per
+   frame** (currently 2). Lighting a column is the expensive part of integration.
+4. **Enemy population budget** (`EnemyManager.PopulationBudget`).
 
-The debug overlay (Options → Debug Overlay) shows frame rate, resident columns, both
-worker queue depths, drawn sections and triangles, live particle and enemy counts, pool
-occupancy, and managed heap size. Watch the pool numbers in particular: if the live
-count climbs without the free count recovering, something is leaking chunk arrays.
+The debug overlay (Options → Debug Overlay, or `--debug`) shows frame rate, resident
+columns, both worker queue depths, drawn sections and triangles, live particle and enemy
+counts, pool occupancy, and managed heap size. Watch the pool numbers in particular: if the
+live count climbs without the free count recovering, something is leaking chunk arrays.

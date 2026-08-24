@@ -348,8 +348,10 @@ namespace CastleMinerZ.Graphics
                 ? (float)System.Math.Sin(player.MiningProgress * 22.0f) * 0.09f
                 : 0.0f;
 
-            // View space: +X right, +Y up, -Z forward.
-            Vector3 position = new Vector3(0.42f, -0.42f + bob + swing, -0.75f);
+            // View space: +X right, +Y up, -Z forward. Pushed down and to the right so the
+            // item sits in the corner rather than over the middle of the view, and far
+            // enough back that it takes up roughly a quarter of the screen height.
+            Vector3 position = new Vector3(0.52f, -0.62f + bob + swing, -1.05f);
             float light = session.World.SampleLight(player.EyePosition);
             if (light < 0.35f) light = 0.35f;
 
@@ -358,21 +360,23 @@ namespace CastleMinerZ.Graphics
 
             if (def.IsPlaceable)
             {
-                _batch.AddTexturedBox(position, new Vector3(0.3f, 0.3f, 0.3f), 0.7f, Color.White, light,
+                _batch.AddTexturedBox(position, new Vector3(0.34f, 0.34f, 0.34f), 0.7f, Color.White, light,
                     BlockRegistry.Get(def.PlacesBlock).FaceTiles[Face.PosY], BlockRegistry.AtlasTilesPerRow);
                 _batch.End(view, projection, _blockAtlas);
             }
             else if (def.IsFirearm)
             {
                 // Blocky gun silhouette: receiver, barrel, grip.
-                _batch.AddBox(position + new Vector3(0.0f, 0.0f, 0.0f), new Vector3(0.1f, 0.12f, 0.42f), 0.0f, new Color(48, 48, 52), light);
-                _batch.AddBox(position + new Vector3(0.0f, 0.04f, -0.3f), new Vector3(0.05f, 0.05f, 0.3f), 0.0f, new Color(32, 32, 36), light);
-                _batch.AddBox(position + new Vector3(0.0f, -0.18f, 0.1f), new Vector3(0.08f, 0.2f, 0.12f), 0.0f, new Color(70, 52, 36), light);
+                _batch.AddBox(position, new Vector3(0.12f, 0.14f, 0.5f), 0.0f, new Color(48, 48, 52), light);
+                _batch.AddBox(position + new Vector3(0.0f, 0.05f, -0.36f), new Vector3(0.06f, 0.06f, 0.36f), 0.0f, new Color(32, 32, 36), light);
+                _batch.AddBox(position + new Vector3(0.0f, -0.2f, 0.12f), new Vector3(0.09f, 0.22f, 0.14f), 0.0f, new Color(70, 52, 36), light);
                 _batch.End(view, projection, null);
             }
             else
             {
-                _batch.AddTexturedBox(position, new Vector3(0.26f, 0.26f, 0.05f), 0.25f, Color.White, light,
+                // Tools and materials show their icon on a thin slab, angled slightly so it
+                // reads as an object being held rather than as a sticker on the screen.
+                _batch.AddTexturedBox(position, new Vector3(0.36f, 0.36f, 0.04f), 0.22f, Color.White, light,
                     def.IconTile, ItemRegistry.IconAtlasTilesPerRow);
                 _batch.End(view, projection, _itemAtlas);
             }

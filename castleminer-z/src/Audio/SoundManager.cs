@@ -1,6 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Audio;
-using Microsoft.Xna.Framework.Content;
+using CastleMinerZ.Assets;
 
 namespace CastleMinerZ
 {
@@ -31,8 +31,9 @@ namespace CastleMinerZ
     /// full 3D path allocates a cue object per call, and this game can easily fire thirty
     /// sounds in a second during a horde fight.
     ///
-    /// Every asset is optional. A missing sound file leaves a null slot and plays nothing,
-    /// so the game still runs against an incomplete content build.
+    /// The effects are synthesised at startup by <see cref="SoundFactory"/> rather than
+    /// loaded, so there are no audio assets to build and nothing to keep in step with the
+    /// <see cref="SoundId"/> enum. A null slot simply plays nothing.
     /// </summary>
     public sealed class SoundManager
     {
@@ -46,39 +47,35 @@ namespace CastleMinerZ
         public float MasterVolume = 0.8f;
         public bool Enabled = true;
 
-        private static readonly string[] AssetNames =
+        /// <summary>
+        /// Synthesises every effect. Takes a fraction of a second, once, at startup.
+        ///
+        /// A machine with no working audio device throws on the very first SoundEffect
+        /// constructed. That is not a reason to refuse to start the game, so the failure is
+        /// caught here and the whole subsystem switches itself off -- every Play call then
+        /// becomes a no-op and everything else carries on.
+        /// </summary>
+        public void Initialise()
         {
-            "Audio/break",
-            "Audio/place",
-            "Audio/hit",
-            "Audio/hurt",
-            "Audio/gunshot",
-            "Audio/shotgun",
-            "Audio/laser",
-            "Audio/explosion",
-            "Audio/pickup",
-            "Audio/zombie",
-            "Audio/skeleton",
-            "Audio/dragon",
-            "Audio/menu_move",
-            "Audio/menu_select"
-        };
-
-        public void LoadContent(ContentManager content)
-        {
-            for (int i = 0; i < (int)SoundId.Count; i++)
+            try
             {
-                try
-                {
-                    _sounds[i] = content.Load<SoundEffect>(AssetNames[i]);
-                }
-                catch (ContentLoadException)
-                {
-                    // Optional asset; leave the slot empty.
-                    _sounds[i] = null;
-                }
+                SoundEffect[] generated = SoundFactory.CreateAll();
+                for (int i = 0; i < _sounds.Length && i < generated.Length; i++) _sounds[i] = generated[i];
+            }
+            catch (NoAudioHardwareException)
+            {
+                Enabled = false;
+                Available = false;
+            }
+            catch (InstancePlayLimitException)
+            {
+                Enabled = false;
+                Available = false;
             }
         }
+
+        /// <summary>False when the platform has no usable audio device.</summary>
+        public bool Available = true;
 
         public void SetListener(Vector3 position, Vector3 right)
         {

@@ -46,11 +46,15 @@ namespace CastleMinerZ.Graphics
                 (float)System.Math.Cos(Yaw) * cosPitch);
             Forward.Normalize();
 
-            Right = Vector3.Cross(Vector3.Up, Forward);
+            // Right-handed basis: Forward x WorldUp gives the camera's right. Taking the
+            // cross the other way round yields a left-pointing vector, which the view matrix
+            // hides (CreateLookAt only needs an up vector) but which would silently mirror
+            // stereo panning and particle billboards.
+            Right = Vector3.Cross(Forward, Vector3.Up);
             if (Right.LengthSquared() < 1e-6f) Right = Vector3.Right;
             Right.Normalize();
 
-            Up = Vector3.Cross(Forward, Right);
+            Up = Vector3.Cross(Right, Forward);
 
             View = Matrix.CreateLookAt(Position, Position + Forward, Up);
             Projection = Matrix.CreatePerspectiveFieldOfView(FieldOfView, AspectRatio, NearPlane, FarPlane);

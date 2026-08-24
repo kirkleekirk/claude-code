@@ -316,8 +316,10 @@ namespace CastleMinerZ.Graphics
             BlendState previousBlend = device.BlendState;
             DepthStencilState previousDepth = device.DepthStencilState;
 
+            RasterizerState previousRasterizer = device.RasterizerState;
             device.BlendState = BlendState.NonPremultiplied;
             device.DepthStencilState = DepthStencilState.DepthRead;
+            device.RasterizerState = RasterizerState.CullNone;
 
             for (int p = 0; p < _effect.CurrentTechnique.Passes.Count; p++)
             {
@@ -329,6 +331,7 @@ namespace CastleMinerZ.Graphics
 
             device.BlendState = previousBlend;
             device.DepthStencilState = previousDepth;
+            device.RasterizerState = previousRasterizer;
         }
 
         public void Clear()

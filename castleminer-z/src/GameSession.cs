@@ -152,9 +152,12 @@ namespace CastleMinerZ
                 if (steps == Constants.MaxCatchUpSteps) _accumulator = 0.0f;
             }
 
+#if MONOGAME
+            World.RebakeLightingIfSunMoved();
+#endif
             World.UpdateStreaming(Player.Position);
             World.Worker.IntegrateGeneratedColumns(2);
-            World.Worker.SubmitDirtySections(Player.Position, 6);
+            World.Worker.SubmitDirtySections(Player.Position, ChunkWorker.MeshJobsPerFrame);
 
             UpdateNotices(elapsed);
         }
