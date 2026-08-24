@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  XNA Game Studio 4.0 content project.
+
+  It builds exactly one asset: the terrain shader. Every texture, sound and glyph in the
+  game is generated in code at startup (see src/Assets), which means there is nothing else
+  here to build, nothing to keep in step with the registries by hand, and no font that has
+  to be installed on the build machine.
+
+  The MonoGame configuration does not use this project at all -- it renders with the
+  framework's built-in effects, so it has no content build whatsoever.
+-->
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <ProjectGuid>{CDB7CCC6-38C8-5BC1-AF85-9D74035A85F4}</ProjectGuid>
+    <ProjectTypeGuids>{96E2B04D-8817-42c6-938A-82C39BA4D311}</ProjectTypeGuids>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>CastleMinerZContent</RootNamespace>
+    <AssemblyName>CastleMinerZContent</AssemblyName>
+    <XnaFrameworkVersion>v4.0</XnaFrameworkVersion>
+    <OutputPath>bin\$(Platform)\$(Configuration)</OutputPath>
+    <ContentRootDirectory>Content</ContentRootDirectory>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Microsoft.Xna.Framework.Content.Pipeline.EffectImporter, Version=4.0.0.0, Culture=neutral, PublicKeyToken=842cf8be1de50553, processorArchitecture=MSIL" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="Shaders\Voxel.fx">
+      <Name>Voxel</Name>
+      <Importer>EffectImporter</Importer>
+      <Processor>EffectProcessor</Processor>
+    </Compile>
+  </ItemGroup>
+
+  <Import Project="$(MSBuildExtensionsPath)\Microsoft\XNA Game Studio\v4.0\Microsoft.Xna.GameStudio.ContentPipeline.targets" />
+</Project>

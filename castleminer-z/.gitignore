@@ -1,0 +1,26 @@
+# Build output
+bin/
+obj/
+*.user
+*.suo
+*.cachefile
+
+# Content pipeline intermediates
+content/obj/
+content/bin/
+
+# Desktop and test builds
+desktop/bin/
+desktop/obj/
+tests/bin/
+tests/obj/
+
+# Local dotnet tool manifests
+.config/
+
+# Local saves produced by the desktop build and the test suite
+world.sav
+
+# Output of --dump-assets and tools/screenshot.sh
+art/
+*.local.png
