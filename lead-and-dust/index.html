@@ -7,83 +7,147 @@
 <style>
   :root{
     --sand:#e8d6b0; --dust:#c9a978; --rust:#b4472a; --iron:#2a2622; --ink:#14110f;
-    --gold:#e0a93b; --blood:#8d1f14;
+    --gold:#e0a93b; --blood:#8d1f14; --paper:#e9dcbe;
   }
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#0d0b0a;
-    font-family:"Courier New",Courier,monospace;color:var(--sand);-webkit-user-select:none;user-select:none;}
+    font-family:"Courier New",Courier,monospace;color:var(--sand);
+    -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
   canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
-  #overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
-    background:radial-gradient(ellipse at 50% 35%, #3a2a1c 0%, #17110c 55%, #0a0807 100%);
-    z-index:10;overflow-y:auto;padding:24px}
+
+  /* ---------------------------------------------------------------- menu */
+  #overlay{position:fixed;inset:0;z-index:10;overflow:hidden}
   #overlay.hidden{display:none}
-  .card{width:min(900px,96vw);text-align:center}
-  h1{font-size:clamp(38px,9vw,86px);letter-spacing:.16em;margin:0;line-height:.98;
-    color:var(--sand);text-shadow:0 5px 0 #6b3a1c, 0 8px 22px #000;}
-  h1 .amp{color:var(--rust)}
-  .sub{letter-spacing:.42em;font-size:clamp(10px,2.2vw,15px);color:var(--dust);margin:14px 0 4px}
-  .tag{letter-spacing:.2em;font-size:clamp(9px,2vw,12px);color:#8a7452;margin-bottom:26px}
-  .rule{height:2px;background:linear-gradient(90deg,transparent,#7a5a34 18%,#7a5a34 82%,transparent);margin:20px auto;width:80%}
-  button.big{font-family:inherit;font-size:20px;letter-spacing:.24em;padding:18px 44px;cursor:pointer;
-    color:#1b1410;background:linear-gradient(#f0d9a8,#c9a262);border:3px solid #6b4a24;border-radius:3px;
-    box-shadow:0 6px 0 #4a3218, 0 12px 26px rgba(0,0,0,.55);transition:transform .08s, box-shadow .08s}
-  button.big:hover{transform:translateY(2px);box-shadow:0 4px 0 #4a3218,0 10px 20px rgba(0,0,0,.55)}
+  #menuBg{position:absolute;inset:0;width:100%;height:100%;z-index:0}
+  #menuWrap{position:absolute;inset:0;z-index:1;display:flex;flex-direction:column;
+    align-items:center;justify-content:flex-start;overflow-y:auto;padding:min(4vh,34px) 16px 20px}
+  #menuWrap::-webkit-scrollbar{width:8px}
+  #menuWrap::-webkit-scrollbar-thumb{background:#4a3a24}
+
+  .brand{text-align:center;filter:drop-shadow(0 10px 26px rgba(0,0,0,.75))}
+  h1{font-size:clamp(40px,8.4vw,92px);letter-spacing:.14em;margin:0;line-height:.92;color:#f2e3c0;
+     text-shadow:0 3px 0 #8a4a1e, 0 6px 0 #4a2a12, 0 14px 26px rgba(0,0,0,.7);}
+  h1 .amp{color:#d9622f;text-shadow:0 3px 0 #5a2410, 0 6px 0 #341508}
+  .rule{display:flex;align-items:center;gap:12px;justify-content:center;margin:12px auto 4px;max-width:640px}
+  .rule i{flex:1;height:2px;background:linear-gradient(90deg,transparent,#8a6a3c 30%,#8a6a3c 70%,transparent)}
+  .rule b{font-weight:normal;letter-spacing:.44em;font-size:clamp(9px,2vw,13px);color:#d8bd8c}
+  .tag{letter-spacing:.26em;font-size:clamp(9px,1.8vw,12px);color:#a08a63;margin-top:8px}
+
+  /* ------------------------------------------------------- mode posters */
+  #modes{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;margin:min(3.2vh,26px) 0 0;width:100%;max-width:1120px}
+  .mode{position:relative;flex:1 1 300px;max-width:340px;min-height:238px;cursor:pointer;
+    background:linear-gradient(#241b13ee,#15100beb);border:2px solid #5a4426;border-radius:2px;
+    padding:16px 18px 54px;text-align:left;transition:transform .12s,border-color .12s,box-shadow .12s;
+    box-shadow:0 10px 30px rgba(0,0,0,.55), inset 0 0 60px rgba(0,0,0,.5)}
+  .mode:hover{transform:translateY(-3px);border-color:#c8933a;box-shadow:0 14px 34px rgba(0,0,0,.6)}
+  .mode.sel{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold),0 14px 34px rgba(0,0,0,.6)}
+  .mode .kicker{font-size:10.5px;letter-spacing:.3em;color:#8a7452}
+  .mode h2{margin:6px 0 2px;font-size:clamp(19px,2.4vw,25px);letter-spacing:.06em;color:#f0dfb8;line-height:1.06}
+  .mode .sub{font-size:11px;letter-spacing:.2em;color:var(--gold);margin-bottom:10px}
+  .mode p{font-size:12.5px;line-height:1.55;color:#b7a07c;margin:0}
+  .mode .diff{position:absolute;left:18px;bottom:16px;font-size:11px;letter-spacing:.2em;color:#c9a978}
+  .mode .diff span{display:inline-block;width:9px;height:9px;margin-left:3px;border:1px solid #7a6039;
+    vertical-align:middle;background:transparent}
+  .mode .diff span.on{background:var(--rust);border-color:#e0764a}
+  .mode .go{position:absolute;right:16px;bottom:12px;font-size:11px;letter-spacing:.24em;color:#7d6845}
+  .mode.sel .go{color:var(--gold)}
+  .mode.locked{cursor:not-allowed;filter:grayscale(.75) brightness(.55);border-color:#3a2f22}
+  .mode.locked:hover{transform:none;border-color:#3a2f22}
+  .mode.locked::after{content:"NOT YET SURVEYED";position:absolute;left:50%;top:52%;
+    transform:translate(-50%,-50%) rotate(-11deg);border:3px solid #7d2216;color:#7d2216;
+    padding:7px 14px;font-size:15px;letter-spacing:.2em;background:rgba(10,6,4,.55);white-space:nowrap}
+  .blackout{position:absolute;inset:0;background:
+    repeating-linear-gradient(0deg,rgba(0,0,0,.92) 0 14px,rgba(0,0,0,.78) 14px 28px);
+    mix-blend-mode:multiply;pointer-events:none}
+
+  /* ------------------------------------------------------------- actions */
+  #actions{display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:min(3.4vh,26px)}
+  button.big{font-family:inherit;font-size:clamp(15px,2.2vw,20px);letter-spacing:.24em;padding:16px 46px;
+    cursor:pointer;color:#1b1410;background:linear-gradient(#f2dcae,#c9a262);border:3px solid #6b4a24;
+    border-radius:3px;box-shadow:0 6px 0 #4a3218,0 14px 30px rgba(0,0,0,.6);transition:transform .08s,box-shadow .08s}
+  button.big:hover{transform:translateY(2px);box-shadow:0 4px 0 #4a3218,0 10px 22px rgba(0,0,0,.6)}
   button.big:active{transform:translateY(6px);box-shadow:0 0 0 #4a3218}
-  button.big[disabled]{opacity:.4;cursor:not-allowed;filter:grayscale(1)}
-  .ghost{font-family:inherit;background:none;border:1px solid #6b5636;color:#a08a63;padding:9px 18px;
-    letter-spacing:.18em;font-size:11px;cursor:pointer;border-radius:2px;margin:6px}
+  button.big[disabled]{opacity:.42;cursor:not-allowed;filter:grayscale(1)}
+  .ghostrow{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:4px}
+  .ghost{font-family:inherit;background:rgba(12,9,7,.5);border:1px solid #6b5636;color:#a8916b;padding:9px 16px;letter-spacing:.18em;font-size:11px;cursor:pointer;border-radius:2px}
   .ghost:hover{border-color:var(--gold);color:var(--gold)}
-  .cols{display:flex;gap:26px;justify-content:center;flex-wrap:wrap;margin-top:8px;text-align:left}
-  .col{flex:1 1 240px;max-width:290px;border:1px solid #4a3a24;padding:14px 16px;background:rgba(0,0,0,.28)}
-  .col h3{margin:0 0 10px;font-size:12px;letter-spacing:.24em;color:var(--gold);border-bottom:1px solid #4a3a24;padding-bottom:7px}
-  .col p{margin:7px 0;font-size:12.5px;line-height:1.55;color:#c2ab84}
-  .k{display:inline-block;min-width:82px;color:var(--sand);font-weight:bold}
-  #status{margin-top:18px;font-size:12px;letter-spacing:.14em;color:#8a7452;min-height:18px}
+  .ghost.dev{border-style:dashed;color:#7d6845}
+  #status{margin-top:14px;font-size:11.5px;letter-spacing:.16em;color:#8a7452;min-height:17px;text-align:center}
   #status.warn{color:var(--rust)}
-  #hint{position:fixed;left:0;right:0;bottom:10px;text-align:center;font-size:11px;color:#6d5a3c;
+  #status.ok{color:#8fae63}
+
+  /* -------------------------------------------------------------- modals */
+  #modal{position:fixed;inset:0;z-index:30;background:#080605f2;display:none;
+    flex-direction:column;align-items:center;justify-content:center;padding:14px}
+  #modal.open{display:flex}
+  #modalHead{display:flex;justify-content:space-between;align-items:center;width:100%;max-width:1180px;
+    padding:0 4px 10px;gap:14px}
+  #modalTitle{letter-spacing:.32em;font-size:13px;color:var(--gold)}
+  #modalTools{display:flex;gap:6px;align-items:center}
+  #modalBody{position:relative;width:100%;max-width:1180px;flex:1;min-height:0;overflow:hidden;
+    display:flex;align-items:center;justify-content:center}
+  #mapCv{position:absolute;inset:0;width:100%;height:100%;border:2px solid #6b4a24;
+    background:#e9dcbe;cursor:grab;touch-action:none}
+  #mapCv.drag{cursor:grabbing}
+  #mapHint{font-size:11px;letter-spacing:.18em;color:#7d6845;margin-top:8px;text-align:center}
+  .helpcols{display:flex;gap:22px;flex-wrap:wrap;justify-content:center;max-height:100%;overflow-y:auto}
+  .col{flex:1 1 260px;max-width:320px;border:1px solid #4a3a24;padding:14px 16px;background:rgba(0,0,0,.35)}
+  .col h3{margin:0 0 10px;font-size:12px;letter-spacing:.24em;color:var(--gold);
+    border-bottom:1px solid #4a3a24;padding-bottom:7px}
+  .col p{margin:7px 0;font-size:12.5px;line-height:1.55;color:#c2ab84}
+  .k{display:inline-block;min-width:86px;color:var(--sand);font-weight:bold}
+
+  #hint{position:fixed;left:0;right:0;bottom:8px;text-align:center;font-size:10.5px;color:#6d5a3c;
     letter-spacing:.18em;z-index:11;pointer-events:none}
   #err{position:fixed;left:8px;top:8px;right:8px;max-height:44vh;overflow:auto;background:#2a0d08ee;
     border:1px solid #b4472a;color:#ffd9c8;font-size:11px;padding:10px;z-index:99;display:none;white-space:pre-wrap}
+  #loading{position:fixed;inset:0;z-index:20;display:none;align-items:center;justify-content:center;
+    background:#0c0907f5;letter-spacing:.3em;font-size:14px;color:var(--gold);text-align:center}
+  #loading.on{display:flex}
 </style>
 </head>
 <body>
 <canvas id="gl"></canvas>
 <div id="err"></div>
+
 <div id="overlay">
-  <div class="card">
-    <h1>LEAD <span class="amp">&amp;</span> DUST</h1>
-    <div class="sub">LAST STAND AT LITTLE CANYON</div>
-    <div class="tag">TOMLEND TERRITORY &nbsp;·&nbsp; 1878 &nbsp;·&nbsp; VR ONLY</div>
-    <button class="big" id="enterVR">ENTER VR</button>
-    <div id="status">checking for a headset&hellip;</div>
-    <div class="rule"></div>
-    <div class="cols">
-      <div class="col">
-        <h3>THE IRON RULE</h3>
-        <p><span class="k">COCK</span>click the thumbstick to thumb the hammer back</p>
-        <p><span class="k">FIRE</span>trigger — a gun with the hammer down only clicks</p>
-        <p><span class="k">RELOAD</span>hold grip</p>
-        <p><span class="k">MOVE</span>left stick &nbsp;·&nbsp; <b>TURN</b> right stick</p>
-        <p><span class="k">STORE</span>A / X button, or between waves</p>
-      </div>
-      <div class="col">
-        <h3>WHERE TO AIM</h3>
-        <p>Every outlaw is built from pixels in layers — cloth, meat, bone.</p>
-        <p>A round spends itself punching through. <b>Penetration</b> decides how deep it gets.</p>
-        <p>Clip the <b style="color:#d98cc8">brain</b> or the <b style="color:#c8342a">heart</b> and they drop where they stand. The heart is the size of a fist. Aim small.</p>
-      </div>
-      <div class="col">
-        <h3>THE TERRITORY</h3>
-        <p>Little Canyon sits in the red rock at the south edge of <b>Tomlend</b>, a day's ride from <b>Dranden</b>, two from the <b>Greef</b> line.</p>
-        <p>This build is the <b>endless</b> stand. Free roam of both states comes later.</p>
-      </div>
+  <canvas id="menuBg"></canvas>
+  <div id="menuWrap">
+    <div class="brand">
+      <h1>LEAD <span class="amp">&amp;</span> DUST</h1>
+      <div class="rule"><i></i><b>TOMLEND TERRITORY &middot; 1878</b><i></i></div>
+      <div class="tag">A VR SHOOTING GALLERY WITH A HAMMER TO THUMB</div>
     </div>
-    <div style="margin-top:18px">
-      <button class="ghost" id="flatBtn">FLAT PREVIEW (no headset — dev only)</button>
-      <button class="ghost" id="mapBtn">TERRITORY MAP</button>
+
+    <div id="modes"></div>
+
+    <div id="actions">
+      <button class="big" id="enterVR">ENTER VR</button>
+      <div class="ghostrow">
+        <button class="ghost" id="mapBtn">TERRITORY MAP</button>
+        <button class="ghost" id="helpBtn">HOW TO PLAY</button>
+        <button class="ghost dev" id="flatBtn">FLAT PREVIEW &middot; DEV</button>
+      </div>
+      <div id="status">checking for a headset&hellip;</div>
     </div>
   </div>
 </div>
+
+<div id="modal">
+  <div id="modalHead">
+    <div id="modalTitle">TERRITORY MAP</div>
+    <div id="modalTools">
+      <button class="ghost" id="mapOut">&minus;</button>
+      <button class="ghost" id="mapIn">+</button>
+      <button class="ghost" id="mapFit">FIT</button>
+      <button class="ghost" id="modalClose">CLOSE</button>
+    </div>
+  </div>
+  <div id="modalBody"></div>
+  <div id="mapHint"></div>
+</div>
+
+<div id="loading">RAISING THE TOWN&hellip;</div>
 <div id="hint">Put the headset on before pressing ENTER VR &nbsp;·&nbsp; headphones recommended</div>
 
 <script>
@@ -513,6 +577,11 @@ class StaticMesh {
     gl.bindVertexArray(null);
     this.tris = idx.length / 3;
   }
+  dispose(){
+    gl.deleteVertexArray(this.vao);
+    gl.deleteBuffer(this.pb); gl.deleteBuffer(this.cb);
+    gl.deleteBuffer(this.nb); gl.deleteBuffer(this.ib);
+  }
   draw(frustum){
     gl.bindVertexArray(this.vao);
     for (const c of this.chunks){
@@ -672,7 +741,7 @@ P('barnRed',   0x8e3a26, MAT.WOOD);   P('barnRedD',  0x74301f, MAT.WOOD);
 P('whitewash', 0xdcd6c4, MAT.WOOD);   P('whitewashD',0xc2bba7, MAT.WOOD);
 P('shingle',   0x59493a, MAT.WOOD);   P('shingleD',  0x473a2e, MAT.WOOD);
 P('tin',       0x8a8d90, MAT.TIN);    P('tinD',      0x6f7275, MAT.TIN);
-P('glass',     0x7fa8b4, MAT.GLASS);
+P('glass',     0x51707c, MAT.GLASS);  P('glassL',    0x7d9aa4, MAT.GLASS);
 P('sign',      0x2a2118, MAT.WOOD);   P('signGold',  0xd8a63c, MAT.WOOD);
 P('hay',       0xd4b455, MAT.CLOTH);  P('water',     0x4d6d7c, MAT.GLASS);
 P('cactus',    0x4e7a45, MAT.FLESH);  P('cactusD',   0x3d6136, MAT.FLESH);
@@ -1009,7 +1078,7 @@ const WORLD = {
   bounds: { x0:-21, x1:21, z0:-49, z1:49 },
 };
 
-function buildTerrain(){
+function buildCanyonTerrain(){
   const vs = 1;
   const g = new Grid(140, 40, 152, vs, -70, -8, -76);
   const rockCols = [C.rock1, C.rock2, C.rock3, C.rock4, C.rock5, C.rockDark];
@@ -1082,24 +1151,27 @@ function buildTerrain(){
 }
 
 /* ---- metre-space painting helpers over a grid ---- */
-function mbox(g, x, y, z, w, h, d, col){
+/* metre-space box -> voxel range. A box thinner than one voxel still gets one
+   voxel: without this a 20cm lamp post rounds away and the lantern hangs in air. */
+function mrange(g, x, y, z, w, h, d){
   const x0 = Math.round((x - g.ox) / g.vs), y0 = Math.round((y - g.oy) / g.vs), z0 = Math.round((z - g.oz) / g.vs);
-  const x1 = Math.round((x + w - g.ox) / g.vs) - 1, y1 = Math.round((y + h - g.oy) / g.vs) - 1,
-        z1 = Math.round((z + d - g.oz) / g.vs) - 1;
-  g.box(x0, y0, z0, x1, y1, z1, col);
+  return [x0, y0, z0,
+          Math.max(x0, Math.round((x + w - g.ox) / g.vs) - 1),
+          Math.max(y0, Math.round((y + h - g.oy) / g.vs) - 1),
+          Math.max(z0, Math.round((z + d - g.oz) / g.vs) - 1)];
+}
+function mbox(g, x, y, z, w, h, d, col){
+  const r = mrange(g, x, y, z, w, h, d);
+  g.box(r[0], r[1], r[2], r[3], r[4], r[5], col);
 }
 function mwalls(g, x, y, z, w, h, d, col, t){
   const tv = Math.max(1, Math.round((t || 0.25) / g.vs));
-  const x0 = Math.round((x - g.ox) / g.vs), y0 = Math.round((y - g.oy) / g.vs), z0 = Math.round((z - g.oz) / g.vs);
-  const x1 = Math.round((x + w - g.ox) / g.vs) - 1, y1 = Math.round((y + h - g.oy) / g.vs) - 1,
-        z1 = Math.round((z + d - g.oz) / g.vs) - 1;
-  g.walls(x0, y0, z0, x1, y1, z1, col, tv);
+  const r = mrange(g, x, y, z, w, h, d);
+  g.walls(r[0], r[1], r[2], r[3], r[4], r[5], col, tv);
 }
 function mspeckle(g, x, y, z, w, h, d, col, chance){
-  const x0 = Math.round((x - g.ox) / g.vs), y0 = Math.round((y - g.oy) / g.vs), z0 = Math.round((z - g.oz) / g.vs);
-  const x1 = Math.round((x + w - g.ox) / g.vs) - 1, y1 = Math.round((y + h - g.oy) / g.vs) - 1,
-        z1 = Math.round((z + d - g.oz) / g.vs) - 1;
-  for (let yy = y0; yy <= y1; yy++) for (let zz = z0; zz <= z1; zz++) for (let xx = x0; xx <= x1; xx++)
+  const r = mrange(g, x, y, z, w, h, d);
+  for (let yy = r[1]; yy <= r[4]; yy++) for (let zz = r[2]; zz <= r[5]; zz++) for (let xx = r[0]; xx <= r[3]; xx++)
     if (g.get(xx,yy,zz) && wr() < chance) g.set(xx,yy,zz,col);
 }
 function mclear(g, x, y, z, w, h, d){ mbox(g, x, y, z, w, h, d, 0) }
@@ -1142,23 +1214,25 @@ function makeBuilding(g, cfg){
     for (let i = 0; i < 2; i++){
       const wz = z + d * (0.22 + i * 0.56) - 0.5;
       if (Math.abs(wz - doorZ) < 1.2 && wy < 2) continue;
-      if (face > 0){
-        mclear(g, x + w - 0.4, wy, wz, 0.45, 1.2, 1.1);
-        mbox(g, x + w - 0.35, wy, wz, 0.1, 1.2, 1.1, C.glass);
-        mbox(g, x + w - 0.4, wy - 0.2, wz - 0.2, 0.45, 0.2, 1.5, trim);
-        mbox(g, x + w - 0.4, wy + 1.2, wz - 0.2, 0.45, 0.2, 1.5, trim);
-      } else {
-        mclear(g, x - 0.05, wy, wz, 0.45, 1.2, 1.1);
-        mbox(g, x + 0.25, wy, wz, 0.1, 1.2, 1.1, C.glass);
-        mbox(g, x - 0.05, wy - 0.2, wz - 0.2, 0.45, 0.2, 1.5, trim);
-        mbox(g, x - 0.05, wy + 1.2, wz - 0.2, 0.45, 0.2, 1.5, trim);
-      }
+      const fx = face > 0 ? x + w - 0.4 : x - 0.05;     // hole through the wall
+      const gxw = face > 0 ? x + w - 0.35 : x + 0.25;   // pane
+      mclear(g, fx, wy, wz, 0.45, 1.2, 1.1);
+      mbox(g, gxw, wy, wz, 0.1, 1.2, 1.1, C.glass);
+      mbox(g, gxw, wy, wz, 0.1, 0.5, 0.5, C.glassL);    // a little sky in the corner
+      mbox(g, fx, wy - 0.2, wz - 0.2, 0.45, 0.2, 1.5, trim);   // sill
+      mbox(g, fx, wy + 1.2, wz - 0.2, 0.45, 0.2, 1.5, trim);   // head
+      mbox(g, fx, wy, wz - 0.2, 0.45, 1.2, 0.2, trim);         // jambs
+      mbox(g, fx, wy, wz + 1.1, 0.45, 1.2, 0.2, trim);
+      mbox(g, gxw, wy, wz + 0.5, 0.12, 1.2, 0.12, trim);       // mullions
+      mbox(g, gxw, wy + 0.55, wz, 0.12, 0.12, 1.1, trim);
     }
     // side windows
     for (let i = 0; i < 2; i++){
       const sx = x + w * (0.3 + i * 0.4);
       mclear(g, sx, wy, z - 0.05, 1.0, 1.1, 0.4);
       mbox(g, sx, wy, z + 0.2, 1.0, 1.1, 0.1, C.glass);
+      mbox(g, sx + 0.44, wy, z + 0.2, 0.12, 1.1, 0.12, trim);
+      mbox(g, sx, wy + 0.5, z + 0.2, 1.0, 0.12, 0.12, trim);
     }
   }
 
@@ -1197,17 +1271,30 @@ function makeBuilding(g, cfg){
   if (cfg.porch !== false){
     const pd = cfg.porchDepth || 2.0;
     const px = face > 0 ? x + w : x - pd;
-    mbox(g, px, 0.25, z - 0.3, pd, 0.3, d + 0.6, C.plank);       // decking
-    mspeckle(g, px, 0.25, z - 0.3, pd, 0.3, d + 0.6, C.plankD, 0.22);
+    // decking runs a little under the wall so there is no seam at the threshold
+    const deckX = face > 0 ? px - 0.25 : px;
+    mbox(g, deckX, 0.25, z - 0.3, pd + 0.25, 0.3, d + 0.6, C.plank);
+    mspeckle(g, deckX, 0.25, z - 0.3, pd + 0.25, 0.3, d + 0.6, C.plankD, 0.22);
     const postX = face > 0 ? px + pd - 0.3 : px;
     const roofY = cfg.balcony ? 0.5 + fh : 3.1;
     for (let i = 0; i < 4; i++){
       const pz = z + (d - 0.3) * i / 3 - 0.15;
       mbox(g, postX, 0.55, pz, 0.3, roofY - 0.55, 0.3, C.beam);
+      mbox(g, postX, roofY - 0.55, pz - 0.2, 0.3, 0.25, 0.7, C.beam);        // brace
     }
-    mbox(g, px - 0.15, roofY, z - 0.45, pd + 0.3, 0.28, d + 0.9, roofCol);   // porch roof
+    // the roof reaches half a metre into the facade — a 15cm lap left it looking loose
+    const roofX = face > 0 ? px - 0.5 : px - 0.15;
+    mbox(g, roofX, roofY, z - 0.45, pd + 0.65, 0.28, d + 0.9, roofCol);
+    mbox(g, face > 0 ? px + pd - 0.05 : px - 0.15, roofY - 0.22, z - 0.45,
+         0.25, 0.28, d + 0.9, C.beam);                                        // fascia
+    // steps down to the street, so the boardwalk connects to something
+    const stepZ = z + d / 2 - 0.9;
+    for (let i = 0; i < 2; i++){
+      const sxx = face > 0 ? px + pd + i * 0.35 : px - 0.35 - i * 0.35;
+      mbox(g, sxx, 0.25 - (i + 1) * 0.12, stepZ, 0.35, 0.14, 1.8, C.plankD);
+    }
     if (cfg.balcony){
-      mbox(g, px, roofY + 0.28, z - 0.45, pd, 0.25, d + 0.9, C.plank);       // balcony deck
+      mbox(g, face > 0 ? px - 0.3 : px, roofY + 0.28, z - 0.45, pd + 0.3, 0.25, d + 0.9, C.plank);
       for (let i = 0; i * 0.5 < d + 0.9; i++){                                // railing
         const pz = z - 0.45 + i * 0.5;
         mbox(g, postX, roofY + 0.5, pz, 0.25, 0.9, 0.25, C.plankD);
@@ -1227,10 +1314,20 @@ function makeBuilding(g, cfg){
     const signW = wpx * 0.25;
     const boardY = cfg.signY || (h + 0.5 + (cfg.roof === 'false-front' ? 0.5 : -0.9));
     const zStart = z + d / 2 - signW / 2;
-    const sx = face > 0 ? x + w - 0.5 : x;
-    mbox(g, sx, boardY - 0.4, zStart - 0.4, 0.5, 5 * 0.25 * scale + 0.8, signW + 0.8, C.sign);
+    // the board has to stand out past the cornice trim, which otherwise draws a
+    // dark bar straight across the lettering
+    const boardT = 0.75;
+    const sx = face > 0 ? x + w - 0.25 : x + 0.25 - boardT;
+    const boardH = 5 * 0.25 * scale + 0.8;
+    mbox(g, sx, boardY - 0.4, zStart - 0.4, boardT, boardH, signW + 0.8, C.sign);
+    mbox(g, sx, boardY - 0.4, zStart - 0.4, boardT, 0.25, signW + 0.8, C.beam);       // frame
+    mbox(g, sx, boardY + boardH - 0.65, zStart - 0.4, boardT, 0.25, signW + 0.8, C.beam);
+    for (const bz2 of [zStart - 0.4, zStart + signW + 0.15]){                          // end braces
+      mbox(g, sx, boardY - 0.4, bz2, boardT, boardH, 0.25, C.beam);
+      mbox(g, face > 0 ? sx - 0.5 : sx + boardT + 0.25, boardY - 0.15, bz2, 0.5, 0.25, 0.25, C.beam);
+    }
     // letters read left-to-right from the street, so they run -Z on a +X facade
-    const gx = face > 0 ? g.vx(sx + 0.26) : g.vx(sx);
+    const gx = face > 0 ? g.vx(sx + boardT - 0.13) : g.vx(sx);
     const gz = face > 0 ? g.vz(zStart + signW - 0.25) : g.vz(zStart);
     stampText(g, cfg.sign, gx, g.vy(boardY), gz, 'zy', face > 0 ? -1 : 1,
               cfg.signCol || C.signGold, scale, 1);
@@ -1264,6 +1361,23 @@ function makeCactus(g, x, z, h){
     g.cylY(g.vx(x - 0.7), gz, 0.22 / g.vs, g.vy(armY - 0.5), g.vy(armY + 0.5), C.cactusD);
     mbox(g, x - 0.85, armY - 0.5, z - 0.22, 0.7, 0.44, 0.44, C.cactusD);
   }
+}
+function makeStreetLamp(g, x, z, faceDir){
+  mbox(g, x - 0.22, 0, z - 0.22, 0.44, 0.35, 0.44, C.stone);       // stone footing
+  mbox(g, x - 0.14, 0.35, z - 0.14, 0.28, 2.75, 0.28, C.iron);     // post
+  mbox(g, x - 0.2, 3.05, z - 0.2, 0.4, 0.18, 0.4, C.iron);         // cap
+  // bracket arm out over the street, lantern hung off the end
+  const ax = x + faceDir * 0.16;
+  mbox(g, Math.min(ax, ax + faceDir * 0.62), 2.85, z - 0.09, 0.62, 0.18, 0.18, C.iron);
+  for (let i = 0; i < 3; i++)                                       // scroll under the arm
+    mbox(g, x + faceDir * (0.2 + i * 0.14), 2.6 + i * 0.1, z - 0.08, 0.16, 0.16, 0.16, C.iron);
+  const lx = x + faceDir * 0.66;
+  mbox(g, lx - 0.05, 2.72, z - 0.05, 0.1, 0.2, 0.1, C.iron);        // hanger
+  mbox(g, lx - 0.21, 2.56, z - 0.21, 0.42, 0.18, 0.42, C.iron);     // lantern top
+  mbox(g, lx - 0.18, 2.12, z - 0.18, 0.36, 0.46, 0.36, C.lampGlow); // glass
+  mbox(g, lx - 0.21, 1.98, z - 0.21, 0.42, 0.16, 0.42, C.iron);     // lantern base
+  for (const [cx, cz] of [[-0.19,-0.19],[0.15,-0.19],[-0.19,0.15],[0.15,0.15]])
+    mbox(g, lx + cx, 2.12, z + cz, 0.06, 0.46, 0.06, C.iron);       // corner bars
 }
 function makeHitchPost(g, x, z, len){
   mbox(g, x - 0.12, 0, z - 0.12, 0.24, 1.2, 0.24, C.beam);
@@ -1311,25 +1425,52 @@ function makeGrave(g, x, z, cross){
 }
 
 /* ---------------------------------------------------------- big structures */
-function makeWaterTower(g, x, z){
-  const legs = [[-1.5,-1.5],[1.5,-1.5],[-1.5,1.5],[1.5,1.5]];
+function makeWaterTower(g, x, z, faceDir){
+  faceDir = faceDir || -1;                 // which way the name board looks
+  const legs = [[-2.2,-2.2],[2.2,-2.2],[-2.2,2.2],[2.2,2.2]];
   for (const [lx, lz] of legs){
-    mbox(g, x + lx - 0.15, 0, z + lz - 0.15, 0.3, 6.0, 0.3, C.beam);
-    for (let y = 1.5; y < 6; y += 2.0){   // cross bracing
-      mbox(g, x + lx - 0.12, y, z - 1.5, 0.24, 0.24, 3.0, C.plankD);
-      mbox(g, x - 1.5, y, z + lz - 0.12, 3.0, 0.24, 0.24, C.plankD);
+    mbox(g, x + lx - 0.18, 0, z + lz - 0.18, 0.36, 6.4, 0.36, C.beam);
+    mbox(g, x + lx - 0.3, 0, z + lz - 0.3, 0.6, 0.4, 0.6, C.stone);      // footing
+  }
+  for (let y = 1.6; y < 6.2; y += 1.6){                                   // girts + diagonals
+    mbox(g, x - 2.3, y, z - 2.3, 4.6, 0.26, 0.26, C.plankD);
+    mbox(g, x - 2.3, y, z + 2.05, 4.6, 0.26, 0.26, C.plankD);
+    mbox(g, x - 2.3, y, z - 2.3, 0.26, 0.26, 4.6, C.plankD);
+    mbox(g, x + 2.05, y, z - 2.3, 0.26, 0.26, 4.6, C.plankD);
+    for (let i = 0; i < 9; i++){                                          // sway braces
+      const t = i / 8;
+      mbox(g, x - 2.2 + t * 4.4 - 0.1, y + t * 1.5, z - 2.3, 0.2, 0.3, 0.2, C.beam);
+      mbox(g, x - 2.3, y + t * 1.5, z - 2.2 + t * 4.4 - 0.1, 0.2, 0.3, 0.2, C.beam);
     }
   }
-  mbox(g, x - 2.0, 6.0, z - 2.0, 4.0, 0.3, 4.0, C.plank);
-  g.cylY(g.vx(x), g.vz(z), 1.9 / g.vs, g.vy(6.3), g.vy(9.4), C.plankD);
-  g.cylY(g.vx(x), g.vz(z), 1.6 / g.vs, g.vy(6.5), g.vy(9.4), 0);
-  g.cylY(g.vx(x), g.vz(z), 1.95 / g.vs, g.vy(7.2), g.vy(7.4), C.iron);
-  for (let i = 0; i <= 8; i++){    // conical cap
-    const r = (1.9 - i * 0.22) / g.vs;
-    g.cylY(g.vx(x), g.vz(z), r, g.vy(9.4 + i * 0.25), g.vy(9.4 + i * 0.25), C.shingle);
+  mbox(g, x - 2.8, 6.4, z - 2.8, 5.6, 0.35, 5.6, C.plank);               // platform
+  const R = 2.6;
+  g.cylY(g.vx(x), g.vz(z), R / g.vs, g.vy(6.75), g.vy(10.6), C.plankD);  // tank
+  g.cylY(g.vx(x), g.vz(z), (R - 0.35) / g.vs, g.vy(6.95), g.vy(10.6), 0);
+  for (const hy of [7.4, 8.7, 10.0])                                      // iron hoops
+    g.cylY(g.vx(x), g.vz(z), (R + 0.05) / g.vs, g.vy(hy), g.vy(hy + 0.2), C.iron);
+  for (let i = 0; i <= 10; i++){                                          // conical roof
+    const rr = (R - i * 0.24) / g.vs;
+    g.cylY(g.vx(x), g.vz(z), rr, g.vy(10.6 + i * 0.22), g.vy(10.6 + i * 0.22), C.shingle);
   }
-  mbox(g, x - 0.15, 4.0, z + 1.9, 0.3, 2.4, 0.3, C.beam);   // spout
-  stampText(g, 'LITTLE CANYON', g.vx(x - 1.85), g.vy(7.6), g.vz(z - 1.6), 'zy', 1, C.whitewash, 1, 1);
+  mbox(g, x - 0.2, 12.9, z - 0.2, 0.4, 0.5, 0.4, C.iron);                // finial
+  // spout and downpipe
+  mbox(g, x + faceDir * (R + 0.1), 5.2, z - 0.18, 0.36, 1.7, 0.36, C.beam);
+  mbox(g, x + faceDir * (R + 0.6), 4.4, z - 0.22, 0.7, 0.44, 0.44, C.iron);
+  // ladder up one leg
+  for (let y = 0.6; y < 6.4; y += 0.5)
+    mbox(g, x - 2.5, y, z + 1.9, 0.9, 0.16, 0.16, C.plankD);
+  // name board, sized to the tank instead of a line of floating letters
+  const txt = 'WATER';
+  const bw = (textWidth(txt, 1) - 1) * 0.25;              // 4.75 m across
+  const bx = x + faceDir * (R + 0.35);
+  const wr2 = mrange(g, bx - 0.2, 7.5, z - bw / 2 - 0.4, 0.4, 1.85, bw + 0.8);
+  g.box(wr2[0], wr2[1], wr2[2], wr2[3], wr2[4], wr2[5], C.sign);
+  mbox(g, bx - 0.2, 7.5, z - bw / 2 - 0.4, 0.4, 0.25, bw + 0.8, C.beam);
+  mbox(g, bx - 0.2, 9.1, z - bw / 2 - 0.4, 0.4, 0.25, bw + 0.8, C.beam);
+  stampText(g, txt, faceDir < 0 ? wr2[0] : wr2[3], g.vy(7.85),
+            faceDir < 0 ? g.vz(z - bw / 2) : g.vz(z + bw / 2 - 0.25), 'zy', faceDir < 0 ? 1 : -1,
+            C.whitewash, 1, 1);
 }
 
 function makeWindmill(g, x, z){
@@ -1447,7 +1588,7 @@ function makeCorral(g, x, z, w, d){
 }
 
 /* ------------------------------------------------------------ the town ---- */
-function buildTown(){
+function buildCanyonTown(){
   const g = new Grid(216, 72, 424, 0.25, -27, 0, -53);
 
   /* ---- west side of the street (fronts face +X) ---- */
@@ -1517,11 +1658,8 @@ function buildTown(){
   mbox(g, -1.8, 3.2, 26.5, 3.6, 0.25, 3.0, C.shingle);
   // lamp posts down the street
   for (const lz of [-32, -20, -8, 4, 16, 28]){
-    for (const lx of [-6.8, 6.8]){
-      mbox(g, lx - 0.1, 0, lz - 0.1, 0.2, 2.6, 0.2, C.iron);
-      mbox(g, lx - 0.22, 2.6, lz - 0.22, 0.44, 0.5, 0.44, C.lampGlow);
-      mbox(g, lx - 0.28, 3.1, lz - 0.28, 0.56, 0.2, 0.56, C.iron);
-    }
+    makeStreetLamp(g, -7.4, lz,  1);
+    makeStreetLamp(g,  7.4, lz, -1);
   }
   // desert scrub against the canyon walls
   for (let i = 0; i < 26; i++){
@@ -1539,21 +1677,420 @@ function buildTown(){
   return g;
 }
 
-function buildWorld(){
+
+/* ==========================================================================
+   THE DRANDEN ROAD
+   Open range between Little Canyon and the Dranden city limit: the wagon road,
+   the creek crossing, a ranch, a way station, and not much cover. Harder than
+   the town — the sight lines are long and they come at you from every side.
+   ========================================================================== */
+const ROAD = {
+  x: z => 3.6 * Math.sin(z * 0.031) + 1.8 * Math.sin(z * 0.0115 + 1.7),   // centreline
+  halfW: 4.6,
+  creekZ: wx => 21 + 5.5 * Math.sin(wx * 0.055),
+  creekHalf: 4.2,
+};
+/* flat building pads, so nothing is left standing on a slope */
+const ROAD_PADS = [
+  { x0:-27, z0:-16, x1:-8,  z1:10 },     // the ranch
+  { x0: 9,  z0: 27, x1: 27, z1: 47 },    // the way station
+  { x0:-30, z0:-72, x1: 30, z1:-52 },    // Dranden's edge
+  { x0:-14, z0: 12, x1: 14, z1: 30 },    // the crossing
+  { x0: 12, z0:-40, x1: 26, z1:-26 },    // boot hill
+];
+function roadPadFlat(wx, wz){
+  for (const p of ROAD_PADS)
+    if (wx > p.x0 && wx < p.x1 && wz > p.z0 && wz < p.z1) return true;
+  return false;
+}
+
+function buildRoadTerrain(){
+  const g = new Grid(140, 40, 176, 1, -70, -10, -88);
+  const rockCols = [C.rock1, C.rock2, C.rock3, C.rock4, C.rock5, C.rockDark];
+  const strata = y => rockCols[(Math.floor((y + 10) / 2.4 + hash2(y * 2.7, 4.1) * 0.5) % 6 + 6) % 6];
+
+  for (let x = 0; x < g.nx; x++){
+    for (let z = 0; z < g.nz; z++){
+      const wx = g.wx(x), wz = g.wz(z);
+      const rx = ROAD.x(wz), fromRoad = Math.abs(wx - rx);
+
+      /* --- ground height --- */
+      let h = (fbm(wx * 0.021 + 3.3, wz * 0.021 + 7.7, 3) - 0.5) * 3.4
+            + (fbm(wx * 0.07, wz * 0.07, 2) - 0.5) * 0.9;
+      if (fromRoad < 9) h = lerp(h, 0, clamp((9 - fromRoad) / 4.5, 0, 1));   // graded verge
+      if (roadPadFlat(wx, wz)) h = 0;
+
+      /* --- the creek, cut across the whole map --- */
+      const cz = ROAD.creekZ(wx), inCreek = Math.abs(wz - cz) < ROAD.creekHalf;
+      let water = false;
+      if (Math.abs(wz - cz) < ROAD.creekHalf + 3.5){
+        const t = clamp(1 - (Math.abs(wz - cz) - ROAD.creekHalf) / 3.5, 0, 1);
+        h = Math.min(h, lerp(h, -2.2, t));
+        water = inCreek;
+      }
+
+      /* --- flanking ridges close the range in --- */
+      const ridge = fbm(wz * 0.05 + 21, 3.9, 3);
+      const edge = 42 + ridge * 9;
+      if (Math.abs(wx) > edge) h += (Math.abs(wx) - edge) * 1.9;
+      /* --- red rock closes the south end: the mouth of Little Canyon --- */
+      if (wz > 54){
+        const t = (wz - 54) / 10;
+        const gap = Math.abs(wx - ROAD.x(wz)) < 7.5 && wz < 66;
+        if (!gap) h += t * t * 26;
+      }
+      /* --- and hills behind Dranden to the north --- */
+      if (wz < -70) h += (-70 - wz) * 2.4;
+
+      const top = Math.round(h);
+      for (let y = 0; y <= g.vy(top) - 1; y++){
+        const wy = g.wy(y);
+        let col;
+        if (wy > 3.5 || (Math.abs(wx) > edge && wy > 1.5)) col = strata(wy);
+        else if (y < g.vy(top) - 1) col = C.sandDark;
+        else if (fromRoad < ROAD.halfW && !inCreek)
+          col = hash2(wx * 1.7, wz * 2.3) > 0.5 ? C.road : C.roadDark;
+        else if (inCreek) col = C.gravel;
+        else {
+          const patch = fbm(wx * 0.3 + 11, wz * 0.3 + 5, 2) + hash2(wx, wz) * 0.14;
+          col = patch > 0.6 ? C.sand : patch > 0.44 ? C.sandDark : C.sandDark2;
+        }
+        g.set(x, y, z, col);
+      }
+      if (water && top < -0.6)
+        for (let y = g.vy(top); y <= g.vy(-0.8); y++) g.set(x, y, z, C.water);
+    }
+  }
+
+  /* --- mesas and buttes: the only high ground out here --- */
+  const mesas = [[-31,-31,9,15],[33,6,11,18],[-35,36,8,12],[29,-49,7,11],[-26,52,6,9],[34,-16,6,10]];
+  for (const [mx, mz, r, mh] of mesas){
+    for (let y = 0; y <= mh; y++){
+      const rr = r * (1 - Math.pow(y / (mh + 5), 1.7)) + 0.6;
+      g.cylY(g.vx(mx), g.vz(mz), rr, g.vy(y), g.vy(y), strata(y));
+    }
+    for (let i = 0; i < 14; i++){          // talus at the foot
+      const a = wrr(0, TAU), d = r + wrr(0.4, 3.4);
+      mbox(g, mx + Math.cos(a) * d, 0, mz + Math.sin(a) * d, wrr(1, 2.6), wrr(0.8, 2.2), wrr(1, 2.6), strata(1));
+    }
+  }
+  /* --- boulders scattered near the road for something to hide behind --- */
+  for (let i = 0; i < 40; i++){
+    const bz = wrr(-56, 58), bx = ROAD.x(bz) + (wr() > 0.5 ? 1 : -1) * wrr(6, 30);
+    if (Math.abs(bz - ROAD.creekZ(bx)) < 6) continue;
+    const r = wrr(1.1, 2.6);
+    g.ellipsoid(g.vx(bx), g.vy(r * 0.35), g.vz(bz), r, r * 0.75, r * 0.9, strata(1));
+  }
+  return g;
+}
+
+/* ------------------------------------------------------------- road props */
+function makeTelegraphPole(g, x, z, nextX, nextZ){
+  mbox(g, x - 0.16, 0, z - 0.16, 0.32, 6.2, 0.32, C.beam);
+  mbox(g, x - 0.9, 5.4, z - 0.12, 1.8, 0.22, 0.24, C.plankD);       // crossarm
+  for (const o of [-0.7, 0.7]){
+    mbox(g, x + o - 0.09, 5.62, z - 0.09, 0.18, 0.26, 0.18, C.glass);   // insulators
+  }
+  if (nextX !== undefined){
+    const steps = 30;
+    for (let i = 1; i < steps; i++){                                 // sagging wire
+      const t = i / steps;
+      const wx2 = lerp(x, nextX, t), wz2 = lerp(z, nextZ, t);
+      const sag = Math.sin(t * Math.PI) * 0.5;
+      for (const o of [-0.7, 0.7])
+        mbox(g, wx2 + o - 0.06, 5.72 - sag, wz2 - 0.06, 0.12, 0.12, 0.42, C.iron);
+    }
+  }
+}
+function makeBridge(g, cz, len){
+  const w = 7.0;
+  const cx = ROAD.x(cz);
+  for (let i = 0; i <= len; i++){
+    const z = cz - len / 2 + i;
+    const x = ROAD.x(z);
+    mbox(g, x - w / 2, -0.35, z, w, 0.35, 1.0, C.beam);              // stringers
+    mbox(g, x - w / 2, 0, z, w, 0.22, 1.0, i % 2 ? C.plank : C.plankD);
+    if (i % 3 === 0){                                                 // rails
+      mbox(g, x - w / 2, 0.22, z, 0.25, 1.1, 0.25, C.beam);
+      mbox(g, x + w / 2 - 0.25, 0.22, z, 0.25, 1.1, 0.25, C.beam);
+    }
+    mbox(g, x - w / 2, 1.05, z, 0.22, 0.22, 1.0, C.plankD);
+    mbox(g, x + w / 2 - 0.22, 1.05, z, 0.22, 0.22, 1.0, C.plankD);
+    if (i === 0 || i === len)                                         // abutments
+      mbox(g, x - w / 2 - 0.4, -2.6, z - 0.6, w + 0.8, 2.6, 1.6, C.stone);
+    if (i === Math.floor(len / 2))                                    // mid pier
+      mbox(g, x - 1.2, -2.6, z - 0.5, 2.4, 2.4, 1.2, C.beam);
+  }
+  WORLD.cover.push({ x: cx, z: cz, w, d: len });
+}
+function makeDeadTree(g, x, z, h){
+  mbox(g, x - 0.28, 0, z - 0.28, 0.56, h, 0.56, C.beam);
+  const limbs = [[0.5, 1, 0.2], [-0.5, 0.8, -0.3], [0.2, 1.1, -0.6]];
+  for (const [dx, dy, dz] of limbs){
+    for (let i = 0; i < 6; i++){
+      const t = i / 5;
+      mbox(g, x + dx * t * 2.2 - 0.16, h * 0.62 + dy * t * 1.5, z + dz * t * 2.2 - 0.16,
+           0.32 - t * 0.12, 0.32, 0.32 - t * 0.12, C.plankD);
+    }
+  }
+}
+function makeHaystack(g, x, z, r){
+  for (let i = 0; i <= 7; i++){
+    const rr = r * (1 - i / 9);
+    g.cylY(g.vx(x), g.vz(z), rr / g.vs, g.vy(i * 0.32), g.vy(i * 0.32), i > 5 ? C.hay : C.hay);
+  }
+  mbox(g, x - 0.1, r * 0.6, z - 0.1, 0.2, 1.4, 0.2, C.beam);
+}
+function makeStagecoach(g, x, z){
+  mbox(g, x - 1.1, 0.9, z - 2.2, 2.2, 1.9, 4.4, C.barnRed);          // body
+  mbox(g, x - 1.15, 1.4, z - 2.25, 2.3, 0.6, 4.5, C.plankD);
+  mbox(g, x - 1.0, 2.8, z - 2.0, 2.0, 0.3, 4.0, C.plankD);           // roof rack
+  mbox(g, x - 0.9, 3.1, z - 1.6, 1.8, 0.6, 1.6, C.canvasT);          // luggage
+  mbox(g, x - 1.05, 1.9, z - 1.4, 0.15, 0.9, 1.1, C.coal);           // windows
+  mbox(g, x + 0.9, 1.9, z - 1.4, 0.15, 0.9, 1.1, C.coal);
+  mbox(g, x - 1.0, 2.6, z + 2.0, 2.0, 0.5, 0.9, C.plank);            // driver's box
+  for (const [wx2, wz2, r] of [[-1.25,-1.5,0.7],[1.25,-1.5,0.7],[-1.3,1.6,0.95],[1.3,1.6,0.95]]){
+    for (let a = 0; a < TAU; a += 0.11)
+      mbox(g, x + wx2 + Math.cos(a) * r - 0.1, r + Math.sin(a) * r - 0.1, z + wz2 - 0.09, 0.2, 0.2, 0.18, C.beam);
+    for (let a = 0; a < TAU; a += 0.6)
+      for (let t = 0; t < r; t += 0.22)
+        mbox(g, x + wx2 + Math.cos(a) * t - 0.06, r + Math.sin(a) * t - 0.06, z + wz2 - 0.07, 0.12, 0.12, 0.14, C.plankD);
+  }
+  mbox(g, x - 0.15, 1.5, z + 2.6, 0.3, 0.25, 2.6, C.beam);           // tongue
+  WORLD.cover.push({ x, z, w: 2.4, d: 4.6 });
+}
+function makeSignpost(g, x, z, lines, faceDir){
+  const H = 5.0;
+  mbox(g, x - 0.2, 0, z - 0.2, 0.4, H, 0.4, C.beam);
+  mbox(g, x - 0.5, 0.15, z - 0.5, 1.0, 0.35, 1.0, C.stone);          // footing
+  let y = H - 1.9;
+  for (const line of lines){
+    const bw = (textWidth(line, 1) - 1) * 0.25;
+    const bx = faceDir < 0 ? x - 0.66 : x + 0.26;
+    const r = mrange(g, bx, y - 0.3, z - bw / 2 - 0.35, 0.4, 1.9, bw + 0.7);
+    g.box(r[0], r[1], r[2], r[3], r[4], r[5], C.sign);
+    mbox(g, bx, y - 0.3, z - bw / 2 - 0.35, 0.4, 0.22, bw + 0.7, C.beam);
+    mbox(g, bx, y + 1.38, z - bw / 2 - 0.35, 0.4, 0.22, bw + 0.7, C.beam);
+    stampText(g, line, faceDir < 0 ? r[0] : r[3], g.vy(y),
+              faceDir < 0 ? g.vz(z - bw / 2) : g.vz(z + bw / 2 - 0.25), 'zy',
+              faceDir < 0 ? 1 : -1, C.whitewash, 1, 1);
+    y -= 2.15;
+  }
+  mbox(g, x - 0.7, 0.5, z - 0.16, 1.5, 0.3, 0.32, C.plankD);         // brace
+}
+
+/* a plain false-front facade facing +Z — used for the Dranden city limit,
+   where you can see the town but the road is closed */
+function makeFacadeZ(g, x, z, w, d, h, wall, roofCol, sign){
+  mbox(g, x - 0.25, 0, z - 0.25, w + 0.5, 0.5, d + 0.5, C.stone);
+  mwalls(g, x, 0.5, z, w, h, d, wall, 0.3);
+  mspeckle(g, x, 0.5, z, w, h, d, C.plankD, 0.08);
+  mbox(g, x - 0.25, h + 0.5, z - 0.25, w + 0.5, 0.35, d + 0.5, roofCol);
+  mbox(g, x, 0.5, z, w, h + 1.5, 0.3, wall);                        // false front
+  mbox(g, x - 0.2, h + 1.7, z - 0.2, w + 0.4, 0.3, 0.7, C.beam);
+  // door + windows on the +Z... this side faces the player, which is -Z here
+  mclear(g, x + w / 2 - 0.6, 0.5, z - 0.1, 1.2, 2.2, 0.5);
+  for (let i = 0; i < 2; i++){
+    const wx2 = x + w * (0.2 + i * 0.6) - 0.55;
+    mclear(g, wx2, 1.4, z - 0.05, 1.1, 1.2, 0.45);
+    mbox(g, wx2, 1.4, z + 0.2, 1.1, 1.2, 0.1, C.glass);
+    mbox(g, wx2 + 0.5, 1.4, z + 0.2, 0.12, 1.2, 0.12, C.plankD);
+  }
+  mbox(g, x - 0.6, 0.25, z - 2.0, w + 1.2, 0.3, 2.0, C.plank);      // boardwalk
+  for (let i = 0; i < 3; i++)
+    mbox(g, x + w * i / 2 - 0.15, 0.55, z - 1.9, 0.3, 2.6, 0.3, C.beam);
+  mbox(g, x - 0.7, 3.15, z - 2.2, w + 1.4, 0.28, 2.4, roofCol);
+  if (sign){
+    const wpx = textWidth(sign, 1) - 1, bw = wpx * 0.25;
+    const sx = x + w / 2 - bw / 2;
+    mbox(g, sx - 0.4, h + 0.6, z - 0.7, bw + 0.8, 1.8, 0.6, C.sign);
+    stampText(g, sign, g.vx(sx), g.vy(h + 0.95), g.vz(z - 0.7), 'xy', 1, C.signGold, 1, 1);
+  }
+}
+
+function buildRoadStructures(){
+  const g = new Grid(232, 60, 592, 0.25, -29, 0, -74);
+
+  /* ---- the road itself: telegraph line, ruts, mileposts ---- */
+  const poleZs = [];
+  for (let z = -54; z <= 56; z += 11) poleZs.push(z);
+  for (let i = 0; i < poleZs.length; i++){
+    const z = poleZs[i], x = ROAD.x(z) + 6.4;
+    const nz = poleZs[i + 1];
+    makeTelegraphPole(g, x, z, nz === undefined ? undefined : ROAD.x(nz) + 6.4, nz);
+  }
+  /* ---- creek crossing ---- */
+  makeBridge(g, 21, 12);
+  makeSignpost(g, ROAD.x(15) - 6.6, 15, ['DRANDEN', '14 MI'], 1);
+  makeSignpost(g, ROAD.x(52) + 6.4, 52, ['LITTLE', 'CANYON'], -1);
+
+  /* ---- the Rocking K: ranch house, barn, corral ---- */
+  makeBuilding(g, { x:-24, z:-12, w:9, d:10, floors:1, fh:3.4, wallCol:C.plankL, wallCol2:C.plank,
+                    trimCol:C.beam, roofCol:C.shingle, roof:'gable', peak:2.2, face:1,
+                    sign:'ROCKING K', porchDepth:2.2 });
+  makeBuilding(g, { x:-26, z:2, w:11, d:12, floors:1, fh:5.4, wallCol:C.barnRed, wallCol2:C.barnRedD,
+                    trimCol:C.beam, roofCol:C.shingleD, roof:'gable', peak:3.0, face:1, porch:false });
+  mclear(g, -15.4, 0.5, 6.0, 0.6, 4.2, 4.0);                        // barn doors
+  mbox(g, -15.5, 0.5, 6.0, 0.3, 4.2, 0.3, C.beam);
+  mbox(g, -15.5, 0.5, 9.7, 0.3, 4.2, 0.3, C.beam);
+  mbox(g, -15.6, 4.7, 6.0, 0.4, 0.3, 4.0, C.beam);
+  makeCorral(g, -14.5, -6, 9, 10);
+  makeWindmill(g, -18, 12.5);
+  makeTrough(g, -12.5, -2);
+  makeHaystack(g, -21, 15, 2.2);
+  makeHaystack(g, -24.5, 14, 1.8);
+  makeWagon(g, -11.5, 9, true, false);
+  for (const [bx, bz] of [[-13.2,-13],[-12.6,-12.2],[-13.0,-11.4]]) makeBarrel(g, bx, bz);
+
+  /* ---- the way station: stone relay stop, stable, coach ---- */
+  makeBuilding(g, { x:12, z:31, w:10, d:11, floors:1, fh:3.8, wallCol:C.stone, wallCol2:C.gravel,
+                    trimCol:C.beam, roofCol:C.shingle, roof:'false-front', ffH:1.3, face:-1,
+                    sign:'WAY STATION', porchDepth:2.4, foundation:C.stone });
+  makeBuilding(g, { x:14, z:44, w:9, d:9, floors:1, fh:4.2, wallCol:C.plankD, wallCol2:C.plank,
+                    trimCol:C.beam, roofCol:C.shingleD, roof:'gable', peak:2.0, face:-1, porch:false });
+  makeStagecoach(g, 8.5, 38);
+  makeCorral(g, 17, 53, 8, 8);
+  makeTrough(g, 10.5, 33);
+  for (const [bx, bz] of [[10.0,28.5],[10.6,29.2],[9.6,29.6],[11.2,44],[10.6,44.8]]) makeBarrel(g, bx, bz);
+  makeCrate(g, 9.4, 0, 41, 0.9); makeCrate(g, 9.6, 0.9, 41.1, 0.7);
+
+  /* ---- boot hill, east of the road ---- */
+  for (let i = 0; i < 11; i++)
+    makeGrave(g, 15 + (i % 4) * 2.4 + wrr(-.3,.3), -37 + Math.floor(i / 4) * 3.0 + wrr(-.3,.3), wr() > 0.35);
+  mbox(g, 12.5, 0, -39.5, 0.25, 1.4, 12, C.plankD);
+  mbox(g, 24.5, 0, -39.5, 0.25, 1.4, 12, C.plankD);
+  mbox(g, 12.5, 0, -39.5, 12.25, 1.4, 0.25, C.plankD);
+  makeSignpost(g, 13.5, -26, ['BOOT HILL'], -1);
+  makeDeadTree(g, 20, -30, 4.5);
+
+  /* ---- the Dranden city limit: you can see it, you cannot ride into it ---- */
+  const edgeZ = -64;
+  makeFacadeZ(g, -26, edgeZ - 2, 11, 9, 4.2, C.plank,      C.shingle,  'MILL');
+  makeFacadeZ(g, -13, edgeZ,     10, 9, 5.6, C.whitewash,  C.shingleD, 'DRANDEN');
+  makeFacadeZ(g,  1,  edgeZ - 1, 12, 10, 4.6, C.plankL,    C.shingle,  'DEPOT');
+  makeFacadeZ(g,  16, edgeZ,     10, 9, 4.2, C.barnRed,    C.shingleD, 'FREIGHT');
+  // a church spire behind, so the skyline reads as a real town
+  mbox(g, -8.5, 0, edgeZ - 12, 6, 7.5, 8, C.whitewash);
+  mbox(g, -9.0, 7.5, edgeZ - 12.5, 7, 0.4, 9, C.shingle);
+  mbox(g, -7.0, 7.9, edgeZ - 10.5, 3, 4.0, 3, C.whitewash);
+  for (let i = 0; i <= 8; i++)
+    mbox(g, -7.0 + i * 0.16, 11.9 + i * 0.5, edgeZ - 10.5 + i * 0.16, 3 - i * 0.32, 0.5, 3 - i * 0.32, C.shingleD);
+  mbox(g, -5.7, 16.0, edgeZ - 9.2, 0.25, 1.6, 0.25, C.iron);
+  mbox(g, -6.2, 16.7, edgeZ - 9.2, 1.25, 0.25, 0.25, C.iron);
+  // water tank + a boxcar on a spur
+  makeWaterTower(g, 24, edgeZ - 9, 1);
+  for (let i = 0; i < 26; i++){
+    mbox(g, 6 + i * 1.2, 0.05, edgeZ - 6.4, 1.0, 0.16, 0.18, C.rail);
+    mbox(g, 6 + i * 1.2, 0.05, edgeZ - 4.6, 1.0, 0.16, 0.18, C.rail);
+    mbox(g, 6 + i * 1.2, 0, edgeZ - 6.7, 0.3, 0.1, 2.4, C.plankD);
+  }
+  mbox(g, 12, 0.5, edgeZ - 6.9, 9, 3.4, 2.9, C.barnRedD);
+  mbox(g, 11.8, 3.9, edgeZ - 7.1, 9.4, 0.4, 3.3, C.shingleD);
+  // the barricade across the road
+  const bx0 = ROAD.x(-58);
+  for (let i = -12; i <= 12; i += 2){
+    mbox(g, bx0 + i - 0.2, 0, -58, 0.4, 1.9, 0.4, C.beam);
+  }
+  for (const yy of [0.9, 1.5]) mbox(g, bx0 - 12.2, yy, -58.1, 24.4, 0.3, 0.3, C.plankD);
+  // gantry over the road: you can read the town's name and get no closer
+  for (const gx of [bx0 - 6.4, bx0 + 6.0]){
+    mbox(g, gx, 0, -58.9, 0.5, 6.2, 0.5, C.beam);
+    mbox(g, gx - 0.25, 0.2, -59.15, 1.0, 0.4, 1.0, C.stone);
+    mbox(g, gx - 0.5, 5.2, -58.9, 1.5, 0.35, 0.5, C.beam);
+  }
+  const gw = 13.4, gy = 4.3;
+  const gr = mrange(g, bx0 - gw / 2, gy, -59.1, gw, 2.0, 0.5);
+  g.box(gr[0], gr[1], gr[2], gr[3], gr[4], gr[5], C.sign);
+  mbox(g, bx0 - gw / 2, gy, -59.1, gw, 0.25, 0.5, C.beam);
+  mbox(g, bx0 - gw / 2, gy + 1.75, -59.1, gw, 0.25, 0.5, C.beam);
+  stampText(g, 'DRANDEN', g.vx(bx0 - 3.4), g.vy(gy + 0.4), gr[5], 'xy', 1, C.signGold, 1, 1);
+  const cr = mrange(g, bx0 - 2.6, 2.35, -58.35, 5.2, 1.5, 0.4);
+  g.box(cr[0], cr[1], cr[2], cr[3], cr[4], cr[5], C.sign);
+  stampText(g, 'CLOSED', g.vx(bx0 - 2.4), g.vy(2.6), cr[5], 'xy', 1, C.whitewash, 1, 1);
+  makeSignpost(g, bx0 + 9.5, -50, ['DRANDEN'], -1);
+
+  /* ---- scattered life along the road ---- */
+  makeWagon(g, ROAD.x(-30) - 7.5, -30, false, true);
+  makeWagon(g, ROAD.x(44) + 7.0, 44, true, true);
+  makeDeadTree(g, ROAD.x(-8) + 9, -8, 5.2);
+  makeDeadTree(g, ROAD.x(30) - 11, 30, 4.0);
+  makeDeadTree(g, ROAD.x(-44) + 12, -44, 4.6);
+  for (let i = 0; i < 22; i++){
+    const cz = wrr(-56, 56), cx = ROAD.x(cz) + (wr() > 0.5 ? 1 : -1) * wrr(7, 26);
+    if (Math.abs(cz - ROAD.creekZ(cx)) < 7) continue;
+    if (wr() > 0.5) makeCactus(g, cx, cz, wrr(1.8, 3.6));
+    else mbox(g, cx - 0.5, 0, cz - 0.5, 1.0, wrr(0.3, 0.7), 1.0, C.brush);
+  }
+  // a burnt-out camp beside the road
+  const campZ = -22, campX = ROAD.x(campZ) - 8;
+  for (let a = 0; a < TAU; a += 0.7)
+    mbox(g, campX + Math.cos(a) * 1.1 - 0.2, 0, campZ + Math.sin(a) * 1.1 - 0.2, 0.4, 0.3, 0.4, C.stone);
+  mbox(g, campX - 0.4, 0, campZ - 0.4, 0.8, 0.4, 0.8, C.coal);
+  makeCrate(g, campX + 1.8, 0, campZ + 1.2, 0.8);
+  makeBarrel(g, campX - 1.9, campZ + 1.4);
+  return g;
+}
+
+/* ==========================================================================
+   MAPS — an arena, its spawns, and how mean it is
+   ========================================================================== */
+const MAPS = {
+  littleCanyon: {
+    id:'littleCanyon', name:'LITTLE CANYON', sub:'LAST STAND IN THE RED ROCK',
+    diff:'ROUGH', rank:1, credits:800,
+    blurb:'One street, two rows of timber, canyon wall on both sides. Everything ' +
+          'that comes for you has to come down the road or out of a gully — and ' +
+          'there is a porch post to put your shoulder against.',
+    tune:{ speed:1.00, dmg:1.00, acc:1.00, size:1.00, alive:13, spawn:1.00 },
+    start:{ x:0, z:13, yaw:Math.PI },
+    bounds:{ x0:-25, x1:25, z0:-50, z1:50 },
+    chunkT:24, chunkS:12,
+    build(){ return { terrain: buildCanyonTerrain(), struct: buildCanyonTown() } },
+    spawns(){ return [
+      { x:  0, z:-53 }, { x:  0, z: 53 }, { x:-25, z:-18 }, { x: 25, z: 14 },
+      { x:-25, z: 26 }, { x: 25, z:-32 }, { x: -3, z:-49 }, { x:  3, z: 49 },
+    ] },
+  },
+  drandenRoad: {
+    id:'drandenRoad', name:'THE DRANDEN ROAD', sub:'OPEN RANGE, NO WALLS',
+    diff:'HARD RIDE', rank:2, credits:1200,
+    blurb:'The fourteen miles between Little Canyon and the Dranden city limit: ' +
+          'wagon road, creek crossing, the Rocking K, and a way station. Long ' +
+          'sight lines, thin cover, and they ride in from every quarter.',
+    tune:{ speed:1.10, dmg:1.14, acc:1.20, size:1.30, alive:15, spawn:1.25 },
+    start:{ x: ROAD.x(42), z:42, yaw:Math.PI },
+    bounds:{ x0:-40, x1:40, z0:-54, z1:60 },
+    chunkT:24, chunkS:14,
+    build(){ return { terrain: buildRoadTerrain(), struct: buildRoadStructures() } },
+    spawns(){ return [
+      { x: ROAD.x(-50), z:-50 }, { x: ROAD.x(56), z: 56 }, { x: ROAD.x(-46) + 9, z:-46 },
+      { x: 31, z:-18 }, { x: 35, z: 18 }, { x: 27, z: 50 },
+      { x:-31, z:-30 }, { x:-35, z: 22 }, { x:-27, z: 50 }, { x: 22, z:-44 },
+    ] },
+  },
+};
+const MAP_LIST = ['littleCanyon', 'drandenRoad'];
+
+function buildWorld(mapId){
+  mapId = mapId || GAME.mapId || 'littleCanyon';
+  const M = MAPS[mapId];
   const t0 = performance.now();
-  WORLD.terrain = buildTerrain();
-  WORLD.struct  = buildTown();
+  for (const m of WORLD.meshes) m.dispose();
+  WORLD.meshes.length = 0; WORLD.cover.length = 0;
+  wseed = 1337;                            // same map, same town, every time
+  const built = M.build();
+  WORLD.terrain = built.terrain;
+  WORLD.struct  = built.struct;
   const t1 = performance.now();
-  const a = meshGrid(WORLD.terrain, 24);
-  const b = meshGrid(WORLD.struct, 12);
+  const a = meshGrid(WORLD.terrain, M.chunkT);
+  const b = meshGrid(WORLD.struct, M.chunkS);
   WORLD.meshes = [a.mesh, b.mesh];
-  WORLD.spawns = [
-    { x:  0, z:-53 }, { x:  0, z: 53 }, { x:-25, z:-18 }, { x: 25, z: 14 },
-    { x:-25, z: 26 }, { x: 25, z:-32 }, { x: -3, z:-49 }, { x:  3, z: 49 },
-  ];
-  console.log('world built: gen ' + (t1 - t0).toFixed(0) + 'ms, mesh ' +
-              (performance.now() - t1).toFixed(0) + 'ms, ' +
-              (a.faces + b.faces) + ' faces');
+  WORLD.spawns = M.spawns();
+  WORLD.bounds = M.bounds;
+  WORLD.map = M;
+  GAME.mapId = mapId;
+  console.log('map "' + M.name + '": gen ' + (t1 - t0).toFixed(0) + 'ms, mesh ' +
+              (performance.now() - t1).toFixed(0) + 'ms, ' + (a.faces + b.faces) + ' faces');
   return { faces: a.faces + b.faces };
 }
 
@@ -1564,12 +2101,24 @@ function worldSolidAt(wx, wy, wz){
   if (t.get(t.vx(wx), t.vy(wy), t.vz(wz))) return true;
   return false;
 }
-/* height of the ground under a point (only ever a metre or two of variation) */
-function groundHeight(wx, wz){
+/* Top of the terrain under a point, searched downward from `fromY` so that tall
+   rock never yanks anything up to its summit. */
+function groundHeight(wx, wz, fromY){
   const t = WORLD.terrain;
   const x = t.vx(wx), z = t.vz(wz);
-  for (let y = t.vy(6); y >= 0; y--) if (t.get(x, y, z)) return t.oy + (y + 1) * t.vs;
-  return 0;
+  const y1 = Math.min(t.ny - 1, t.vy(fromY === undefined ? 6 : fromY + 1.2));
+  for (let y = y1; y >= 0; y--) if (t.get(x, y, z)) return t.oy + (y + 1) * t.vs;
+  return t.oy;
+}
+/* Same, but boardwalks, bridges and porch decking count as floor too. */
+function surfaceHeight(wx, wz, fromY){
+  const top = (fromY === undefined ? 6 : fromY + 0.9);
+  const s = WORLD.struct;
+  const sx = s.vx(wx), sz = s.vz(wz);
+  const y1 = Math.min(s.ny - 1, s.vy(top)), y0 = Math.max(0, s.vy(top - 3.6));
+  for (let y = y1; y >= y0; y--)
+    if (s.get(sx, y, sz)) return s.oy + (y + 1) * s.vs;
+  return groundHeight(wx, wz, fromY);
 }
 
 /* ==========================================================================
@@ -1785,7 +2334,7 @@ class Enemy {
     this.regLost = new Uint32Array(REG_COUNT);
     this.severed = new Uint8Array(REG_COUNT);
     this.scale = K.scale * rnd(0.96, 1.05);
-    this.pos = V3.new(x, groundHeight(x, z), z);
+    this.pos = V3.new(x, surfaceHeight(x, z, 2.5), z);
     this.vel = V3.new(0, 0, 0);
     this.yaw = Math.atan2(-x, -z);
     this.integrity = 100;
@@ -1944,7 +2493,7 @@ function updateParticles(dt){
     }
     parts.x[i] += parts.vx[i] * dt; parts.y[i] += parts.vy[i] * dt; parts.z[i] += parts.vz[i] * dt;
     if (t === PT.GORE || t === PT.SHELL || t === PT.BLOOD){
-      const gh = groundHeight(parts.x[i], parts.z[i]);
+      const gh = groundHeight(parts.x[i], parts.z[i], parts.y[i]);
       if (parts.y[i] <= gh + parts.size[i] * 0.5){
         parts.y[i] = gh + parts.size[i] * 0.5;
         if (Math.abs(parts.vy[i]) < 1.1 || t === PT.BLOOD){
@@ -2034,6 +2583,7 @@ const GAME = {
   hp: 100, maxHp: 100, armor: 0, maxArmor: 0, hitT: 0, dmgDir: 0,
   shots: 0, hits: 0, brainKills: 0, heartKills: 0, dismember: 0, best: 0,
   buyOpen: false, damageTaken: 0, timeAlive: 0, penTotal: 0,
+  mapId: 'littleCanyon', maxAlive: 13,
 };
 
 function damageEnemyRay(e, ox,oy,oz, dx,dy,dz, budget, W, results){
@@ -2361,7 +2911,8 @@ function buildGunModel(spec){
   const PARTS = { body:1, hammer:2, cyl:3, lever:4, brass:5 };
   const box = (x0,y0,z0, x1,y1,z1, col, p) => {
     const X0 = g.vx(x0), Y0 = g.vy(y0), Z0 = g.vz(z0);
-    const X1 = g.vx(x1 - 1e-4), Y1 = g.vy(y1 - 1e-4), Z1 = g.vz(z1 - 1e-4);
+    const X1 = Math.max(X0, g.vx(x1 - 1e-4)), Y1 = Math.max(Y0, g.vy(y1 - 1e-4)),
+          Z1 = Math.max(Z0, g.vz(z1 - 1e-4));
     for (let y = Y0; y <= Y1; y++) for (let z = Z0; z <= Z1; z++) for (let x = X0; x <= X1; x++){
       if (!g.inside(x,y,z)) continue;
       g.set(x,y,z,col); part[g.idx(x,y,z)] = p || PARTS.body;
@@ -2810,7 +3361,8 @@ function playerCollide(nx, nz){
   let ox = nx, oz = nz;
   // axis-separated probes so you slide along walls instead of sticking
   const blocked = (x, z) => {
-    for (const h of [0.35, 0.95, 1.5])
+    // nothing below 0.7 m counts, so a boardwalk or a low rock is a step, not a wall
+    for (const h of [0.78, 1.25, 1.65])
       for (const [sx, sz] of [[r,0],[-r,0],[0,r],[0,-r],[r*.7,r*.7],[-r*.7,r*.7],[r*.7,-r*.7],[-r*.7,-r*.7]])
         if (worldSolidAt(x + sx, feet + h, z + sz)) return true;
     return false;
@@ -2819,11 +3371,12 @@ function playerCollide(nx, nz){
   if (blocked(ox, oz)) oz = PLAYER.pos[2];
   if (blocked(ox, oz)) { ox = PLAYER.pos[0]; oz = PLAYER.pos[2] }
   PLAYER.pos[0] = ox; PLAYER.pos[2] = oz;
-  // stay inside the canyon
-  PLAYER.pos[0] = clamp(PLAYER.pos[0], -25, 25);
-  PLAYER.pos[2] = clamp(PLAYER.pos[2], -50, 50);
-  // follow the ground, with a step-up
-  const gh = groundHeight(PLAYER.pos[0], PLAYER.pos[2]);
+  // stay inside the playable ground
+  const B = WORLD.bounds;
+  PLAYER.pos[0] = clamp(PLAYER.pos[0], B.x0, B.x1);
+  PLAYER.pos[2] = clamp(PLAYER.pos[2], B.z0, B.z1);
+  // follow the surface, with a step-up
+  const gh = surfaceHeight(PLAYER.pos[0], PLAYER.pos[2], PLAYER.pos[1]);
   PLAYER.pos[1] = damp(PLAYER.pos[1], gh, 14, 1/60);
 }
 
@@ -3061,7 +3614,7 @@ function updateEnemy(e, dt){
     mx /= ml; mz /= ml;
     // nose out of walls: if blocked ahead, try sliding along
     const probe = (ax, az) => {
-      for (const h of [0.4, 1.0, 1.5])
+      for (const h of [0.8, 1.3, 1.7])
         if (worldSolidAt(e.pos[0] + ax * 0.55, e.pos[1] + h, e.pos[2] + az * 0.55)) return true;
       return false;
     };
@@ -3077,9 +3630,10 @@ function updateEnemy(e, dt){
     e.pos[2] += mz * speed * dt;
     e.walkPhase += dt * speed * 3.4;
   }
-  e.pos[0] = clamp(e.pos[0], -27, 27);
-  e.pos[2] = clamp(e.pos[2], -56, 56);
-  e.pos[1] = damp(e.pos[1], groundHeight(e.pos[0], e.pos[2]), 12, dt);
+  const EB = WORLD.bounds;
+  e.pos[0] = clamp(e.pos[0], EB.x0 - 4, EB.x1 + 4);
+  e.pos[2] = clamp(e.pos[2], EB.z0 - 6, EB.z1 + 6);
+  e.pos[1] = damp(e.pos[1], surfaceHeight(e.pos[0], e.pos[2], e.pos[1]), 12, dt);
   e.moving = ml > 0.001;
 
   /* --- shooting --- */
@@ -3113,7 +3667,7 @@ function enemyShoot(e){
   let dx = tx - gx, dy = ty - gy, dz = tz - gz;
   const d = Math.hypot(dx, dy, dz) || 1;
   dx /= d; dy /= d; dz /= d;
-  const acc = e.K.acc / GAME.waveAcc;
+  const acc = e.K.acc * GAME.waveAcc;
   dx += rnd(-acc, acc); dy += rnd(-acc, acc) * 0.8; dz += rnd(-acc, acc);
   const l = Math.hypot(dx, dy, dz); dx /= l; dy /= l; dz /= l;
   e.muzzle = 0.06;
@@ -3141,19 +3695,19 @@ function enemyShoot(e){
 function updateCorpse(e, dt){
   e.deadT += dt;
   if (e.deadT < 0.75) e.fallAng = Math.min(Math.PI / 2, e.fallAng + dt * 3.0);
-  e.pos[1] = damp(e.pos[1], groundHeight(e.pos[0], e.pos[2]), 8, dt);
+  e.pos[1] = damp(e.pos[1], surfaceHeight(e.pos[0], e.pos[2], e.pos[1]), 8, dt);
 }
 
 /* ==========================================================================
    WAVES — the endless stand
    ========================================================================== */
 GAME.waveSpeed = 1; GAME.waveDmg = 1; GAME.waveAcc = 1;
-const MAX_ALIVE = 13;
+function mapTune(){ return (WORLD.map || MAPS.littleCanyon).tune }
 
 function waveRoster(n){
   const list = [];
   const add = (kind, count) => { for (let i = 0; i < count; i++) list.push(kind) };
-  const total = Math.min(46, 4 + Math.floor(n * 1.7));
+  const total = Math.min(52, Math.round((4 + n * 1.7) * mapTune().size));
   let left = total;
   if (n % 5 === 0){ add('marshal', Math.min(3, 1 + Math.floor(n / 10))); left -= Math.min(3, 1 + Math.floor(n/10)) }
   if (n >= 6){ const c = Math.min(6, Math.floor(n / 3)); add('ironclad', c); left -= c }
@@ -3174,16 +3728,23 @@ function startWave(n){
   GAME.spawnT = 0.6;
   GAME.state = 'playing';
   GAME.buyOpen = false;
-  GAME.waveSpeed = Math.min(1.55, 1 + (n - 1) * 0.028);
-  GAME.waveDmg   = Math.min(2.4,  1 + (n - 1) * 0.055);
-  GAME.waveAcc   = Math.max(0.55, 1 - (n - 1) * 0.022);
+  const T = mapTune();
+  GAME.maxAlive  = T.alive;
+  GAME.waveSpeed = Math.min(1.55, 1 + (n - 1) * 0.028) * T.speed;
+  GAME.waveDmg   = Math.min(2.4,  1 + (n - 1) * 0.055) * T.dmg;
+  GAME.waveAcc   = Math.max(0.5,  1 - (n - 1) * 0.022) / T.acc;   // smaller = tighter groups
   hud.banner('WAVE ' + n, waveTitle(n));
   sfx.waveHorn();
 }
+const WAVE_TITLES = {
+  littleCanyon:['RIDERS ON THE RIM','DUST ON THE ROAD','THEY CAME FOR THE BANK','OUT OF THE GULLY',
+                'THE MINE ROAD','SOUTH OF THE GALLOWS','HELL IN A SMALL TOWN'],
+  drandenRoad: ['OFF THE HIGH GROUND','ACROSS THE CREEK','THEY CUT THE WIRE','OUT OF THE MESAS',
+                'THE STAGE IS LATE','RANCH HANDS GONE BAD','NOBODY RIDES TO DRANDEN'],
+};
 function waveTitle(n){
   if (n % 5 === 0) return 'A MARSHAL RIDES IN';
-  const t = ['RIDERS ON THE RIM','DUST ON THE ROAD','THEY CAME FOR THE BANK','OUT OF THE GULLY',
-             'THE MINE ROAD','SOUTH OF THE GALLOWS','HELL IN A SMALL TOWN'];
+  const t = WAVE_TITLES[GAME.mapId] || WAVE_TITLES.littleCanyon;
   return t[(n - 1) % t.length];
 }
 
@@ -3209,9 +3770,9 @@ function spawnOne(kind){
 function updateWaves(dt){
   if (GAME.state === 'playing'){
     GAME.spawnT -= dt;
-    if (GAME.spawnQueue.length && GAME.spawnT <= 0 && GAME.enemies.length < MAX_ALIVE){
+    if (GAME.spawnQueue.length && GAME.spawnT <= 0 && GAME.enemies.length < GAME.maxAlive){
       spawnOne(GAME.spawnQueue.shift());
-      GAME.spawnT = rnd(0.5, 1.6) / Math.min(2, 0.8 + GAME.wave * 0.05);
+      GAME.spawnT = rnd(0.5, 1.6) / (Math.min(2, 0.8 + GAME.wave * 0.05) * mapTune().spawn);
     }
     if (!GAME.spawnQueue.length && !GAME.enemies.length){
       // wave cleared
@@ -3249,7 +3810,9 @@ function resetRun(){
   for (const e of GAME.enemies) for (const p of e.parts) p.dispose();
   for (const e of GAME.corpses) for (const p of e.parts) p.dispose();
   GAME.enemies.length = 0; GAME.corpses.length = 0;
-  GAME.wave = 0; GAME.credits = 800; GAME.killed = 0; GAME.alive = 0;
+  const M = WORLD.map || MAPS[GAME.mapId] || MAPS.littleCanyon;
+  GAME.wave = 0; GAME.credits = M.credits; GAME.killed = 0; GAME.alive = 0;
+  GAME.maxAlive = M.tune.alive;
   GAME.hp = 100; GAME.maxHp = 100; PLAYER.armor = 0;
   GAME.shots = 0; GAME.hits = 0; GAME.brainKills = 0; GAME.heartKills = 0;
   GAME.dismember = 0; GAME.damageTaken = 0; GAME.timeAlive = 0;
@@ -3258,10 +3821,12 @@ function resetRun(){
   panelPlaced = false;
   PLAYER.hands.right.setWeapon('navy51');
   PLAYER.hands.left.setWeapon(null);
-  PLAYER.pos[0] = 0; PLAYER.pos[2] = 13; PLAYER.yaw = Math.PI;
+  PLAYER.pos[0] = M.start.x; PLAYER.pos[2] = M.start.z; PLAYER.yaw = M.start.yaw;
+  PLAYER.pos[1] = surfaceHeight(M.start.x, M.start.z, 3);
+  flat.yaw = M.start.yaw;
   parts.n = 0;
   GAME.state = 'buy'; GAME.waveTimer = 25; GAME.buyOpen = true;
-  hud.banner('LITTLE CANYON', 'BUY YOUR IRON — WAVE 1 IS COMING');
+  hud.banner(M.name, 'BUY YOUR IRON — WAVE 1 IS COMING');
 }
 
 /* ==========================================================================
@@ -3346,7 +3911,7 @@ function storeItems(page){
 
 function drawStore(){
   const P = store.panel;
-  const sig = [store.page, GAME.credits, Math.ceil(GAME.waveTimer), GAME.wave, GAME.state,
+  const sig = [store.page, GAME.credits, Math.ceil(GAME.waveTimer), GAME.wave, GAME.state, GAME.mapId,
                P.hover, PLAYER.hands.left.weapon && PLAYER.hands.left.weapon.id,
                PLAYER.hands.right.weapon && PLAYER.hands.right.weapon.id,
                Object.keys(PLAYER.owned).join(','), Object.keys(PLAYER.gear).join(',')].join('|');
@@ -3367,9 +3932,10 @@ function drawStore(){
   c.fillStyle = '#0d0907'; c.fillRect(16, 16, W-32, 92);
   c.textAlign = 'left'; c.fillStyle = UI.bone;
   c.font = 'bold 40px "Courier New",monospace';
-  c.fillText('LITTLE CANYON', 40, 74);
+  const mapName = (WORLD.map || MAPS.littleCanyon).name;
+  c.fillText(mapName, 40, 74);
   c.fillStyle = UI.dim; c.font = '17px "Courier New",monospace';
-  c.fillText('GOODS & MUNITIONS  ·  TOMLEND TERR.', 372, 74);
+  c.fillText('GOODS & MUNITIONS  ·  TOMLEND TERR.', 62 + mapName.length * 24, 74);
   c.textAlign = 'right';
   c.fillStyle = UI.gold; c.font = 'bold 42px "Courier New",monospace';
   c.fillText(money(GAME.credits), W - 40, 76);
@@ -3986,10 +4552,11 @@ function updateGame(dt){
 }
 
 /* ------------------------------------------------------------- XR session */
-async function enterVR(){
+async function enterVR(mapId){
   try {
     sfx.init(); sfx.resume();
-    if (!WORLD.struct) bootWorld();
+    mapId = mapId || selectedMode;
+    if (builtMap !== mapId) await withLoading('RAISING ' + MAPS[mapId].name + '\u2026', () => bootWorld(mapId));
     const session = await navigator.xr.requestSession('immersive-vr', {
       requiredFeatures: ['local-floor'],
       optionalFeatures: ['bounded-floor', 'hand-tracking'],
@@ -4003,6 +4570,7 @@ async function enterVR(){
     xrRefSpace = await session.requestReferenceSpace('local-floor');
     session.addEventListener('end', () => { xrSession = null; document.getElementById('overlay').classList.remove('hidden') });
     document.getElementById('overlay').classList.add('hidden');
+    closeModal();
     resetRun();
     lastT = 0;
     session.requestAnimationFrame(onXRFrame);
@@ -4136,13 +4704,15 @@ function handleStoreInput(inputs){
    town without putting the headset on. Mouse looks, WASD walks.
    ========================================================================== */
 const flat = { yaw: Math.PI, pitch: -0.05, keys: {}, mouse: { down:false }, prev: {}, eye: 1.68 };
-function startFlat(){
-  flatMode = true;
+async function startFlat(mapId){
+  mapId = mapId || selectedMode;
   sfx.init(); sfx.resume();
-  if (!WORLD.struct) bootWorld();
+  if (builtMap !== mapId) await withLoading('RAISING ' + MAPS[mapId].name + '\u2026', () => bootWorld(mapId));
+  flatMode = true;
+  closeModal();
   document.getElementById('overlay').classList.add('hidden');
   document.getElementById('hint').textContent =
-    'WASD move · mouse look · CLICK fire · F cock · R reload · B store · ESC release mouse';
+    'DEV PREVIEW — WASD move · mouse look · CLICK fire · F cock · R reload · B store · ESC release mouse';
   resetRun();
   canvas.requestPointerLock && canvas.requestPointerLock();
   resizeFlat();
@@ -4247,109 +4817,783 @@ function onFlatFrame(t){
 }
 
 /* ==========================================================================
-   BOOT
+   MENU
    ========================================================================== */
-const overlay = document.getElementById('overlay');
+const overlay  = document.getElementById('overlay');
 const statusEl = document.getElementById('status');
 const enterBtn = document.getElementById('enterVR');
-function setStatus(msg, warn){
+const loadingEl = document.getElementById('loading');
+function setStatus(msg, kind){
   statusEl.textContent = msg;
-  statusEl.className = warn ? 'warn' : '';
+  statusEl.className = kind || '';
 }
-let worldReady = false;
-function bootWorld(){
-  if (worldReady) return;
-  const info = buildWorld();
+
+/* --- the modes on offer, including the one that is not --- */
+const MODES = [
+  { id:'littleCanyon', kicker:'ENDLESS · MAP ONE', name:'LITTLE CANYON',
+    sub:'LAST STAND IN THE RED ROCK', diff:2,
+    blurb:'One street, two rows of timber, canyon wall on both sides. They have ' +
+          'to come down the road or out of a gully, and there is always a porch ' +
+          'post to put your shoulder against.' },
+  { id:'drandenRoad', kicker:'ENDLESS · MAP TWO', name:'THE DRANDEN ROAD',
+    sub:'OPEN RANGE, NO WALLS', diff:3,
+    blurb:'The fourteen miles between the canyon and the Dranden city limit. ' +
+          'Wagon road, creek crossing, the Rocking K, a way station — and long ' +
+          'sight lines with thin cover. They ride in from every quarter.' },
+  { id:'freeRoam', kicker:'CAMPAIGN', name:'FREE ROAM', locked:true,
+    sub:'TOMLEND & THE GREEF LINE', diff:4,
+    blurb:'Both states, open country, every town on the map. Ride where you like ' +
+          'and take work as it comes.' },
+];
+let selectedMode = 'littleCanyon';
+
+function buildModeCards(){
+  const wrap = document.getElementById('modes');
+  wrap.innerHTML = '';
+  for (const m of MODES){
+    const el = document.createElement('div');
+    el.className = 'mode' + (m.locked ? ' locked' : '') + (m.id === selectedMode ? ' sel' : '');
+    el.dataset.id = m.id;
+    const pips = [1,2,3,4].map(i => '<span class="' + (i <= m.diff ? 'on' : '') + '"></span>').join('');
+    el.innerHTML =
+      '<div class="kicker">' + m.kicker + '</div>' +
+      '<h2>' + m.name + '</h2>' +
+      '<div class="sub">' + m.sub + '</div>' +
+      '<p>' + m.blurb + '</p>' +
+      '<div class="diff">DIFFICULTY ' + pips + '</div>' +
+      '<div class="go">' + (m.locked ? 'LOCKED' : 'SELECT') + '</div>' +
+      (m.locked ? '<div class="blackout"></div>' : '');
+    if (!m.locked) el.addEventListener('click', () => selectMode(m.id));
+    wrap.appendChild(el);
+  }
+}
+function selectMode(id){
+  selectedMode = id;
+  for (const el of document.querySelectorAll('.mode')){
+    el.classList.toggle('sel', el.dataset.id === id);
+    const go = el.querySelector('.go');
+    if (go && !el.classList.contains('locked')) go.textContent = el.dataset.id === id ? 'SELECTED' : 'SELECT';
+  }
+}
+
+/* --------------------------------------------------------- menu backdrop */
+const menuBg = document.getElementById('menuBg');
+function paintMenuBg(){
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const W = menuBg.width = Math.floor(window.innerWidth * dpr);
+  const H = menuBg.height = Math.floor(window.innerHeight * dpr);
+  const c = menuBg.getContext('2d');
+  const S = H / 900;                                     // scale to viewport
+  // dusk sky
+  const sky = c.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0,   '#1a1a35');
+  sky.addColorStop(0.34,'#4a3050');
+  sky.addColorStop(0.58,'#a8563a');
+  sky.addColorStop(0.74,'#d98a45');
+  sky.addColorStop(0.86,'#e8b163');
+  sky.addColorStop(1,   '#3a2418');
+  c.fillStyle = sky; c.fillRect(0, 0, W, H);
+  // sun
+  const sy = H * 0.79, sx = W * 0.62;
+  const glow = c.createRadialGradient(sx, sy, 0, sx, sy, H * 0.42);
+  glow.addColorStop(0, 'rgba(255,214,140,.55)');
+  glow.addColorStop(1, 'rgba(255,180,90,0)');
+  c.fillStyle = glow; c.fillRect(0, 0, W, H);
+  c.fillStyle = '#ffd489';
+  c.beginPath(); c.arc(sx, sy, 62 * S, 0, TAU); c.fill();
+  // stars up top
+  for (let i = 0; i < 90; i++){
+    const x = hash2(i * 3.1, 1.7) * W, y = hash2(i * 1.9, 9.4) * H * 0.36;
+    c.fillStyle = 'rgba(255,240,220,' + (0.15 + hash2(i, 5) * 0.5) + ')';
+    c.fillRect(x, y, 1.6 * dpr, 1.6 * dpr);
+  }
+  // layered mesas, back to front
+  const bands = [
+    { y:0.70, h:0.11, col:'#6b3f3a', seed:11, step:0.055 },
+    { y:0.78, h:0.14, col:'#4a2a2c', seed:31, step:0.045 },
+    { y:0.865,h:0.16, col:'#2c1a1e', seed:57, step:0.035 },
+  ];
+  for (const b of bands){
+    c.fillStyle = b.col;
+    c.beginPath(); c.moveTo(0, H);
+    let x = 0, y = H * b.y;
+    c.lineTo(0, y);
+    while (x < W){
+      const w = W * (b.step + hash2(x * 0.013 + b.seed, 2.2) * b.step);
+      const top = H * b.y - hash2(x * 0.017 + b.seed, 7.3) * H * b.h;
+      c.lineTo(x, top); c.lineTo(x + w, top);
+      x += w;
+    }
+    c.lineTo(W, H); c.closePath(); c.fill();
+  }
+  // foreground ground + a lone saguaro or two
+  c.fillStyle = '#181012'; c.fillRect(0, H * 0.955, W, H);
+  const cact = (px, s) => {
+    c.fillStyle = '#140c0e';
+    c.fillRect(px, H * 0.955 - 120 * s, 22 * s, 120 * s);
+    c.fillRect(px - 26 * s, H * 0.955 - 84 * s, 26 * s, 16 * s);
+    c.fillRect(px - 26 * s, H * 0.955 - 118 * s, 15 * s, 40 * s);
+    c.fillRect(px + 22 * s, H * 0.955 - 96 * s, 24 * s, 15 * s);
+    c.fillRect(px + 40 * s, H * 0.955 - 132 * s, 15 * s, 48 * s);
+  };
+  cact(W * 0.115, S * 1.35); cact(W * 0.86, S * 0.95);
+  // dust haze
+  const haze = c.createLinearGradient(0, H * 0.6, 0, H);
+  haze.addColorStop(0, 'rgba(232,177,99,0)');
+  haze.addColorStop(1, 'rgba(232,150,80,.22)');
+  c.fillStyle = haze; c.fillRect(0, H * 0.6, W, H * 0.4);
+  // vignette
+  const vg = c.createRadialGradient(W / 2, H * 0.45, H * 0.2, W / 2, H * 0.5, H * 0.95);
+  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.72)');
+  c.fillStyle = vg; c.fillRect(0, 0, W, H);
+}
+window.addEventListener('resize', () => { if (!overlay.classList.contains('hidden')) paintMenuBg() });
+
+/* ------------------------------------------------------------- modals */
+const modal = document.getElementById('modal');
+const modalBody = document.getElementById('modalBody');
+const modalTitle = document.getElementById('modalTitle');
+const mapHintEl = document.getElementById('mapHint');
+function openModal(title, node, hint){
+  modalTitle.textContent = title;
+  modalBody.innerHTML = '';
+  modalBody.appendChild(node);
+  mapHintEl.textContent = hint || '';
+  modal.classList.add('open');
+  document.getElementById('mapIn').style.display   = hint ? '' : 'none';
+  document.getElementById('mapOut').style.display  = hint ? '' : 'none';
+  document.getElementById('mapFit').style.display  = hint ? '' : 'none';
+}
+function closeModal(){ modal.classList.remove('open'); modalBody.innerHTML = ''; mapView.cv = null }
+document.getElementById('modalClose').addEventListener('click', closeModal);
+window.addEventListener('keydown', e => { if (e.code === 'Escape' && modal.classList.contains('open')) closeModal() });
+
+function showHelp(){
+  const d = document.createElement('div');
+  d.className = 'helpcols';
+  d.innerHTML =
+    '<div class="col"><h3>THE IRON RULE</h3>' +
+    '<p><span class="k">COCK</span>click the thumbstick — that is your thumb on the hammer</p>' +
+    '<p><span class="k">FIRE</span>trigger. A gun with the hammer down only clicks</p>' +
+    '<p><span class="k">RELOAD</span>hold grip, and keep holding it</p>' +
+    '<p><span class="k">MOVE</span>left stick · <b>TURN</b> right stick</p>' +
+    '<p><span class="k">STORE</span>A / X, or between waves</p>' +
+    '<p><span class="k">LEMAT</span>B / Y swaps to the buckshot barrel</p></div>' +
+    '<div class="col"><h3>WHERE TO AIM</h3>' +
+    '<p>Every outlaw is built from pixels in layers — cloth, meat, bone.</p>' +
+    '<p>A round spends itself punching through. <b>Penetration</b> decides how deep it gets, ' +
+    'and <b>armour damage</b> decides whether plate steel stops it dead.</p>' +
+    '<p>Clip the <b style="color:#d98cc8">brain</b> or the <b style="color:#e04a3a">heart</b> and they drop where they stand. ' +
+    'The heart is the size of a fist, low and slightly to his left, behind a rib.</p></div>' +
+    '<div class="col"><h3>MAKING A LIVING</h3>' +
+    '<p>Kills pay. Clearing a wave pays a bonus. Guns carry a trade-in value, so you can ' +
+    'sell back into something bigger.</p>' +
+    '<p>A long arm takes both hands — put your free hand on the forestock and the group ' +
+    'tightens by half.</p>' +
+    '<p>Or carry a pistol in each hand and keep track of two hammers.</p></div>';
+  openModal('HOW TO PLAY', d);
+}
+
+/* ==========================================================================
+   THE TERRITORY, PROPERLY SURVEYED
+   A pan-and-zoom map. Detail appears as you come down: states and ranges at
+   altitude, then ranches and washes, then the street plan of the towns.
+   ========================================================================== */
+const TERR = {
+  w: 1200, h: 900,
+  ink:'#43301c', ink2:'#6b5330', paper:'#e9dcbe', water:'#5b7f92',
+  desert:'#e2a05e', desertPale:'#eec489', green:'#8b9a5d',
+};
+/* the two states, traced from the sketch: Tomlend north-west, Greef beyond the range */
+const TOMLEND_OUTLINE = [
+  [104,152],[168,92],[258,56],[360,42],[462,50],[552,80],[616,132],[648,198],
+  [656,272],[636,348],[594,406],[532,444],[452,464],[372,472],[302,470],
+  [272,512],[250,562],[232,618],[216,670],[198,714],[166,744],[124,742],[100,700],
+  [92,622],[98,542],[106,462],[96,382],[86,292],[88,212],
+];
+const GREEF_OUTLINE = [
+  [848,42],[930,26],[1024,34],[1104,58],[1152,104],[1174,178],[1178,286],[1166,392],
+  [1148,494],[1120,596],[1080,690],[1024,772],[956,830],[886,858],[846,842],[836,722],
+  [842,596],[838,466],[844,330],[838,196],
+];
+const RANGE_LINE = [[742,20],[758,120],[746,240],[762,360],[748,480],[766,600],[750,720],[762,860]];
+const RIVER_LINE = [[800,10],[818,120],[796,250],[812,380],[790,510],[806,640],[788,770],[800,890]];
+const CANYONS = [                       // the orange country from the sketch
+  { pts:[[18,54],[70,84],[84,180],[74,290],[86,420],[70,556],[84,690],[52,820],[18,862],[6,700],[10,420],[8,190]],
+    label:'THE BREAKS' },
+  { pts:[[236,486],[330,452],[418,470],[506,458],[588,492],[648,470],[698,520],[686,606],
+         [706,676],[642,742],[556,772],[470,802],[372,808],[288,782],[238,724],[206,660],[214,570]],
+    label:'PAINTED CANYONS' },
+  { pts:[[300,468],[352,438],[392,462],[380,506],[326,520]], label:'' },   // a finger cutting north
+];
+const TOWNS = [
+  { x:352, y:126, name:'DRANDEN',      rank:1, note:'COUNTY SEAT · RAIL HEAD' },
+  { x:166, y:672, name:'LITTLE CANYON',rank:2, note:'ENDLESS · MAP ONE', play:'littleCanyon' },
+  { x:470, y:212, name:'TWO PINES',    rank:3 },
+  { x:556, y:352, name:'SALT WELLS',   rank:3 },
+  { x:262, y:318, name:'HALLOWAY',     rank:3 },
+  { x:960, y:214, name:'ELDER GREEF',  rank:2, note:'ACROSS THE LINE' },
+  { x:1046,y:508, name:'MARROWBONE',   rank:3 },
+  { x:906, y:706, name:'COLD SPRING',  rank:3 },
+];
+/* the wagon road that map two is set on */
+const DRANDEN_ROAD = [[358,142],[334,210],[306,272],[288,340],[268,404],[242,468],[212,540],[186,610],[166,660]];
+const ROADS = [
+  { pts:DRANDEN_ROAD, name:'THE DRANDEN ROAD', kind:'wagon', play:'drandenRoad' },
+  { pts:[[352,126],[430,168],[470,212]], name:'', kind:'wagon' },
+  { pts:[[470,212],[540,286],[556,352]], name:'', kind:'wagon' },
+  { pts:[[262,318],[330,300],[430,290],[540,300]], name:'BAR T TRAIL', kind:'trail' },
+  { pts:[[556,352],[660,400],[742,430],[806,442],[900,470],[1046,508]], name:'GREEF FERRY ROAD', kind:'wagon' },
+  { pts:[[166,672],[248,706],[338,730],[434,716]], name:'OLD MINE TRACE', kind:'trail' },
+];
+const RAIL = [[352,126],[352,60],[420,26],[560,14],[700,20]];
+const PLACES = [
+  { x:290, y:344, name:'ROCKING K RANCH',  kind:'ranch', zoom:1.5 },
+  { x:232, y:478, name:'HALFWAY STATION',  kind:'station', zoom:1.5 },
+  { x:266, y:412, name:'DRY CREEK',        kind:'creek', zoom:1.5 },
+  { x:252, y:452, name:'BOOT HILL',        kind:'grave', zoom:2.2 },
+  { x:122, y:614, name:'NO. 4 MINE',       kind:'mine', zoom:1.5 },
+  { x:120, y:700, name:'SAWTOOTH MESA',    kind:'mesa', zoom:1.5 },
+  { x:222, y:706, name:'HANGMAN BUTTE',    kind:'mesa', zoom:2.2 },
+  { x:398, y:236, name:'TOMLEND WASH',     kind:'creek', zoom:1.6 },
+  { x:600, y:180, name:'BITTER LAKE',      kind:'lake',  zoom:1.2 },
+  { x:806, y:442, name:'GREEF FERRY',      kind:'ferry', zoom:1.6 },
+  { x:742, y:300, name:'IRON VEIN RANGE',  kind:'label', zoom:0.8, rot:-Math.PI/2 },
+  { x:790, y:640, name:'GREEF RIVER',      kind:'label', zoom:1.2, rot:-Math.PI/2, col:'#5b7f92' },
+  { x:470, y:760, name:'DEVIL’S OVEN', kind:'label', zoom:1.2 },
+  { x:46,  y:330, name:'THE BREAKS',       kind:'label', zoom:1.15, rot:-Math.PI/2 },
+  { x:446, y:640, name:'PAINTED CANYONS',  kind:'label', zoom:1.15, col:'rgba(150,80,30,.9)' },
+  { x:206, y:560, name:'THE DRANDEN ROAD', kind:'label', zoom:2.0, rot:-1.25, col:'rgba(140,60,30,.85)' },
+];
+
+const mapView = { cv:null, ctx:null, scale:1, ox:0, oy:0, drag:null, hover:null, fit:1 };
+
+function showMap(){
+  const cv = document.createElement('canvas');
+  cv.id = 'mapCv';
+  openModal('TERRITORY OF TOMLEND — SURVEYED 1878', cv,
+            'drag to pan · wheel or +/− to zoom · click a marked place to ride there');
+  mapView.cv = cv;
+  mapView.ctx = cv.getContext('2d');
+  const resize = () => {
+    if (!mapView.cv) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.floor(cv.clientWidth * dpr);
+    cv.height = Math.floor(cv.clientHeight * dpr);
+    mapFit();
+  };
+  setTimeout(resize, 16);
+  window.addEventListener('resize', resize);
+
+  cv.addEventListener('pointerdown', e => {
+    mapView.drag = { x:e.clientX, y:e.clientY, ox:mapView.ox, oy:mapView.oy, moved:0 };
+    cv.classList.add('drag'); cv.setPointerCapture(e.pointerId);
+  });
+  cv.addEventListener('pointermove', e => {
+    const r = cv.getBoundingClientRect();
+    const dpr = cv.width / r.width;
+    if (mapView.drag){
+      const dx = (e.clientX - mapView.drag.x) * dpr, dy = (e.clientY - mapView.drag.y) * dpr;
+      mapView.drag.moved += Math.abs(dx) + Math.abs(dy);
+      mapView.ox = mapView.drag.ox + dx; mapView.oy = mapView.drag.oy + dy;
+      drawMap();
+    } else {
+      const mx = (e.clientX - r.left) * dpr, my = (e.clientY - r.top) * dpr;
+      const wx = (mx - mapView.ox) / mapView.scale, wy = (my - mapView.oy) / mapView.scale;
+      const hit = mapHitTest(wx, wy);
+      if (hit !== mapView.hover){ mapView.hover = hit; cv.style.cursor = hit ? 'pointer' : 'grab'; drawMap() }
+    }
+  });
+  const endDrag = e => {
+    if (mapView.drag && mapView.drag.moved < 6){
+      const r = cv.getBoundingClientRect(), dpr = cv.width / r.width;
+      const wx = ((e.clientX - r.left) * dpr - mapView.ox) / mapView.scale;
+      const wy = ((e.clientY - r.top) * dpr - mapView.oy) / mapView.scale;
+      const hit = mapHitTest(wx, wy);
+      if (hit && hit.play){ closeModal(); selectMode(hit.play); enterVR(hit.play) }
+    }
+    mapView.drag = null; cv.classList.remove('drag');
+  };
+  cv.addEventListener('pointerup', endDrag);
+  cv.addEventListener('pointercancel', () => { mapView.drag = null; cv.classList.remove('drag') });
+  cv.addEventListener('wheel', e => {
+    e.preventDefault();
+    const r = cv.getBoundingClientRect(), dpr = cv.width / r.width;
+    mapZoom(Math.pow(0.9, e.deltaY > 0 ? 1 : -1), (e.clientX - r.left) * dpr, (e.clientY - r.top) * dpr);
+  }, { passive:false });
+}
+function mapZoom(k, cx, cy){
+  if (!mapView.cv) return;
+  if (cx === undefined){ cx = mapView.cv.width / 2; cy = mapView.cv.height / 2 }
+  const s0 = mapView.scale;
+  const s1 = clamp(s0 * k, mapView.fit * 0.9, mapView.fit * 14);
+  mapView.ox = cx - (cx - mapView.ox) * (s1 / s0);
+  mapView.oy = cy - (cy - mapView.oy) * (s1 / s0);
+  mapView.scale = s1;
+  drawMap();
+}
+function mapFit(){
+  if (!mapView.cv) return;
+  const cv = mapView.cv;
+  const s = Math.min(cv.width / TERR.w, cv.height / TERR.h) * 0.94;
+  mapView.fit = s; mapView.scale = s;
+  mapView.ox = (cv.width - TERR.w * s) / 2;
+  mapView.oy = (cv.height - TERR.h * s) / 2;
+  drawMap();
+}
+document.getElementById('mapIn').addEventListener('click', () => mapZoom(1.35));
+document.getElementById('mapOut').addEventListener('click', () => mapZoom(1 / 1.35));
+document.getElementById('mapFit').addEventListener('click', mapFit);
+
+function mapHitTest(wx, wy){
+  const r = 22;
+  for (const t of TOWNS) if (t.play && Math.hypot(t.x - wx, t.y - wy) < r) return t;
+  for (const rd of ROADS){
+    if (!rd.play) continue;
+    for (const p of rd.pts) if (Math.hypot(p[0] - wx, p[1] - wy) < 16) return rd;
+  }
+  return null;
+}
+
+/* ---------------------------------------------------------- map drawing */
+/* push a smooth outline through noise so borders read as surveyed, not drawn
+   with a compass. Cached — the territory does not move. */
+const _wobbleCache = new Map();
+function wobbled(pts, amp, seed, freq){
+  const key = seed + ':' + amp + ':' + pts.length;
+  if (_wobbleCache.has(key)) return _wobbleCache.get(key);
+  const out = [];
+  const n = pts.length;
+  for (let i = 0; i < n; i++){
+    const a = pts[i], b = pts[(i + 1) % n];
+    const steps = 6;
+    for (let s = 0; s < steps; s++){
+      const t = s / steps;
+      const x = lerp(a[0], b[0], t), y = lerp(a[1], b[1], t);
+      const dx = b[0] - a[0], dy = b[1] - a[1];
+      const l = Math.hypot(dx, dy) || 1;
+      const nx = -dy / l, ny = dx / l;
+      const d = (fbm(x * (freq || 0.02) + seed, y * (freq || 0.02) - seed, 3) - 0.5) * amp;
+      out.push([x + nx * d, y + ny * d]);
+    }
+  }
+  _wobbleCache.set(key, out);
+  return out;
+}
+function mpath(c, pts, close){
+  c.beginPath();
+  c.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++){
+    const p = pts[i], q = pts[i - 1];
+    const mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2;
+    c.quadraticCurveTo(q[0], q[1], mx, my);
+  }
+  const last = pts[pts.length - 1];
+  if (close){ c.quadraticCurveTo(last[0], last[1], pts[0][0], pts[0][1]); c.closePath() }
+  else c.lineTo(last[0], last[1]);
+}
+function mlabel(c, text, x, y, size, col, spacing, rot){
+  c.save();
+  c.translate(x, y);
+  if (rot) c.rotate(rot);
+  const inv = 1 / (mapView.scale || 1);
+  c.scale(inv, inv);
+  c.font = 'bold ' + size + 'px "Courier New",monospace';
+  c.fillStyle = col;
+  c.textAlign = 'left'; c.textBaseline = 'middle';
+  const sp = spacing === undefined ? size * 0.22 : spacing;
+  let total = 0;
+  for (const ch of text) total += c.measureText(ch).width + sp;
+  let cx = -total / 2;
+  for (const ch of text){
+    c.fillText(ch, cx, 0);
+    cx += c.measureText(ch).width + sp;
+  }
+  c.restore();
+}
+
+function drawMap(){
+  const c = mapView.ctx, cv = mapView.cv;
+  if (!c || !cv) return;
+  const W = cv.width, H = cv.height;
+  const z = mapView.scale / mapView.fit;          // 1 = fitted, higher = closer
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.fillStyle = '#1a140f'; c.fillRect(0, 0, W, H);
+  c.save();
+  c.translate(mapView.ox, mapView.oy);
+  c.scale(mapView.scale, mapView.scale);
+  const px = 1 / mapView.scale;                   // one screen pixel in map units
+
+  /* ---- paper ---- */
+  c.fillStyle = TERR.paper;
+  c.fillRect(0, 0, TERR.w, TERR.h);
+  for (let i = 0; i < 260; i++){                  // foxing and fibre
+    const x = hash2(i * 1.7, 3.1) * TERR.w, y = hash2(i * 2.9, 8.8) * TERR.h;
+    const r = 6 + hash2(i, 4) * 34;
+    c.fillStyle = 'rgba(176,140,90,' + (0.02 + hash2(i, 9) * 0.05) + ')';
+    c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill();
+  }
+  c.fillStyle = 'rgba(120,90,50,.05)';
+  for (let i = 0; i < 400; i++)
+    c.fillRect(hash2(i * 5.1, 1.3) * TERR.w, hash2(i * 3.3, 7.7) * TERR.h, 12, 0.8);
+
+  /* ---- desert country ---- */
+  for (const region of CANYONS){
+    const rp = wobbled(region.pts, 26, 3.7, 0.035);
+    c.save();
+    mpath(c, rp, true);
+    c.fillStyle = TERR.desertPale; c.fill();
+    c.clip();
+    c.strokeStyle = 'rgba(200,110,42,.55)'; c.lineWidth = 1.4;
+    for (let i = -TERR.h; i < TERR.w; i += 11){   // canyon hachures
+      c.beginPath(); c.moveTo(i, 0); c.lineTo(i + TERR.h * 0.5, TERR.h); c.stroke();
+    }
+    if (z > 1.6){
+      c.strokeStyle = 'rgba(150,80,30,.45)'; c.lineWidth = 1.1;
+      for (let i = 0; i < 90; i++){               // little rock ticks
+        const x = hash2(i * 2.2, 6.1) * TERR.w, y = hash2(i * 4.4, 2.8) * TERR.h;
+        c.beginPath(); c.moveTo(x, y); c.lineTo(x + 7, y - 5); c.lineTo(x + 14, y); c.stroke();
+      }
+    }
+    c.restore();
+    c.lineWidth = 1.8;
+    c.strokeStyle = 'rgba(160,86,30,.75)';
+    mpath(c, rp, true); c.stroke();
+  }
+
+  /* ---- states ---- */
+  const TOM = wobbled(TOMLEND_OUTLINE, 17, 8.2, 0.022);
+  const GRE = wobbled(GREEF_OUTLINE, 15, 21.4, 0.022);
+  for (const [outline, fill] of [[TOM, '#f4ead0'], [GRE, '#e8e3c6']]){
+    c.save();
+    c.shadowColor = 'rgba(60,40,20,.28)'; c.shadowBlur = 14; c.shadowOffsetY = 5;
+    mpath(c, outline, true);
+    c.fillStyle = fill; c.fill();
+    c.restore();
+    c.lineWidth = 2.8; c.strokeStyle = TERR.ink;
+    mpath(c, outline, true); c.stroke();
+    c.lineWidth = 0.8; c.strokeStyle = 'rgba(67,48,28,.35)';
+    c.save(); mpath(c, outline, true); c.clip();
+    for (let i = 1; i < 5; i++){                  // engraver's fringe inside the border
+      mpath(c, outline.map(p => [p[0] + i * 3.0, p[1] + i * 3.0]), true); c.stroke();
+    }
+    c.restore();
+  }
+  // grazing land speckle inside Tomlend
+  c.save(); mpath(c, TOM, true); c.clip();
+  c.fillStyle = 'rgba(139,154,93,.35)';
+  for (let i = 0; i < 260; i++){
+    const x = 92 + hash2(i * 1.3, 2.7) * 560, y = 44 + hash2(i * 2.1, 5.3) * 700;
+    c.beginPath(); c.arc(x, y, 1.6, 0, TAU); c.fill();
+  }
+  c.restore();
+
+  /* ---- the Iron Vein range: hachured ridges ---- */
+  c.strokeStyle = '#2a2018'; c.fillStyle = '#2a2018';
+  for (let i = 0; i < RANGE_LINE.length - 1; i++){
+    const a = RANGE_LINE[i], b = RANGE_LINE[i + 1];
+    const steps = 14;
+    for (let s = 0; s < steps; s++){
+      const t = s / steps;
+      const x = lerp(a[0], b[0], t), y = lerp(a[1], b[1], t);
+      const hgt = 12 + hash2(i * 3 + s, 4.4) * 16;
+      const wdt = 9 + hash2(i * 5 + s, 1.1) * 8;
+      c.beginPath();
+      c.moveTo(x - wdt, y + 6); c.lineTo(x, y - hgt); c.lineTo(x + wdt, y + 6);
+      c.closePath(); c.fill();
+      if (z > 1.4){
+        c.lineWidth = 0.7;
+        for (let k = -2; k <= 2; k++){
+          c.beginPath(); c.moveTo(x + k * 3, y - hgt * 0.45); c.lineTo(x + k * 3 + 2, y + 5); c.stroke();
+        }
+      }
+    }
+  }
+
+  /* ---- rivers ---- */
+  c.lineCap = 'round';
+  c.strokeStyle = TERR.water; c.lineWidth = 3.4;
+  mpath(c, RIVER_LINE); c.stroke();
+  c.strokeStyle = 'rgba(91,127,146,.35)'; c.lineWidth = 8;
+  mpath(c, RIVER_LINE); c.stroke();
+  if (z > 1.3){                                    // creeks that feed it
+    c.strokeStyle = 'rgba(91,127,146,.8)'; c.lineWidth = 1.5;
+    for (const cr of [[[262,398],[300,430],[330,470],[300,520]],
+                      [[398,236],[440,280],[470,330]],
+                      [[556,352],[620,392],[700,420],[790,440]]]){
+      mpath(c, cr); c.stroke();
+    }
+  }
+  // Bitter Lake
+  c.fillStyle = 'rgba(91,127,146,.75)';
+  c.beginPath(); c.ellipse(600, 180, 34, 20, 0.3, 0, TAU); c.fill();
+
+  /* ---- roads and rail ---- */
+  for (const rd of ROADS){
+    const on = mapView.hover === rd;
+    c.lineCap = 'butt';
+    if (rd.kind === 'trail'){
+      c.setLineDash([5, 6]); c.lineWidth = 1.6; c.strokeStyle = 'rgba(67,48,28,.6)';
+    } else {
+      c.setLineDash([]);
+      c.lineWidth = Math.min(on ? 6.4 : 4.6, (on ? 7 : 5) / mapView.scale * 1.2);
+      c.strokeStyle = on ? '#b4472a' : '#7d5c30';
+    }
+    mpath(c, rd.pts); c.stroke();
+    if (rd.kind !== 'trail'){
+      c.setLineDash([7, 7]); c.lineWidth = 1.1; c.strokeStyle = TERR.paper;
+      mpath(c, rd.pts); c.stroke();
+    }
+    c.setLineDash([]);
+  }
+  c.lineWidth = 2.2; c.strokeStyle = '#3a2c1c';
+  mpath(c, RAIL); c.stroke();
+  for (let i = 0; i < RAIL.length - 1; i++){
+    const a = RAIL[i], b = RAIL[i + 1], n = 10;
+    for (let s = 0; s <= n; s++){
+      const x = lerp(a[0], b[0], s / n), y = lerp(a[1], b[1], s / n);
+      const ang = Math.atan2(b[1] - a[1], b[0] - a[0]) + Math.PI / 2;
+      c.beginPath();
+      c.moveTo(x + Math.cos(ang) * 4, y + Math.sin(ang) * 4);
+      c.lineTo(x - Math.cos(ang) * 4, y - Math.sin(ang) * 4);
+      c.lineWidth = 1.4; c.stroke();
+    }
+  }
+
+  /* ---- named places ---- */
+  for (const p of PLACES){
+    if (z < p.zoom) continue;
+    const s = 1;
+    c.fillStyle = p.col || TERR.ink; c.strokeStyle = p.col || TERR.ink; c.lineWidth = 1.4;
+    if (p.kind === 'ranch'){
+      c.fillRect(p.x - 5, p.y - 4, 10, 8);
+      c.beginPath(); c.moveTo(p.x - 6, p.y - 4); c.lineTo(p.x, p.y - 9); c.lineTo(p.x + 6, p.y - 4); c.fill();
+    } else if (p.kind === 'station'){
+      c.fillRect(p.x - 6, p.y - 5, 12, 10);
+      c.fillStyle = TERR.paper; c.fillRect(p.x - 3, p.y - 2, 6, 7); c.fillStyle = TERR.ink;
+    } else if (p.kind === 'mine'){
+      c.beginPath(); c.arc(p.x, p.y, 5, Math.PI, 0); c.fill();
+      c.beginPath(); c.moveTo(p.x - 8, p.y + 6); c.lineTo(p.x + 8, p.y + 6); c.stroke();
+    } else if (p.kind === 'mesa'){
+      c.beginPath(); c.moveTo(p.x - 11, p.y + 5); c.lineTo(p.x - 7, p.y - 6);
+      c.lineTo(p.x + 7, p.y - 6); c.lineTo(p.x + 11, p.y + 5); c.closePath(); c.fill();
+    } else if (p.kind === 'grave'){
+      c.fillRect(p.x - 1.2, p.y - 7, 2.4, 12); c.fillRect(p.x - 5, p.y - 4, 10, 2.4);
+    } else if (p.kind === 'ferry'){
+      c.beginPath(); c.moveTo(p.x - 7, p.y); c.lineTo(p.x + 7, p.y);
+      c.lineTo(p.x + 4, p.y + 5); c.lineTo(p.x - 4, p.y + 5); c.closePath(); c.fill();
+    } else if (p.kind === 'creek' || p.kind === 'lake'){
+      /* label only */
+    }
+    if (p.kind === 'label') mlabel(c, p.name, p.x, p.y, 13, p.col || 'rgba(67,48,28,.85)', 5, p.rot);
+    else mlabel(c, p.name, p.x, p.y + 15, 8.5, 'rgba(67,48,28,.9)', 1.6);
+  }
+
+  /* ---- towns ---- */
+  for (const t of TOWNS){
+    const big = t.rank === 1, mid = t.rank === 2;
+    const on = mapView.hover === t;
+    if (z > 4.5 && (t.name === 'LITTLE CANYON' || t.name === 'DRANDEN')) drawTownPlan(c, t, z);
+    else {
+      const n = big ? 9 : mid ? 6 : 3;
+      c.fillStyle = TERR.ink;
+      const sz = big ? 6 : mid ? 5.4 : 4.6, gap = big ? 7 : 6;
+      for (let i = 0; i < n; i++){
+        const gx = (i % 3) - 1, gy = Math.floor(i / 3) - 1;
+        c.fillRect(t.x + gx * gap - sz / 2, t.y + gy * gap - sz / 2, sz, sz);
+      }
+    }
+    if (t.play){
+      c.strokeStyle = on ? '#b4472a' : 'rgba(180,71,42,.75)';
+      c.lineWidth = on ? 2.6 : 1.8;
+      c.setLineDash([4, 3]);
+      c.beginPath(); c.arc(t.x, t.y, 19, 0, TAU); c.stroke();
+      c.setLineDash([]);
+    }
+    const planned = z > 4.5 && (t.name === 'LITTLE CANYON' || t.name === 'DRANDEN');
+    mlabel(c, t.name, t.x, t.y - (planned ? 56 : big ? 24 : 19),
+           big ? 18 : mid ? 15 : 12, TERR.ink, big ? 5 : 3);
+    if (t.note && z > 1.25) mlabel(c, t.note, t.x, t.y + (planned ? 58 : 20), 9, 'rgba(120,60,30,.9)', 1.6);
+  }
+
+  /* ---- state names, big and airy ---- */
+  mlabel(c, 'TOMLEND', 366, 262, 46, 'rgba(67,48,28,.30)', 18);
+  mlabel(c, 'GREEF',  1004, 420, 46, 'rgba(67,48,28,.30)', 18);
+  mlabel(c, 'TERRITORY LINE', 772, 700, 9, 'rgba(67,48,28,.6)', 4, -Math.PI / 2);
+
+  /* ---- frame, rose, scale, cartouche ---- */
+  c.lineWidth = 6; c.strokeStyle = TERR.ink;
+  c.strokeRect(10, 10, TERR.w - 20, TERR.h - 20);
+  c.lineWidth = 1.6; c.strokeRect(20, 20, TERR.w - 40, TERR.h - 40);
+  drawCompass(c, 1094, 810, 44);
+  // scale bar
+  c.fillStyle = TERR.ink; c.font = 'bold 11px "Courier New",monospace'; c.textAlign = 'left';
+  const sbx = 60, sby = 846;
+  for (let i = 0; i < 6; i++){
+    c.fillStyle = i % 2 ? TERR.paper : TERR.ink;
+    c.fillRect(sbx + i * 22, sby, 22, 7);
+    c.strokeStyle = TERR.ink; c.lineWidth = 1; c.strokeRect(sbx + i * 22, sby, 22, 7);
+  }
+  c.fillStyle = TERR.ink;
+  c.fillText('0', sbx - 3, sby - 6); c.fillText('30 MILES', sbx + 118, sby - 6);
+  // cartouche, down in the empty south
+  c.fillStyle = 'rgba(236,224,196,.94)';
+  c.fillRect(392, 800, 330, 76);
+  c.strokeStyle = TERR.ink; c.lineWidth = 2.4; c.strokeRect(392, 800, 330, 76);
+  c.lineWidth = 1; c.strokeRect(398, 806, 318, 64);
+  mlabel(c, 'TOMLEND TERRITORY', 557, 826, 16, TERR.ink, 3.4);
+  mlabel(c, '& THE GREEF LINE', 557, 847, 11, 'rgba(67,48,28,.8)', 3);
+  mlabel(c, 'SURVEYED 1878', 557, 863, 8, 'rgba(67,48,28,.6)', 3);
+  c.restore();
+
+  /* ---- hover readout, in screen space ---- */
+  if (mapView.hover){
+    const h = mapView.hover;
+    const label = (h.name || '') + (h.play ? '  —  CLICK TO RIDE IN' : '');
+    c.font = 'bold 15px "Courier New",monospace';
+    const w = c.measureText(label).width + 26;
+    c.fillStyle = 'rgba(12,9,7,.9)';
+    c.fillRect(W / 2 - w / 2, H - 46, w, 30);
+    c.strokeStyle = '#e0a93b'; c.lineWidth = 1.5;
+    c.strokeRect(W / 2 - w / 2, H - 46, w, 30);
+    c.fillStyle = '#e8d6b0'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText(label, W / 2, H - 30);
+  }
+}
+
+function drawCompass(c, x, y, r){
+  c.save(); c.translate(x, y);
+  c.strokeStyle = TERR.ink; c.lineWidth = 1.6;
+  c.beginPath(); c.arc(0, 0, r, 0, TAU); c.stroke();
+  c.beginPath(); c.arc(0, 0, r * 0.78, 0, TAU); c.stroke();
+  for (let i = 0; i < 4; i++){
+    const a = i * Math.PI / 2 - Math.PI / 2;
+    c.fillStyle = i === 0 ? '#8d1f14' : TERR.ink;
+    c.beginPath();
+    c.moveTo(Math.cos(a) * r * 0.72, Math.sin(a) * r * 0.72);
+    c.lineTo(Math.cos(a + 0.36) * r * 0.2, Math.sin(a + 0.36) * r * 0.2);
+    c.lineTo(Math.cos(a - 0.36) * r * 0.2, Math.sin(a - 0.36) * r * 0.2);
+    c.closePath(); c.fill();
+  }
+  for (let i = 0; i < 4; i++){
+    const a = i * Math.PI / 2 + Math.PI / 4 - Math.PI / 2;
+    c.fillStyle = 'rgba(67,48,28,.6)';
+    c.beginPath();
+    c.moveTo(Math.cos(a) * r * 0.5, Math.sin(a) * r * 0.5);
+    c.lineTo(Math.cos(a + 0.4) * r * 0.16, Math.sin(a + 0.4) * r * 0.16);
+    c.lineTo(Math.cos(a - 0.4) * r * 0.16, Math.sin(a - 0.4) * r * 0.16);
+    c.closePath(); c.fill();
+  }
+  mlabel(c, 'N', 0, -r * 0.9, 12, '#8d1f14', 0);
+  c.restore();
+}
+
+/* street plans, drawn once you come right down on a town */
+function drawTownPlan(c, t, z){
+  const isLC = t.name === 'LITTLE CANYON';
+  c.save(); c.translate(t.x, t.y); c.scale(0.5, 0.5);
+  c.fillStyle = 'rgba(226,160,94,.35)';
+  c.fillRect(-70, -95, 140, 190);
+  // the street
+  c.fillStyle = 'rgba(200,150,90,.55)';
+  if (isLC) c.fillRect(-13, -95, 26, 190);
+  else { c.fillRect(-13, -95, 26, 190); c.fillRect(-70, -20, 140, 22); c.fillRect(-70, 40, 140, 18) }
+  c.strokeStyle = TERR.ink; c.lineWidth = 1.2; c.fillStyle = '#3a2c1c';
+  const blk = (x, y, w, h, name) => {
+    c.fillStyle = '#4a3826'; c.fillRect(x, y, w, h);
+    c.strokeRect(x, y, w, h);
+    if (name && z > 4.4){
+      c.save();
+      c.translate(x + w / 2, y + h / 2);
+      const inv = 2 / (mapView.scale || 1);       // the plan is drawn at half scale
+      c.scale(inv, inv);
+      c.font = 'bold 9px "Courier New",monospace'; c.fillStyle = '#efe4c8';
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText(name, 0, 0);
+      c.restore();
+    }
+  };
+  if (isLC){
+    blk(-52, -84, 30, 22, 'LIVERY');   blk(-50, -58, 26, 20, 'GENERAL');
+    blk(-52, -34, 30, 26, 'SALOON');   blk(-50, -4, 26, 20, 'JAIL');
+    blk(-48, 20, 24, 18, 'COFFINS');   blk(-52, 44, 30, 22, 'FEED');
+    blk(22, -88, 26, 20, 'ASSAY');     blk(22, -62, 28, 22, 'BANK');
+    blk(22, -36, 28, 26, 'HOTEL');     blk(22, -8, 22, 18, 'SMITH');
+    blk(22, 14, 26, 20, 'TRADE');      blk(22, 38, 26, 30, 'CHURCH');
+    c.fillStyle = '#2a2018';
+    c.beginPath(); c.arc(56, 72, 5, 0, TAU); c.fill();          // water tower
+    c.beginPath(); c.arc(-56, 74, 4, 0, TAU); c.fill();         // windmill
+    c.fillRect(-6, -96, 12, 6);                                  // mine
+    if (z > 4.4){
+      const lab = (t2, xx, yy) => { c.save(); c.translate(xx, yy); const inv = 2 / mapView.scale;
+        c.scale(inv, inv); c.font = 'bold 9px "Courier New",monospace'; c.fillStyle = TERR.ink;
+        c.textAlign = 'center'; c.fillText(t2, 0, 0); c.restore() };
+      lab('MINE NO.4', 0, -100); lab('BOOT HILL', -34, 92); lab('TANK', 56, 86);
+    }
+  } else {
+    for (let i = 0; i < 5; i++) for (let j = 0; j < 4; j++){
+      if (i === 2) continue;
+      blk(-66 + i * 27, -80 + j * 42, 22, 30, '');
+    }
+    c.fillStyle = '#2a2018'; c.fillRect(-70, -95, 140, 5);       // rail head
+    if (z > 4.4){
+      c.save(); c.translate(0, -100); const inv = 2 / mapView.scale; c.scale(inv, inv);
+      c.font = 'bold 9px "Courier New",monospace'; c.fillStyle = TERR.ink; c.textAlign = 'center';
+      c.fillText('RAIL HEAD', 0, 0); c.restore();
+    }
+  }
+  c.restore();
+}
+
+/* ==========================================================================
+   BOOT
+   ========================================================================== */
+let builtMap = null;
+function bootWorld(mapId){
+  mapId = mapId || selectedMode || 'littleCanyon';
+  if (!MAPS[mapId]) mapId = 'littleCanyon';
+  if (builtMap === mapId) return;
+  buildWorld(mapId);
+  builtMap = mapId;
   PLAYER.hands.right.setWeapon('navy51');
-  worldReady = true;
-  return info;
+}
+/* building a map blocks for the best part of a second, so show something first */
+function withLoading(msg, fn){
+  loadingEl.textContent = msg;
+  loadingEl.classList.add('on');
+  return new Promise(res => setTimeout(() => {
+    try { fn() } catch(e){ fail(e) }
+    loadingEl.classList.remove('on');
+    res();
+  }, 40));
 }
 
 async function checkXR(){
   if (!navigator.xr){
     enterBtn.disabled = true;
-    setStatus('no WebXR in this browser — open in a headset browser (Quest, Wolvic, SteamVR/Chrome)', true);
+    setStatus('no WebXR here — open this in a headset browser (Quest, Wolvic, or desktop Chrome with a headset)', 'warn');
     return;
   }
   try {
     const ok = await navigator.xr.isSessionSupported('immersive-vr');
-    if (ok) setStatus('headset found — put it on and press ENTER VR');
-    else { enterBtn.disabled = true; setStatus('no VR headset detected on this device', true) }
-  } catch(e){ enterBtn.disabled = true; setStatus('WebXR check failed: ' + e.message, true) }
+    if (ok) setStatus('headset found — pick your ground and press ENTER VR', 'ok');
+    else { enterBtn.disabled = true; setStatus('no VR headset detected on this device', 'warn') }
+  } catch(e){ enterBtn.disabled = true; setStatus('WebXR check failed: ' + e.message, 'warn') }
 }
-enterBtn.addEventListener('click', enterVR);
-document.getElementById('flatBtn').addEventListener('click', startFlat);
 
-/* --------------------------- the territory, as drawn --------------------- */
+enterBtn.addEventListener('click', () => enterVR(selectedMode));
+document.getElementById('flatBtn').addEventListener('click', () => startFlat(selectedMode));
 document.getElementById('mapBtn').addEventListener('click', showMap);
-function showMap(){
-  let m = document.getElementById('mapModal');
-  if (m){ m.remove(); return }
-  m = document.createElement('div');
-  m.id = 'mapModal';
-  m.style.cssText = 'position:fixed;inset:0;background:#0a0807ee;z-index:40;display:flex;' +
-    'align-items:center;justify-content:center;flex-direction:column;gap:14px;padding:20px';
-  const cv = document.createElement('canvas');
-  cv.width = 760; cv.height = 520;
-  cv.style.cssText = 'max-width:96vw;height:auto;border:2px solid #6b4a24;background:#fff';
-  const c = cv.getContext('2d');
-  // desert
-  c.fillStyle = '#fff'; c.fillRect(0, 0, 760, 520);
-  c.fillStyle = '#e8641a';
-  c.beginPath(); c.moveTo(10, 0); c.lineTo(120, 0); c.lineTo(95, 520); c.lineTo(6, 520); c.closePath(); c.fill();
-  c.fillRect(60, 250, 340, 270);
-  c.beginPath(); c.moveTo(330, 0); c.lineTo(420, 10); c.lineTo(400, 300); c.lineTo(300, 260); c.closePath(); c.fill();
-  // Tomlend
-  c.fillStyle = '#fff'; c.strokeStyle = '#111'; c.lineWidth = 3;
-  c.beginPath(); c.moveTo(70, 20); c.bezierCurveTo(300, -10, 400, 60, 380, 200);
-  c.bezierCurveTo(360, 300, 120, 300, 70, 200); c.closePath(); c.fill(); c.stroke();
-  c.fillStyle = '#111'; c.font = 'bold 46px "Courier New",monospace'; c.textAlign = 'center';
-  c.fillText('TOMLEND', 225, 130);
-  // mountains
-  c.strokeStyle = '#111'; c.lineWidth = 2;
-  for (let i = 0; i < 90; i++){
-    c.beginPath(); c.moveTo(430 + Math.random()*24, i * 6);
-    c.lineTo(455 + Math.random()*26, i * 6 + 12); c.stroke();
-  }
-  c.strokeStyle = '#2a6fd8'; c.lineWidth = 2;
-  c.beginPath(); c.moveTo(468, 0); c.bezierCurveTo(492, 160, 470, 340, 486, 520); c.stroke();
-  c.fillStyle = '#111'; c.font = 'bold 52px "Courier New",monospace';
-  c.fillText('GREEF', 610, 130);
-  // towns
-  const town = (x, y, label, big) => {
-    c.fillStyle = '#111';
-    for (let i = 0; i < (big ? 9 : 5); i++)
-      c.fillRect(x + (i % 3) * 11 - 16, y + Math.floor(i / 3) * 11 - 14, 8, 8);
-    c.font = 'bold 15px "Courier New",monospace'; c.textAlign = 'left';
-    c.fillText(label, x + 20, y + 4);
-  };
-  town(210, 30, 'DRANDEN', true);
-  town(95, 330, 'LITTLE CANYON', true);
-  c.strokeStyle = '#111'; c.lineWidth = 2; c.setLineDash([7, 6]);
-  c.beginPath(); c.moveTo(200, 40); c.bezierCurveTo(150, 160, 130, 240, 100, 330); c.stroke();
-  c.setLineDash([]);
-  c.fillStyle = '#c0492a'; c.font = 'bold 14px "Courier New",monospace'; c.textAlign = 'left';
-  c.fillText('Large canyons cover the', 150, 430);
-  c.fillText('desert part of the map', 150, 448);
-  c.fillStyle = '#111'; c.font = '13px "Courier New",monospace';
-  c.fillText('★ you are here — endless stand, wave one', 150, 480);
-  const cap = document.createElement('div');
-  cap.style.cssText = 'color:#a89272;font-size:12px;letter-spacing:.16em;text-align:center';
-  cap.innerHTML = 'THE TWO STATES — free roam of Tomlend and Greef is the next build.<br>' +
-                  'Click anywhere to close.';
-  m.appendChild(cv); m.appendChild(cap);
-  m.addEventListener('click', () => m.remove());
-  document.body.appendChild(m);
-}
+document.getElementById('helpBtn').addEventListener('click', showHelp);
 
-/* build the world in the background so the menu paints immediately */
+buildModeCards();
+paintMenuBg();
+/* warm the first map up in the background so the menu paints immediately */
 setTimeout(() => {
-  try {
-    setStatus('raising Little Canyon…');
-    const info = bootWorld();
-    checkXR();
-  } catch(e){ fail(e); setStatus('world build failed: ' + e.message, true) }
-}, 60);
+  try { bootWorld('littleCanyon'); checkXR() }
+  catch(e){ fail(e); setStatus('world build failed: ' + e.message, 'warn') }
+}, 80);
+
 </script>
 </body>
 </html>

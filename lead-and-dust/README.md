@@ -1,10 +1,10 @@
-# LEAD & DUST — Last Stand at Little Canyon
+# LEAD & DUST — Tomlend Territory, 1878
 
 A VR-only voxel western. One HTML file, no build step, no dependencies: WebGL2 and
 WebXR, everything else — the town, the outlaws, the guns, the sound — is generated
 at load time.
 
-![the street](screenshot-street.png)
+![the menu](screenshot-menu.png)
 
 ## The one rule
 
@@ -96,23 +96,53 @@ fire in one motion, wild but fast) · **Vernier Sight** (35% tighter with long a
 | A / X | open or recall the buy panel |
 | B / Y | LeMat: swap between ball and the buckshot barrel |
 
+On the menu: pick a map, then **ENTER VR**. **FLAT PREVIEW · DEV** runs the same map in a
+window (WASD, mouse look, click to fire, `F` cock, `R` reload, `B` store) for checking
+the build without a headset — a development view, not the game.
+
 Buy a long arm and it takes both hands; put your free hand on the forestock and the
 group tightens by half and the recoil drops. Both hands can hold a pistol instead —
 each with its own hammer to keep track of.
 
-## Little Canyon
+## Where you fight
 
-A town in the red rock at the south edge of **Tomlend**, a day's ride from **Dranden**
-and two from the **Greef** line. Saloon, hotel, bank, jail, livery, blacksmith, church,
-water tower, windmill, a mine at the north end and a gallows at the south. Outlaws ride
-in through six gullies in the canyon wall; the porches, wagons, barrels and water
-troughs are all cover, and most of them are wood, which means a big enough round will
-come straight through.
+Two endless maps, picked from the main menu or by clicking a marked place on the map.
 
-Endless waves. Runners with knives, gunhands, riflemen who hang back, ironclads in
-boiler plate and iron bucket helmets with an eye slit for a weak point, and a Marshal
-every fifth wave. This build is the stand at Little Canyon; free roam of both states is
-the next one.
+### Little Canyon — *rough*
+
+![Little Canyon](screenshot-canyon.png)
+
+A town in the red rock at the south edge of **Tomlend**. Saloon with a balcony, hotel,
+bank, jail, livery, blacksmith, church with a steeple, water tower, windmill, a mine at
+the north end and a gallows at the south, all with painted shopfront lettering stamped
+into the voxels. Outlaws ride in through six gullies in the canyon wall; the porches,
+wagons, barrels and troughs are cover, and most of it is wood, so a big enough round
+comes straight through.
+
+### The Dranden Road — *hard ride*
+
+![The Dranden Road](screenshot-road.png)
+
+The fourteen miles between the canyon and the **Dranden** city limit, and everything in
+between: the wagon road with its telegraph line, a creek crossing on a timber bridge,
+the Rocking K ranch, a stagecoach way station, boot hill, mesas and boulder fields. You
+can see Dranden at the north end — the mill, the depot, the church spire, a boxcar on
+the spur — but the road is closed at the city limit and that is as far as you ride.
+
+Open country means long sight lines and thin cover, so it is meaner on purpose: enemies
+shoot ~20% tighter, hit ~14% harder, come in bigger waves, and there are ten gullies and
+draws for them to appear from instead of six. You start with more credits to compensate.
+
+**Free roam** of both states is on the menu, blacked out. That is the next build.
+
+## The territory map
+
+![the territory map](screenshot-map.png)
+
+The menu carries a proper surveyed map you can pan and zoom. Zoom out for the two states,
+the Iron Vein Range and the Greef River; come down and the ranches, way stations, washes
+and buttes appear; come down further and the towns open into street plans with the
+buildings named. Places you can actually play are ringed — click one to ride in.
 
 ## Running it
 
@@ -127,10 +157,6 @@ Then open `http://<your-machine>:8080/` in the headset browser (Quest Browser, W
 or desktop Chrome with a headset attached) and press **ENTER VR**. Headphones help —
 the shots echo off the canyon wall.
 
-There is a **flat preview** button on the menu for checking the build without a headset
-(WASD, mouse look, click to fire, `F` to cock, `R` to reload, `B` for the store). It is
-a development view, not the game.
-
 ## How it is put together
 
 Single file, roughly 4,300 lines, no libraries.
@@ -140,9 +166,15 @@ Single file, roughly 4,300 lines, no libraries.
   (outlaws, guns, gore, smoke) is instanced unit cubes: one draw call per body part, so
   limbs can swing and come off. Past fifteen metres an outlaw switches to a merged
   half-resolution silhouette — one draw call instead of six.
-- **World** — two voxel grids, 1 m for the canyon and ground, 0.25 m for the town, both
+- **World** — every map is two voxel grids, 1 m for terrain and 0.25 m for structures,
   painted procedurally from a seeded RNG and meshed at load (~0.2 s to generate,
-  ~275k faces). Shopfront lettering is stamped into the voxels with a 3×5 pixel font.
+  ~270-290k faces). Shopfront lettering is stamped into the voxels with a 3×5 pixel font.
+  Maps are a registry entry — terrain builder, structure builder, spawn points, bounds
+  and difficulty tuning — so switching one out disposes the old meshes and rebuilds.
+- **The map screen** — canvas cartography over a pan/zoom transform, with detail gated on
+  zoom level: wobbled state borders, hachured ranges, hatched canyon country, dashed
+  wagon roads, and street plans for the towns. Labels are drawn in screen space so they
+  stay the same size however far you come down.
 - **Bodies** — 21×50×16 voxels at 4 cm, built per spawn with random skin, shirt, vest,
   hat, hair and duster, plus a parallel array marking which limb each voxel belongs to
   so severing knows what to take.
