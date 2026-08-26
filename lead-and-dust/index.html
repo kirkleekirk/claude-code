@@ -351,9 +351,25 @@ const vec3 GND_BOUNCE= vec3(0.44, 0.30, 0.17);
 vec3 lightVoxel(vec3 albedo, vec3 n, float ao){
   float ndl  = max(dot(n, SUN_DIR), 0.0);
   float wrap = clamp(dot(n, SUN_DIR) * 0.5 + 0.5, 0.0, 1.0);
-  vec3 amb   = mix(GND_BOUNCE, SKY_COL, n.y * 0.5 + 0.5) * 0.62;
+  vec3 amb   = mix(GND_BOUNCE, SKY_COL, n.y * 0.5 + 0.5) * 0.78;
   vec3 lit   = albedo * (SUN_COL * ndl * 0.95 + amb * (0.55 + 0.45 * wrap));
-  return lit * mix(0.34, 1.0, ao);
+  return lit * mix(0.46, 1.0, ao);
+}
+uniform vec4 uLamps[4];          // xyz = position, w = radius (0 = off)
+vec3 lampLight(vec3 albedo, vec3 world, vec3 n){
+  vec3 sum = vec3(0.0);
+  for (int i = 0; i < 4; i++){
+    float r = uLamps[i].w;
+    if (r <= 0.0) continue;
+    vec3 d = uLamps[i].xyz - world;
+    float dist = length(d);
+    if (dist > r) continue;
+    float att = 1.0 - dist / r;
+    att *= att;
+    float nl = max(dot(n, d / max(dist, 0.001)), 0.0) * 0.75 + 0.25;
+    sum += albedo * vec3(1.0, 0.74, 0.42) * att * nl * 1.05;
+  }
+  return sum;
 }
 vec3 applyFog(vec3 c, float dist, vec3 viewDir){
   float f = 1.0 - exp(-pow(dist * 0.0072, 1.55));
@@ -383,7 +399,7 @@ out vec4 frag;
 ${COMMON_LIGHT}
 void main(){
   vec3 d = vWorld - uEye; float dist = length(d);
-  vec3 c = lightVoxel(vCol, vN, vAo);
+  vec3 c = lightVoxel(vCol, vN, vAo) + lampLight(vCol, vWorld, vN) * mix(0.55, 1.0, vAo);
   frag = vec4(applyFog(c, dist, d/max(dist,0.001)), 1.0);
 }`);
 
@@ -414,7 +430,8 @@ out vec4 frag;
 ${COMMON_LIGHT}
 void main(){
   vec3 d = vWorld - uEye; float dist = length(d);
-  vec3 c = mix(lightVoxel(vCol, normalize(vN), 1.0), vCol * 2.2, clamp(vEmis,0.0,1.0));
+  vec3 c = mix(lightVoxel(vCol, normalize(vN), 1.0) + lampLight(vCol, vWorld, normalize(vN)),
+               vCol * 2.2, clamp(vEmis,0.0,1.0));
   c = mix(applyFog(c, dist, d/max(dist,0.001)), c, clamp(vEmis,0.0,1.0));
   frag = vec4(c, 1.0);
 }`);
@@ -626,6 +643,27 @@ class Frustum {
 }
 
 let drawCalls = 0, instCount = 0;
+/* the four lamps nearest the eye, as a vec4 array for the shaders */
+const _lampBuf = new Float32Array(16);
+function nearestLamps(eye){
+  _lampBuf.fill(0);
+  const lamps = WORLD.lamps;
+  if (!lamps || !lamps.length) return _lampBuf;
+  let n = 0;
+  const best = [];
+  for (const L of lamps){
+    const d = (L.x - eye[0]) ** 2 + (L.y - eye[1]) ** 2 + (L.z - eye[2]) ** 2;
+    if (d > L.r * L.r * 1.6) continue;
+    best.push({ L, d });
+  }
+  best.sort((a, b) => a.d - b.d);
+  for (const b of best){
+    if (n >= 4) break;
+    _lampBuf[n*4] = b.L.x; _lampBuf[n*4+1] = b.L.y; _lampBuf[n*4+2] = b.L.z; _lampBuf[n*4+3] = b.L.r;
+    n++;
+  }
+  return _lampBuf;
+}
 
 /* ---------------- canvas-backed textures for panels ---------------------- */
 class CanvasTexture {
@@ -875,7 +913,7 @@ const FACES = [
   { n:[ 0, 0, 1], c0:[0,0,1], u:[1,0,0], v:[0,1,0] },
   { n:[ 0, 0,-1], c0:[0,0,0], u:[0,1,0], v:[1,0,0] },
 ];
-const AO_LEVEL = [0.36, 0.62, 0.83, 1.0];
+const AO_LEVEL = [0.50, 0.71, 0.88, 1.0];
 
 function meshGrid(grid, chunkMetres){
   const cs = Math.max(1, Math.round((chunkMetres || 16) / grid.vs));
@@ -1070,6 +1108,8 @@ function wr(){ wseed = (wseed * 1664525 + 1013904223) >>> 0; return wseed / 4294
 function wrr(a,b){ return a + wr() * (b - a) }
 function wri(a,b){ return Math.floor(wrr(a, b + 1)) }
 
+const SHOP_ANCHORS = {};
+let WORLD_LAMPS = [];
 const WORLD = {
   terrain: null, struct: null,
   meshes: [],
@@ -1199,6 +1239,37 @@ function makeBuilding(g, cfg){
   for (const cx of [x, x + w - 0.25]) for (const cz of [z, z + d - 0.25])
     mbox(g, cx, 0.5, cz, 0.25, h, 0.25, trim);
 
+  /* ---- roof ---- */
+  if (cfg.roof === 'false-front'){
+    // the classic western square façade, taller than the building behind it
+    const ff = h + (cfg.ffH || 1.4);
+    mbox(g, face > 0 ? x + w - 0.3 : x, 0.5, z, 0.3, ff, d, cfg.ffCol || wall);
+    mbox(g, face > 0 ? x + w - 0.45 : x - 0.15, ff + 0.25, z - 0.15, 0.6, 0.3, d + 0.3, trim);
+    // shed roof behind
+    for (let i = 0; i * 0.25 < d; i++){
+      const zz = z + i * 0.25;
+      const yy = h + 0.5 + (face > 0 ? 0 : 0);
+      mbox(g, x, yy - 0.2, zz, w, 0.25, 0.25, roofCol);
+    }
+  } else if (cfg.roof === 'gable'){
+    const peak = cfg.peak || 2.2;
+    const steps = Math.ceil((w / 2) / 0.25);
+    for (let i = 0; i <= steps; i++){
+      const inset = i * 0.25;
+      const yy = h + 0.5 + (peak * (inset / (w / 2)));
+      mbox(g, x + inset, yy, z - 0.3, 0.25, 0.3, d + 0.6, roofCol);
+      mbox(g, x + w - inset - 0.25, yy, z - 0.3, 0.25, 0.3, d + 0.6, roofCol);
+      if (i < steps){ // gable end infill
+        mbox(g, x + inset, h + 0.5, z, 0.25, yy - h - 0.5, 0.3, wall);
+        mbox(g, x + w - inset - 0.25, h + 0.5, z, 0.25, yy - h - 0.5, 0.3, wall);
+        mbox(g, x + inset, h + 0.5, z + d - 0.3, 0.25, yy - h - 0.5, 0.3, wall);
+        mbox(g, x + w - inset - 0.25, h + 0.5, z + d - 0.3, 0.25, yy - h - 0.5, 0.3, wall);
+      }
+    }
+  } else {
+    mbox(g, x - 0.25, h + 0.5, z - 0.25, w + 0.5, 0.3, d + 0.5, roofCol);
+  }
+
   /* ---- doorway on the street face ---- */
   const doorZ = z + d / 2 - 0.6;
   if (face > 0) mclear(g, x + w - 0.4, 0.5, doorZ, 0.5, 2.2, 1.2);
@@ -1234,37 +1305,6 @@ function makeBuilding(g, cfg){
       mbox(g, sx + 0.44, wy, z + 0.2, 0.12, 1.1, 0.12, trim);
       mbox(g, sx, wy + 0.5, z + 0.2, 1.0, 0.12, 0.12, trim);
     }
-  }
-
-  /* ---- roof ---- */
-  if (cfg.roof === 'false-front'){
-    // the classic western square façade, taller than the building behind it
-    const ff = h + (cfg.ffH || 1.4);
-    mbox(g, face > 0 ? x + w - 0.3 : x, 0.5, z, 0.3, ff, d, cfg.ffCol || wall);
-    mbox(g, face > 0 ? x + w - 0.45 : x - 0.15, ff + 0.25, z - 0.15, 0.6, 0.3, d + 0.3, trim);
-    // shed roof behind
-    for (let i = 0; i * 0.25 < d; i++){
-      const zz = z + i * 0.25;
-      const yy = h + 0.5 + (face > 0 ? 0 : 0);
-      mbox(g, x, yy - 0.2, zz, w, 0.25, 0.25, roofCol);
-    }
-  } else if (cfg.roof === 'gable'){
-    const peak = cfg.peak || 2.2;
-    const steps = Math.ceil((w / 2) / 0.25);
-    for (let i = 0; i <= steps; i++){
-      const inset = i * 0.25;
-      const yy = h + 0.5 + (peak * (inset / (w / 2)));
-      mbox(g, x + inset, yy, z - 0.3, 0.25, 0.3, d + 0.6, roofCol);
-      mbox(g, x + w - inset - 0.25, yy, z - 0.3, 0.25, 0.3, d + 0.6, roofCol);
-      if (i < steps){ // gable end infill
-        mbox(g, x + inset, h + 0.5, z, 0.25, yy - h - 0.5, 0.3, wall);
-        mbox(g, x + w - inset - 0.25, h + 0.5, z, 0.25, yy - h - 0.5, 0.3, wall);
-        mbox(g, x + inset, h + 0.5, z + d - 0.3, 0.25, yy - h - 0.5, 0.3, wall);
-        mbox(g, x + w - inset - 0.25, h + 0.5, z + d - 0.3, 0.25, yy - h - 0.5, 0.3, wall);
-      }
-    }
-  } else {
-    mbox(g, x - 0.25, h + 0.5, z - 0.25, w + 0.5, 0.3, d + 0.5, roofCol);
   }
 
   /* ---- porch / boardwalk with roof, and an optional balcony above it ---- */
@@ -1372,6 +1412,7 @@ function makeStreetLamp(g, x, z, faceDir){
   for (let i = 0; i < 3; i++)                                       // scroll under the arm
     mbox(g, x + faceDir * (0.2 + i * 0.14), 2.6 + i * 0.1, z - 0.08, 0.16, 0.16, 0.16, C.iron);
   const lx = x + faceDir * 0.66;
+  WORLD_LAMPS.push({ x: lx, y: 2.35, z: z, r: 7.5 });
   mbox(g, lx - 0.05, 2.72, z - 0.05, 0.1, 0.2, 0.1, C.iron);        // hanger
   mbox(g, lx - 0.21, 2.56, z - 0.21, 0.42, 0.18, 0.42, C.iron);     // lantern top
   mbox(g, lx - 0.18, 2.12, z - 0.18, 0.36, 0.46, 0.36, C.lampGlow); // glass
@@ -1587,6 +1628,81 @@ function makeCorral(g, x, z, w, d){
   mbox(g, x + 1.0, 0, z + 1.0, 2.2, 0.8, 2.2, C.hay);
 }
 
+
+/* ==========================================================================
+   SHOPS
+   A counter you walk up to between waves. Cheaper than the peddler's catalogue,
+   because you came to him.
+   ========================================================================== */
+const SHOP_DISCOUNT = 0.85;
+function itemPrice(it){
+  return GAME.shopOpen ? Math.max(1, Math.round(it.cost * SHOP_DISCOUNT)) : it.cost;
+}
+
+/* floor, counter, shelves and stock inside a shop. Returns the counter anchor. */
+function makeShopInterior(g, x, z, w, d, face, kind){
+  const floorY = 0.45;
+  mbox(g, x + 0.28, floorY, z + 0.28, w - 0.56, 0.25, d - 0.56, C.plankL);
+  mspeckle(g, x + 0.28, floorY, z + 0.28, w - 0.56, 0.25, d - 0.56, C.plank, 0.18);
+  // pale lining and a boarded ceiling: an unlit room in here is a cave otherwise
+  mwalls(g, x + 0.28, 0.7, z + 0.28, w - 0.56, 2.4, d - 0.56, C.whitewash, 0.25);
+  mbox(g, x + 0.3, 3.05, z + 0.3, w - 0.6, 0.2, d - 0.6, C.plankL);
+  for (let i = 1; i < 3; i++){                      // hanging lamps
+    const lz2 = z + d * i / 3;
+    mbox(g, x + w / 2 - 0.18, 2.72, lz2 - 0.18, 0.36, 0.3, 0.36, C.lampGlow);
+    mbox(g, x + w / 2 - 0.22, 3.0, lz2 - 0.22, 0.44, 0.12, 0.44, C.iron);
+    WORLD_LAMPS.push({ x: x + w / 2, y: 2.7, z: lz2, r: 6.5 });
+  }
+
+  // counter across the room, a pace back from the street wall
+  const cx = face > 0 ? x + w - 2.9 : x + 1.9;
+  const cz0 = z + 0.9, cd = d - 1.8;
+  mbox(g, cx, 0.7, cz0, 0.95, 1.0, cd, C.plankD);
+  mbox(g, cx - 0.12, 1.7, cz0 - 0.12, 1.2, 0.16, cd + 0.24, C.plankL);   // top
+  mbox(g, cx, 0.7, cz0, 0.95, 0.14, cd, C.beam);                          // kick rail
+
+  // back shelves with stock
+  const bx = face > 0 ? x + 0.4 : x + w - 1.3;
+  const goods = kind === 'guns'
+    ? [C.gunBlue, C.gunBlueD, C.grip, C.brass, C.nickel, C.gunCase]
+    : [C.canvasT, C.hay, C.barnRed, C.brass, C.plankL, C.sh2, C.sh4, C.glassL];
+  for (let si = 0; si < 3; si++){
+    const sy = 0.95 + si * 0.62;
+    mbox(g, bx, sy, z + 0.7, 0.9, 0.12, d - 1.4, C.plankD);
+    for (let i = 0; i * 0.55 < d - 1.8; i++){
+      if (wr() < 0.22) continue;
+      const gz = z + 1.0 + i * 0.55;
+      const col = goods[(i + si * 3) % goods.length];
+      if (kind === 'guns' && si === 1){
+        mbox(g, bx + 0.25, sy + 0.12, gz, 0.16, 0.5, 0.14, col);         // barrels standing up
+        mbox(g, bx + 0.2, sy + 0.12, gz, 0.3, 0.16, 0.2, C.grip);
+      } else {
+        mbox(g, bx + 0.18, sy + 0.12, gz, 0.5, wrr(0.22, 0.42), 0.4, col);
+      }
+    }
+  }
+  // a lamp on the counter and one on the wall, so the room is not a cave
+  const lz = z + d * 0.5;
+  WORLD_LAMPS.push({ x: cx + 0.44, y: 2.0, z: lz, r: 4.5 });
+  mbox(g, cx + 0.3, 1.86, lz, 0.28, 0.34, 0.28, C.lampGlow);
+  mbox(g, cx + 0.26, 2.2, lz - 0.04, 0.36, 0.12, 0.36, C.iron);
+  mbox(g, bx + 0.2, 2.7, z + d * 0.3, 0.3, 0.36, 0.3, C.lampGlow);
+  // stock on the floor
+  makeBarrel(g, face > 0 ? x + 1.0 : x + w - 1.0, z + 1.2);
+  makeCrate(g, face > 0 ? x + 1.6 : x + w - 1.6, 0.7, z + d - 1.3, 0.7);
+  if (kind === 'guns'){
+    // a rack of long arms against the counter end
+    for (let i = 0; i < 4; i++){
+      const rz = cz0 + 0.4 + i * 0.42;
+      mbox(g, cx - 0.55, 0.7, rz, 0.14, 1.5, 0.14, C.gunBlue);
+      mbox(g, cx - 0.6, 0.7, rz, 0.24, 0.4, 0.2, C.grip);
+    }
+    mbox(g, cx - 0.7, 2.2, cz0 + 0.2, 0.4, 0.16, 2.0, C.plankD);
+  }
+  return { px: cx + (face > 0 ? 0.9 : -0.55), py: 2.35, pz: z + d * 0.5,
+           x: cx + (face > 0 ? 1.4 : -1.0), z: z + d * 0.5, y: 0.7 };
+}
+
 /* ------------------------------------------------------------ the town ---- */
 function buildCanyonTown(){
   const g = new Grid(216, 72, 424, 0.25, -27, 0, -53);
@@ -1598,6 +1714,7 @@ function buildCanyonTown(){
   makeCorral(g, -26, -30, 8, 9);
   makeBuilding(g, { x:-17, z:-28, w:9, d:9, floors:2, fh:3.3, wallCol:C.plank, wallCol2:C.plankD,
                     roof:'false-front', ffH:1.6, face:1, sign:'GENERAL', signScale:1, porchDepth:2.2 });
+  SHOP_ANCHORS.general = makeShopInterior(g, -17, -28, 9, 9, 1, 'general');
   makeBuilding(g, { x:-18, z:-16.5, w:10, d:12.5, floors:2, fh:3.5, wallCol:C.plankL, wallCol2:C.plank,
                     roof:'false-front', ffH:2.0, face:1, sign:'SALOON', signScale:2,
                     porchDepth:2.4, balcony:true, ffCol:C.barnRed });
@@ -1620,7 +1737,8 @@ function buildCanyonTown(){
                     porchDepth:2.4, balcony:true });
   makeBlacksmith(g, 8, -3.5, 7, 8);
   makeBuilding(g, { x:8, z:7, w:9, d:9, floors:1, fh:3.6, wallCol:C.plankL, wallCol2:C.plank,
-                    roof:'false-front', ffH:1.4, face:-1, sign:'TRADE', porchDepth:2.0 });
+                    roof:'false-front', ffH:1.4, face:-1, sign:'GUNS', signScale:2, porchDepth:2.0 });
+  SHOP_ANCHORS.gunsmith = makeShopInterior(g, 8, 7, 9, 9, -1, 'guns');
   makeChurch(g, 8, 19, 9, 13);
 
   /* ---- landmarks ---- */
@@ -1927,7 +2045,8 @@ function buildRoadStructures(){
   /* ---- the Rocking K: ranch house, barn, corral ---- */
   makeBuilding(g, { x:-24, z:-12, w:9, d:10, floors:1, fh:3.4, wallCol:C.plankL, wallCol2:C.plank,
                     trimCol:C.beam, roofCol:C.shingle, roof:'gable', peak:2.2, face:1,
-                    sign:'ROCKING K', porchDepth:2.2 });
+                    sign:'GUNS', signScale:2, porchDepth:2.2 });
+  SHOP_ANCHORS.ranchGuns = makeShopInterior(g, -24, -12, 9, 10, 1, 'guns');
   makeBuilding(g, { x:-26, z:2, w:11, d:12, floors:1, fh:5.4, wallCol:C.barnRed, wallCol2:C.barnRedD,
                     trimCol:C.beam, roofCol:C.shingleD, roof:'gable', peak:3.0, face:1, porch:false });
   mclear(g, -15.4, 0.5, 6.0, 0.6, 4.2, 4.0);                        // barn doors
@@ -1945,7 +2064,8 @@ function buildRoadStructures(){
   /* ---- the way station: stone relay stop, stable, coach ---- */
   makeBuilding(g, { x:12, z:31, w:10, d:11, floors:1, fh:3.8, wallCol:C.stone, wallCol2:C.gravel,
                     trimCol:C.beam, roofCol:C.shingle, roof:'false-front', ffH:1.3, face:-1,
-                    sign:'WAY STATION', porchDepth:2.4, foundation:C.stone });
+                    sign:'STORE', signScale:2, porchDepth:2.4, foundation:C.stone });
+  SHOP_ANCHORS.station = makeShopInterior(g, 12, 31, 10, 11, -1, 'general');
   makeBuilding(g, { x:14, z:44, w:9, d:9, floors:1, fh:4.2, wallCol:C.plankD, wallCol2:C.plank,
                     trimCol:C.beam, roofCol:C.shingleD, roof:'gable', peak:2.0, face:-1, porch:false });
   makeStagecoach(g, 8.5, 38);
@@ -2050,6 +2170,14 @@ const MAPS = {
       { x:  0, z:-53 }, { x:  0, z: 53 }, { x:-25, z:-18 }, { x: 25, z: 14 },
       { x:-25, z: 26 }, { x: 25, z:-32 }, { x: -3, z:-49 }, { x:  3, z: 49 },
     ] },
+    shops(){ return [
+      { id:'gunsmith', kind:'guns',    name:"McCREADY'S GUNS & AMMUNITION",
+        pages:[['sidearm','SIDEARMS'],['longarm','LONG ARMS'],['heavy','HEAVY']],
+        anchor:SHOP_ANCHORS.gunsmith },
+      { id:'general',  kind:'general', name:'LITTLE CANYON GENERAL STORE',
+        pages:[['gear','GOODS & OUTFIT'],['sidearm','SIDEARMS']],
+        anchor:SHOP_ANCHORS.general },
+    ] },
   },
   drandenRoad: {
     id:'drandenRoad', name:'THE DRANDEN ROAD', sub:'OPEN RANGE, NO WALLS',
@@ -2057,7 +2185,7 @@ const MAPS = {
     blurb:'The fourteen miles between Little Canyon and the Dranden city limit: ' +
           'wagon road, creek crossing, the Rocking K, and a way station. Long ' +
           'sight lines, thin cover, and they ride in from every quarter.',
-    tune:{ speed:1.10, dmg:1.14, acc:1.20, size:1.30, alive:15, spawn:1.25 },
+    tune:{ speed:1.08, dmg:1.08, acc:1.12, size:1.30, alive:15, spawn:1.25 },
     start:{ x: ROAD.x(42), z:42, yaw:Math.PI },
     bounds:{ x0:-40, x1:40, z0:-54, z1:60 },
     chunkT:24, chunkS:14,
@@ -2066,6 +2194,14 @@ const MAPS = {
       { x: ROAD.x(-50), z:-50 }, { x: ROAD.x(56), z: 56 }, { x: ROAD.x(-46) + 9, z:-46 },
       { x: 31, z:-18 }, { x: 35, z: 18 }, { x: 27, z: 50 },
       { x:-31, z:-30 }, { x:-35, z: 22 }, { x:-27, z: 50 }, { x: 22, z:-44 },
+    ] },
+    shops(){ return [
+      { id:'station', kind:'general', name:'HALFWAY STATION STORE',
+        pages:[['gear','GOODS & OUTFIT'],['sidearm','SIDEARMS']],
+        anchor:SHOP_ANCHORS.station },
+      { id:'ranchGuns', kind:'guns', name:'ROCKING K GUN ROOM',
+        pages:[['sidearm','SIDEARMS'],['longarm','LONG ARMS'],['heavy','HEAVY']],
+        anchor:SHOP_ANCHORS.ranchGuns },
     ] },
   },
 };
@@ -2077,6 +2213,7 @@ function buildWorld(mapId){
   const t0 = performance.now();
   for (const m of WORLD.meshes) m.dispose();
   WORLD.meshes.length = 0; WORLD.cover.length = 0;
+  WORLD_LAMPS = [];
   wseed = 1337;                            // same map, same town, every time
   const built = M.build();
   WORLD.terrain = built.terrain;
@@ -2086,6 +2223,8 @@ function buildWorld(mapId){
   const b = meshGrid(WORLD.struct, M.chunkS);
   WORLD.meshes = [a.mesh, b.mesh];
   WORLD.spawns = M.spawns();
+  WORLD.shops = M.shops ? M.shops().filter(sh => sh.anchor) : [];
+  WORLD.lamps = WORLD_LAMPS;
   WORLD.bounds = M.bounds;
   WORLD.map = M;
   GAME.mapId = mapId;
@@ -2577,13 +2716,14 @@ function lineOfSight(ax,ay,az, bx,by,bz){
    A round spends its penetration budget voxel by voxel: cloth is nothing,
    meat costs a little, bone costs plenty, plate steel costs everything.
    ========================================================================== */
+function uiOpen(){ return GAME.buyOpen || GAME.packOpen || GAME.shopOpen }
 const GAME = {
   enemies: [], corpses: [], wave: 0, credits: 800, state: 'lobby',
   waveTimer: 0, spawnQueue: [], spawnT: 0, alive: 0, killed: 0, killedWave: 0,
   hp: 100, maxHp: 100, armor: 0, maxArmor: 0, hitT: 0, dmgDir: 0,
   shots: 0, hits: 0, brainKills: 0, heartKills: 0, dismember: 0, best: 0,
   buyOpen: false, damageTaken: 0, timeAlive: 0, penTotal: 0,
-  mapId: 'littleCanyon', maxAlive: 13,
+  mapId: 'littleCanyon', maxAlive: 13, packOpen: false, shopOpen: false,
 };
 
 function damageEnemyRay(e, ox,oy,oz, dx,dy,dz, budget, W, results){
@@ -3056,7 +3196,7 @@ function gunModel(id){
    means anything. Thumbstick click is your thumb on the hammer spur.
    ========================================================================== */
 const PLAYER = {
-  pos: V3.new(0, 0, 13), yaw: 0,
+  pos: V3.new(0, 0, 13), yaw: 0, velY: 0, grounded: true, wantJump: false, dt: 1/60,
   head: V3.new(0, 1.7, 13), headMat: M4.new(), worldMat: M4.new(),
   vel: V3.new(0,0,0), speed: 3.1, snapCd: 0, vignette: 0,
   owned: { navy51: true }, gear: {}, armor: 0,
@@ -3193,9 +3333,16 @@ class Hand {
       0.017, 0.78, 0.62, 0.28, 6);
   }
 
+  cancelReload(){
+    if (!this.reloading) return;
+    this.reloading = false;
+    sfx.dryClick(this.muzzleWorld(_v0));
+    hud.flash('RELOAD STOPPED', '#c0492a');
+  }
   startReload(){
     const W = this.weapon;
-    if (!W || this.reloading || this.ammo >= W.cap) return;
+    if (!W || this.reloading) return;
+    if (this.ammo >= W.cap){ sfx.dryClick(this.muzzleWorld(_v0)); hud.flash('ALREADY LOADED', '#7d6845'); return }
     this.reloading = true;
     this.reloadLen = W.reload * (PLAYER.gear.speedload ? 0.55 : 1);
     this.reloadT = this.reloadLen;
@@ -3205,7 +3352,7 @@ class Hand {
   finishReload(){
     const W = this.weapon;
     const spent = W.cap - this.ammo;
-    for (let i = 0; i < Math.min(spent, 8); i++) setTimeout(() => this.ejectShell(), i * 40);
+    for (let i = 0; i < Math.min(spent, 8); i++) this.ejectShell();
     this.ammo = W.cap;
     this.reloading = false;
     this.cylSpin += TAU * 0.5;
@@ -3239,7 +3386,7 @@ class Hand {
     if (!W || !input) return;
     if (this.buffer > 0){                     // a pull that landed mid-cooldown still counts
       this.buffer -= dt;
-      if (this.fireCd <= 0 && !this.reloading && !GAME.buyOpen &&
+      if (this.fireCd <= 0 && !this.reloading && !uiOpen() &&
           (this.ready || W.action === 'double')){ this.buffer = 0; this.pullTrigger(false) }
     }
 
@@ -3247,16 +3394,12 @@ class Hand {
       this.reloadT -= dt;
       this.cylSpin += dt * 7;
       if (this.reloadT <= 0) this.finishReload();
-      else if (!input.grip && this.reloadT < this.reloadLen - 0.25){
-        this.reloading = false;                 // let go early, lose the reload
-        sfx.dryClick(this.muzzleWorld(_v0));
-      }
     }
 
     /* --- cock: thumbstick click --- */
     if (input.stick && !this.prev.stick) this.cock();
     /* --- fire (the trigger belongs to the buy panel while it is open) --- */
-    const shopping = GAME.buyOpen;
+    const shopping = uiOpen();
     if (!shopping && input.trigger > 0.6 && this.prev.trigger <= 0.6) this.pullTrigger(false);
     if (W.action === 'crank'){
       const cranking = input.stick || Math.abs(input.ax) > 0.6;
@@ -3266,8 +3409,11 @@ class Hand {
       }
       this.crankSpin += dt * (input.trigger > 0.6 && cranking ? 9 : 0);
     }
-    /* --- reload: hold grip --- */
-    if (input.grip && !this.prev.grip && !this.reloading) this.startReload();
+    /* --- reload: a tap of the grip, and it works itself --- */
+    if (input.grip && !this.prev.grip && !this.gripUsed){
+      if (this.reloading) this.cancelReload();
+      else this.startReload();
+    }
     /* --- LeMat: switch to the buckshot barrel --- */
     if (input.b && !this.prev.b && this.weapon.alt){
       this.altMode = !this.altMode;
@@ -3355,14 +3501,16 @@ PLAYER.hands.left  = new Hand('left');
 PLAYER.hands.right = new Hand('right');
 
 /* ---------------------------------------------------------- player physics */
+const STEP_UP = 1.08;          // a one-metre terrain step is climbable
+const JUMP_V  = 5.6, GRAV = 20;
 function playerCollide(nx, nz){
   const r = 0.26;
   const feet = PLAYER.pos[1];
   let ox = nx, oz = nz;
   // axis-separated probes so you slide along walls instead of sticking
   const blocked = (x, z) => {
-    // nothing below 0.7 m counts, so a boardwalk or a low rock is a step, not a wall
-    for (const h of [0.78, 1.25, 1.65])
+    // anything the height of a step is something you walk up, not into
+    for (const h of [STEP_UP + 0.12, STEP_UP + 0.5, STEP_UP + 0.85])
       for (const [sx, sz] of [[r,0],[-r,0],[0,r],[0,-r],[r*.7,r*.7],[-r*.7,r*.7],[r*.7,-r*.7],[-r*.7,-r*.7]])
         if (worldSolidAt(x + sx, feet + h, z + sz)) return true;
     return false;
@@ -3375,9 +3523,28 @@ function playerCollide(nx, nz){
   const B = WORLD.bounds;
   PLAYER.pos[0] = clamp(PLAYER.pos[0], B.x0, B.x1);
   PLAYER.pos[2] = clamp(PLAYER.pos[2], B.z0, B.z1);
-  // follow the surface, with a step-up
-  const gh = surfaceHeight(PLAYER.pos[0], PLAYER.pos[2], PLAYER.pos[1]);
-  PLAYER.pos[1] = damp(PLAYER.pos[1], gh, 14, 1/60);
+  // vertical: stick to the surface, or fall, or leave it on a jump
+  const dt = PLAYER.dt || 1/60;
+  const gh = surfaceHeight(PLAYER.pos[0], PLAYER.pos[2], PLAYER.pos[1] + 0.25);
+  if (PLAYER.grounded){
+    if (PLAYER.pos[1] > gh + 0.55){ PLAYER.grounded = false; PLAYER.velY = 0 }   // walked off a ledge
+    else {
+      PLAYER.pos[1] = damp(PLAYER.pos[1], gh, 16, dt);                          // eases over steps
+      if (PLAYER.wantJump){
+        PLAYER.velY = JUMP_V; PLAYER.grounded = false;
+        sfx.jump(); for (const h of ['left','right']) PLAYER.hands[h].pulse(0.25, 25);
+      }
+    }
+  }
+  if (!PLAYER.grounded){
+    PLAYER.velY -= GRAV * dt;
+    PLAYER.pos[1] += PLAYER.velY * dt;
+    if (PLAYER.velY <= 0 && PLAYER.pos[1] <= gh){
+      if (PLAYER.velY < -9) spawnDust(PLAYER.pos[0], gh + 0.1, PLAYER.pos[2], 5);
+      PLAYER.pos[1] = gh; PLAYER.velY = 0; PLAYER.grounded = true;
+    }
+  }
+  PLAYER.wantJump = false;
 }
 
 function hurtPlayer(amount, fromX, fromZ){
@@ -3534,6 +3701,9 @@ const sfx = {
   },
   deny(){ if (!this.ready) return; this.tone(this.at(null, 0.5), 'square', 180, 110, 0.16, 0.22) },
   ui(){ if (!this.ready) return; this.tone(this.at(null, 0.35), 'sine', 660, 660, 0.04, 0.12) },
+  jump(){ if (!this.ready) return; this.burst(this.at(null, 0.3), 0.09, 'lowpass', 900, 1, 0.35, 300) },
+  pack(){ if (!this.ready) return; this.burst(this.at(null, 0.4), 0.14, 'lowpass', 1400, 1.4, 0.5, 500) },
+  holster(pos){ if (!this.ready) return; this.burst(this.at(pos, 0.5), 0.12, 'bandpass', 1100, 2.2, 0.55, 620) },
   startWind(){
     const src = this.ctx.createBufferSource();
     src.buffer = this.noise; src.loop = true;
@@ -3614,7 +3784,7 @@ function updateEnemy(e, dt){
     mx /= ml; mz /= ml;
     // nose out of walls: if blocked ahead, try sliding along
     const probe = (ax, az) => {
-      for (const h of [0.8, 1.3, 1.7])
+      for (const h of [STEP_UP + 0.12, STEP_UP + 0.5, STEP_UP + 0.85])
         if (worldSolidAt(e.pos[0] + ax * 0.55, e.pos[1] + h, e.pos[2] + az * 0.55)) return true;
       return false;
     };
@@ -3817,6 +3987,10 @@ function resetRun(){
   GAME.shots = 0; GAME.hits = 0; GAME.brainKills = 0; GAME.heartKills = 0;
   GAME.dismember = 0; GAME.damageTaken = 0; GAME.timeAlive = 0;
   PLAYER.owned = { navy51:true }; PLAYER.gear = {};
+  for (const h of PLAYER.holsters){ h.w = null; h.glow = 0 }
+  PLAYER.pack.fill(null);
+  GAME.packOpen = false; GAME.shopOpen = false;
+  PLAYER.velY = 0; PLAYER.grounded = true; PLAYER.wantJump = false;
   PLAYER.speed = 3.1; GAME.maxArmor = 0; PLAYER.vignette = 0;
   panelPlaced = false;
   PLAYER.hands.right.setWeapon('navy51');
@@ -3912,6 +4086,7 @@ function storeItems(page){
 function drawStore(){
   const P = store.panel;
   const sig = [store.page, GAME.credits, Math.ceil(GAME.waveTimer), GAME.wave, GAME.state, GAME.mapId,
+               GAME.shopOpen && GAME.shopOpen.id,
                P.hover, PLAYER.hands.left.weapon && PLAYER.hands.left.weapon.id,
                PLAYER.hands.right.weapon && PLAYER.hands.right.weapon.id,
                Object.keys(PLAYER.owned).join(','), Object.keys(PLAYER.gear).join(',')].join('|');
@@ -3931,11 +4106,13 @@ function drawStore(){
   /* ---- header ---- */
   c.fillStyle = '#0d0907'; c.fillRect(16, 16, W-32, 92);
   c.textAlign = 'left'; c.fillStyle = UI.bone;
-  c.font = 'bold 40px "Courier New",monospace';
-  const mapName = (WORLD.map || MAPS.littleCanyon).name;
-  c.fillText(mapName, 40, 74);
-  c.fillStyle = UI.dim; c.font = '17px "Courier New",monospace';
-  c.fillText('GOODS & MUNITIONS  ·  TOMLEND TERR.', 62 + mapName.length * 24, 74);
+  const shop = GAME.shopOpen;
+  const title = shop ? shop.name : (WORLD.map || MAPS.littleCanyon).name;
+  c.font = 'bold ' + (title.length > 22 ? 28 : 40) + 'px "Courier New",monospace';
+  c.fillText(title, 40, title.length > 22 ? 70 : 74);
+  c.fillStyle = shop ? '#8fae63' : UI.dim; c.font = '17px "Courier New",monospace';
+  c.fillText(shop ? 'AT THE COUNTER  ·  15% OFF' : 'PEDDLER\u2019S CATALOGUE  ·  TOMLEND TERR.',
+             48 + title.length * (title.length > 22 ? 17 : 24), title.length > 22 ? 70 : 74);
   c.textAlign = 'right';
   c.fillStyle = UI.gold; c.font = 'bold 42px "Courier New",monospace';
   c.fillText(money(GAME.credits), W - 40, 76);
@@ -3948,8 +4125,9 @@ function drawStore(){
   c.fillText(GAME.state === 'buy' ? ('NEXT WAVE IN ' + t + 's') : ('WAVE ' + GAME.wave + ' IN PROGRESS'), W/2, 70);
 
   /* ---- tabs ---- */
-  const tabW = 214, tabY = 122;
-  PAGES.forEach((pg, i) => {
+  const pages = shop ? shop.pages : PAGES;
+  const tabW = Math.min(214, Math.floor(820 / pages.length) - 10), tabY = 122;
+  pages.forEach((pg, i) => {
     const x = 30 + i * (tabW + 10);
     const on = store.page === pg[0];
     const hot = P.hit('tab:' + pg[0], x, tabY, tabW, 50);
@@ -3957,7 +4135,8 @@ function drawStore(){
     c.fillRect(x, tabY, tabW, 50);
     c.strokeStyle = on ? '#fff2cf' : UI.line; c.lineWidth = 2; c.strokeRect(x+1, tabY+1, tabW-2, 48);
     c.fillStyle = on ? '#191208' : UI.dust;
-    c.font = 'bold 21px "Courier New",monospace'; c.textAlign = 'center';
+    c.font = 'bold ' + (pg[1].length > 12 ? 15 : 21) + 'px "Courier New",monospace';
+    c.textAlign = 'center';
     c.fillText(pg[1], x + tabW/2, tabY + 34);
   });
   // ready button
@@ -3973,6 +4152,7 @@ function drawStore(){
   }
 
   /* ---- item cards ---- */
+  if (!pages.some(pg => pg[0] === store.page)) store.page = pages[0][0];
   const items = storeItems(store.page);
   const cols = 3, cw = 430, ch = 250, gx = 30, gy = 192, pad = 18;
   items.forEach((it, i) => {
@@ -3981,7 +4161,8 @@ function drawStore(){
     const owned = isGear ? !!PLAYER.gear[it.id] : !!PLAYER.owned[it.id];
     const equippedL = PLAYER.hands.left.weapon && PLAYER.hands.left.weapon.id === it.id;
     const equippedR = PLAYER.hands.right.weapon && PLAYER.hands.right.weapon.id === it.id;
-    const afford = GAME.credits >= it.cost || owned;
+    const price = itemPrice(it);
+    const afford = GAME.credits >= price || owned;
     const hot = P.hit('card:' + it.id, x, y, cw, ch, it);
 
     c.fillStyle = owned ? '#22200f' : (hot ? '#2b2118' : '#1b1510');
@@ -3999,7 +4180,11 @@ function drawStore(){
     c.textAlign = 'right';
     c.fillStyle = owned ? UI.green : (afford ? UI.gold : UI.rust);
     c.font = 'bold 25px "Courier New",monospace';
-    c.fillText(owned ? 'OWNED' : money(it.cost), x + cw - 16, y + 34);
+    c.fillText(owned ? 'OWNED' : money(price), x + cw - 16, y + 34);
+    if (!owned && GAME.shopOpen){
+      c.fillStyle = '#5c4c38'; c.font = '13px "Courier New",monospace';
+      c.fillText(money(it.cost), x + cw - 16 - c.measureText(money(price)).width - 96, y + 34);
+    }
     if (!isGear){
       c.fillStyle = UI.dim; c.font = '13px "Courier New",monospace';
       c.fillText('TRADE-IN ' + money(weaponValue(it)), x + cw - 16, y + 54);
@@ -4036,9 +4221,11 @@ function drawStore(){
       c.fillRect(x + 16, byY, bwid, 34);
       c.textAlign = 'center'; c.font = 'bold 18px "Courier New",monospace';
       c.fillStyle = owned && !it.consumable ? UI.dim : (afford ? (hb ? '#191208' : UI.bone) : '#6b3a2a');
-      c.fillText(owned && !it.consumable ? 'IN YOUR KIT' : (afford ? 'BUY  ' + money(it.cost) : 'SHORT ON CREDITS'),
+      c.fillText(owned && !it.consumable ? 'IN YOUR KIT' : (afford ? 'BUY  ' + money(price) : 'SHORT ON CREDITS'),
                  x + 16 + bwid/2, byY + 24);
     } else {
+      const onBelt = PLAYER.holsters.some(h => h.w === it.id) ||
+                     PLAYER.pack.some(sl => sl && sl.kind === 'weapon' && sl.id === it.id);
       [['L','left',equippedL], ['R','right',equippedR]].forEach(([lab, hand, eq], k) => {
         const bxx = x + 16 + k * (bwid + 12);
         const hb = P.hit('equip:' + it.id + ':' + hand, bxx, byY, bwid, 34);
@@ -4049,6 +4236,16 @@ function drawStore(){
         c.fillStyle = eq ? UI.bone : (afford ? (hb ? '#191208' : UI.dust) : '#6b3a2a');
         c.fillText(eq ? ('IN ' + lab + ' HAND') : (owned ? 'TAKE IN ' + lab : 'BUY TO ' + lab), bxx + bwid/2, byY + 24);
       });
+      // and a slim button to buy it straight onto the belt
+      const sy2 = byY - 30, sw = cw - 32;
+      const hs = P.hit('stow:' + it.id, x + 16, sy2, sw, 26);
+      c.fillStyle = onBelt ? '#2a2a18' : (afford ? (hs ? '#6b5a1e' : '#241d14') : '#241812');
+      c.fillRect(x + 16, sy2, sw, 26);
+      c.strokeStyle = UI.line; c.lineWidth = 1; c.strokeRect(x + 16.5, sy2 + .5, sw - 1, 25);
+      c.textAlign = 'center'; c.font = '14px "Courier New",monospace';
+      c.fillStyle = onBelt ? '#7fa05a' : (afford ? UI.dust : '#6b3a2a');
+      c.fillText(onBelt ? 'ON YOUR BELT' : (owned ? 'STOW ON BELT' : 'BUY TO BELT  ' + money(price)),
+                 x + 16 + sw/2, sy2 + 18);
     }
   });
 
@@ -4099,6 +4296,31 @@ function wrapText(c, text, x, y, maxW, lh){
 }
 
 /* ---------------------------------------------------------- store actions */
+function updateShops(dt){
+  const shops = WORLD.shops || [];
+  let near = null;
+  if (GAME.state === 'buy' && !GAME.packOpen){
+    for (const sh of shops){
+      const a = sh.anchor;
+      const d = Math.hypot(a.x - PLAYER.pos[0], a.z - PLAYER.pos[2]);
+      if (d < 3.4 && Math.abs(a.y - PLAYER.pos[1]) < 2.2){ near = sh; break }
+    }
+  }
+  if (near !== GAME.shopOpen){
+    GAME.shopOpen = near;
+    store.panel.sig = '';
+    if (near){
+      GAME.buyOpen = false;
+      store.page = near.pages[0][0];
+      sfx.ui();
+      hud.banner(near.name, 'COUNTER PRICES — 15% OFF THE CATALOGUE');
+    }
+  }
+  if (GAME.shopOpen){
+    const a = GAME.shopOpen.anchor;
+    lookPanel(store.panel.mat, a.px, a.py, a.pz, PLAYER.head[0], PLAYER.head[1], PLAYER.head[2]);
+  }
+}
 function storeClick(hotId){
   if (!hotId) return;
   const parts2 = hotId.split(':');
@@ -4110,30 +4332,42 @@ function storeClick(hotId){
   if (parts2[0] === 'equip'){
     const id = parts2[1], hand = parts2[2], W = WEAPONS[id], H = PLAYER.hands[hand];
     if (H.weapon && H.weapon.id === id) return;
-    if (!PLAYER.owned[id]){
-      if (GAME.credits < W.cost){ sfx.deny(); hud.flash('NOT ENOUGH CREDITS', '#c0492a'); return }
-      GAME.credits -= W.cost;
-      PLAYER.owned[id] = true;
-    }
-    // a long arm needs both hands
-    if (W.twoHand){
-      const other = hand === 'left' ? 'right' : 'left';
-      if (PLAYER.hands[other].weapon && PLAYER.hands[other].weapon.twoHand)
-        PLAYER.hands[other].setWeapon(null);
-    }
-    H.setWeapon(id);
+    const owned = !!PLAYER.owned[id], price = itemPrice(W);
+    if (!owned && GAME.credits < price){ sfx.deny(); hud.flash('NOT ENOUGH CREDITS', '#c0492a'); return }
+    if (!takeWeapon(id, hand)) return;              // whatever was there goes to belt or bag
+    if (!owned){ GAME.credits -= price; PLAYER.owned[id] = true }
     sfx.buy();
     hud.flash(W.short + ' → ' + hand.toUpperCase(), '#e0a93b');
+    return;
+  }
+  if (parts2[0] === 'stow'){
+    const id = parts2[1], W = WEAPONS[id];
+    const owned = !!PLAYER.owned[id], price = itemPrice(W);
+    if (!owned && GAME.credits < price){ sfx.deny(); hud.flash('NOT ENOUGH CREDITS', '#c0492a'); return }
+    if (findWeapon(id)){ hud.flash('YOU ARE CARRYING THAT', '#7d6845'); return }
+    if (!stowWeapon(id)){ sfx.deny(); hud.flash('NO ROOM ON YOUR BELT', '#c0492a'); return }
+    if (!owned){ GAME.credits -= price; PLAYER.owned[id] = true }
+    sfx.buy();
+    hud.flash(W.short + ' STOWED', '#e0a93b');
     return;
   }
   if (parts2[0] === 'buy'){
     const g = GEAR[parts2[1]];
     if (!g) return;
     if (PLAYER.gear[g.id] && !g.consumable){ sfx.deny(); return }
-    if (GAME.credits < g.cost){ sfx.deny(); hud.flash('NOT ENOUGH CREDITS', '#c0492a'); return }
-    GAME.credits -= g.cost;
-    if (g.consumable){ GAME.hp = GAME.maxHp; hud.flash('PATCHED UP', '#7fa05a') }
-    else {
+    const gp = itemPrice(g);
+    if (GAME.credits < gp){ sfx.deny(); hud.flash('NOT ENOUGH CREDITS', '#c0492a'); return }
+    if (!g.consumable) GAME.credits -= gp;
+    if (g.consumable){
+      const i = freePackSlot();
+      if (i < 0){ sfx.deny(); hud.flash('BAG IS FULL', '#c0492a'); return }
+      GAME.credits -= gp;
+      PLAYER.pack[i] = { kind:'item', id:g.id };
+      hud.flash(g.name + ' IN THE BAG', '#7fa05a');
+      sfx.buy();
+      return;
+    }
+    {
       PLAYER.gear[g.id] = true;
       if (g.armor){ PLAYER.armor += g.armor; GAME.maxArmor = Math.max(GAME.maxArmor, PLAYER.armor) }
       if (g.id === 'spurs') PLAYER.speed = 3.1 * 1.2;
@@ -4145,10 +4379,15 @@ function storeClick(hotId){
   if (parts2[0] === 'sell'){
     const H = PLAYER.hands[parts2[1]];
     if (!H.weapon || !H.weapon.cost) return;
-    GAME.credits += weaponValue(H.weapon);
-    delete PLAYER.owned[H.weapon.id];
-    hud.flash('SOLD ' + H.weapon.short, '#c0492a');
-    H.setWeapon(PLAYER.owned.navy51 ? 'navy51' : null);
+    const sold = H.weapon;
+    GAME.credits += weaponValue(sold);
+    delete PLAYER.owned[sold.id];
+    H.setWeapon(null);
+    hud.flash('SOLD ' + sold.short, '#c0492a');
+    // fall back to whatever is still on the belt, or the old Navy
+    const belt = PLAYER.holsters.find(h => h.w);
+    if (belt){ const id = belt.w; belt.w = null; H.setWeapon(id) }
+    else if (PLAYER.owned.navy51 && !findWeapon('navy51')) H.setWeapon('navy51');
     sfx.buy();
   }
 }
@@ -4229,6 +4468,280 @@ function drawWrist(){
   });
   P.tex.dirty = true;
 }
+
+
+/* ==========================================================================
+   BELT AND SADDLEBAG
+   Guns live somewhere: in a hand, in a holster on your hip, slung across your
+   back, or in one of nine pockets. Reach down and grab, reach back for the bag.
+   ========================================================================== */
+PLAYER.body = { yaw: 0 };
+PLAYER.holsters = [
+  { id:'hipL',  name:'LEFT HIP',  kind:'pistol', off:[-0.235, -0.66, 0.02], w:null, mat:M4.new() },
+  { id:'hipR',  name:'RIGHT HIP', kind:'pistol', off:[ 0.235, -0.66, 0.02], w:null, mat:M4.new() },
+  { id:'sling', name:'SLING',     kind:'long',   off:[ 0.00,  -0.30, -0.24], w:null, mat:M4.new() },
+];
+PLAYER.pack = new Array(9).fill(null);        // {kind:'weapon'|'item', id}
+const PACK_SLOTS = 9;
+
+function holsterFits(h, id){
+  const W = WEAPONS[id];
+  if (!W) return false;
+  return h.kind === 'long' ? !!W.twoHand : !W.twoHand;
+}
+function freeHolsterFor(id){ return PLAYER.holsters.find(h => !h.w && holsterFits(h, id)) || null }
+function freePackSlot(){ return PLAYER.pack.findIndex(s => !s) }
+
+/* where does this weapon live right now? */
+function findWeapon(id){
+  for (const side of ['left','right'])
+    if (PLAYER.hands[side].weapon && PLAYER.hands[side].weapon.id === id) return { where:'hand', side };
+  for (const h of PLAYER.holsters) if (h.w === id) return { where:'holster', h };
+  const i = PLAYER.pack.findIndex(s => s && s.kind === 'weapon' && s.id === id);
+  if (i >= 0) return { where:'pack', i };
+  return null;
+}
+/* stow a weapon id somewhere sensible. Returns false if there is no room. */
+function stowWeapon(id){
+  if (!id) return true;
+  const h = freeHolsterFor(id);
+  if (h){ h.w = id; return true }
+  const i = freePackSlot();
+  if (i >= 0){ PLAYER.pack[i] = { kind:'weapon', id }; return true }
+  return false;
+}
+function clearWeaponFrom(loc){
+  if (!loc) return;
+  if (loc.where === 'hand') PLAYER.hands[loc.side].setWeapon(null);
+  else if (loc.where === 'holster') loc.h.w = null;
+  else if (loc.where === 'pack') PLAYER.pack[loc.i] = null;
+}
+/* put a weapon in a hand, stowing whatever was there. */
+function takeWeapon(id, side){
+  const H = PLAYER.hands[side], W = WEAPONS[id];
+  if (!W) return false;
+  const from = findWeapon(id);
+  if (from && from.where === 'hand' && from.side === side) return true;
+  const displaced = H.weapon ? H.weapon.id : null;
+  // a long arm needs both hands free
+  let other = null;
+  if (W.twoHand){
+    const os = side === 'left' ? 'right' : 'left';
+    if (PLAYER.hands[os].weapon) other = { side:os, id:PLAYER.hands[os].weapon.id };
+  }
+  clearWeaponFrom(from);
+  H.setWeapon(null);
+  if (displaced && displaced !== id && !stowWeapon(displaced)){
+    H.setWeapon(displaced);                       // no room — put it back
+    if (from) stowWeapon(id);
+    hud.flash('NO ROOM ON YOUR BELT', '#c0492a'); sfx.deny();
+    return false;
+  }
+  if (other){
+    PLAYER.hands[other.side].setWeapon(null);
+    if (!stowWeapon(other.id)) PLAYER.hands[other.side].setWeapon(other.id);
+  }
+  H.setWeapon(id);
+  return true;
+}
+
+/* ---------------------------------------------------------- holster poses */
+function updateBodyFrame(dt){
+  const fwd = M4.axis(_v1, PLAYER.headMat, 2);
+  const yaw = Math.atan2(-fwd[0], -fwd[2]);
+  let diff = ((yaw - PLAYER.body.yaw + Math.PI * 3) % TAU) - Math.PI;
+  PLAYER.body.yaw += diff * Math.min(1, dt * 6);
+  const c = Math.cos(PLAYER.body.yaw), s = Math.sin(PLAYER.body.yaw);
+  for (const h of PLAYER.holsters){
+    const o = h.off;
+    h.pos = h.pos || V3.new(0,0,0);
+    h.pos[0] = PLAYER.head[0] + c * o[0] + s * o[2];
+    h.pos[1] = PLAYER.head[1] + o[1];
+    h.pos[2] = PLAYER.head[2] - s * o[0] + c * o[2];
+    // gun pose: pistols hang butt-up on the hip, long arms sling across the back
+    h.leatherMat = h.leatherMat || M4.new();
+    M4.translate(h.leatherMat, h.pos[0], h.pos[1], h.pos[2]);
+    M4.rotY(_m1, PLAYER.body.yaw + (h.id === 'hipL' ? -0.25 : h.id === 'hipR' ? 0.25 : 0));
+    M4.mul(h.leatherMat, h.leatherMat, _m1);
+    M4.copy(h.mat, h.leatherMat);
+    if (h.kind === 'long'){
+      M4.rotZ(_m1, 0.85); M4.mul(h.mat, h.mat, _m1);
+      M4.rotX(_m1, -1.35); M4.mul(h.mat, h.mat, _m1);
+      M4.translate(_m1, 0, 0, -0.16); M4.mul(h.mat, h.mat, _m1);
+    } else {
+      M4.rotX(_m1, -1.45); M4.mul(h.mat, h.mat, _m1);
+      M4.rotZ(_m1, h.id === 'hipL' ? 0.18 : -0.18); M4.mul(h.mat, h.mat, _m1);
+      M4.translate(_m1, 0, 0.02, 0.05); M4.mul(h.mat, h.mat, _m1);
+    }
+  }
+}
+function nearestHolster(handPos, wantEmpty, id){
+  let best = null, bd = 0.30;
+  for (const h of PLAYER.holsters){
+    if (!h.pos) continue;
+    const d = V3.dist(handPos, h.pos);
+    if (d > bd) continue;
+    if (wantEmpty){ if (h.w || !holsterFits(h, id)) continue }
+    else if (!h.w) continue;
+    bd = d; best = h;
+  }
+  return best;
+}
+/* hand up behind the head = going for the bag */
+function handBehindShoulder(handPos){
+  const d = V3.sub(_v3, handPos, PLAYER.head);
+  if (d[1] < -0.55 || d[1] > 0.30) return false;
+  const c = Math.cos(PLAYER.body.yaw), s = Math.sin(PLAYER.body.yaw);
+  const localX = c * d[0] - s * d[2];            // world -> body
+  const localZ = s * d[0] + c * d[2];
+  return localZ < -0.14 && Math.abs(localX) < 0.45;
+}
+
+/* --------------------------------------------------------- the bag itself */
+const packPanel = new Panel(880, 700, 0.74, 0.59);
+function packItemLabel(slot){
+  if (!slot) return null;
+  if (slot.kind === 'weapon') return (WEAPONS[slot.id] || {}).short || slot.id;
+  return (ITEMS[slot.id] || {}).name || slot.id;
+}
+const ITEMS = {
+  snakeoil: { id:'snakeoil', name:'SNAKE OIL', blurb:'Drink it. Full health.',
+              use(){ GAME.hp = GAME.maxHp; hud.flash('PATCHED UP', '#7fa05a'); sfx.buy(); return true } },
+};
+
+function drawPack(){
+  const P = packPanel;
+  const sig = [PLAYER.pack.map(s => s ? s.kind + s.id : '-').join(','),
+               PLAYER.holsters.map(h => h.w || '-').join(','),
+               PLAYER.hands.left.weapon && PLAYER.hands.left.weapon.id,
+               PLAYER.hands.right.weapon && PLAYER.hands.right.weapon.id,
+               P.hover, Math.round(GAME.hp)].join('|');
+  if (sig === P.sig) return;
+  P.sig = sig;
+  const c = P.begin(), W = P.w, H = P.h;
+  c.fillStyle = '#15100c'; c.fillRect(0, 0, W, H);
+  const grd = c.createLinearGradient(0, 0, 0, H);
+  grd.addColorStop(0, 'rgba(70,50,30,.5)'); grd.addColorStop(1, 'rgba(10,8,6,.4)');
+  c.fillStyle = grd; c.fillRect(0, 0, W, H);
+  c.strokeStyle = UI.gold; c.lineWidth = 3; c.strokeRect(6, 6, W - 12, H - 12);
+  c.textAlign = 'left'; c.fillStyle = UI.bone; c.font = 'bold 28px "Courier New",monospace';
+  c.fillText('SADDLEBAG', 28, 48);
+  c.fillStyle = UI.dim; c.font = '13px "Courier New",monospace';
+  c.fillText('POINT AND PULL THE TRIGGER TO TAKE OR STOW', 28, 70);
+
+  /* carried: hands and belt */
+  const carried = [
+    { key:'hand:left',  label:'LEFT HAND',  id: PLAYER.hands.left.weapon && PLAYER.hands.left.weapon.id },
+    { key:'hand:right', label:'RIGHT HAND', id: PLAYER.hands.right.weapon && PLAYER.hands.right.weapon.id },
+    { key:'hol:hipL',   label:'LEFT HIP',   id: PLAYER.holsters[0].w },
+    { key:'hol:hipR',   label:'RIGHT HIP',  id: PLAYER.holsters[1].w },
+    { key:'hol:sling',  label:'SLING',      id: PLAYER.holsters[2].w },
+  ];
+  carried.forEach((s, i) => {
+    const x = 26, y = 96 + i * 78, w = 318, h = 66;
+    const hot = P.hit(s.key, x, y, w, h);
+    c.fillStyle = hot ? '#33281b' : '#1b1510';
+    c.fillRect(x, y, w, h);
+    c.strokeStyle = s.id ? UI.gold : UI.line; c.lineWidth = s.id ? 2 : 1;
+    c.strokeRect(x + 1, y + 1, w - 2, h - 2);
+    c.fillStyle = UI.dim; c.font = '12px "Courier New",monospace';
+    c.fillText(s.label, x + 12, y + 20);
+    c.fillStyle = s.id ? UI.bone : '#4a3a2a'; c.font = 'bold 19px "Courier New",monospace';
+    c.fillText(s.id ? (WEAPONS[s.id].short || s.id) : 'EMPTY', x + 12, y + 46);
+  });
+
+  /* nine pockets */
+  c.fillStyle = UI.dim; c.font = '13px "Courier New",monospace'; c.textAlign = 'left';
+  c.fillText('NINE POCKETS', 386, 92);
+  for (let i = 0; i < PACK_SLOTS; i++){
+    const cx = 386 + (i % 3) * 158, cy = 104 + Math.floor(i / 3) * 158;
+    const slot = PLAYER.pack[i];
+    const hot = P.hit('pack:' + i, cx, cy, 146, 146);
+    c.fillStyle = hot ? '#33281b' : (slot ? '#20190f' : '#141009');
+    c.fillRect(cx, cy, 146, 146);
+    c.strokeStyle = slot ? '#8a7040' : UI.line; c.lineWidth = slot ? 2 : 1;
+    c.strokeRect(cx + 1, cy + 1, 144, 144);
+    c.fillStyle = '#3a2f22'; c.font = '11px "Courier New",monospace'; c.textAlign = 'right';
+    c.fillText((i + 1) + '', cx + 138, cy + 20);
+    if (slot){
+      c.textAlign = 'center';
+      c.fillStyle = slot.kind === 'item' ? '#8fae63' : UI.bone;
+      c.font = 'bold 15px "Courier New",monospace';
+      const words = String(packItemLabel(slot)).split(' ');
+      words.forEach((w2, k) => c.fillText(w2, cx + 73, cy + 74 + (k - (words.length - 1) / 2) * 19));
+      if (slot.kind === 'item'){
+        c.fillStyle = UI.dim; c.font = '10px "Courier New",monospace';
+        c.fillText('CLICK TO USE', cx + 73, cy + 130);
+      }
+    }
+  }
+  P.tex.dirty = true;
+}
+
+function packClick(id){
+  if (!id) return;
+  const [what, key] = id.split(':');
+  const handHolding = pointerHand ? pointerHand.side : 'right';
+  const H = PLAYER.hands[handHolding];
+  if (what === 'pack'){
+    const i = +key, slot = PLAYER.pack[i];
+    if (slot){
+      if (slot.kind === 'item'){
+        const it = ITEMS[slot.id];
+        if (it && it.use()) PLAYER.pack[i] = null;
+        return;
+      }
+      // take it out into the pointing hand
+      const id2 = slot.id;
+      PLAYER.pack[i] = null;
+      if (!takeWeapon(id2, handHolding)) PLAYER.pack[i] = { kind:'weapon', id:id2 };
+      else sfx.pack();
+    } else if (H.weapon){
+      const id2 = H.weapon.id;
+      H.setWeapon(null);
+      PLAYER.pack[i] = { kind:'weapon', id:id2 };
+      sfx.pack();
+    }
+    return;
+  }
+  if (what === 'hand'){
+    const side = key, HH = PLAYER.hands[side];
+    if (HH.weapon){
+      const id2 = HH.weapon.id;
+      HH.setWeapon(null);
+      if (!stowWeapon(id2)){ HH.setWeapon(id2); hud.flash('NO ROOM', '#c0492a'); sfx.deny() }
+      else sfx.holster(HH.mat ? M4.getTranslation(_v0, HH.mat) : null);
+    }
+    return;
+  }
+  if (what === 'hol'){
+    const h = PLAYER.holsters.find(x => x.id === key);
+    if (!h) return;
+    if (h.w){
+      const id2 = h.w; h.w = null;
+      if (!takeWeapon(id2, handHolding)) h.w = id2; else sfx.holster(h.pos);
+    } else if (H.weapon && holsterFits(h, H.weapon.id)){
+      h.w = H.weapon.id; H.setWeapon(null); sfx.holster(h.pos);
+    } else if (H.weapon){ hud.flash('WRONG HOLSTER FOR THAT', '#c0492a'); sfx.deny() }
+  }
+}
+
+/* the leather itself, drawn on your belt whether or not it is full */
+const holsterBatch = new InstanceBatch(220);
+const holsterGlow = new InstanceBatch(4);
+function buildHolsterLeather(){
+  holsterBatch.clear();
+  const L = PAL.rgb[C.leather], D = PAL.rgb[C.leatherD], B = PAL.rgb[C.brass];
+  const cube = (x,y,z,sx,sy,sz,col) => holsterBatch.push(x,y,z,sx,sy,sz,col[0],col[1],col[2],0);
+  // a simple pouch, drawn in holster-local space (y up, z back)
+  for (let i = 0; i < 5; i++){
+    const y = -0.02 - i * 0.045;
+    cube(0, y, 0.02, 0.075, 0.045, 0.10, i > 2 ? D : L);
+  }
+  cube(0, 0.03, 0.02, 0.09, 0.035, 0.115, D);
+  cube(0.045, 0.02, 0.02, 0.02, 0.06, 0.03, B);
+}
+buildHolsterLeather();
 
 /* ================================ banners ================================= */
 const banner = new Panel(1024, 256, 1.5, 0.375);
@@ -4366,15 +4879,18 @@ function renderScene(vp, eye){
   /* the town */
   gl.enable(gl.DEPTH_TEST);
   gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
+  const lampData = nearestLamps(eye);
   gl.useProgram(P_STATIC);
   gl.uniformMatrix4fv(P_STATIC.u.uViewProj, false, vp);
   gl.uniform3f(P_STATIC.u.uEye, eye[0], eye[1], eye[2]);
+  if (P_STATIC.u.uLamps) gl.uniform4fv(P_STATIC.u.uLamps, lampData);
   for (const m of WORLD.meshes) m.draw(frustum);
 
   /* everything made of loose cubes */
   gl.useProgram(P_CUBE);
   gl.uniformMatrix4fv(P_CUBE.u.uViewProj, false, vp);
   gl.uniform3f(P_CUBE.u.uEye, eye[0], eye[1], eye[2]);
+  if (P_CUBE.u.uLamps) gl.uniform4fv(P_CUBE.u.uLamps, lampData);
   for (const e of GAME.enemies) drawEnemy(e, eye);
   for (const e of GAME.corpses) drawEnemy(e, eye);
   buildParticleBatch();
@@ -4383,8 +4899,25 @@ function renderScene(vp, eye){
     const H = PLAYER.hands[h];
     if (H.present && H.weapon) H.draw();
   }
+  /* what is on your belt */
+  for (const h of PLAYER.holsters){
+    if (!h.pos) continue;
+    if (h.kind !== 'long') holsterBatch.draw(h.leatherMat);
+    if (h.w){
+      const gm = gunModel(h.w);
+      gm.batches.body.draw(h.mat);
+      gm.batches.cyl.draw(h.mat);
+      gm.batches.hammer.draw(h.mat);
+    }
+    if (h.glow > 0){
+      holsterGlow.clear();
+      const s2 = 0.05 + h.glow * 0.02;
+      holsterGlow.push(0, 0.02, 0, s2, s2, s2, 1.0, 0.82, 0.4, 1);
+      holsterGlow.draw(h.leatherMat);
+    }
+  }
   /* pointer, while the store is up */
-  if (GAME.buyOpen && pointerHand && pointerHand.present){
+  if (uiOpen() && pointerHand && pointerHand.present){
     const L = pointerLen;
     M4.translate(_m0, 0, 0, -L / 2);
     M4.scale(_m1, 0.006, 0.006, L);
@@ -4404,7 +4937,8 @@ function renderScene(vp, eye){
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.disable(gl.CULL_FACE);
-  if (GAME.buyOpen){ drawStore(); store.panel.draw(1) }
+  if (GAME.buyOpen || GAME.shopOpen){ drawStore(); store.panel.draw(1) }
+  if (GAME.packOpen){ drawPack(); packPanel.draw(1) }
   drawWrist();
   if (PLAYER.hands.left.present || flatMode) wrist.draw(0.97);
   if (hud.bannerT > 0 || hud.flashT > 0 || hud.creditPop > 0){ drawBanner(); banner.draw(Math.min(1, Math.max(hud.bannerT, hud.flashT, hud.creditPop))) }
@@ -4502,9 +5036,40 @@ function locomote(dt, inL, inR){
 }
 
 function updateHands(dt, inputs){
+  for (const h of PLAYER.holsters) h.glow = Math.max(0, (h.glow || 0) - dt * 4);
   for (const side of ['left','right']){
     const H = PLAYER.hands[side], other = PLAYER.hands[side === 'left' ? 'right' : 'left'];
     const inp = inputs[side];
+    H.gripUsed = false;
+    /* reach for your belt: holster what you are holding, or draw what is there */
+    if (inp && H.present && !uiOpen()){
+      const hp = M4.getTranslation(_v0, H.gripMat);
+      const held = H.weapon ? H.weapon.id : null;
+      const target = nearestHolster(hp, !!held, held);
+      if (target) target.glow = 1;
+      const behind = handBehindShoulder(hp);
+      if (inp.grip && !H.prev.grip){
+        if (target && held){
+          target.w = held; H.setWeapon(null);
+          sfx.holster(target.pos); H.pulse(0.5, 45); H.gripUsed = true;
+          hud.flash('HOLSTERED', '#c9a978');
+        } else if (target && !held && target.w){
+          const id = target.w; target.w = null;
+          if (takeWeapon(id, side)){ sfx.holster(target.pos); H.pulse(0.55, 45) }
+          else target.w = id;
+          H.gripUsed = true;
+        } else if (behind){
+          if (held){
+            const slot = freePackSlot();
+            if (slot >= 0){
+              PLAYER.pack[slot] = { kind:'weapon', id:held }; H.setWeapon(null);
+              sfx.pack(); H.pulse(0.5, 45); hud.flash('IN THE BAG', '#c9a978');
+            } else { sfx.deny(); hud.flash('BAG IS FULL', '#c0492a') }
+          } else togglePack();
+          H.gripUsed = true;
+        }
+      }
+    }
     // two hands on a long arm: steadier, and the recoil hurts less
     H.stabilized = false;
     if (H.weapon && H.weapon.twoHand && other.present && !other.weapon){
@@ -4532,6 +5097,7 @@ function updateHands(dt, inputs){
 function updateGame(dt){
   now += dt;
   hud.update(dt);
+  updateShops(dt);
   GAME.timeAlive += dt;
   PLAYER.vignette = damp(PLAYER.vignette, 0, 3.2, dt);
   GAME.hitT = Math.max(0, GAME.hitT - dt);
@@ -4610,6 +5176,10 @@ function onXRFrame(t, frame){
   /* store: point and click */
   handleStoreInput(inputs);
 
+  updateBodyFrame(dt);
+  PLAYER.dt = dt;
+  PLAYER.wantJump = !!(inputs.left && inputs.left.a && !prevJump);
+  prevJump = !!(inputs.left && inputs.left.a);
   locomote(dt, inputs.left, inputs.right);
   updateHands(dt, inputs);
   for (const side of ['left','right']) PLAYER.hands[side].poseGun();
@@ -4667,17 +5237,24 @@ function placeBanner(){
             head[0], head[1], head[2]);
 }
 
-let prevPointerTrigger = false, prevMenuBtn = false;
+let prevPointerTrigger = false, prevMenuBtn = false, prevJump = false, prevPackBtn = false;
 function handleStoreInput(inputs){
-  // A / X opens and recalls the store
-  const anyA = (inputs.left && inputs.left.a) || (inputs.right && inputs.right.a);
-  if (anyA && !prevMenuBtn){
+  // A on the right hand: the store. Y on the left: the saddlebag.
+  const aBtn = !!(inputs.right && inputs.right.a);
+  if (aBtn && !prevMenuBtn){
     if (GAME.state === 'dead'){ resetRun() }
-    else { GAME.buyOpen = !GAME.buyOpen; if (GAME.buyOpen) placeStorePanel(); sfx.ui() }
+    else { GAME.buyOpen = !GAME.buyOpen; GAME.packOpen = false;
+           if (GAME.buyOpen) placeStorePanel(); sfx.ui() }
   }
-  prevMenuBtn = anyA;
-  if (!GAME.buyOpen){ pointerHand = null; pointerHit = null; return }
-  if (!panelPlaced) placeStorePanel();
+  prevMenuBtn = aBtn;
+  const packBtn = !!(inputs.left && inputs.left.b &&
+                     !(PLAYER.hands.left.weapon && PLAYER.hands.left.weapon.alt));
+  if (packBtn && !prevPackBtn) togglePack();
+  prevPackBtn = packBtn;
+
+  const panel = GAME.packOpen ? packPanel : ((GAME.buyOpen || GAME.shopOpen) ? store.panel : null);
+  if (!panel){ pointerHand = null; pointerHit = null; return }
+  if (GAME.buyOpen && !panelPlaced) placeStorePanel();
 
   // whichever hand is pointing at the panel drives it
   let best = null, bestHand = null;
@@ -4686,24 +5263,42 @@ function handleStoreInput(inputs){
     if (!H.present) continue;
     const o = M4.getTranslation(_v0, H.mat);
     const d = M4.axis(_v1, H.mat, 2); V3.scale(d, d, -1);
-    const hit = store.panel.pick(o[0], o[1], o[2], d[0], d[1], d[2]);
+    const hit = panel.pick(o[0], o[1], o[2], d[0], d[1], d[2]);
     if (hit){ best = hit; bestHand = H; break }
   }
   pointerHand = bestHand;
   pointerHit = best && best.id !== '__panel' ? best : null;
-  pointerLen = bestHand ? (store.panel.lastT || 2) : 2.5;
+  pointerLen = bestHand ? (panel.lastT || 2) : 2.5;
   const newHover = pointerHit ? pointerHit.id : null;
-  if (newHover !== store.panel.hover){ store.panel.hover = newHover; if (newHover) sfx.ui() }
+  if (newHover !== panel.hover){ panel.hover = newHover; if (newHover) sfx.ui() }
   const trig = bestHand && inputs[bestHand.side] ? inputs[bestHand.side].trigger > 0.6 : false;
-  if (trig && !prevPointerTrigger && pointerHit) storeClick(pointerHit.id);
+  if (trig && !prevPointerTrigger && pointerHit){
+    if (GAME.packOpen) packClick(pointerHit.id); else storeClick(pointerHit.id);
+  }
   prevPointerTrigger = trig;
+}
+function togglePack(){
+  GAME.packOpen = !GAME.packOpen;
+  if (GAME.packOpen){
+    GAME.buyOpen = false;
+    placePanelInFront(packPanel, 0.72, -0.12);
+    sfx.pack();
+  } else sfx.ui();
+}
+function placePanelInFront(panel, dist, drop){
+  const head = PLAYER.head;
+  const fwd = M4.axis(_v1, PLAYER.headMat, 2);
+  V3.scale(fwd, fwd, -1); fwd[1] = 0; V3.norm(fwd, fwd);
+  lookPanel(panel.mat, head[0] + fwd[0] * dist, head[1] + (drop || 0), head[2] + fwd[2] * dist,
+            head[0], head[1], head[2]);
+  panel.sig = '';
 }
 
 /* ==========================================================================
    FLAT PREVIEW — not the game, just a window into it so you can check the
    town without putting the headset on. Mouse looks, WASD walks.
    ========================================================================== */
-const flat = { yaw: Math.PI, pitch: -0.05, keys: {}, mouse: { down:false }, prev: {}, eye: 1.68 };
+const flat = { yaw: Math.PI, pitch: -0.05, keys: {}, mouse: { down:false }, prev: { jump:false }, eye: 1.68 };
 async function startFlat(mapId){
   mapId = mapId || selectedMode;
   sfx.init(); sfx.resume();
@@ -4712,7 +5307,8 @@ async function startFlat(mapId){
   closeModal();
   document.getElementById('overlay').classList.add('hidden');
   document.getElementById('hint').textContent =
-    'DEV PREVIEW — WASD move · mouse look · CLICK fire · F cock · R reload · B store · ESC release mouse';
+    'DEV PREVIEW — WASD move · SPACE jump · mouse look · CLICK fire · F cock · R reload · ' +
+    'I inventory · B store · ESC release mouse';
   resetRun();
   canvas.requestPointerLock && canvas.requestPointerLock();
   resizeFlat();
@@ -4727,7 +5323,10 @@ function resizeFlat(){
 window.addEventListener('resize', () => { if (flatMode) resizeFlat() });
 window.addEventListener('keydown', e => {
   flat.keys[e.code] = true;
-  if (flatMode && e.code === 'KeyB'){ GAME.buyOpen = !GAME.buyOpen; if (GAME.buyOpen) placeStorePanel(); sfx.ui() }
+  if (flatMode && e.code === 'KeyB'){ GAME.buyOpen = !GAME.buyOpen; GAME.packOpen = false;
+    if (GAME.buyOpen) placeStorePanel(); sfx.ui() }
+  if (flatMode && (e.code === 'KeyI' || e.code === 'Tab')){ e.preventDefault(); togglePack() }
+  if (flatMode && e.code === 'Space') e.preventDefault();
   if (flatMode && (e.code === 'Enter' || e.code === 'Space') && GAME.state === 'dead') resetRun();
 });
 window.addEventListener('keyup', e => { flat.keys[e.code] = false });
@@ -4778,25 +5377,32 @@ function onFlatFrame(t){
   V3.set(PLAYER.vel, mx * PLAYER.speed, 0, mz * PLAYER.speed);
   playerCollide(PLAYER.pos[0] + mx * PLAYER.speed * dt, PLAYER.pos[2] + mz * PLAYER.speed * dt);
 
+  PLAYER.dt = dt;
+  PLAYER.wantJump = !!k.Space && !flat.prev.jump;
+  flat.prev.jump = !!k.Space;
   const inputs = {
-    right: { trigger: (flat.mouse.down && !GAME.buyOpen) ? 1 : 0, grip: !!k.KeyR,
+    right: { trigger: (flat.mouse.down && !uiOpen()) ? 1 : 0, grip: !!k.KeyR,
              stick: !!k.KeyF, a: false, b: !!k.KeyG, ax: 0, ay: 0 },
     left: null,
   };
   if (L.weapon) inputs.left = { trigger: (k.ShiftLeft ? 1 : 0), grip: !!k.KeyR, stick: !!k.KeyQ, a:false, b:false, ax:0, ay:0 };
+  updateBodyFrame(dt);
   updateHands(dt, inputs);
   for (const side of ['left','right']) PLAYER.hands[side].poseGun();
 
-  /* store: aim with the crosshair, click with the mouse */
-  if (GAME.buyOpen){
-    if (!panelPlaced) placeStorePanel();
+  /* panels: aim with the crosshair, click with the mouse */
+  const panel = GAME.packOpen ? packPanel : ((GAME.buyOpen || GAME.shopOpen) ? store.panel : null);
+  if (panel){
+    if (GAME.buyOpen && !panelPlaced) placeStorePanel();
     const o = M4.getTranslation(_v0, PLAYER.headMat);
     const d = M4.axis(_v1, PLAYER.headMat, 2); V3.scale(d, d, -1);
-    const hitR = store.panel.pick(o[0], o[1], o[2], d[0], d[1], d[2]);
+    const hitR = panel.pick(o[0], o[1], o[2], d[0], d[1], d[2]);
     pointerHand = R; pointerHit = hitR && hitR.id !== '__panel' ? hitR : null;
-    pointerLen = store.panel.lastT || 2;
-    store.panel.hover = pointerHit ? pointerHit.id : null;
-    if (flat.mouse.down && !flat.prev.mouse && pointerHit) storeClick(pointerHit.id);
+    pointerLen = panel.lastT || 2;
+    panel.hover = pointerHit ? pointerHit.id : null;
+    if (flat.mouse.down && !flat.prev.mouse && pointerHit){
+      if (GAME.packOpen) packClick(pointerHit.id); else storeClick(pointerHit.id);
+    }
   } else { pointerHit = null }
   flat.prev.mouse = flat.mouse.down;
 

@@ -91,18 +91,60 @@ fire in one motion, wild but fast) · **Vernier Sight** (35% tighter with long a
 | left stick | walk |
 | right stick | snap turn |
 | **stick click** | **cock the hammer / work the lever / thumb both barrels** |
-| trigger | fire, and click the buy panel |
-| grip (hold) | reload — let go early and you lose it |
-| A / X | open or recall the buy panel |
-| B / Y | LeMat: swap between ball and the buckshot barrel |
+| trigger | fire, and click any panel |
+| grip | at your hip: holster or draw · behind your shoulder: the saddlebag · otherwise: **reload** |
+| X (left A) | jump |
+| Y (left B) | open the saddlebag |
+| A (right A) | the peddler's catalogue |
+| B (right B) | LeMat: swap between ball and the buckshot barrel |
 
-On the menu: pick a map, then **ENTER VR**. **FLAT PREVIEW · DEV** runs the same map in a
-window (WASD, mouse look, click to fire, `F` cock, `R` reload, `B` store) for checking
-the build without a headset — a development view, not the game.
+Reloading is a **tap** of the grip, not a hold — the gun loads itself while you keep
+moving, and a second tap stops it.
 
 Buy a long arm and it takes both hands; put your free hand on the forestock and the
 group tightens by half and the recoil drops. Both hands can hold a pistol instead —
 each with its own hammer to keep track of.
+
+On the menu: pick a map, then **ENTER VR**. **FLAT PREVIEW · DEV** runs the same map in
+a window for checking the build without a headset — a development view, not the game:
+
+| | |
+|---|---|
+| WASD / mouse | move and look |
+| space | jump |
+| click | fire · F cock · R reload |
+| I or Tab | inventory (the same saddlebag panel) |
+| B | the catalogue |
+
+## Carrying it
+
+![the saddlebag](screenshot-bag.png)
+
+You have two hands, a belt and a bag.
+
+- **Two hip holsters and a sling.** Reach down to your hip and squeeze the grip: if
+  your hand is full the gun goes in, if it is empty the gun comes out. Pistols go on
+  the hips, long arms across your back. Whatever is holstered is drawn on your belt, so
+  you can see what you are carrying.
+- **A saddlebag with nine pockets.** Reach over your shoulder and grip to open it — or
+  do it with a gun in hand to drop that gun straight in. Point at a pocket and pull the
+  trigger to take something out or put it in. The same panel shows both hands and all
+  three holsters, so it doubles as the inventory screen.
+- Buying a gun into a full hand pushes the old one onto your belt, or into the bag if
+  the belt is full. Snake oil goes in a pocket and is drunk from there.
+
+## Shops
+
+![the gun shop](screenshot-shop.png)
+
+Between waves you can walk into a shop instead of thumbing through the catalogue on
+your wrist. Little Canyon has **McCready's Guns & Ammunition** and a **general store**;
+the Dranden Road has the store at **Halfway Station** and the gun room at the
+**Rocking K**. Step up to the counter and the goods appear over it — and everything on
+the counter is **15% off** the catalogue price, because you came to him.
+
+The gun shops carry sidearms, long arms and heavy iron. The general stores carry the
+outfit — coats, plate, speed loaders, sights, spurs and snake oil — plus a few pistols.
 
 ## Where you fight
 
@@ -181,5 +223,8 @@ Single file, roughly 4,300 lines, no libraries.
 - **Ballistics** — 3D DDA (Amanatides & Woo) through the static world and then through
   each body's local grid, in distance order, spending the penetration budget per voxel
   and carving a wider channel for fat rounds.
+- **Lighting** — one directional sun plus the four lamps nearest the eye, uploaded as
+  uniforms each frame, so shop interiors and porches are actually lit rather than being
+  caves.
 - **Sound** — entirely synthesised WebAudio: filtered noise bursts for the report,
   a delayed pair for the canyon slap-back, positional panning per shot, and a wind bed.
