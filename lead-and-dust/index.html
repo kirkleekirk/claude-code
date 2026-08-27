@@ -599,9 +599,13 @@ class StaticMesh {
     gl.deleteBuffer(this.pb); gl.deleteBuffer(this.cb);
     gl.deleteBuffer(this.nb); gl.deleteBuffer(this.ib);
   }
-  draw(frustum){
+  draw(frustum, eye){
     gl.bindVertexArray(this.vao);
     for (const c of this.chunks){
+      if (eye){
+        const dx = (c.min[0] + c.max[0]) * 0.5 - eye[0], dz = (c.min[2] + c.max[2]) * 0.5 - eye[2];
+        if (dx*dx + dz*dz > 250*250) continue;      // past the fog, no point
+      }
       if (frustum && !frustum.aabb(c.min, c.max)) continue;
       gl.drawElements(gl.TRIANGLES, c.count, gl.UNSIGNED_INT, c.start * 4);
       drawCalls++;
@@ -723,7 +727,7 @@ let curVP = M4.new();
    ========================================================================== */
 const MAT = {
   CLOTH: 0, FLESH: 1, BONE: 2, ORGAN: 3, WOOD: 4, ROCK: 5,
-  STEEL: 6, GLASS: 7, TIN: 8, DIRT: 9, HAIR: 10, LEATHER: 11,
+  STEEL: 6, GLASS: 7, TIN: 8, DIRT: 9, HAIR: 10, LEATHER: 11, WATER: 12,
 };
 const MAT_INFO = [
   { name:'cloth',   cost:0.55, chunk:[0,0,0], vital:false },
@@ -738,6 +742,7 @@ const MAT_INFO = [
   { name:'dirt',    cost:40,   chunk:[.40,.30,.20], vital:false },
   { name:'hair',    cost:0.40, chunk:[.16,.12,.09], vital:false },
   { name:'leather', cost:1.30, chunk:[.32,.22,.14], vital:false },
+  { name:'water',   cost:0.30, chunk:[.35,.50,.58], vital:false, pass:true },
 ];
 
 /* ---------------- palette: index -> colour + material -------------------- */
@@ -781,7 +786,8 @@ P('shingle',   0x59493a, MAT.WOOD);   P('shingleD',  0x473a2e, MAT.WOOD);
 P('tin',       0x8a8d90, MAT.TIN);    P('tinD',      0x6f7275, MAT.TIN);
 P('glass',     0x51707c, MAT.GLASS);  P('glassL',    0x7d9aa4, MAT.GLASS);
 P('sign',      0x2a2118, MAT.WOOD);   P('signGold',  0xd8a63c, MAT.WOOD);
-P('hay',       0xd4b455, MAT.CLOTH);  P('water',     0x4d6d7c, MAT.GLASS);
+P('hay',       0xd4b455, MAT.CLOTH);  P('water',     0x4d6d7c, MAT.WATER);
+P('waterD',    0x3f5c6b, MAT.WATER);  P('waterL',    0x628393, MAT.WATER);
 P('cactus',    0x4e7a45, MAT.FLESH);  P('cactusD',   0x3d6136, MAT.FLESH);
 P('brush',     0x7e7a4a, MAT.CLOTH);  P('iron',      0x3f4247, MAT.STEEL);
 P('rail',      0x5a5f66, MAT.STEEL);  P('coal',      0x241f1c, MAT.ROCK);
@@ -831,11 +837,22 @@ class Grid {
     this.vs = vs; this.ox = ox; this.oy = oy; this.oz = oz;
     this.data = new Uint8Array(nx * ny * nz);
     this.strideY = nx * nz;
+    // written-bounds, so meshing a mostly-empty grid stays cheap
+    this.bx0 = nx; this.by0 = ny; this.bz0 = nz; this.bx1 = -1; this.by1 = -1; this.bz1 = -1;
+  }
+  mark(x, y, z){
+    if (x < this.bx0) this.bx0 = x; if (x > this.bx1) this.bx1 = x;
+    if (y < this.by0) this.by0 = y; if (y > this.by1) this.by1 = y;
+    if (z < this.bz0) this.bz0 = z; if (z > this.bz1) this.bz1 = z;
   }
   idx(x, y, z){ return y * this.strideY + z * this.nx + x }
   inside(x, y, z){ return x >= 0 && y >= 0 && z >= 0 && x < this.nx && y < this.ny && z < this.nz }
   get(x, y, z){ return this.inside(x,y,z) ? this.data[y*this.strideY + z*this.nx + x] : 0 }
-  set(x, y, z, v){ if (this.inside(x,y,z)) this.data[y*this.strideY + z*this.nx + x] = v }
+  set(x, y, z, v){
+    if (!this.inside(x,y,z)) return;
+    this.data[y*this.strideY + z*this.nx + x] = v;
+    if (v) this.mark(x, y, z);
+  }
   /* world <-> voxel */
   vx(wx){ return Math.floor((wx - this.ox) / this.vs) }
   vy(wy){ return Math.floor((wy - this.oy) / this.vs) }
@@ -925,9 +942,12 @@ function meshGrid(grid, chunkMetres){
   const vs = grid.vs;
   let faceTotal = 0;
 
-  for (let y = 0; y < grid.ny; y++)
-  for (let z = 0; z < grid.nz; z++)
-  for (let x = 0; x < grid.nx; x++){
+  const Y0 = Math.max(0, grid.by0 - 1), Y1 = Math.min(grid.ny - 1, grid.by1 + 1);
+  const Z0 = Math.max(0, grid.bz0 - 1), Z1 = Math.min(grid.nz - 1, grid.bz1 + 1);
+  const X0 = Math.max(0, grid.bx0 - 1), X1 = Math.min(grid.nx - 1, grid.bx1 + 1);
+  for (let y = Y0; y <= Y1; y++)
+  for (let z = Z0; z <= Z1; z++)
+  for (let x = X0; x <= X1; x++){
     const val = grid.data[y*grid.strideY + z*grid.nx + x];
     if (!val) continue;
     const rgb = PAL.rgb[val];
@@ -1391,10 +1411,11 @@ function makeCrate(g, x, y, z, s, col){
   mbox(g, x - s/2, y, z - s/2, s, 0.15, 0.15, C.plankD);
   mbox(g, x - s/2, y + s - 0.15, z - s/2, s, 0.15, 0.15, C.plankD);
 }
-function makeCactus(g, x, z, h){
+function makeCactus(g, x, z, h, base){
+  base = base || 0;
   const gx = g.vx(x), gz = g.vz(z);
-  g.cylY(gx, gz, 0.32 / g.vs, g.vy(0), g.vy(h), C.cactus);
-  const armY = h * 0.55;
+  g.cylY(gx, gz, 0.32 / g.vs, g.vy(base), g.vy(base + h), C.cactus);
+  const armY = base + h * 0.55;
   g.cylY(g.vx(x + 0.7), gz, 0.22 / g.vs, g.vy(armY), g.vy(armY + 0.9), C.cactusD);
   mbox(g, x + 0.15, armY, z - 0.22, 0.7, 0.44, 0.44, C.cactusD);
   if (h > 2){
@@ -1798,106 +1819,147 @@ function buildCanyonTown(){
 
 /* ==========================================================================
    THE DRANDEN ROAD
-   Open range between Little Canyon and the Dranden city limit: the wagon road,
-   the creek crossing, a ranch, a way station, and not much cover. Harder than
-   the town — the sight lines are long and they come at you from every side.
+   Fourteen miles of open range between Little Canyon and the Dranden city
+   limit, in miniature: 240 by 460 metres of it. The road wanders north, the
+   creek cuts across, and the country between is filled with the things a
+   road passes — a ranch, a way station, played-out diggings, boot hill.
    ========================================================================== */
 const ROAD = {
-  x: z => 3.6 * Math.sin(z * 0.031) + 1.8 * Math.sin(z * 0.0115 + 1.7),   // centreline
-  halfW: 4.6,
-  creekZ: wx => 21 + 5.5 * Math.sin(wx * 0.055),
-  creekHalf: 4.2,
+  x: z => 16 * Math.sin(z * 0.0071) + 7 * Math.sin(z * 0.0184 + 1.3) + 3.4 * Math.sin(z * 0.041),
+  halfW: 5.0,
+  creekZ: wx => 150 + 9 * Math.sin(wx * 0.021),
+  creekHalf: 5.5,
+  washZ:  wx => -66 + 13 * Math.sin(wx * 0.016 + 2.1),
+  washHalf: 7.0,
+  waterLevel: -0.9,
+  north: -246, south: 236,          // where the country closes in
 };
-/* flat building pads, so nothing is left standing on a slope */
+/* flat pads, so nothing is left standing on a slope */
 const ROAD_PADS = [
-  { x0:-27, z0:-16, x1:-8,  z1:10 },     // the ranch
-  { x0: 9,  z0: 27, x1: 27, z1: 47 },    // the way station
-  { x0:-30, z0:-72, x1: 30, z1:-52 },    // Dranden's edge
-  { x0:-14, z0: 12, x1: 14, z1: 30 },    // the crossing
-  { x0: 12, z0:-40, x1: 26, z1:-26 },    // boot hill
+  { x0:-74, z0: 66, x1:-18, z1:126 },     // the Rocking K
+  { x0: 16, z0:-34, x1: 72, z1: 22 },     // Halfway Station
+  { x0:-80, z0:-126, x1:-24, z1:-70 },    // the diggings
+  { x0:-56, z0:-246, x1: 56, z1:-192 },   // Dranden's edge
+  { x0:-28, z0: 130, x1: 28, z1: 174 },   // the crossing
+  { x0: 30, z0: 30, x1: 62, z1: 62 },     // boot hill
 ];
-function roadPadFlat(wx, wz){
-  for (const p of ROAD_PADS)
-    if (wx > p.x0 && wx < p.x1 && wz > p.z0 && wz < p.z1) return true;
-  return false;
+/* how flat a pad wants this point to be: 1 inside, easing to 0 over a skirt,
+   so a homestead sits in the country instead of on a plinth */
+function roadPadBlend(wx, wz){
+  let best = 0;
+  for (const p of ROAD_PADS){
+    const dx = Math.max(p.x0 - wx, 0, wx - p.x1);
+    const dz = Math.max(p.z0 - wz, 0, wz - p.z1);
+    const t = clamp(1 - Math.hypot(dx, dz) / 16, 0, 1);
+    if (t > best) best = t;
+  }
+  return best * best * (3 - 2 * best);
+}
+function roadPadFlat(wx, wz){ return roadPadBlend(wx, wz) > 0.995 }
+/* one height function, used by the fill and by everything placed on top of it,
+   so nothing ends up floating */
+function roadHeight(wx, wz){
+  const rx = ROAD.x(wz), fromRoad = Math.abs(wx - rx);
+  let h = (fbm(wx * 0.0125 + 3.3, wz * 0.0125 + 7.7, 4) - 0.5) * 7.5
+        + (fbm(wx * 0.052 + 21, wz * 0.052 + 5, 2) - 0.5) * 1.7;
+  if (fromRoad < 15) h = lerp(h, 0, clamp((15 - fromRoad) / 7.5, 0, 1));
+  h = lerp(h, 0, roadPadBlend(wx, wz));
+  /* the creek and the dry wash */
+  const cz = ROAD.creekZ(wx), cd = Math.abs(wz - cz);
+  if (cd < ROAD.creekHalf + 7){
+    const t = clamp(1 - (cd - ROAD.creekHalf) / 7, 0, 1);
+    h = Math.min(h, lerp(h, -1.9, t * t * (3 - 2 * t)));
+  }
+  const wz2 = ROAD.washZ(wx), wd = Math.abs(wz - wz2);
+  if (wd < ROAD.washHalf + 6){
+    const t = clamp(1 - (wd - ROAD.washHalf) / 6, 0, 1);
+    h = Math.min(h, lerp(h, -1.5, t * t * (3 - 2 * t)));
+  }
+  /* ridges hem the range in east and west */
+  const edge = 112 + fbm(wz * 0.021 + 31, 4.4, 3) * 22;
+  if (Math.abs(wx) > edge) h += Math.pow(Math.abs(wx) - edge, 1.35) * 1.5;
+  /* red rock closes the south, leaving the canyon gate open */
+  if (wz > ROAD.south - 26){
+    const t = (wz - (ROAD.south - 26)) / 16;
+    const gate = Math.abs(wx - ROAD.x(wz)) < 9 && wz < ROAD.south + 4;
+    if (!gate) h += t * t * 30;
+  }
+  /* and hills behind Dranden */
+  if (wz < ROAD.north + 14) h += Math.pow(Math.abs(wz - (ROAD.north + 14)) * 0.55, 1.5);
+  return h;
 }
 
 function buildRoadTerrain(){
-  const g = new Grid(140, 40, 176, 1, -70, -10, -88);
+  const g = new Grid(320, 44, 520, 1, -160, -12, -260);
   const rockCols = [C.rock1, C.rock2, C.rock3, C.rock4, C.rock5, C.rockDark];
-  const strata = y => rockCols[(Math.floor((y + 10) / 2.4 + hash2(y * 2.7, 4.1) * 0.5) % 6 + 6) % 6];
+  const strata = y => rockCols[(Math.floor((y + 12) / 2.6 + hash2(y * 2.7, 4.1) * 0.5) % 6 + 6) % 6];
 
   for (let x = 0; x < g.nx; x++){
     for (let z = 0; z < g.nz; z++){
       const wx = g.wx(x), wz = g.wz(z);
-      const rx = ROAD.x(wz), fromRoad = Math.abs(wx - rx);
-
-      /* --- ground height --- */
-      let h = (fbm(wx * 0.021 + 3.3, wz * 0.021 + 7.7, 3) - 0.5) * 3.4
-            + (fbm(wx * 0.07, wz * 0.07, 2) - 0.5) * 0.9;
-      if (fromRoad < 9) h = lerp(h, 0, clamp((9 - fromRoad) / 4.5, 0, 1));   // graded verge
-      if (roadPadFlat(wx, wz)) h = 0;
-
-      /* --- the creek, cut across the whole map --- */
-      const cz = ROAD.creekZ(wx), inCreek = Math.abs(wz - cz) < ROAD.creekHalf;
-      let water = false;
-      if (Math.abs(wz - cz) < ROAD.creekHalf + 3.5){
-        const t = clamp(1 - (Math.abs(wz - cz) - ROAD.creekHalf) / 3.5, 0, 1);
-        h = Math.min(h, lerp(h, -2.2, t));
-        water = inCreek;
-      }
-
-      /* --- flanking ridges close the range in --- */
-      const ridge = fbm(wz * 0.05 + 21, 3.9, 3);
-      const edge = 42 + ridge * 9;
-      if (Math.abs(wx) > edge) h += (Math.abs(wx) - edge) * 1.9;
-      /* --- red rock closes the south end: the mouth of Little Canyon --- */
-      if (wz > 54){
-        const t = (wz - 54) / 10;
-        const gap = Math.abs(wx - ROAD.x(wz)) < 7.5 && wz < 66;
-        if (!gap) h += t * t * 26;
-      }
-      /* --- and hills behind Dranden to the north --- */
-      if (wz < -70) h += (-70 - wz) * 2.4;
-
+      const h = roadHeight(wx, wz);
       const top = Math.round(h);
+      const rx = ROAD.x(wz), fromRoad = Math.abs(wx - rx);
+      const inChannel = Math.abs(wz - ROAD.creekZ(wx)) < ROAD.creekHalf + 7;
+
       for (let y = 0; y <= g.vy(top) - 1; y++){
         const wy = g.wy(y);
         let col;
-        if (wy > 3.5 || (Math.abs(wx) > edge && wy > 1.5)) col = strata(wy);
+        if (wy > 4.5 || (Math.abs(wx) > 108 && wy > 2)) col = strata(wy);
         else if (y < g.vy(top) - 1) col = C.sandDark;
-        else if (fromRoad < ROAD.halfW && !inCreek)
+        else if (fromRoad < ROAD.halfW && !inChannel)
           col = hash2(wx * 1.7, wz * 2.3) > 0.5 ? C.road : C.roadDark;
-        else if (inCreek) col = C.gravel;
+        else if (inChannel && h < 0.4) col = C.gravel;
         else {
           const patch = fbm(wx * 0.3 + 11, wz * 0.3 + 5, 2) + hash2(wx, wz) * 0.14;
           col = patch > 0.6 ? C.sand : patch > 0.44 ? C.sandDark : C.sandDark2;
         }
         g.set(x, y, z, col);
       }
-      if (water && top < -0.6)
-        for (let y = g.vy(top); y <= g.vy(-0.8); y++) g.set(x, y, z, C.water);
+      /* fill the creek to a level, whatever the bed does underneath */
+      if (inChannel && top < ROAD.waterLevel){
+        const surf = g.vy(ROAD.waterLevel);
+        for (let y = Math.max(0, g.vy(top)); y <= surf; y++)
+          g.set(x, y, z, y === surf ? C.waterL : (y > surf - 2 ? C.water : C.waterD));
+      }
     }
   }
 
-  /* --- mesas and buttes: the only high ground out here --- */
-  const mesas = [[-31,-31,9,15],[33,6,11,18],[-35,36,8,12],[29,-49,7,11],[-26,52,6,9],[34,-16,6,10]];
+  /* --- mesas and buttes, stacked from whatever the ground is doing --- */
+  const mesas = [[-96,-150,15,20],[88,-88,17,23],[-104,60,13,17],[96,140,12,16],
+                 [-70,-210,11,15],[74,196,10,14],[102,-160,12,18],[-116,120,10,15],
+                 [112,20,11,16]];
   for (const [mx, mz, r, mh] of mesas){
+    const base = Math.round(roadHeight(mx, mz));
     for (let y = 0; y <= mh; y++){
-      const rr = r * (1 - Math.pow(y / (mh + 5), 1.7)) + 0.6;
-      g.cylY(g.vx(mx), g.vz(mz), rr, g.vy(y), g.vy(y), strata(y));
+      const rr = r * (1 - Math.pow(y / (mh + 6), 1.7)) + 0.7;
+      g.cylY(g.vx(mx), g.vz(mz), rr, g.vy(base + y), g.vy(base + y), strata(base + y));
     }
-    for (let i = 0; i < 14; i++){          // talus at the foot
-      const a = wrr(0, TAU), d = r + wrr(0.4, 3.4);
-      mbox(g, mx + Math.cos(a) * d, 0, mz + Math.sin(a) * d, wrr(1, 2.6), wrr(0.8, 2.2), wrr(1, 2.6), strata(1));
+    for (let i = 0; i < 22; i++){                    // talus, sitting on the ground
+      const a = wrr(0, TAU), d = r + wrr(0.5, 5.0);
+      const tx = mx + Math.cos(a) * d, tz = mz + Math.sin(a) * d;
+      const ty = Math.round(roadHeight(tx, tz));
+      mbox(g, tx, ty, tz, wrr(1, 3.0), wrr(0.8, 2.6), wrr(1, 3.0), strata(ty + 1));
     }
   }
-  /* --- boulders scattered near the road for something to hide behind --- */
-  for (let i = 0; i < 40; i++){
-    const bz = wrr(-56, 58), bx = ROAD.x(bz) + (wr() > 0.5 ? 1 : -1) * wrr(6, 30);
-    if (Math.abs(bz - ROAD.creekZ(bx)) < 6) continue;
-    const r = wrr(1.1, 2.6);
-    g.ellipsoid(g.vx(bx), g.vy(r * 0.35), g.vz(bz), r, r * 0.75, r * 0.9, strata(1));
+  /* --- boulders, also sitting on the ground rather than hovering over it --- */
+  for (let i = 0; i < 110; i++){
+    const bz = wrr(ROAD.north + 20, ROAD.south - 20);
+    const bx = ROAD.x(bz) + (wr() > 0.5 ? 1 : -1) * wrr(7, 95);
+    if (Math.abs(bz - ROAD.creekZ(bx)) < 8) continue;
+    if (roadPadFlat(bx, bz)) continue;
+    const r = wrr(1.0, 3.2), base = roadHeight(bx, bz);
+    g.ellipsoid(g.vx(bx), g.vy(base + r * 0.3), g.vz(bz), r, r * 0.7, r * 0.9, strata(base + 1));
+  }
+  /* --- scrub and cactus stands, on the ground too --- */
+  for (let i = 0; i < 140; i++){
+    const cz = wrr(ROAD.north + 20, ROAD.south - 20);
+    const cx = ROAD.x(cz) + (wr() > 0.5 ? 1 : -1) * wrr(8, 100);
+    if (Math.abs(cz - ROAD.creekZ(cx)) < 8) continue;
+    const base = Math.round(roadHeight(cx, cz));
+    if (base > 6) continue;
+    if (wr() > 0.62) makeCactus(g, cx, cz, wrr(2, 4), base);
+    else mbox(g, cx - 0.5, base, cz - 0.5, wrr(0.8, 1.6), wrr(0.4, 0.9), wrr(0.8, 1.6), C.brush);
   }
   return g;
 }
@@ -2027,128 +2089,206 @@ function makeFacadeZ(g, x, z, w, d, h, wall, roofCol, sign){
 }
 
 function buildRoadStructures(){
-  const g = new Grid(232, 60, 592, 0.25, -29, 0, -74);
+  const grids = [];
+  const mkGrid = (x0, z0, w, d, h) =>
+    new Grid(Math.round(w / 0.25), Math.round((h || 15) / 0.25), Math.round(d / 0.25), 0.25, x0, 0, z0);
 
-  /* ---- the road itself: telegraph line, ruts, mileposts ---- */
-  const poleZs = [];
-  for (let z = -54; z <= 56; z += 11) poleZs.push(z);
-  for (let i = 0; i < poleZs.length; i++){
-    const z = poleZs[i], x = ROAD.x(z) + 6.4;
-    const nz = poleZs[i + 1];
-    makeTelegraphPole(g, x, z, nz === undefined ? undefined : ROAD.x(nz) + 6.4, nz);
+  /* ------------------------------------------------- the Rocking K ranch -- */
+  {
+    const g = mkGrid(-74, 66, 56, 60);
+    makeBuilding(g, { x:-56, z:78, w:10, d:11, floors:1, fh:3.5, wallCol:C.plankL, wallCol2:C.plank,
+                      trimCol:C.beam, roofCol:C.shingle, roof:'gable', peak:2.4, face:1,
+                      sign:'GUNS', signScale:2, porchDepth:2.2 });
+    SHOP_ANCHORS.ranchGuns = makeShopInterior(g, -56, 78, 10, 11, 1, 'guns');
+    makeBuilding(g, { x:-58, z:94, w:12, d:14, floors:1, fh:5.6, wallCol:C.barnRed, wallCol2:C.barnRedD,
+                      trimCol:C.beam, roofCol:C.shingleD, roof:'gable', peak:3.2, face:1, porch:false });
+    mclear(g, -46.4, 0.5, 99, 0.6, 4.4, 4.4);                    // barn doors
+    mbox(g, -46.5, 0.5, 99, 0.3, 4.4, 0.3, C.beam);
+    mbox(g, -46.5, 0.5, 103.1, 0.3, 4.4, 0.3, C.beam);
+    mbox(g, -46.6, 4.9, 99, 0.4, 0.3, 4.4, C.beam);
+    mbox(g, -52, 6.4, 100.5, 3.0, 2.6, 3.0, C.hay);              // hay loft spill
+    makeCorral(g, -44, 88, 14, 16);
+    makeWindmill(g, -50, 116);
+    makeTrough(g, -42, 96);
+    makeHaystack(g, -66, 108, 2.6); makeHaystack(g, -70, 104, 2.0);
+    makeHaystack(g, -63, 113, 1.7);
+    makeWagon(g, -40, 110, true, false);
+    for (const [bx, bz] of [[-45,74],[-44.4,74.8],[-45.2,75.6],[-59,90],[-60,90.8]]) makeBarrel(g, bx, bz);
+    makeCrate(g, -43, 0, 78, 0.9); makeCrate(g, -43.2, 0.9, 78.2, 0.7);
+    makeDeadTree(g, -68, 84, 5.4);
+    grids.push(g);
   }
-  /* ---- creek crossing ---- */
-  makeBridge(g, 21, 12);
-  makeSignpost(g, ROAD.x(15) - 6.6, 15, ['DRANDEN', '14 MI'], 1);
-  makeSignpost(g, ROAD.x(52) + 6.4, 52, ['LITTLE', 'CANYON'], -1);
 
-  /* ---- the Rocking K: ranch house, barn, corral ---- */
-  makeBuilding(g, { x:-24, z:-12, w:9, d:10, floors:1, fh:3.4, wallCol:C.plankL, wallCol2:C.plank,
-                    trimCol:C.beam, roofCol:C.shingle, roof:'gable', peak:2.2, face:1,
-                    sign:'GUNS', signScale:2, porchDepth:2.2 });
-  SHOP_ANCHORS.ranchGuns = makeShopInterior(g, -24, -12, 9, 10, 1, 'guns');
-  makeBuilding(g, { x:-26, z:2, w:11, d:12, floors:1, fh:5.4, wallCol:C.barnRed, wallCol2:C.barnRedD,
-                    trimCol:C.beam, roofCol:C.shingleD, roof:'gable', peak:3.0, face:1, porch:false });
-  mclear(g, -15.4, 0.5, 6.0, 0.6, 4.2, 4.0);                        // barn doors
-  mbox(g, -15.5, 0.5, 6.0, 0.3, 4.2, 0.3, C.beam);
-  mbox(g, -15.5, 0.5, 9.7, 0.3, 4.2, 0.3, C.beam);
-  mbox(g, -15.6, 4.7, 6.0, 0.4, 0.3, 4.0, C.beam);
-  makeCorral(g, -14.5, -6, 9, 10);
-  makeWindmill(g, -18, 12.5);
-  makeTrough(g, -12.5, -2);
-  makeHaystack(g, -21, 15, 2.2);
-  makeHaystack(g, -24.5, 14, 1.8);
-  makeWagon(g, -11.5, 9, true, false);
-  for (const [bx, bz] of [[-13.2,-13],[-12.6,-12.2],[-13.0,-11.4]]) makeBarrel(g, bx, bz);
-
-  /* ---- the way station: stone relay stop, stable, coach ---- */
-  makeBuilding(g, { x:12, z:31, w:10, d:11, floors:1, fh:3.8, wallCol:C.stone, wallCol2:C.gravel,
-                    trimCol:C.beam, roofCol:C.shingle, roof:'false-front', ffH:1.3, face:-1,
-                    sign:'STORE', signScale:2, porchDepth:2.4, foundation:C.stone });
-  SHOP_ANCHORS.station = makeShopInterior(g, 12, 31, 10, 11, -1, 'general');
-  makeBuilding(g, { x:14, z:44, w:9, d:9, floors:1, fh:4.2, wallCol:C.plankD, wallCol2:C.plank,
-                    trimCol:C.beam, roofCol:C.shingleD, roof:'gable', peak:2.0, face:-1, porch:false });
-  makeStagecoach(g, 8.5, 38);
-  makeCorral(g, 17, 53, 8, 8);
-  makeTrough(g, 10.5, 33);
-  for (const [bx, bz] of [[10.0,28.5],[10.6,29.2],[9.6,29.6],[11.2,44],[10.6,44.8]]) makeBarrel(g, bx, bz);
-  makeCrate(g, 9.4, 0, 41, 0.9); makeCrate(g, 9.6, 0.9, 41.1, 0.7);
-
-  /* ---- boot hill, east of the road ---- */
-  for (let i = 0; i < 11; i++)
-    makeGrave(g, 15 + (i % 4) * 2.4 + wrr(-.3,.3), -37 + Math.floor(i / 4) * 3.0 + wrr(-.3,.3), wr() > 0.35);
-  mbox(g, 12.5, 0, -39.5, 0.25, 1.4, 12, C.plankD);
-  mbox(g, 24.5, 0, -39.5, 0.25, 1.4, 12, C.plankD);
-  mbox(g, 12.5, 0, -39.5, 12.25, 1.4, 0.25, C.plankD);
-  makeSignpost(g, 13.5, -26, ['BOOT HILL'], -1);
-  makeDeadTree(g, 20, -30, 4.5);
-
-  /* ---- the Dranden city limit: you can see it, you cannot ride into it ---- */
-  const edgeZ = -64;
-  makeFacadeZ(g, -26, edgeZ - 2, 11, 9, 4.2, C.plank,      C.shingle,  'MILL');
-  makeFacadeZ(g, -13, edgeZ,     10, 9, 5.6, C.whitewash,  C.shingleD, 'DRANDEN');
-  makeFacadeZ(g,  1,  edgeZ - 1, 12, 10, 4.6, C.plankL,    C.shingle,  'DEPOT');
-  makeFacadeZ(g,  16, edgeZ,     10, 9, 4.2, C.barnRed,    C.shingleD, 'FREIGHT');
-  // a church spire behind, so the skyline reads as a real town
-  mbox(g, -8.5, 0, edgeZ - 12, 6, 7.5, 8, C.whitewash);
-  mbox(g, -9.0, 7.5, edgeZ - 12.5, 7, 0.4, 9, C.shingle);
-  mbox(g, -7.0, 7.9, edgeZ - 10.5, 3, 4.0, 3, C.whitewash);
-  for (let i = 0; i <= 8; i++)
-    mbox(g, -7.0 + i * 0.16, 11.9 + i * 0.5, edgeZ - 10.5 + i * 0.16, 3 - i * 0.32, 0.5, 3 - i * 0.32, C.shingleD);
-  mbox(g, -5.7, 16.0, edgeZ - 9.2, 0.25, 1.6, 0.25, C.iron);
-  mbox(g, -6.2, 16.7, edgeZ - 9.2, 1.25, 0.25, 0.25, C.iron);
-  // water tank + a boxcar on a spur
-  makeWaterTower(g, 24, edgeZ - 9, 1);
-  for (let i = 0; i < 26; i++){
-    mbox(g, 6 + i * 1.2, 0.05, edgeZ - 6.4, 1.0, 0.16, 0.18, C.rail);
-    mbox(g, 6 + i * 1.2, 0.05, edgeZ - 4.6, 1.0, 0.16, 0.18, C.rail);
-    mbox(g, 6 + i * 1.2, 0, edgeZ - 6.7, 0.3, 0.1, 2.4, C.plankD);
+  /* --------------------------------------------------- Halfway Station --- */
+  {
+    const g = mkGrid(16, -34, 56, 58);
+    makeBuilding(g, { x:34, z:-18, w:11, d:12, floors:1, fh:3.9, wallCol:C.stone, wallCol2:C.gravel,
+                      trimCol:C.beam, roofCol:C.shingle, roof:'false-front', ffH:1.4, face:-1,
+                      sign:'STORE', signScale:2, porchDepth:2.6, foundation:C.stone });
+    SHOP_ANCHORS.station = makeShopInterior(g, 34, -18, 11, 12, -1, 'general');
+    makeBuilding(g, { x:36, z:-2, w:10, d:10, floors:1, fh:4.4, wallCol:C.plankD, wallCol2:C.plank,
+                      trimCol:C.beam, roofCol:C.shingleD, roof:'gable', peak:2.2, face:-1, porch:false });
+    mclear(g, 35.6, 0.5, 2, 0.6, 3.6, 3.6);                       // stable doors
+    makeStagecoach(g, 28, 6);
+    makeCorral(g, 44, 10, 14, 14);
+    makeTrough(g, 31, -14);
+    makeWaterTower(g, 60, -24, -1);
+    for (const [bx, bz] of [[31,-22],[31.6,-21.2],[30.6,-20.6],[33,4],[32.4,4.8]]) makeBarrel(g, bx, bz);
+    makeCrate(g, 30, 0, -6, 0.9); makeCrate(g, 30.2, 0.9, -6.1, 0.7);
+    makeHitchPost(g, 30, -12, 5);
+    grids.push(g);
   }
-  mbox(g, 12, 0.5, edgeZ - 6.9, 9, 3.4, 2.9, C.barnRedD);
-  mbox(g, 11.8, 3.9, edgeZ - 7.1, 9.4, 0.4, 3.3, C.shingleD);
-  // the barricade across the road
-  const bx0 = ROAD.x(-58);
-  for (let i = -12; i <= 12; i += 2){
-    mbox(g, bx0 + i - 0.2, 0, -58, 0.4, 1.9, 0.4, C.beam);
-  }
-  for (const yy of [0.9, 1.5]) mbox(g, bx0 - 12.2, yy, -58.1, 24.4, 0.3, 0.3, C.plankD);
-  // gantry over the road: you can read the town's name and get no closer
-  for (const gx of [bx0 - 6.4, bx0 + 6.0]){
-    mbox(g, gx, 0, -58.9, 0.5, 6.2, 0.5, C.beam);
-    mbox(g, gx - 0.25, 0.2, -59.15, 1.0, 0.4, 1.0, C.stone);
-    mbox(g, gx - 0.5, 5.2, -58.9, 1.5, 0.35, 0.5, C.beam);
-  }
-  const gw = 13.4, gy = 4.3;
-  const gr = mrange(g, bx0 - gw / 2, gy, -59.1, gw, 2.0, 0.5);
-  g.box(gr[0], gr[1], gr[2], gr[3], gr[4], gr[5], C.sign);
-  mbox(g, bx0 - gw / 2, gy, -59.1, gw, 0.25, 0.5, C.beam);
-  mbox(g, bx0 - gw / 2, gy + 1.75, -59.1, gw, 0.25, 0.5, C.beam);
-  stampText(g, 'DRANDEN', g.vx(bx0 - 3.4), g.vy(gy + 0.4), gr[5], 'xy', 1, C.signGold, 1, 1);
-  const cr = mrange(g, bx0 - 2.6, 2.35, -58.35, 5.2, 1.5, 0.4);
-  g.box(cr[0], cr[1], cr[2], cr[3], cr[4], cr[5], C.sign);
-  stampText(g, 'CLOSED', g.vx(bx0 - 2.4), g.vy(2.6), cr[5], 'xy', 1, C.whitewash, 1, 1);
-  makeSignpost(g, bx0 + 9.5, -50, ['DRANDEN'], -1);
 
-  /* ---- scattered life along the road ---- */
-  makeWagon(g, ROAD.x(-30) - 7.5, -30, false, true);
-  makeWagon(g, ROAD.x(44) + 7.0, 44, true, true);
-  makeDeadTree(g, ROAD.x(-8) + 9, -8, 5.2);
-  makeDeadTree(g, ROAD.x(30) - 11, 30, 4.0);
-  makeDeadTree(g, ROAD.x(-44) + 12, -44, 4.6);
-  for (let i = 0; i < 22; i++){
-    const cz = wrr(-56, 56), cx = ROAD.x(cz) + (wr() > 0.5 ? 1 : -1) * wrr(7, 26);
-    if (Math.abs(cz - ROAD.creekZ(cx)) < 7) continue;
-    if (wr() > 0.5) makeCactus(g, cx, cz, wrr(1.8, 3.6));
-    else mbox(g, cx - 0.5, 0, cz - 0.5, 1.0, wrr(0.3, 0.7), 1.0, C.brush);
+  /* ------------------------------------------------------- boot hill ----- */
+  {
+    const g = mkGrid(28, 28, 36, 36);
+    for (let i = 0; i < 16; i++)
+      makeGrave(g, 36 + (i % 4) * 2.8 + wrr(-.3,.3), 38 + Math.floor(i / 4) * 3.2 + wrr(-.3,.3), wr() > 0.35);
+    mbox(g, 32, 0, 34, 0.25, 1.5, 20, C.plankD);
+    mbox(g, 50, 0, 34, 0.25, 1.5, 20, C.plankD);
+    mbox(g, 32, 0, 34, 18.25, 1.5, 0.25, C.plankD);
+    mbox(g, 32, 0, 54, 18.25, 1.5, 0.25, C.plankD);
+    mclear(g, 39, 0, 33.5, 3, 2, 1.5);
+    makeSignpost(g, 37.5, 32, ['BOOT HILL'], -1);
+    makeDeadTree(g, 46, 48, 5.0);
+    grids.push(g);
   }
-  // a burnt-out camp beside the road
-  const campZ = -22, campX = ROAD.x(campZ) - 8;
-  for (let a = 0; a < TAU; a += 0.7)
-    mbox(g, campX + Math.cos(a) * 1.1 - 0.2, 0, campZ + Math.sin(a) * 1.1 - 0.2, 0.4, 0.3, 0.4, C.stone);
-  mbox(g, campX - 0.4, 0, campZ - 0.4, 0.8, 0.4, 0.8, C.coal);
-  makeCrate(g, campX + 1.8, 0, campZ + 1.2, 0.8);
-  makeBarrel(g, campX - 1.9, campZ + 1.4);
-  return g;
+
+  /* ------------------------------------------------- the played-out mine -- */
+  {
+    const g = mkGrid(-80, -126, 56, 56);
+    // head frame over the shaft
+    for (const [px, pz] of [[-58,-104],[-52,-104],[-58,-98],[-52,-98]]){
+      mbox(g, px, 0, pz, 0.4, 7.5, 0.4, C.beam);
+      for (let y = 2; y < 7; y += 2.2){
+        mbox(g, -58, y, pz, 6.4, 0.28, 0.28, C.plankD);
+        mbox(g, px, y, -104, 0.28, 0.28, 6.4, C.plankD);
+      }
+    }
+    mbox(g, -58.4, 7.5, -104.4, 6.8, 0.5, 6.8, C.plank);
+    mbox(g, -57, 8.0, -103, 4, 1.6, 4, C.tin);
+    mbox(g, -56, 0, -102, 4, 0.4, 4, C.coal);                     // the shaft mouth
+    mbox(g, -55.4, -1.5, -101.4, 2.8, 1.5, 2.8, C.coal);
+    // spoil heaps
+    for (const [hx, hz, r] of [[-64,-96,4],[-48,-110,3.4],[-66,-112,2.6]])
+      for (let i = 0; i <= 6; i++)
+        g.cylY(g.vx(hx), g.vz(hz), (r - i * r / 7) / g.vs, g.vy(i * 0.4), g.vy(i * 0.4), i > 3 ? C.coal : C.gravel);
+    // sluice and shack
+    mbox(g, -44, 0.3, -108, 9, 0.5, 1.2, C.plankD);
+    mbox(g, -44, 0.5, -108, 9, 0.5, 0.2, C.plank);
+    mbox(g, -44, 0.5, -106.8, 9, 0.5, 0.2, C.plank);
+    makeBuilding(g, { x:-70, z:-90, w:7, d:7, floors:1, fh:2.9, wallCol:C.plankD, wallCol2:C.plank,
+                      trimCol:C.beam, roofCol:C.tin, roof:'shed', face:1, porchDepth:1.4 });
+    // canvas tents
+    for (const [tx, tz] of [[-62,-86],[-56,-84],[-50,-88]]){
+      for (let i = 0; i <= 6; i++){
+        const w2 = 3.0 - i * 0.42;
+        mbox(g, tx - w2 / 2, i * 0.36, tz - 2, w2, 0.36, 4, C.canvasT);
+      }
+      mbox(g, tx - 0.12, 0, tz - 2.2, 0.24, 2.4, 0.24, C.beam);
+      mbox(g, tx - 0.12, 0, tz + 2, 0.24, 2.4, 0.24, C.beam);
+    }
+    // ore cart on a short rail
+    for (let i = 0; i < 14; i++){
+      mbox(g, -54 + i * 1.2, 0.05, -100.9, 1.0, 0.16, 0.18, C.rail);
+      mbox(g, -54 + i * 1.2, 0.05, -99.3, 1.0, 0.16, 0.18, C.rail);
+      mbox(g, -54 + i * 1.2, 0, -101.2, 0.3, 0.1, 2.2, C.plankD);
+    }
+    mbox(g, -40, 0.35, -101.2, 2.2, 1.1, 1.8, C.iron);
+    mbox(g, -39.8, 1.1, -101.0, 1.8, 0.5, 1.4, C.coal);
+    makeSignpost(g, -46, -116, ['NO 7', 'CLOSED'], 1);
+    for (const [bx, bz] of [[-60,-92],[-59.2,-91.4],[-48,-94]]) makeBarrel(g, bx, bz);
+    makeCrate(g, -52, 0, -92, 0.9);
+    grids.push(g);
+  }
+
+  /* ------------------------------------------------ the Dranden city limit */
+  {
+    const g = mkGrid(-56, -248, 112, 56, 20);
+    const edgeZ = -226;
+    makeFacadeZ(g, -46, edgeZ - 4, 12, 10, 4.4, C.plank,     C.shingle,  'MILL');
+    makeFacadeZ(g, -30, edgeZ - 1, 11, 10, 5.8, C.whitewash, C.shingleD, 'DRANDEN');
+    makeFacadeZ(g, -15, edgeZ - 2, 13, 11, 4.8, C.plankL,    C.shingle,  'DEPOT');
+    makeFacadeZ(g,  2,  edgeZ,     11, 10, 4.4, C.barnRed,   C.shingleD, 'FREIGHT');
+    makeFacadeZ(g,  17, edgeZ - 3, 12, 10, 5.0, C.plank,     C.shingle,  'HOTEL');
+    makeFacadeZ(g,  33, edgeZ - 1, 11, 10, 4.4, C.plankD,    C.shingleD, 'BANK');
+    // a church spire behind, so the skyline reads as a town
+    mbox(g, -26, 0, edgeZ - 20, 8, 8.5, 10, C.whitewash);
+    mbox(g, -26.6, 8.5, edgeZ - 20.6, 9.2, 0.5, 11.2, C.shingle);
+    mbox(g, -24, 9.0, edgeZ - 17.5, 3.6, 4.6, 3.6, C.whitewash);
+    for (let i = 0; i <= 9; i++)
+      mbox(g, -24 + i * 0.18, 13.6 + i * 0.55, edgeZ - 17.5 + i * 0.18,
+           3.6 - i * 0.36, 0.55, 3.6 - i * 0.36, C.shingleD);
+    mbox(g, -22.4, 18.6, edgeZ - 15.9, 0.3, 1.8, 0.3, C.iron);
+    mbox(g, -23.0, 19.5, edgeZ - 15.9, 1.5, 0.3, 0.3, C.iron);
+    makeWaterTower(g, 44, edgeZ - 14, -1);
+    // rail head with a boxcar
+    for (let i = 0; i < 46; i++){
+      mbox(g, -52 + i * 2.2, 0.05, edgeZ - 11.4, 1.9, 0.16, 0.18, C.rail);
+      mbox(g, -52 + i * 2.2, 0.05, edgeZ - 9.6, 1.9, 0.16, 0.18, C.rail);
+      mbox(g, -52 + i * 2.2, 0, edgeZ - 11.7, 0.5, 0.1, 2.4, C.plankD);
+    }
+    mbox(g, -6, 0.5, edgeZ - 11.9, 11, 3.6, 2.9, C.barnRedD);
+    mbox(g, -6.3, 4.1, edgeZ - 12.1, 11.6, 0.4, 3.3, C.shingleD);
+    mbox(g, 8, 0.5, edgeZ - 11.9, 6, 2.2, 2.9, C.plankD);
+    // the gantry across the road, and the barricade under it
+    const bx0 = ROAD.x(-214);
+    for (let i = -14; i <= 14; i += 2)
+      mbox(g, bx0 + i - 0.2, 0, -214, 0.4, 2.0, 0.4, C.beam);
+    for (const yy of [0.95, 1.6]) mbox(g, bx0 - 14.2, yy, -214.1, 28.4, 0.3, 0.3, C.plankD);
+    for (const gx of [bx0 - 7.4, bx0 + 7.0]){
+      mbox(g, gx, 0, -214.9, 0.5, 6.4, 0.5, C.beam);
+      mbox(g, gx - 0.3, 0.2, -215.2, 1.1, 0.4, 1.1, C.stone);
+      mbox(g, gx - 0.55, 5.4, -214.9, 1.6, 0.35, 0.5, C.beam);
+    }
+    const gw = 15.4, gy = 4.4;
+    const gr = mrange(g, bx0 - gw / 2, gy, -215.1, gw, 2.1, 0.5);
+    g.box(gr[0], gr[1], gr[2], gr[3], gr[4], gr[5], C.sign);
+    mbox(g, bx0 - gw / 2, gy, -215.1, gw, 0.25, 0.5, C.beam);
+    mbox(g, bx0 - gw / 2, gy + 1.85, -215.1, gw, 0.25, 0.5, C.beam);
+    stampText(g, 'DRANDEN', g.vx(bx0 - 3.4), g.vy(gy + 0.45), gr[5], 'xy', 1, C.signGold, 1, 1);
+    const cr = mrange(g, bx0 - 2.6, 2.45, -214.35, 5.2, 1.5, 0.4);
+    g.box(cr[0], cr[1], cr[2], cr[3], cr[4], cr[5], C.sign);
+    stampText(g, 'CLOSED', g.vx(bx0 - 2.4), g.vy(2.7), cr[5], 'xy', 1, C.whitewash, 1, 1);
+    grids.push(g);
+  }
+
+  /* ------------------------------------- everything strung along the road - */
+  {
+    const g = new Grid(360, 24, 1000, 0.5, -90, 0, -250);
+    // telegraph line the whole length
+    const poles = [];
+    for (let z = ROAD.north + 24; z <= ROAD.south - 18; z += 13) poles.push(z);
+    for (let i = 0; i < poles.length; i++){
+      const z = poles[i], x = ROAD.x(z) + 7.5;
+      const nz = poles[i + 1];
+      makeTelegraphPole(g, x, z, nz === undefined ? undefined : ROAD.x(nz) + 7.5, nz);
+    }
+    makeBridge(g, ROAD.creekZ(ROAD.x(150)), 18);
+    // mileposts and turn-offs
+    makeSignpost(g, ROAD.x(196) + 7.0, 196, ['LITTLE', 'CANYON'], -1);
+    makeSignpost(g, ROAD.x(120) - 7.4, 120, ['ROCKING K'], 1);
+    makeSignpost(g, ROAD.x(20) + 7.0, 20, ['HALFWAY', 'STATION'], -1);
+    makeSignpost(g, ROAD.x(-90) - 7.4, -90, ['NO 7 MINE'], 1);
+    makeSignpost(g, ROAD.x(-180) + 7.0, -180, ['DRANDEN'], -1);
+    // wrecked wagons, a camp, hitching rails
+    makeWagon(g, ROAD.x(64) - 8.5, 64, false, true);
+    makeWagon(g, ROAD.x(-140) + 8.0, -140, true, true);
+    makeWagon(g, ROAD.x(178) + 7.5, 178, false, true);
+    makeDeadTree(g, ROAD.x(-40) + 10, -40, 5.6);
+    makeDeadTree(g, ROAD.x(104) - 11, 104, 4.4);
+    makeDeadTree(g, ROAD.x(-160) - 9, -160, 5.0);
+    for (const cz of [-118, 42, 132]){
+      const cx = ROAD.x(cz) - 9;
+      for (let a = 0; a < TAU; a += 0.7)
+        mbox(g, cx + Math.cos(a) * 1.2 - 0.25, 0, cz + Math.sin(a) * 1.2 - 0.25, 0.5, 0.4, 0.5, C.stone);
+      mbox(g, cx - 0.5, 0, cz - 0.5, 1.0, 0.5, 1.0, C.coal);
+      makeCrate(g, cx + 2.0, 0, cz + 1.4, 0.9);
+      makeBarrel(g, cx - 2.2, cz + 1.6);
+    }
+    grids.push(g);
+  }
+  return grids;
 }
 
 /* ==========================================================================
@@ -2183,17 +2323,17 @@ const MAPS = {
     id:'drandenRoad', name:'THE DRANDEN ROAD', sub:'OPEN RANGE, NO WALLS',
     diff:'HARD RIDE', rank:2, credits:1200,
     blurb:'The fourteen miles between Little Canyon and the Dranden city limit: ' +
-          'wagon road, creek crossing, the Rocking K, and a way station. Long ' +
-          'sight lines, thin cover, and they ride in from every quarter.',
+          'wagon road and telegraph line, the creek crossing, the Rocking K, ' +
+          'Halfway Station, boot hill and the played-out No. 7 — with a lot of ' +
+          'empty country in between. Long sight lines and thin cover.',
     tune:{ speed:1.08, dmg:1.08, acc:1.12, size:1.30, alive:15, spawn:1.25 },
-    start:{ x: ROAD.x(42), z:42, yaw:Math.PI },
-    bounds:{ x0:-40, x1:40, z0:-54, z1:60 },
-    chunkT:24, chunkS:14,
-    build(){ return { terrain: buildRoadTerrain(), struct: buildRoadStructures() } },
-    spawns(){ return [
-      { x: ROAD.x(-50), z:-50 }, { x: ROAD.x(56), z: 56 }, { x: ROAD.x(-46) + 9, z:-46 },
-      { x: 31, z:-18 }, { x: 35, z: 18 }, { x: 27, z: 50 },
-      { x:-31, z:-30 }, { x:-35, z: 22 }, { x:-27, z: 50 }, { x: 22, z:-44 },
+    start:{ x: ROAD.x(194), z:194, yaw:Math.PI },
+    bounds:{ x0:-118, x1:118, z0:-210, z1:228 },
+    chunkT:32, chunkS:16, spawnMode:'ring',
+    build(){ return { terrain: buildRoadTerrain(), structs: buildRoadStructures() } },
+    spawns(){ return [                      // fallbacks; the ring does the work
+      { x: ROAD.x(-160), z:-160 }, { x: ROAD.x(180), z: 180 }, { x: 70, z: -60 },
+      { x:-70, z: 40 }, { x: 60, z: 120 }, { x:-60, z:-120 },
     ] },
     shops(){ return [
       { id:'station', kind:'general', name:'HALFWAY STATION STORE',
@@ -2217,11 +2357,17 @@ function buildWorld(mapId){
   wseed = 1337;                            // same map, same town, every time
   const built = M.build();
   WORLD.terrain = built.terrain;
-  WORLD.struct  = built.struct;
+  WORLD.structs = built.structs || [built.struct];
+  WORLD.struct  = WORLD.structs[0];
   const t1 = performance.now();
   const a = meshGrid(WORLD.terrain, M.chunkT);
-  const b = meshGrid(WORLD.struct, M.chunkS);
-  WORLD.meshes = [a.mesh, b.mesh];
+  WORLD.meshes = [a.mesh];
+  let faces = a.faces;
+  for (const sg of WORLD.structs){
+    const b = meshGrid(sg, M.chunkS);
+    WORLD.meshes.push(b.mesh);
+    faces += b.faces;
+  }
   WORLD.spawns = M.spawns();
   WORLD.shops = M.shops ? M.shops().filter(sh => sh.anchor) : [];
   WORLD.lamps = WORLD_LAMPS;
@@ -2229,16 +2375,30 @@ function buildWorld(mapId){
   WORLD.map = M;
   GAME.mapId = mapId;
   console.log('map "' + M.name + '": gen ' + (t1 - t0).toFixed(0) + 'ms, mesh ' +
-              (performance.now() - t1).toFixed(0) + 'ms, ' + (a.faces + b.faces) + ' faces');
-  return { faces: a.faces + b.faces };
+              (performance.now() - t1).toFixed(0) + 'ms, ' + faces + ' faces, ' +
+              WORLD.structs.length + ' structure grids');
+  return { faces };
 }
 
 /* ---- world queries used by physics, AI and bullets ---- */
+/* the structure grid covering a column, if any (they never overlap in plan) */
+function structAt(wx, wz){
+  const gs = WORLD.structs;
+  for (let i = 0; i < gs.length; i++){
+    const g = gs[i];
+    if (wx >= g.ox && wz >= g.oz && wx < g.ox + g.nx * g.vs && wz < g.oz + g.nz * g.vs) return g;
+  }
+  return null;
+}
+function solidVox(g, x, y, z){
+  const v = g.get(x, y, z);
+  return v && !MAT_INFO[PAL.mat[v]].pass;
+}
 function worldSolidAt(wx, wy, wz){
-  const s = WORLD.struct, t = WORLD.terrain;
-  if (s.get(s.vx(wx), s.vy(wy), s.vz(wz))) return true;
-  if (t.get(t.vx(wx), t.vy(wy), t.vz(wz))) return true;
-  return false;
+  const s = structAt(wx, wz);
+  if (s && solidVox(s, s.vx(wx), s.vy(wy), s.vz(wz))) return true;
+  const t = WORLD.terrain;
+  return !!solidVox(t, t.vx(wx), t.vy(wy), t.vz(wz));
 }
 /* Top of the terrain under a point, searched downward from `fromY` so that tall
    rock never yanks anything up to its summit. */
@@ -2246,17 +2406,32 @@ function groundHeight(wx, wz, fromY){
   const t = WORLD.terrain;
   const x = t.vx(wx), z = t.vz(wz);
   const y1 = Math.min(t.ny - 1, t.vy(fromY === undefined ? 6 : fromY + 1.2));
-  for (let y = y1; y >= 0; y--) if (t.get(x, y, z)) return t.oy + (y + 1) * t.vs;
+  for (let y = y1; y >= 0; y--) if (solidVox(t, x, y, z)) return t.oy + (y + 1) * t.vs;
   return t.oy;
+}
+/* depth of standing water over a point, 0 if dry */
+function waterDepth(wx, wz, fromY){
+  const t = WORLD.terrain;
+  const x = t.vx(wx), z = t.vz(wz);
+  const y1 = Math.min(t.ny - 1, t.vy((fromY === undefined ? 4 : fromY) + 1.2));
+  for (let y = y1; y >= 0; y--){
+    const v = t.get(x, y, z);
+    if (!v) continue;
+    if (MAT_INFO[PAL.mat[v]].pass) return t.oy + (y + 1) * t.vs - groundHeight(wx, wz, fromY);
+    return 0;
+  }
+  return 0;
 }
 /* Same, but boardwalks, bridges and porch decking count as floor too. */
 function surfaceHeight(wx, wz, fromY){
   const top = (fromY === undefined ? 6 : fromY + 0.9);
-  const s = WORLD.struct;
-  const sx = s.vx(wx), sz = s.vz(wz);
-  const y1 = Math.min(s.ny - 1, s.vy(top)), y0 = Math.max(0, s.vy(top - 3.6));
-  for (let y = y1; y >= y0; y--)
-    if (s.get(sx, y, sz)) return s.oy + (y + 1) * s.vs;
+  const s = structAt(wx, wz);
+  if (s){
+    const sx = s.vx(wx), sz = s.vz(wz);
+    const y1 = Math.min(s.ny - 1, s.vy(top)), y0 = Math.max(0, s.vy(top - 3.6));
+    for (let y = y1; y >= y0; y--)
+      if (solidVox(s, sx, y, sz)) return s.oy + (y + 1) * s.vs;
+  }
   return groundHeight(wx, wz, fromY);
 }
 
@@ -2694,8 +2869,10 @@ const _hit = { t: Infinity, x:0, y:0, z:0, col:0, mat:0, grid:null, face:-1 };
 function castWorld(ox,oy,oz, dx,dy,dz, maxDist, out){
   out = out || _hit;
   out.t = Infinity; out.col = 0; out.grid = null;
-  for (const g of [WORLD.struct, WORLD.terrain]){
+  const grids = WORLD.structs.concat([WORLD.terrain]);
+  for (const g of grids){
     raycastGrid(g, ox,oy,oz, dx,dy,dz, maxDist, (x,y,z,v,t,face) => {
+      if (MAT_INFO[PAL.mat[v]].pass) return false;
       if (t < out.t){ out.t = t; out.x = x; out.y = y; out.z = z; out.col = v;
                       out.mat = PAL.mat[v]; out.grid = g; out.face = face }
       return true;
@@ -2867,7 +3044,7 @@ function marchWorldCost(ox,oy,oz, dx,dy,dz, t0, t1, budget, W, fx){
   let firstHit = null, lastSolid = -1;
   for (let t = Math.max(t0, 0) + 0.02; t < t1; t += step){
     const px = ox + dx*t, py = oy + dy*t, pz = oz + dz*t;
-    let g = WORLD.struct, v = g.get(g.vx(px), g.vy(py), g.vz(pz));
+    let g = structAt(px, pz), v = g ? g.get(g.vx(px), g.vy(py), g.vz(pz)) : 0;
     if (!v){ g = WORLD.terrain; v = g.get(g.vx(px), g.vy(py), g.vz(pz)) }
     if (!v) continue;
     const info = MAT_INFO[PAL.mat[v]];
@@ -3918,7 +4095,37 @@ function waveTitle(n){
   return t[(n - 1) % t.length];
 }
 
+function ringSpawnPoint(){
+  const B = WORLD.bounds;
+  const fwd = M4.axis(_v1, PLAYER.headMat, 2);          // where he is looking
+  const lookA = Math.atan2(-fwd[0], -fwd[2]);
+  for (let tries = 0; tries < 40; tries++){
+    // favour behind and to the sides, so they are not conjured in front of him
+    const a = lookA + Math.PI + rnd(-2.1, 2.1);
+    const d = rnd(32, 58);
+    const x = PLAYER.pos[0] + Math.sin(a) * d, z = PLAYER.pos[2] + Math.cos(a) * d;
+    if (x < B.x0 + 6 || x > B.x1 - 6 || z < B.z0 + 6 || z > B.z1 - 6) continue;
+    const gh = surfaceHeight(x, z, 8);
+    if (gh > 7 || gh < -3) continue;                    // not up a mesa, not down a hole
+    if (waterDepth(x, z, 4) > 0.7) continue;            // not mid-creek
+    if (worldSolidAt(x, gh + 1.2, z) || worldSolidAt(x, gh + 1.9, z)) continue;
+    return { x, z };
+  }
+  return null;
+}
 function spawnOne(kind){
+  if (WORLD.map && WORLD.map.spawnMode === 'ring'){
+    const p = ringSpawnPoint();
+    if (p){
+      const e = new Enemy(kind, p.x, p.z);
+      e.integrity = 100;
+      e.K = Object.assign({}, KINDS[kind]);
+      GAME.enemies.push(e);
+      GAME.alive++;
+      spawnDust(e.pos[0], e.pos[1] + 0.2, e.pos[2], 7);
+      return e;
+    }
+  }
   // pick a gully the player is not staring straight down
   let best = null, bestScore = -1e9;
   for (const s of WORLD.spawns){
@@ -4884,7 +5091,7 @@ function renderScene(vp, eye){
   gl.uniformMatrix4fv(P_STATIC.u.uViewProj, false, vp);
   gl.uniform3f(P_STATIC.u.uEye, eye[0], eye[1], eye[2]);
   if (P_STATIC.u.uLamps) gl.uniform4fv(P_STATIC.u.uLamps, lampData);
-  for (const m of WORLD.meshes) m.draw(frustum);
+  for (const m of WORLD.meshes) m.draw(frustum, eye);
 
   /* everything made of loose cubes */
   gl.useProgram(P_CUBE);

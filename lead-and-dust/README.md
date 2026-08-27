@@ -165,15 +165,28 @@ comes straight through.
 
 ![The Dranden Road](screenshot-road.png)
 
-The fourteen miles between the canyon and the **Dranden** city limit, and everything in
-between: the wagon road with its telegraph line, a creek crossing on a timber bridge,
-the Rocking K ranch, a stagecoach way station, boot hill, mesas and boulder fields. You
-can see Dranden at the north end — the mill, the depot, the church spire, a boxcar on
-the spur — but the road is closed at the city limit and that is as far as you ride.
+Two hundred and forty metres by four hundred and sixty of open range — the country
+between the canyon mouth and the **Dranden** city limit, with a lot of nothing in
+between the things worth stopping at:
 
-Open country means long sight lines and thin cover, so it is meaner on purpose: enemies
-shoot ~20% tighter, hit ~14% harder, come in bigger waves, and there are ten gullies and
-draws for them to appear from instead of six. You start with more credits to compensate.
+- the **wagon road** itself, wandering north under a telegraph line the whole way
+- the **creek**, running the full width of the map and crossed on a timber bridge —
+  wade it if you like, the water is knee deep and you can shoot through it
+- the **Rocking K**, house and barn and corral and windmill, with a gun room
+- **Halfway Station**, the stage stop: store, stable, coach, water tank, corral
+- **boot hill** behind its fence, and the played-out **No. 7** with its head frame,
+  spoil heaps, tents and ore cart
+- **Dranden's edge** to the north — mill, depot, freight house, hotel, bank, a church
+  spire and a boxcar on the spur, behind a gantry that reads DRANDEN and a barricade
+  across the road. You can see the town and get no closer.
+
+Mesas and buttes stand off the road, boulders and cactus stands are scattered thin, and
+the ridges close the range in east and west. Because there are no walls to spawn behind,
+outlaws ride in on a **ring around you** — thirty to sixty metres out, favouring the
+ground at your back, always on open footing.
+
+Open country with thin cover is meaner on purpose: enemies shoot ~12% tighter, hit ~8%
+harder and come in bigger waves. You start with more credits to compensate.
 
 **Free roam** of both states is on the menu, blacked out. That is the next build.
 
@@ -208,11 +221,17 @@ Single file, roughly 4,300 lines, no libraries.
   (outlaws, guns, gore, smoke) is instanced unit cubes: one draw call per body part, so
   limbs can swing and come off. Past fifteen metres an outlaw switches to a merged
   half-resolution silhouette — one draw call instead of six.
-- **World** — every map is two voxel grids, 1 m for terrain and 0.25 m for structures,
-  painted procedurally from a seeded RNG and meshed at load (~0.2 s to generate,
-  ~270-290k faces). Shopfront lettering is stamped into the voxels with a 3×5 pixel font.
-  Maps are a registry entry — terrain builder, structure builder, spawn points, bounds
-  and difficulty tuning — so switching one out disposes the old meshes and rebuilds.
+- **World** — a map is one 1 m terrain grid plus any number of finer structure grids:
+  Little Canyon is a single 0.25 m grid over the town, the Dranden Road is five 0.25 m
+  clusters (ranch, station, boot hill, diggings, city limit) and one 0.5 m grid for the
+  road furniture strung down 460 m. All painted procedurally from a seeded RNG and meshed
+  at load — the road map is ~0.6 s to generate and 776k faces. Grids track the bounds of
+  what was actually written so meshing a mostly-empty corridor stays cheap, chunks past
+  the fog are never submitted, and shopfront lettering is stamped into the voxels with a
+  3×5 pixel font. Maps are a registry entry — builders, spawns, bounds, difficulty — so
+  switching one out disposes the old meshes and rebuilds.
+- **Water** is a material rather than rock: the creek fills to a level whatever the bed
+  does under it, and you can wade through it and shoot through it.
 - **The map screen** — canvas cartography over a pan/zoom transform, with detail gated on
   zoom level: wobbled state borders, hachured ranges, hatched canyon country, dashed
   wagon roads, and street plans for the towns. Labels are drawn in screen space so they
