@@ -27,7 +27,7 @@
   /* biomes */
   --b-corn:#E9C55C; --b-blue:#8ECDE8; --b-nice:#F2A8C4;
   --b-sandy:#E5C89A; --b-swamp:#93A97C; --b-rain:#C9A8E8;
-  --stroke:3px; --tilt:44deg;
+  --stroke:3px; --tilt:52deg;
   color-scheme:dark;
 }
 *{box-sizing:border-box}
@@ -220,205 +220,191 @@ button{font:inherit; color:inherit; cursor:pointer}
 .gc .dupes span{position:relative; font-family:"JetBrains Mono",monospace; font-size:8px; color:#DCE9FB}
 </style>
 <style>
-/* ================================================================= BATTLE */
+/* ================================================================= BATTLE
+   The arena is a ground plane tilted on X. Creatures are real boxes built
+   from three faces each (top / front / side), standing up off that plane,
+   so they have actual volume and sort by depth like solid objects.
+   ======================================================================= */
 #battle{
   background:
-    radial-gradient(70% 45% at 50% -8%, rgba(255,255,255,.16), transparent 62%),
-    linear-gradient(180deg,#3E86C8 0%,#1F4F86 38%,#0E2B4E 100%);
+    radial-gradient(70% 45% at 50% -8%, rgba(255,255,255,.15), transparent 62%),
+    linear-gradient(180deg,#3E86C8 0%,#1F4F86 40%,#0C2542 100%);
 }
-.bhud{display:flex; align-items:center; gap:8px; padding:6px 9px; flex:none; z-index:5}
-.bhud.bottom{padding-top:0}
+.bhud{display:flex; align-items:center; gap:8px; padding:6px 9px; flex:none; z-index:6}
 .fighter{
   display:flex; align-items:center; gap:8px; padding:4px 11px 4px 4px;
   border:2.5px solid var(--ink); border-radius:999px;
   background:linear-gradient(180deg,#24478A,#122A55); min-width:0;
 }
-.fighter .face{
-  width:32px; height:32px; flex:none; display:grid; place-items:center; font-size:18px;
-  border:2.5px solid var(--ink); border-radius:50%; background:var(--cream);
+.fighter .face{width:30px; height:30px; flex:none; display:grid; place-items:center; font-size:17px;
+  border:2.5px solid var(--ink); border-radius:50%; background:var(--cream)}
+.fighter .fn{display:block; font-family:"Lilita One",Impact,fantasy; font-size:13px; line-height:1.1;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:110px}
+.fighter .fd{display:block; font-size:9px; color:#9FBCE4; font-weight:800; letter-spacing:.06em; text-transform:uppercase}
+
+/* wall pips - three per side, they go dark as a wall falls */
+.wallpips{display:flex; gap:4px}
+.wallpips i{
+  width:15px; height:19px; border:2.5px solid var(--ink); border-radius:3px;
+  background:repeating-linear-gradient(180deg,#9AA5B5 0 4px,#7A8494 4px 6px);
+  box-shadow:inset 0 -3px 0 rgba(0,0,0,.25);
 }
-.fighter .fn{display:block; font-family:"Lilita One",Impact,fantasy; font-size:13.5px; line-height:1.1; letter-spacing:.3px;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px}
-.fighter .fd{display:block; font-size:9.5px; color:#9FBCE4; font-weight:800; letter-spacing:.06em; text-transform:uppercase;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px}
-.lifebar{display:flex; align-items:center; gap:6px}
-.lifebar .meter{width:clamp(70px,16vw,132px); height:13px; border:2.5px solid var(--ink);
-  border-radius:999px; background:#0D1F3E; overflow:hidden}
-.lifebar .meter i{display:block; height:100%; background:linear-gradient(90deg,#F5798F,#D8365C); transition:width .3s}
-.lifebar .n{font-family:"JetBrains Mono",monospace; font-size:14px; font-weight:700; color:#FF9FB4;
-  font-variant-numeric:tabular-nums; min-width:26px}
-.roundchip{
-  margin-left:auto; display:flex; align-items:center; gap:6px; padding:4px 11px;
+.wallpips i.gone{background:#2A3550; box-shadow:none; opacity:.55}
+.wallpips.foe i{background:repeating-linear-gradient(180deg,#E29AAB 0 4px,#C1758A 4px 6px)}
+.wallpips.foe i.gone{background:#4A2438}
+
+.clock{
+  margin-left:auto; display:flex; align-items:center; gap:7px; padding:4px 13px;
   border:2.5px solid var(--ink); border-radius:999px; background:#0D1F3E;
-  font-family:"Lilita One",Impact,fantasy; font-size:12px; letter-spacing:.5px; color:#BBD3F2;
+  font-family:"Lilita One",Impact,fantasy; font-size:16px; color:#DCE9FB; letter-spacing:.5px;
 }
-.roundchip.ot{background:linear-gradient(180deg,#F5798F,#9E1E3C); color:#FFF0F4}
-.roundchip.you{background:linear-gradient(180deg,#FFD866,var(--gold-2)); color:#4A2F04}
+.clock.x2{background:linear-gradient(180deg,#C455B0,#7A2E6E); color:#FFEAFB}
+.clock.ot{background:linear-gradient(180deg,#F5798F,#9E1E3C); color:#FFF0F4}
 
-/* ------------------------------------------------------------- the arena */
-.arenawrap{flex:1; min-height:0; display:grid; place-items:center; position:relative; overflow:hidden}
-.arena{perspective:2100px; perspective-origin:50% 46%}
-.board{
-  --tile-w:116px; --tile-h:74px; --gap:6px;
-  width:calc(var(--tile-w)*3 + var(--gap)*2 + 22px);
-  transform:translateY(var(--bdy,0px)) rotateX(var(--tilt)) scale(var(--bscale,1));
-  transform-style:preserve-3d; padding:11px;
-  display:flex; flex-direction:column; align-items:center; gap:0;
-  border:var(--stroke) solid var(--ink); border-radius:20px;
-  background:
-    repeating-linear-gradient(45deg, rgba(255,255,255,.022) 0 3px, transparent 3px 7px),
-    radial-gradient(90% 70% at 50% 50%, var(--mat) 0%, var(--mat-3) 100%);
-  box-shadow:inset 0 0 70px rgba(0,0,0,.55), 0 26px 40px rgba(0,0,0,.45);
+/* -------------------------------------------------------------- the field */
+.fieldwrap{flex:1; min-height:0; position:relative; overflow:hidden; display:grid; place-items:center}
+.field{perspective:1500px; perspective-origin:50% 50%; transform:translateY(var(--fdy,0px))}
+.ground{
+  position:relative; width:var(--aw); height:var(--ah);
+  transform:rotateX(var(--tilt)) scale(var(--gscale,1));
+  transform-style:preserve-3d;
+  background:#16352A; border-radius:16px;
+  box-shadow:0 0 0 3px var(--ink), inset 0 0 80px rgba(0,0,0,.5), 0 30px 46px rgba(0,0,0,.45);
 }
-.side{display:grid; grid-template-columns:repeat(3,var(--tile-w)); gap:var(--gap); transform-style:preserve-3d}
-.tile{
-  position:relative; height:var(--tile-h); border-radius:7px; transform-style:preserve-3d;
-  border:2px solid rgba(16,16,14,.62); background:var(--bio,#3A5A4C);
-  box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.14), inset 0 -8px 14px rgba(0,0,0,.28);
-  display:flex; align-items:flex-start; justify-content:center; padding-top:3px;
+.patch{
+  position:absolute; transform-style:preserve-3d; background:var(--bio);
+  box-shadow:inset 0 0 0 1.5px rgba(0,0,0,.30), inset 0 0 22px rgba(0,0,0,.18);
 }
-.tile .bico{position:absolute; top:2px; left:4px; font-size:15px; line-height:1; opacity:.95;
-  filter:drop-shadow(0 1px 1px rgba(0,0,0,.45)); z-index:1}
-.tile .bnm{
-  position:absolute; left:0; right:0; top:22px; text-align:center;
-  font-size:8px; font-weight:900; letter-spacing:.09em; text-transform:uppercase;
-  color:rgba(16,16,14,.72); transform:scaleY(1.5); transform-origin:center top;
+.patch .pico{
+  position:absolute; top:5px; left:7px; font-size:15px; line-height:1; opacity:.9;
+  filter:drop-shadow(0 1px 1px rgba(0,0,0,.45));
 }
-.tile.legal{border-color:var(--gold); box-shadow:inset 0 0 0 3px var(--gold), 0 0 22px rgba(245,197,66,.5); cursor:pointer}
-.tile.legal:hover{filter:brightness(1.25)}
-.tile.hittable{border-color:var(--candy); box-shadow:inset 0 0 0 3px var(--candy), 0 0 22px rgba(232,84,124,.5); cursor:pointer}
-.tile.hittable:hover{filter:brightness(1.25)}
-.tile.floopable{box-shadow:inset 0 0 0 3px var(--spell), 0 0 20px rgba(161,132,219,.5); cursor:pointer}
-.tile.dim{filter:brightness(.62) saturate(.6)}
+.patch .pnm{
+  position:absolute; left:0; right:0; top:24px; text-align:center; font-size:8.5px; font-weight:900;
+  letter-spacing:.1em; text-transform:uppercase; color:rgba(16,16,14,.62);
+  transform:scaleY(1.55); transform-origin:center top;
+}
+.patch.mine.pickable{box-shadow:inset 0 0 0 3px var(--gold), inset 0 0 26px rgba(245,197,66,.4); cursor:pointer}
+.patch.mine.pickable:hover{filter:brightness(1.25)}
+.patch.dropzone{box-shadow:inset 0 0 0 2px rgba(245,197,66,.65), inset 0 0 26px rgba(245,197,66,.22)}
 
-/* a creature standing on the mat */
-.standee{
-  position:absolute; left:50%; bottom:4px; width:58px;
-  transform:translateX(-50%) rotateX(calc(-1 * var(--tilt)));
-  transform-origin:50% 100%; transform-style:preserve-3d; cursor:pointer;
-}
-.standee .body{
-  border:2.5px solid var(--ink); border-radius:8px 8px 5px 5px; padding:3px 2px 2px;
-  background:linear-gradient(180deg,#FBF5E6,#D9C9A6); color:var(--ink);
-  display:flex; flex-direction:column; align-items:center; gap:1px;
-  box-shadow:0 3px 6px rgba(0,0,0,.45);
-}
-.standee.structure .body{background:linear-gradient(180deg,#D9A273,#A9713F)}
-.standee.foe .body{background:linear-gradient(180deg,#F6DCE3,#D7A8B6)}
-.standee.foe.structure .body{background:linear-gradient(180deg,#D9A273,#A9713F)}
-.standee .sart{font-size:20px; line-height:1.05}
-.standee .snm{font-family:"Lilita One",Impact,fantasy; font-size:7.5px; line-height:1.02; text-align:center;
-  letter-spacing:.1px; overflow-wrap:anywhere; max-width:52px}
-.standee .sst{display:flex; gap:2px}
-.standee .sst .pip{font-size:9px; padding:0 3px; border-width:1.5px; border-radius:4px}
-.standee .shadow{
-  position:absolute; left:50%; bottom:-5px; width:46px; height:11px; border-radius:50%;
-  background:rgba(0,0,0,.42); transform:translateX(-50%) rotateX(var(--tilt)); filter:blur(2.5px);
-}
-.standee.sick{filter:saturate(.5) brightness(.9)}
-.standee.tapped{transform:translateX(-50%) rotateX(calc(-1 * var(--tilt))) rotate(9deg)}
-.standee.canfloop .body{box-shadow:0 3px 6px rgba(0,0,0,.45), 0 0 0 2.5px var(--spell)}
-.standee.hot .body{box-shadow:0 3px 6px rgba(0,0,0,.45), 0 0 0 2.5px var(--candy)}
-.standee.pickme .body{box-shadow:0 3px 6px rgba(0,0,0,.45), 0 0 0 2.5px var(--gold)}
-.standee .tagline{
-  position:absolute; top:-9px; left:50%; transform:translateX(-50%);
-  font-size:7.5px; font-weight:900; letter-spacing:.05em; text-transform:uppercase;
-  background:var(--ink); color:var(--cream); border:2px solid var(--cream);
-  border-radius:999px; padding:0 5px; white-space:nowrap;
-}
-.standee .tagline.zzz{background:var(--moss-dim)}
-.standee .tagline.rng{background:#2D6FD6}
-.standee .tagline.safe{background:var(--good); color:var(--ink)}
-.standee .inhab{
-  position:absolute; bottom:-4px; right:-8px; font-size:13px; line-height:1;
-  filter:drop-shadow(0 1px 0 var(--ink));
-}
-
-/* --------------------------------------------------------- river+bridges */
 .river{
-  position:relative; width:calc(var(--tile-w)*3 + var(--gap)*2); height:62px; margin:var(--gap) 0;
-  border-radius:4px; transform-style:preserve-3d;
+  position:absolute; left:0; width:100%; transform-style:preserve-3d;
   background:
-    repeating-linear-gradient(90deg, rgba(255,255,255,.10) 0 9px, transparent 9px 22px),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.09) 0 10px, transparent 10px 24px),
     linear-gradient(180deg,#2E7FB8,#1B5B8E 48%,#12416B);
-  box-shadow:inset 0 0 0 2px rgba(16,16,14,.6), inset 0 6px 16px rgba(0,0,0,.4);
+  box-shadow:inset 0 0 0 2px rgba(16,16,14,.55), inset 0 8px 18px rgba(0,0,0,.4);
   animation:flow 7s linear infinite;
 }
-@keyframes flow{to{background-position:44px 0, 0 0}}
+@keyframes flow{to{background-position:48px 0, 0 0}}
 .bridge{
-  position:absolute; top:-5px; bottom:-5px; width:calc(var(--tile-w) - 26px);
-  border:2.5px solid var(--ink); border-radius:5px; transform-style:preserve-3d;
-  background:repeating-linear-gradient(180deg,#B07B45 0 7px,#8B5A2B 7px 11px);
-  box-shadow:0 5px 9px rgba(0,0,0,.45);
+  position:absolute; transform-style:preserve-3d; border:2.5px solid var(--ink); border-radius:4px;
+  background:repeating-linear-gradient(180deg,#B07B45 0 8px,#8B5A2B 8px 12px);
+  box-shadow:0 0 10px rgba(0,0,0,.5);
 }
-.bridge::after{
-  content:""; position:absolute; inset:2px 3px; border-radius:3px;
-  background:linear-gradient(180deg,rgba(255,255,255,.22),transparent 55%); pointer-events:none;
-}
-.bridge.held-you{border-color:var(--gold); box-shadow:0 5px 9px rgba(0,0,0,.45), 0 0 16px rgba(245,197,66,.65)}
-.bridge.held-foe{border-color:var(--candy); box-shadow:0 5px 9px rgba(0,0,0,.45), 0 0 16px rgba(232,84,124,.65)}
 
-/* ------------------------------------------------------------- castles */
-.castle{position:relative; height:26px; width:100%; transform-style:preserve-3d}
-.castle .keep{
-  position:absolute; left:50%; bottom:0; transform:translateX(-50%) rotateX(calc(-1 * var(--tilt)));
-  transform-origin:50% 100%; display:flex; align-items:center; gap:7px;
-  border:2.5px solid var(--ink); border-radius:9px; padding:4px 11px;
-  background:linear-gradient(180deg,#6E7F96,#3D4A5E); box-shadow:0 4px 8px rgba(0,0,0,.45);
+/* ------------------------------------------------------------- creatures */
+.mob{position:absolute; left:0; top:0; width:0; height:0; transform-style:preserve-3d}
+.mob .sh{
+  position:absolute; border-radius:50%; background:rgba(0,0,0,.36); filter:blur(3px);
+  left:calc(var(--r) * -1); top:calc(var(--r) * -0.62);
+  width:calc(var(--r) * 2); height:calc(var(--r) * 1.24);
 }
-.castle .keep .kico{font-size:19px; line-height:1}
-.castle .keep .knum{font-family:"Lilita One",Impact,fantasy; font-size:19px; color:#FFD0DC; text-shadow:0 2px 0 var(--ink)}
-.castle.foe .keep{background:linear-gradient(180deg,#9E6274,#5E3341)}
-.castle.you .keep{background:linear-gradient(180deg,#5E7E9E,#2F4A66)}
+.rig{position:absolute; left:0; top:0; transform-style:preserve-3d}
+.bx{position:absolute; left:0; top:0; transform-style:preserve-3d; transform:translateZ(var(--z,0px))}
+.bx > b{
+  position:absolute; left:0; top:0; transform-origin:0 0; display:block; background:var(--c);
+  box-shadow:inset 0 0 0 1.5px rgba(0,0,0,.42);
+}
+.bx > b.tp{
+  width:var(--w); height:var(--d); filter:brightness(1.24);
+  transform:translate3d(calc(var(--w) / -2), calc(var(--d) / -2), var(--h));
+}
+.bx > b.fr{
+  width:var(--w); height:var(--h);
+  transform:translate3d(calc(var(--w) / -2), calc(var(--d) / 2), var(--h)) rotateX(-90deg);
+}
+.bx > b.sd{
+  width:var(--d); height:var(--h); filter:brightness(.68);
+  transform:translate3d(calc(var(--w) / 2), calc(var(--d) / 2), var(--h)) rotateX(-90deg) rotateY(90deg);
+}
+.bx > b.fr > i.ey{
+  position:absolute; top:24%; width:24%; height:24%; border-radius:50%;
+  background:#12100C; box-shadow:0 0 0 2.5px rgba(255,255,255,.95);
+}
+.bx > b.fr > i.ey.l{left:15%} .bx > b.fr > i.ey.r{right:15%}
+.bx > b.fr > span.mk{
+  position:absolute; left:0; right:0; bottom:6%; text-align:center; font-size:11px; line-height:1;
+}
+.walking .rig{animation:bob .42s ease-in-out infinite alternate}
+@keyframes bob{to{transform:translateZ(2.5px)}}
+.striking .rig{animation:lunge .22s ease-out}
+@keyframes lunge{40%{transform:translate3d(0,6px,0)}}
+.mob.dying{animation:die .34s ease-in forwards}
+@keyframes die{to{opacity:0; transform:translate3d(var(--dx),var(--dy),0) scale(.3)}}
 
-/* --------------------------------------------------------------- the hand */
-.handdock{display:flex; align-items:flex-end; gap:8px; padding:0 9px 7px; flex:none; z-index:5}
+.hpb{
+  position:absolute; left:-17px; width:34px; height:5px; border:1.5px solid rgba(0,0,0,.7);
+  border-radius:3px; background:#2A1520; overflow:hidden;
+  transform:translate3d(0,0,var(--top)) rotateX(calc(-1 * var(--tilt)));
+}
+.hpb > i{display:block; height:100%; background:linear-gradient(180deg,#8FE3A0,#3FA85A)}
+.mob.foe .hpb > i{background:linear-gradient(180deg,#F5798F,#C1304F)}
+.hpb.full{opacity:0}
+
+.blast{
+  position:absolute; border-radius:50%; transform-style:preserve-3d; pointer-events:none;
+  border:3px solid rgba(255,255,255,.85); animation:blast .5s ease-out forwards;
+}
+@keyframes blast{from{transform:scale(.2); opacity:1} to{transform:scale(1); opacity:0}}
+.ping{position:absolute; border-radius:50%; border:2px dashed rgba(245,197,66,.9); pointer-events:none;
+  animation:blast .6s ease-out forwards}
+
+/* ------------------------------------------------------------------ dock */
+.dock{display:flex; align-items:flex-end; gap:8px; padding:0 9px 7px; flex:none; z-index:6}
 .nextslot{display:flex; flex-direction:column; align-items:center; gap:3px; flex:none}
 .nextslot .lab{font-size:8.5px; font-weight:900; letter-spacing:.1em; text-transform:uppercase; color:#9FBCE4}
-.nextslot .gc{width:44px; opacity:.88}
+.nextslot .gc{width:42px; opacity:.85}
 .handcards{display:flex; gap:6px; flex:1; min-width:0; justify-content:center}
-.handcards .gc{width:clamp(56px,10.5vw,80px); flex:none; transition:transform .12s, box-shadow .12s}
+.handcards .gc{width:clamp(58px,11vw,82px); flex:none; transition:transform .12s, box-shadow .12s}
 .handcards .gc.playable{cursor:pointer}
 .handcards .gc.playable:hover{transform:translateY(-7px); box-shadow:0 9px 0 rgba(0,0,0,.4)}
-.handcards .gc.sel{transform:translateY(-11px); box-shadow:0 12px 0 rgba(0,0,0,.4), 0 0 0 3px var(--gold)}
-.handcards .gc.broke{filter:grayscale(.55) brightness(.72)}
-.juicewrap{display:flex; align-items:center; gap:6px; padding:0 9px 6px}
-.juicebar{
-  flex:1; height:17px; border:2.5px solid var(--ink); border-radius:999px; background:#0D1F3E;
-  display:flex; gap:2px; padding:2px; overflow:hidden;
-}
-.juicebar span{flex:1; border-radius:999px; background:#16305C}
-.juicebar span.on{background:linear-gradient(180deg,#8FD6F5,#3E93C8); box-shadow:inset 0 1px 0 rgba(255,255,255,.5)}
-.juicebar span.ot{background:linear-gradient(180deg,#F5B8E8,#C455B0)}
-.juicenum{font-family:"Lilita One",Impact,fantasy; font-size:19px; color:#8FD6F5; text-shadow:0 2px 0 var(--ink); min-width:30px}
-.actrow{display:flex; gap:7px; align-items:center}
+.handcards .gc.sel{transform:translateY(-12px); box-shadow:0 13px 0 rgba(0,0,0,.4), 0 0 0 3px var(--gold)}
+.handcards .gc.broke{filter:grayscale(.55) brightness(.7)}
+.juicewrap{display:flex; align-items:center; gap:7px; padding:0 9px 6px; z-index:6}
+.juicebar{flex:1; height:16px; border:2.5px solid var(--ink); border-radius:999px; background:#0D1F3E;
+  display:flex; gap:2px; padding:2px; overflow:hidden; position:relative}
+.juicebar span{flex:1; border-radius:999px; background:#16305C; position:relative; overflow:hidden}
+.juicebar span i{position:absolute; inset:0; background:linear-gradient(180deg,#8FD6F5,#3E93C8);
+  transform-origin:left center}
+.juicebar.x2 span i{background:linear-gradient(180deg,#F5B8E8,#C455B0)}
+.juicenum{font-family:"Lilita One",Impact,fantasy; font-size:19px; color:#8FD6F5;
+  text-shadow:0 2px 0 var(--ink); min-width:26px}
 
-/* --------------------------------------------------------------- overlays */
-.side-pop{
-  position:absolute; right:9px; top:52px; width:min(288px,64vw); max-height:60%;
-  display:flex; flex-direction:column; z-index:12; overflow:hidden;
+#hint{
+  align-self:center; max-width:min(560px,94vw); margin:0 9px 5px; padding:5px 13px;
+  border:2.5px solid var(--ink); border-radius:11px; background:linear-gradient(180deg,#24478A,#122A55);
+  font-size:12px; line-height:1.35; color:#DCE9FB; text-align:center; z-index:6;
 }
-.side-pop h4{
-  margin:0; padding:6px 11px; font-family:"Lilita One",Impact,fantasy; font-size:12.5px;
+#hint b{color:var(--gold)} #hint.off{display:none}
+
+.side-pop{position:absolute; right:9px; top:8px; width:min(270px,62vw); max-height:64%;
+  display:flex; flex-direction:column; z-index:12; overflow:hidden}
+.side-pop h4{margin:0; padding:6px 11px; font-family:"Lilita One",Impact,fantasy; font-size:12px;
   letter-spacing:.5px; color:var(--gold); background:var(--panel-3); border-bottom:2.5px solid var(--ink);
-  display:flex; align-items:center; gap:7px;
-}
-.side-pop h4 button{margin-left:auto; background:transparent; border:0; color:#9FBCE4; font-size:15px; line-height:1}
-.logfeed{overflow-y:auto; padding:7px 11px; display:flex; flex-direction:column; gap:5px; font-size:12px}
-.logfeed p{margin:0; color:#C6D8F0; line-height:1.38}
+  display:flex; align-items:center; gap:7px}
+.side-pop h4 button{margin-left:auto; background:transparent; border:0; color:#9FBCE4; font-size:15px}
+.logfeed{overflow-y:auto; padding:7px 11px; display:flex; flex-direction:column; gap:4px; font-size:11.5px}
+.logfeed p{margin:0; color:#C6D8F0; line-height:1.35}
 .logfeed p.hit{color:#FF9FB4} .logfeed p.bmo{color:#8FD6F5; font-weight:700}
 .logfeed p.foe{color:#E9D8B8}
-.logfeed p.turn{color:#7D95BC; font-size:9.5px; letter-spacing:.14em; text-transform:uppercase; font-weight:900;
-  border-top:1px solid rgba(255,255,255,.14); padding-top:5px; margin-top:2px}
 
 .scrim{position:fixed; inset:0; background:rgba(6,18,36,.88); backdrop-filter:blur(3px);
   display:grid; place-items:center; padding:16px; z-index:50; overflow-y:auto}
 .scrim[hidden]{display:none}
-.sheet{
-  width:min(640px,100%); border:var(--stroke) solid var(--ink); border-radius:18px;
+.sheet{width:min(640px,100%); border:var(--stroke) solid var(--ink); border-radius:18px;
   background:linear-gradient(180deg,var(--panel),var(--panel-3)); padding:17px 19px; margin:auto;
-  display:flex; flex-direction:column; gap:12px; box-shadow:0 12px 0 rgba(0,0,0,.42);
-}
+  display:flex; flex-direction:column; gap:12px; box-shadow:0 12px 0 rgba(0,0,0,.42)}
 .sheet h2{margin:0; font-family:"Lilita One",Impact,fantasy; font-size:25px; letter-spacing:.6px;
   color:var(--gold); text-shadow:0 3px 0 var(--ink); text-wrap:balance}
 .sheet h3{margin:5px 0 0; font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:#9FBCE4; font-weight:900}
@@ -440,9 +426,8 @@ button{font:inherit; color:inherit; cursor:pointer}
 .pick.on{background:linear-gradient(180deg,#FFD866,var(--gold-2)); color:#4A2F04}
 .pick .pt{font-family:"Lilita One",Impact,fantasy; font-size:14.5px; letter-spacing:.3px}
 .pick .pd{font-size:11.5px; line-height:1.32; opacity:.88}
-
 .detail{display:flex; gap:14px; flex-wrap:wrap}
-.detail .big{width:118px; flex:none}
+.detail .big{width:112px; flex:none}
 .detail .info{flex:1; min-width:190px; display:flex; flex-direction:column; gap:7px}
 .detail .tags{display:flex; gap:5px; flex-wrap:wrap}
 .tag{border:2.5px solid var(--ink); border-radius:999px; padding:1px 9px; font-size:11px; font-weight:800;
@@ -451,42 +436,29 @@ button{font:inherit; color:inherit; cursor:pointer}
 .tag.cost{background:#8FD6F5; color:#06263A} .tag.bio{background:var(--bio,#fff); color:var(--ink)}
 .tag.kw{background:var(--spell); color:#FFF}
 
-/* ------------------------------------------------------------- floaters */
 .fxlayer{position:fixed; inset:0; pointer-events:none; z-index:60}
 .float{position:absolute; transform:translate(-50%,-50%); font-family:"Lilita One",Impact,fantasy;
-  font-size:23px; text-shadow:0 2.5px 0 var(--ink); animation:rise 1.05s ease-out forwards; white-space:nowrap}
+  font-size:20px; text-shadow:0 2.5px 0 var(--ink); animation:rise 1s ease-out forwards; white-space:nowrap}
 .float.dmg{color:#FF7E9C} .float.heal{color:#8FE3A0} .float.juice{color:#8FD6F5}
-.float.note{font-family:Nunito,sans-serif; font-weight:900; font-size:14px; color:#FFF}
-.float.floop{color:#C9A8F5; font-size:30px; animation:burst .9s cubic-bezier(.2,1.6,.4,1) forwards}
-@keyframes rise{to{transform:translate(-50%,-165%); opacity:0}}
-@keyframes burst{
-  0%{transform:translate(-50%,-50%) scale(.3) rotate(-14deg); opacity:0}
-  35%{transform:translate(-50%,-50%) scale(1.25) rotate(7deg); opacity:1}
-  100%{transform:translate(-50%,-95%) scale(1) rotate(-3deg); opacity:0}
-}
-.arenawrap.shake{animation:shk .34s}
-@keyframes shk{25%{transform:translateX(-6px)}50%{transform:translateX(6px)}75%{transform:translateX(-3px)}}
-
-.toast{
-  position:fixed; left:50%; top:14%; transform:translateX(-50%); z-index:70;
+.float.note{font-family:Nunito,sans-serif; font-weight:900; font-size:13px; color:#FFF}
+@keyframes rise{to{transform:translate(-50%,-160%); opacity:0}}
+.toast{position:fixed; left:50%; top:13%; transform:translateX(-50%); z-index:70;
   border:var(--stroke) solid var(--ink); border-radius:14px; padding:9px 22px;
   background:linear-gradient(180deg,#FFD866,var(--gold-2)); color:#4A2F04;
   font-family:"Lilita One",Impact,fantasy; font-size:20px; letter-spacing:.5px;
-  box-shadow:0 6px 0 var(--gold-3); animation:pop 1.9s ease forwards; pointer-events:none;
-}
+  box-shadow:0 6px 0 var(--gold-3); animation:pop 1.9s ease forwards; pointer-events:none}
 @keyframes pop{0%{transform:translateX(-50%) scale(.6); opacity:0}14%{transform:translateX(-50%) scale(1); opacity:1}
   78%{opacity:1}100%{opacity:0; transform:translateX(-50%) translateY(-18px)}}
+.fieldwrap.shake{animation:shk .3s}
+@keyframes shk{25%{transform:translateX(-5px)}50%{transform:translateX(5px)}75%{transform:translateX(-3px)}}
 
-@media (max-width:560px){
-  .board{--tile-w:96px; --tile-h:70px}
-  .nextslot{display:none}
-  .fighter .fd{display:none}
-}
+@media (max-width:560px){ .nextslot{display:none} .fighter .fd{display:none} }
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms !important; animation-iteration-count:1 !important;
     transition-duration:.01ms !important}
 }
 </style>
+
 </head>
 <body>
 <div id="app">
@@ -548,42 +520,35 @@ button{font:inherit; color:inherit; cursor:pointer}
   <section class="screen off" id="battle">
     <div class="bhud">
       <div class="fighter" id="foe-plate"></div>
-      <div class="lifebar"><span class="meter"><i id="foe-life-bar"></i></span><span class="n" id="foe-life">34</span></div>
-      <div class="roundchip" id="roundchip">Round 1</div>
+      <div class="wallpips foe" id="foe-walls"></div>
+      <div class="clock" id="clock">2:30</div>
     </div>
 
-    <div class="arenawrap" id="arenawrap">
-      <div class="arena">
-        <div class="board" id="board">
-          <div class="castle foe"><span class="keep"><span class="kico">🏰</span><span class="knum" id="keep-foe">34</span></span></div>
-          <div class="side" id="side-foe"></div>
-          <div class="river" id="river"></div>
-          <div class="side" id="side-you"></div>
-          <div class="castle you"><span class="keep"><span class="kico">🏰</span><span class="knum" id="keep-you">34</span></span></div>
-        </div>
-      </div>
-      <div class="panel side-pop off hidden" id="logpop">
-        <h4>BMO is keeping score <button type="button" data-act="closelog">✕</button></h4>
+    <div class="fieldwrap" id="fieldwrap">
+      <div class="field" id="field"><div class="ground" id="ground"></div></div>
+      <div class="panel side-pop hidden" id="logpop">
+        <h4>BMO is calling it <button type="button" data-act="closelog">✕</button></h4>
         <div class="logfeed" id="logfeed"></div>
       </div>
     </div>
 
-    <div class="bhud bottom">
+    <div class="bhud">
       <div class="fighter" id="you-plate"></div>
-      <div class="lifebar"><span class="meter"><i id="you-life-bar"></i></span><span class="n" id="you-life">34</span></div>
-      <div class="actrow" style="margin-left:auto">
+      <div class="wallpips" id="you-walls"></div>
+      <div class="actrow" style="margin-left:auto; display:flex; gap:6px">
+        <button class="cbtn sm" id="btn-floop" type="button">Floop a patch · 2</button>
         <button class="cbtn blue sm" id="btn-log" type="button">Log</button>
         <button class="cbtn blue sm" id="btn-rules2" type="button">?</button>
         <button class="cbtn blue sm" id="btn-quit" type="button">Forfeit</button>
       </div>
     </div>
+
+    <div id="hint" class="off"></div>
     <div class="juicewrap">
       <span class="juicenum" id="juicenum">0</span>
       <span class="juicebar" id="juicebar"></span>
-      <button class="cbtn sm" id="btn-floop-tile" type="button">Floop a tile · 2</button>
-      <button class="cbtn" id="btn-end" type="button">End turn</button>
     </div>
-    <div class="handdock">
+    <div class="dock">
       <div class="nextslot"><span class="lab">Next</span><div id="nextcard"></div></div>
       <div class="handcards" id="handcards"></div>
     </div>
@@ -596,168 +561,199 @@ button{font:inherit; color:inherit; cursor:pointer}
 <script>
 "use strict";
 /* =====================================================================
-   BIOMES - six terrains. A tile blesses whoever stands on it; a card
-   played on its own home biome costs 1 less and comes in stronger.
+   THE ARENA - world units are pixels on the un-scaled ground plane
+   ===================================================================== */
+const AW = 600, AH = 980;
+const RIVER_Y = 490, RIVER_H = 46;
+const LANEX = [100, 300, 500], BRIDGE_W = 80;
+const WALL_Y = {foe:154, you:826}, KEEP_Y = {foe:64, you:916};
+const MATCH_TIME = 150, OT_TIME = 60, X2_AT = 90;
+const JUICE_MAX = 10, JUICE_RATE = 2.6;
+const HAND_SIZE = 4, DECK_SIZE = 12;
+
+/* =====================================================================
+   BIOMES - the ground is patched into 3x3 per side. Whatever stands on a
+   patch takes its blessing; a card deployed onto its own biome is cheaper
+   and comes in stronger. Floop a patch to retill it.
    ===================================================================== */
 const BIO = {
-  corn:  {name:"Cornfields",    icon:"\u{1F33D}", buff:"+1 ATK",       color:"#E9C55C",
-          note:"Creatures here get +1 ATK."},
-  blue:  {name:"Blue Plains",   icon:"\u{1F4A7}", buff:"+2 HP",        color:"#8ECDE8",
-          note:"Creatures here get +2 max HP."},
-  nice:  {name:"Nice Lands",    icon:"\u{1F338}", buff:"Heal 1/turn",  color:"#F2A8C4",
-          note:"Creatures here heal 1 at the start of your turn."},
-  sandy: {name:"SandyLands",    icon:"\u{1F3DC}", buff:"Rush",         color:"#E5C89A",
-          note:"Creatures here can attack the turn they land."},
-  swamp: {name:"Useless Swamp", icon:"\u{1FAB5}", buff:"Spell-proof",  color:"#93A97C",
-          note:"No stats at all. But nobody aims a spell at the swamp, so creatures here can't be targeted by enemy spells."},
-  rain:  {name:"Rainbow",       icon:"\u{1F308}", buff:"+1/+1, any home", color:"#C9A8E8",
-          note:"+1/+1, and it counts as every card's home biome."},
+  corn:  {name:"Cornfields",    icon:"\u{1F33D}", buff:"+20% attack",  color:"#D9B54C",
+          note:"Creatures standing here hit 20% harder."},
+  blue:  {name:"Blue Plains",   icon:"\u{1F4A7}", buff:"+25% health",  color:"#7FBEDC",
+          note:"Creatures deployed here arrive with 25% more health."},
+  nice:  {name:"Nice Lands",    icon:"\u{1F338}", buff:"regenerates",  color:"#E39AB8",
+          note:"Creatures standing here heal 2% of their health a second."},
+  sandy: {name:"SandyLands",    icon:"\u{1F3DC}", buff:"+30% speed",   color:"#D9BC8C",
+          note:"Creatures standing here move 30% faster."},
+  swamp: {name:"Useless Swamp", icon:"\u{1FAB5}", buff:"spell-proof",  color:"#879C70",
+          note:"No stats at all. But nobody aims a spell at the swamp — creatures here ignore enemy spells."},
+  rain:  {name:"Rainbow",       icon:"\u{1F308}", buff:"+15% all, any home", color:"#BB9ADD",
+          note:"+15% health and attack, and it counts as every card's home biome."},
 };
 const BIO_KEYS = Object.keys(BIO);
 
 /* =====================================================================
+   BODY PLANS - every creature is built from boxes, so they are original
+   blocky puppets rather than pictures. Dimensions are w / d / h.
+   ===================================================================== */
+const PLAN = {
+  brute:   {sh:17, torso:[39,28,30], head:[28,22,22], legs:[12,12,13,2],  arms:true},
+  scamp:   {sh:13, torso:[26,22,17], head:[30,25,23], legs:[9,9,9,2]},
+  lanky:   {sh:12, torso:[22,19,36], head:[22,19,19], legs:[9,9,19,2], arms:true},
+  crawler: {sh:19, torso:[52,25,17], head:[23,20,17], legs:[9,9,12,4]},
+  hulk:    {sh:22, torso:[52,35,41], head:[32,26,25], legs:[14,14,14,2], arms:true},
+  tower:   {sh:20, torso:[44,38,46], head:[32,29,19], legs:null},
+  bunker:  {sh:22, torso:[55,44,29], head:[38,32,14], legs:null},
+};
+
+/* =====================================================================
    CARDS - 36. Names in quotes are cards actually named on screen in
    Adventure Time S4E14; the rest are built in the same spirit.
-   kind: unit | structure | spell      tags: rush ranged reap spellproof
-   dwell: which structures will take this creature in
-   houses: which dwellers a structure accepts
+   rt: hp, dmg per hit, hit interval (s), speed (px/s), range (px),
+       n (how many spawn), splash radius, targets
    ===================================================================== */
+const C = (o) => o;
 const CARDS = {
   /* ---------------------------------------------------------- CORNFIELDS */
-  husker:{name:"Husker Knights", kind:"unit", cost:4, atk:2, hp:5, bio:"corn", art:"\u{1F33D}",
-    tags:["corn"], text:"+1 ATK for each Cornfields tile you control.", special:"husker",
-    flavor:"“Husker Knights, attack!”"},
-  maize:{name:"Immortal Maize Walker", kind:"unit", cost:8, atk:6, hp:7, bio:"corn", art:"\u{1F3DA}",
-    tags:["corn","spellproof"], text:"Cannot be damaged or targeted by spells.",
-    flavor:"Jake's closer. Of course it's corn."},
-  sprout:{name:"Corn Sprout", kind:"unit", cost:1, atk:1, hp:3, bio:"corn", art:"\u{1F331}",
-    tags:["corn"], dwell:["corn","any"], text:"A cob with ambitions. Can move into corn structures.",
-    flavor:"Give it a season."},
-  squatch:{name:"Cornsquatch", kind:"unit", cost:5, atk:5, hp:4, bio:"corn", art:"\u{1F43B}",
-    tags:["corn","rush"], text:"Rush.", flavor:"Six foot four of creamed style."},
-  silo:{name:"Silo of Truth", kind:"structure", cost:4, atk:0, hp:8, bio:"corn", art:"\u{1F3ED}",
-    houses:["corn"], trigger:"silo", text:"Start of your turn: gain 2 juice. Houses a corn creature — it heals 2 a turn and the silo pays 1 more.",
-    flavor:"The truth is corn."},
-  kernel:{name:"Kernel Storm", kind:"spell", cost:3, bio:"corn", art:"\u{1F32C}",
-    spell:{id:"front", n:2}, text:"Deal 2 damage to the front creature in every enemy lane.",
-    flavor:"Weaponised popcorn. It's exactly as bad as it sounds."},
+  husker:C({name:"Husker Knights", kind:"unit", cost:4, bio:"corn", art:"\u{1F33D}", plan:"brute", col:"#E3C25A",
+    rt:{hp:620, dmg:105, hit:1.2, spd:46, rng:26, n:2}, text:"Two of them, shoulder to shoulder.",
+    flavor:"“Husker Knights, attack!”"}),
+  maize:C({name:"Immortal Maize Walker", kind:"unit", cost:8, bio:"corn", art:"\u{1F3DA}", plan:"hulk", col:"#C9A83E",
+    rt:{hp:2600, dmg:330, hit:1.6, spd:32, rng:30, n:1, spellproof:true},
+    text:"Enormous, slow, and spells slide right off it.", flavor:"Jake's closer. Of course it's corn."}),
+  sprout:C({name:"Corn Sprout", kind:"unit", cost:1, bio:"corn", art:"\u{1F331}", plan:"scamp", col:"#8FCF6A",
+    rt:{hp:190, dmg:34, hit:1.1, spd:56, rng:24, n:3, dwell:"corn"},
+    text:"Three of them. They are trying their best.", flavor:"Give it a season."}),
+  squatch:C({name:"Cornsquatch", kind:"unit", cost:5, bio:"corn", art:"\u{1F43B}", plan:"brute", col:"#B9823F",
+    rt:{hp:1150, dmg:190, hit:1.3, spd:64, rng:26, n:1}, text:"Fast for its size. Unreasonably so.",
+    flavor:"Six foot four of creamed style."}),
+  silo:C({name:"Silo of Truth", kind:"structure", cost:4, bio:"corn", art:"\u{1F3ED}", plan:"tower", col:"#C9A055",
+    rt:{hp:900, life:40, houses:["corn"], juice:true},
+    text:"Pays you juice while it stands. A corn creature will move in and speed it up.",
+    flavor:"The truth is corn."}),
+  kernel:C({name:"Kernel Storm", kind:"spell", cost:3, bio:"corn", art:"\u{1F32C}",
+    rt:{spell:"blast", dmg:210, radius:95}, text:"A burst of scalding kernels over one spot.",
+    flavor:"Weaponised popcorn. Exactly as bad as it sounds."}),
 
   /* --------------------------------------------------------- BLUE PLAINS */
-  cooldog:{name:"Cool Dog", kind:"unit", cost:3, atk:3, hp:3, bio:"blue", art:"\u{1F576}",
-    tags:["rush"], dwell:["any"], floop:{id:"move", label:"Barrel roll", target:"myEmptyTile"},
-    text:"Rush. Floop: barrel roll to any empty tile on your side.", flavor:"Cool Dog, doin' a barrel roll."},
-  scholar:{name:"Ancient Scholar", kind:"unit", cost:3, atk:1, hp:5, bio:"blue", art:"\u{1F9D9}",
-    tags:["scholar"], dwell:["scholar","any"], floop:{id:"juice", n:2, label:"Consult the notes"},
-    text:"Floop: gain 2 juice. Studies in the Schoolhouse.", flavor:"Two hours to explain the rules. Two."},
-  school:{name:"The Schoolhouse", kind:"structure", cost:4, atk:0, hp:7, bio:"blue", art:"\u{1F3EB}",
-    houses:["scholar"], trigger:"school",
-    text:"Houses a scholar. Each turn it studies: you gain 3 juice and it permanently grows +1/+1, up to +4/+4.",
-    flavor:"Finn sent the Ancient Scholar here to study. It worked."},
-  rider:{name:"Blue Plains Rider", kind:"unit", cost:4, atk:3, hp:4, bio:"blue", art:"\u{1F3C7}",
-    tags:["ranged"], dwell:["ranged","any"], text:"Ranged — attacks from any row and never takes a counter-hit.",
-    flavor:"Rides the long grass all day, hits you from it."},
-  teleport:{name:"Teleport", kind:"spell", cost:2, bio:"blue", art:"\u{1F300}",
-    spell:{id:"teleport", target:"myUnit"}, text:"Move one of your creatures to any empty tile on your side. It may still attack.",
-    flavor:"Blorp."},
-  blizzard:{name:"Blue Plains Blizzard", kind:"spell", cost:4, bio:"blue", art:"\u{2744}",
-    spell:{id:"lane", n:3, target:"enemyLane"}, text:"Deal 3 damage to every enemy creature in one lane.",
-    flavor:"The plains do not care for you."},
+  cooldog:C({name:"Cool Dog", kind:"unit", cost:3, bio:"blue", art:"\u{1F576}", plan:"crawler", col:"#6FB6E0",
+    rt:{hp:420, dmg:88, hit:1.0, spd:84, rng:24, n:1}, text:"Very fast. Does not stop.",
+    flavor:"Cool Dog, doin' a barrel roll."}),
+  scholar:C({name:"Ancient Scholar", kind:"unit", cost:3, bio:"blue", art:"\u{1F9D9}", plan:"lanky", col:"#7E8FD6",
+    rt:{hp:480, dmg:70, hit:1.4, spd:40, rng:120, n:1, dwell:"scholar"},
+    text:"Attacks at range. Walks into a Schoolhouse if one is near, and studies.",
+    flavor:"Two hours to explain the rules. Two."}),
+  school:C({name:"The Schoolhouse", kind:"structure", cost:4, bio:"blue", art:"\u{1F3EB}", plan:"bunker", col:"#8DA4DE",
+    rt:{hp:1000, life:50, houses:["scholar"], study:true},
+    text:"A scholar inside studies: it grows steadily stronger, then comes back out.",
+    flavor:"Finn sent the Ancient Scholar here to study. It worked."}),
+  rider:C({name:"Blue Plains Rider", kind:"unit", cost:4, bio:"blue", art:"\u{1F3C7}", plan:"crawler", col:"#5FA0CE",
+    rt:{hp:560, dmg:120, hit:1.2, spd:70, rng:100, n:1, dwell:"ranged"},
+    text:"Fast, and hits from a distance.", flavor:"Rides the long grass all day, hits you from it."}),
+  teleport:C({name:"Teleport", kind:"spell", cost:2, bio:"blue", art:"\u{1F300}",
+    rt:{spell:"blink", radius:110, dist:190}, text:"Your creatures in the area blorp forward, straight past the river.",
+    flavor:"Blorp."}),
+  blizzard:C({name:"Blue Plains Blizzard", kind:"spell", cost:4, bio:"blue", art:"\u{2744}",
+    rt:{spell:"slow", radius:130, dur:5, dmg:90}, text:"Chills everything in the area: damage, and half speed for 5 seconds.",
+    flavor:"The plains do not care for you."}),
 
   /* ---------------------------------------------------------- NICE LANDS */
-  pig:{name:"The Pig", kind:"unit", cost:2, atk:0, hp:6, bio:"nice", art:"\u{1F437}",
-    dwell:["any"], floop:{id:"heal", n:3, label:"Floop the Pig"},
-    text:"Floop: restore 3 life. Naps in the Cave of Solitude.", flavor:"FLOOP THE PIG!"},
-  niceking:{name:"Nice King", kind:"unit", cost:5, atk:3, hp:7, bio:"nice", art:"\u{1F934}",
-    floop:{id:"healall", n:2, label:"Be nice about it"}, text:"Floop: heal every creature you control 2.",
-    flavor:"He is nice. That is the whole of his deal."},
-  tower:{name:"Spirit Tower", kind:"structure", cost:5, atk:0, hp:9, bio:"nice", art:"\u{1F5FC}",
-    houses:["ranged"], trigger:"tower",
-    text:"Houses a ranged creature, which shoots from inside at +3 ATK and cannot be touched.",
-    flavor:"It hums. Politely."},
-  trunks:{name:"Tree Trunks", kind:"unit", cost:2, atk:1, hp:4, bio:"nice", art:"\u{1F418}",
-    dwell:["any"], floop:{id:"mend", label:"Bake a pie", target:"myUnit"},
-    text:"Floop: heal one of your creatures back to full.", flavor:"Oh my goodness."},
-  pancakes:{name:"Bacon Pancakes", kind:"spell", cost:2, bio:"nice", art:"\u{1F95E}",
-    spell:{id:"heal", n:6}, text:"Restore 6 life.", flavor:"♪ takin' a bacon and I put it in a pancake ♪"},
-  blessing:{name:"Fluffy Blessing", kind:"spell", cost:3, bio:"nice", art:"\u{2728}",
-    spell:{id:"buff", n:2, target:"myUnit"}, text:"A creature you control permanently gains +2/+2.",
-    flavor:"Fluffy people are generous people."},
+  pig:C({name:"The Pig", kind:"unit", cost:2, bio:"nice", art:"\u{1F437}", plan:"scamp", col:"#F0A8C0",
+    rt:{hp:760, dmg:0, hit:1, spd:44, rng:24, n:1, dwell:"any", taunt:true},
+    text:"Cannot attack anything. Soaks an enormous amount and naps in the Cave.",
+    flavor:"FLOOP THE PIG!"}),
+  niceking:C({name:"Nice King", kind:"unit", cost:5, bio:"nice", art:"\u{1F934}", plan:"lanky", col:"#E9C6E6",
+    rt:{hp:900, dmg:60, hit:1.5, spd:42, rng:90, n:1, heal:34},
+    text:"Mends nearby friends while he walks.", flavor:"He is nice. That is the whole of his deal."}),
+  tower:C({name:"Spirit Tower", kind:"structure", cost:5, bio:"nice", art:"\u{1F5FC}", plan:"tower", col:"#C9A8D8",
+    rt:{hp:1150, life:45, dmg:110, hit:1.1, rng:180, houses:["ranged"]},
+    text:"Shoots on its own. A ranged creature inside shoots too, from safety, and harder.",
+    flavor:"It hums. Politely."}),
+  trunks:C({name:"Tree Trunks", kind:"unit", cost:2, bio:"nice", art:"\u{1F418}", plan:"scamp", col:"#C79BD6",
+    rt:{hp:300, dmg:0, hit:1, spd:48, rng:24, n:1, heal:56, dwell:"any"},
+    text:"Bakes for the troops — a steady heal on everything around her.", flavor:"Oh my goodness."}),
+  pancakes:C({name:"Bacon Pancakes", kind:"spell", cost:2, bio:"nice", art:"\u{1F95E}",
+    rt:{spell:"mend", heal:320, radius:130}, text:"Heals every creature of yours in the area.",
+    flavor:"♪ takin' a bacon and I put it in a pancake ♪"}),
+  blessing:C({name:"Fluffy Blessing", kind:"spell", cost:3, bio:"nice", art:"\u{2728}",
+    rt:{spell:"buff", radius:120, dur:9, mult:1.4}, text:"Your creatures in the area hit 40% harder for 9 seconds.",
+    flavor:"Fluffy people are generous people."}),
 
   /* ---------------------------------------------------------- SANDYLANDS */
-  archer:{name:"Summon Archer Dan", kind:"unit", cost:4, atk:2, hp:4, bio:"sandy", art:"\u{1F3F9}",
-    tags:["ranged"], dwell:["ranged","any"], floop:{id:"snipe", n:2, label:"Loose an arrow", target:"enemyUnit"},
-    text:"Ranged. Floop: deal 2 damage to any enemy creature.", flavor:"Dan does not miss. Dan also does not blink."},
-  wyrm:{name:"Sand Wyrm", kind:"unit", cost:6, atk:6, hp:6, bio:"sandy", art:"\u{1F40D}",
-    tags:["rush"], text:"Rush.", flavor:"It was under the mat the whole time."},
-  baldman:{name:"Wandering Bald Man", kind:"unit", cost:1, atk:2, hp:2, bio:"sandy", art:"\u{1F468}",
-    tags:["rush"], special:"wander", text:"Rush. Wanders off at the end of your next turn.",
-    flavor:"He has somewhere to be. He won't say where."},
-  sandstorm:{name:"Sandstorm", kind:"spell", cost:3, bio:"sandy", art:"\u{1F32A}",
-    spell:{id:"sweep", n:2}, text:"Deal 2 damage to every enemy creature.", flavor:"Grit in absolutely everything."},
-  banana:{name:"Banana Guard", kind:"unit", cost:2, atk:1, hp:6, bio:"sandy", art:"\u{1F34C}",
-    dwell:["any"], text:"A wall with a helmet on.", flavor:"Everything is fine here, sir."},
-  goose:{name:"Choose Goose", kind:"unit", cost:3, atk:2, hp:3, bio:"sandy", art:"\u{1F9A2}",
-    dwell:["any"], floop:{id:"cycle", label:"Make a deal"},
-    text:"Floop: send your next card to the back of the deck and pull the one behind it.",
-    flavor:"“Choose, Goose!” is a thing he says about himself."},
+  archer:C({name:"Summon Archer Dan", kind:"unit", cost:4, bio:"sandy", art:"\u{1F3F9}", plan:"lanky", col:"#D6B173",
+    rt:{hp:340, dmg:96, hit:0.9, spd:44, rng:165, n:2, dwell:"ranged"},
+    text:"A pair of them. Longest reach on the mat.", flavor:"Dan does not miss. Dan also does not blink."}),
+  wyrm:C({name:"Sand Wyrm", kind:"unit", cost:6, bio:"sandy", art:"\u{1F40D}", plan:"crawler", col:"#C9A76B",
+    rt:{hp:1500, dmg:250, hit:1.4, spd:50, rng:28, n:1, splash:60},
+    text:"Every bite catches everything nearby.", flavor:"It was under the mat the whole time."}),
+  baldman:C({name:"Wandering Bald Man", kind:"unit", cost:1, bio:"sandy", art:"\u{1F468}", plan:"scamp", col:"#E0C9A4",
+    rt:{hp:210, dmg:62, hit:1.0, spd:78, rng:24, n:1, ttl:22},
+    text:"Quick, cheap, and wanders off after 22 seconds.", flavor:"He has somewhere to be. He won't say where."}),
+  sandstorm:C({name:"Sandstorm", kind:"spell", cost:3, bio:"sandy", art:"\u{1F32A}",
+    rt:{spell:"blast", dmg:120, radius:175}, text:"A wide, thin sheet of grit. Clears out swarms.",
+    flavor:"Grit in absolutely everything."}),
+  banana:C({name:"Banana Guard", kind:"unit", cost:2, bio:"sandy", art:"\u{1F34C}", plan:"brute", col:"#E8D257",
+    rt:{hp:700, dmg:52, hit:1.3, spd:44, rng:26, n:1, dwell:"any"},
+    text:"A wall with a helmet on.", flavor:"Everything is fine here, sir."}),
+  goose:C({name:"Choose Goose", kind:"unit", cost:3, bio:"sandy", art:"\u{1F9A2}", plan:"lanky", col:"#DCCFA8",
+    rt:{hp:430, dmg:78, hit:1.1, spd:52, rng:26, n:1, onDeath:"juice2", dwell:"any"},
+    text:"When he goes down he leaves you 2 juice. A deal is a deal.",
+    flavor:"“Choose, Goose!” is a thing he says about himself."}),
 
   /* -------------------------------------------------------- USELESS SWAMP */
-  reaper:{name:"The Field Reaper", kind:"unit", cost:6, atk:4, hp:6, bio:"swamp", art:"\u{1F480}",
-    tags:["reap"], text:"Any creature it damages is destroyed.",
-    flavor:"He reaps the field. It's right there in the name."},
-  cave:{name:"The Cave of Solitude", kind:"structure", cost:4, atk:0, hp:10, bio:"swamp", art:"\u{1F573}",
-    houses:["any"], trigger:"cave",
-    text:"Houses any creature. Whatever naps inside is invulnerable to all harm and heals 2 a turn.",
-    flavor:"Finn put the Pig in here and Jake simply could not reach it."},
-  lurker:{name:"Swamp Lurker", kind:"unit", cost:3, atk:3, hp:3, bio:"swamp", art:"\u{1F438}",
-    tags:["ranged"], dwell:["ranged","any"], text:"Ranged.", flavor:"Mostly eyes."},
-  nightmares:{name:"Field of Nightmares", kind:"spell", cost:4, bio:"swamp", art:"\u{1F311}",
-    spell:{id:"wither", n:2}, text:"Enemy creatures get −2 ATK until the end of their next turn.",
-    flavor:"Everyone dreams of the same corn."},
-  bloodstorm:{name:"Cerebral Blood Storm", kind:"spell", cost:6, bio:"swamp", art:"\u{1F32A}",
-    spell:{id:"sweep", n:4}, text:"Deal 4 damage to every enemy creature.",
-    flavor:"Sounds worse than it is. It is quite bad."},
-  mushroom:{name:"Marauding Mushroom", kind:"unit", cost:2, atk:2, hp:3, bio:"swamp", art:"\u{1F344}",
-    special:"spores", text:"When it dies, deal 2 damage to the enemy creature across from it.",
-    flavor:"It has been maraudin' all day."},
+  reaper:C({name:"The Field Reaper", kind:"unit", cost:6, bio:"swamp", art:"\u{1F480}", plan:"lanky", col:"#7E8C6A",
+    rt:{hp:1250, dmg:400, hit:1.8, spd:44, rng:30, n:1},
+    text:"Hits like a falling tree, slowly.", flavor:"He reaps the field. It's right there in the name."}),
+  cave:C({name:"The Cave of Solitude", kind:"structure", cost:4, bio:"swamp", art:"\u{1F573}", plan:"bunker", col:"#6E7A5C",
+    rt:{hp:1500, life:55, houses:["any"], shelter:true},
+    text:"Whatever naps inside is safe from absolutely everything, and heals fast.",
+    flavor:"Finn put the Pig in here and Jake simply could not reach it."}),
+  lurker:C({name:"Swamp Lurker", kind:"unit", cost:3, bio:"swamp", art:"\u{1F438}", plan:"crawler", col:"#6F9464",
+    rt:{hp:450, dmg:90, hit:1.1, spd:46, rng:110, n:1, dwell:"ranged"},
+    text:"Sits back and spits.", flavor:"Mostly eyes."}),
+  nightmares:C({name:"Field of Nightmares", kind:"spell", cost:4, bio:"swamp", art:"\u{1F311}",
+    rt:{spell:"wither", radius:145, dur:8, mult:0.55}, text:"Enemy creatures in the area hit 45% weaker for 8 seconds.",
+    flavor:"Everyone dreams of the same corn."}),
+  bloodstorm:C({name:"Cerebral Blood Storm", kind:"spell", cost:6, bio:"swamp", art:"\u{1F32A}",
+    rt:{spell:"blast", dmg:480, radius:150}, text:"The big one. Deletes most of what it lands on.",
+    flavor:"Sounds worse than it is. It is quite bad."}),
+  mushroom:C({name:"Marauding Mushroom", kind:"unit", cost:2, bio:"swamp", art:"\u{1F344}", plan:"scamp", col:"#C2705E",
+    rt:{hp:260, dmg:60, hit:1.2, spd:54, rng:24, n:2, onDeath:"spores"},
+    text:"Two of them, and they burst when they go.", flavor:"It has been maraudin' all day."}),
 
   /* -------------------------------------------------------------- RAINBOW */
-  earlings:{name:"Legion of Earlings", kind:"unit", cost:4, atk:1, hp:3, bio:"rain", art:"\u{1F43D}",
-    special:"swarm", text:"Fills up to three of your empty tiles with 1/3 Earlings.",
-    flavor:"They're small. There are lots."},
-  owl:{name:"Cosmic Owl", kind:"unit", cost:7, atk:5, hp:7, bio:"rain", art:"\u{1F989}",
-    tags:["ranged"], text:"Ranged.", flavor:"If you dream about him, it's going to happen."},
-  reclaim:{name:"Reclaim Landscape", kind:"spell", cost:2, bio:"rain", art:"\u{1F5FA}",
-    spell:{id:"reclaim", n:2, target:"myTile"}, text:"Retill two of your tiles into any biomes you like.",
-    flavor:"Should've read the fine print, Finn."},
-  frenzy:{name:"Floop Frenzy", kind:"spell", cost:4, bio:"rain", art:"\u{1F3A0}",
-    spell:{id:"frenzy"}, text:"Floop every creature you control that has a Floop ability. They don't tap.",
-    flavor:"Floop. Floop. Floop floop floop."},
-  volcano:{name:"Volcano", kind:"spell", cost:5, bio:"rain", art:"\u{1F30B}",
-    spell:{id:"volcano", n:6, target:"enemyTile"},
-    text:"Deal 6 damage to one enemy tile — the creature on it, or their life if the whole lane is empty.",
-    flavor:"Weather report: bad."},
-  rainrider:{name:"Rainbow Rider", kind:"unit", cost:4, atk:2, hp:5, bio:"rain", art:"\u{1F984}",
-    tags:["ranged"], dwell:["ranged","any"], text:"Ranged.", flavor:"Hello there. Nice day for it."},
+  earlings:C({name:"Legion of Earlings", kind:"unit", cost:4, bio:"rain", art:"\u{1F43D}", plan:"scamp", col:"#C79AE0",
+    rt:{hp:130, dmg:44, hit:0.8, spd:70, rng:22, n:6},
+    text:"Six of them. They're small. There are lots.", flavor:"They're small. There are lots."}),
+  owl:C({name:"Cosmic Owl", kind:"unit", cost:7, bio:"rain", art:"\u{1F989}", plan:"hulk", col:"#9B86D8",
+    rt:{hp:1700, dmg:260, hit:1.3, spd:40, rng:140, n:1},
+    text:"Enormous reach, enormous everything.", flavor:"If you dream about him, it's going to happen."}),
+  reclaim:C({name:"Reclaim Landscape", kind:"spell", cost:2, bio:"rain", art:"\u{1F5FA}",
+    rt:{spell:"reclaim"}, text:"Retill one of your patches into any biome you like, free of the usual cost.",
+    flavor:"Should've read the fine print, Finn."}),
+  frenzy:C({name:"Floop Frenzy", kind:"spell", cost:4, bio:"rain", art:"\u{1F3A0}",
+    rt:{spell:"haste", radius:130, dur:8, mult:1.7}, text:"Your creatures in the area attack and move far faster for 8 seconds.",
+    flavor:"Floop. Floop. Floop floop floop."}),
+  volcano:C({name:"Volcano", kind:"spell", cost:5, bio:"rain", art:"\u{1F30B}",
+    rt:{spell:"blast", dmg:700, radius:80, structures:1.5},
+    text:"A tight, enormous hit. Extra hard on walls.", flavor:"Weather report: bad."}),
+  rainrider:C({name:"Rainbow Rider", kind:"unit", cost:4, bio:"rain", art:"\u{1F984}", plan:"crawler", col:"#B98FD8",
+    rt:{hp:620, dmg:98, hit:1.0, spd:62, rng:105, n:1, dwell:"ranged"},
+    text:"Quick and long-legged.", flavor:"Hello there. Nice day for it."}),
 };
 const CARD_KEYS = Object.keys(CARDS);
-</script>
-<script>
-"use strict";
-/* =====================================================================
-   DECKS / ARENAS / OPPONENTS
-   ===================================================================== */
+
 const DECKS = {
   cornlord:{name:"Cornlord", blurb:"Corn, a silo full of corn, and an eight-cost apology.",
     cards:["husker","maize","silo","sprout","squatch","kernel","scholar","pig","volcano","earlings","teleport","sandstorm"]},
   blitz:{name:"Blue Plains Blitz", blurb:"Cheap and fast, and gone before the Maize Walker gets out of bed.",
     cards:["cooldog","baldman","banana","rider","archer","teleport","sandstorm","pancakes","goose","sprout","lurker","mushroom"]},
   swampdoc:{name:"Swamp Doctor", blurb:"Stall in the swamp, retill the mat, let the Reaper do the talking.",
-    cards:["reaper","cave","lurker","nightmares","bloodstorm","mushroom","pig","tower","scholar","reclaim","blizzard","banana"]},
+    cards:["reaper","cave","lurker","bloodstorm","mushroom","pig","tower","scholar","blizzard","banana","wyrm","squatch"]},
+  studyhall:{name:"Study Hall", blurb:"Everybody goes indoors. The Scholar comes back out enormous.",
+    cards:["scholar","school","tower","archer","rider","lurker","cooldog","husker","squatch","frenzy","pancakes","sprout"]},
   spare:{name:"Jake's Spare Deck", blurb:"Every expensive weirdo Jake had lying around. Good luck.",
     cards:["maize","owl","wyrm","reaper","niceking","squatch","volcano","bloodstorm","pig","sprout","banana","pancakes"]},
-  studyhall:{name:"Study Hall", blurb:"Everybody goes indoors. The Scholar comes out enormous.",
-    cards:["scholar","school","tower","archer","rider","lurker","cooldog","husker","squatch","frenzy","pancakes","sprout"]},
 };
 const ARENAS = [
   {t:0,    name:"Treehouse Floor", ico:"\u{1F333}"},
@@ -769,19 +765,20 @@ const ARENAS = [
 ];
 const FOES = {
   finn:{name:"Finn", art:"\u{1F9E2}", deck:"spare", skill:"easy", tier:0,
-    taunts:["Mathematical!","I have no idea what I'm doing!","Jake gave me this deck. I think it's bad.","Is that good? That felt good."]},
+    taunts:["Mathematical!","I have no idea what I'm doing!","Jake gave me this deck. I think it's bad."]},
   jake:{name:"Jake", art:"\u{1F436}", deck:"cornlord", skill:"normal", tier:0,
-    taunts:["Your swamp is looking pretty useless, buddy.","Cornlords never lose.","Husker Knights, attack!","I'm not even trying yet."]},
+    taunts:["Your swamp is looking pretty useless, buddy.","Cornlords never lose.","Husker Knights, attack!"]},
   bmo:{name:"BMO", art:"\u{1F4DF}", deck:"studyhall", skill:"normal", tier:2,
-    taunts:["BMO calculated this eleven turns ago.","Who wants to play video games? Oh — we are.","Floop. Floop. Floop."]},
+    taunts:["BMO calculated this eleven turns ago.","Who wants to play video games? Oh — we are."]},
   marcy:{name:"Marceline", art:"\u{1F987}", deck:"swampdoc", skill:"hard", tier:3,
-    taunts:["I'm a thousand years old, dude.","Nice swamp. Shame about the creature in it.","This is my jam."]},
+    taunts:["I'm a thousand years old, dude.","Nice swamp. Shame about the creature in it."]},
   pb:{name:"Bubblegum", art:"\u{1F451}", deck:"blitz", skill:"hard", tier:4,
-    taunts:["I did the math on this deck. Twice.","Science!","You are a variable I have already solved."]},
+    taunts:["I did the math on this deck. Twice.","Science!"]},
 };
-const START_LIFE = 34, HAND_SIZE = 5, DECK_SIZE = 12, JUICE_CAP = 12,
-      OVERTIME_TURN = 11, CALL_TURN = 18, TILE_FLOOP_COST = 2;
+</script>
 
+<script>
+"use strict";
 /* =====================================================================
    SAVE
    ===================================================================== */
@@ -824,831 +821,552 @@ function lvlBonus(id, lvl){
   return b;
 }
 const UPGRADE = {2:{copies:3, gold:150}, 3:{copies:8, gold:500}};
-
-/* =====================================================================
-   MATCH STATE
-   ===================================================================== */
-let S = null, uidSeq = 1;
-const seenUnits = new Set();
-const $ = (id) => document.getElementById(id);
-function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; } return a; }
-const lane = (i) => i % 3, row = (i) => (i / 3) | 0, idx = (r, l) => r * 3 + l;
-
-function rollTiles(){
-  const t = [];
-  for(let i=0;i<9;i++) t.push({bio: BIO_KEYS[(Math.random() * BIO_KEYS.length) | 0]});
-  return t;
-}
-function makeSide(side, who, deckIds, levels){
-  const cycle = shuffle(deckIds.slice());
-  return {
-    side, name:who.name, art:who.art, skill:who.skill || null, deckName:who.deckName || "",
-    taunts:who.taunts || null, levels:levels || {},
-    life:START_LIFE, juice:0, turns:0, tileFlooped:false,
-    tiles:rollTiles(), units:new Array(9).fill(null),
-    hand:cycle.slice(0, HAND_SIZE), next:cycle[HAND_SIZE], rest:cycle.slice(HAND_SIZE + 1),
-  };
-}
-function newMatch(foeKey){
-  const foe = FOES[foeKey];
-  const ai = arenaIndex(SAVE.trophies);
-  const aiLvl = Math.min(3, 1 + Math.floor(ai / 2));
-  const foeLevels = {};
-  DECKS[foe.deck].cards.forEach(id => foeLevels[id] = aiLvl);
-  const myLevels = {};
-  SAVE.deck.forEach(id => myLevels[id] = cardLevel(id));
-  seenUnits.clear(); aiActions = 0;
-  S = {round:1, active:"you", over:null, pending:null, focus:null, log:[], foeKey};
-  S.you = makeSide("you", {name:SAVE.name, art:"\u{1F0CF}", deckName:"Your deck"}, SAVE.deck, myLevels);
-  S.foe = makeSide("foe", Object.assign({deckName:DECKS[foe.deck].name}, foe), DECKS[foe.deck].cards, foeLevels);
-  logLine("bmo", "BMO: Card Wars! " + SAVE.name + " versus " + foe.name + ". Thirty-four life, three bridges. Begin!");
-  beginTurn("you");
-}
-const opp = (side) => side === "you" ? S.foe : S.you;
-const isOvertime = () => S.round >= OVERTIME_TURN;
-function juiceGain(){ return isOvertime() ? 12 : Math.min(3 + S.round, 8); }
-function juiceCap(){ return isOvertime() ? 16 : JUICE_CAP; }
-
-/* =====================================================================
-   STAT MATH - biome blessings are computed live so units can move
-   ===================================================================== */
-function base(u){ return CARDS[u.id]; }
-function bioAt(P, i){ return i >= 0 ? P.tiles[i].bio : null; }
-function unitTile(P, u){ return P.units.indexOf(u); }
-function maxHpOf(P, u, i){
-  const d = base(u);
-  let h = d.hp + (u.bonusHp || 0);
-  const b = i >= 0 ? P.tiles[i].bio : null;
-  if(b === "blue") h += 2;
-  if(b === "rain") h += 1;
-  return Math.max(1, h);
-}
-function hpOf(P, u, i){ return maxHpOf(P, u, i) - (u.dmg || 0); }
-function atkOf(P, u, i){
-  const d = base(u);
-  if(d.kind === "structure") return 0;
-  let a = d.atk + (u.bonusAtk || 0);
-  const b = i >= 0 ? P.tiles[i].bio : null;
-  if(b === "corn") a += 1;
-  if(b === "rain") a += 1;
-  if(d.special === "husker") a += P.tiles.filter(t => t.bio === "corn").length;
-  return Math.max(0, a - (u.wither || 0));
-}
-const atkAt = (P, i) => P.units[i] ? atkOf(P, P.units[i], i) : 0;
-const hpAt  = (P, i) => P.units[i] ? hpOf(P, P.units[i], i) : 0;
-function isRanged(u){ return (base(u).tags || []).includes("ranged"); }
-function homeTileFor(P, def, i){ const b = P.tiles[i].bio; return b === def.bio || b === "rain"; }
-function controlsBiome(P, bio){ return P.tiles.some(t => t.bio === bio || t.bio === "rain"); }
-function costOf(P, id, i){
-  const d = CARDS[id];
-  let c = d.cost;
-  if(d.kind === "spell"){ if(controlsBiome(P, d.bio)) c -= 1; }
-  else if(i !== undefined && i >= 0 && homeTileFor(P, d, i)) c -= 1;
-  return Math.max(1, c);
-}
-function bestCost(P, id){
-  const d = CARDS[id];
-  if(d.kind === "spell") return costOf(P, id);
-  let best = d.cost;
-  for(let i=0;i<9;i++) if(!P.units[i]) best = Math.min(best, costOf(P, id, i));
-  return best;
-}
-function spellPower(P, def, n){ return n + (controlsBiome(P, def.bio) ? 1 : 0); }
-/* the frontmost tile index holding anything in a lane (row 0 is the river edge) */
-function frontIdx(P, l){ for(let r=0;r<3;r++){ const i = idx(r,l); if(P.units[i]) return i; } return -1; }
-function spellSafe(P, i){
-  const u = P.units[i];
-  if(!u) return false;
-  if(P.tiles[i].bio === "swamp") return true;
-  return (base(u).tags || []).includes("spellproof");
-}
-function canFloopUnit(P, i){
-  const u = P.units[i];
-  return !!(u && base(u).floop && !u.tapped && !u.flooped);
-}
-function houseTakes(structDef, u){
-  const h = structDef.houses || [];
-  if(h.includes("any")) return true;
-  const tags = base(u).tags || [];
-  return h.some(t => tags.includes(t));
-}
-
-function spawn(P, i, id){
-  const d = CARDS[id];
-  const lv = P.levels[id] || 1, lb = lvlBonus(id, lv);
-  const u = {uid:uidSeq++, id, dmg:0, bonusAtk:lb.atk, bonusHp:lb.hp,
-    tapped:false, flooped:false, sick:d.kind !== "structure", wither:0, guest:null, study:0};
-  if(homeTileFor(P, d, i)){ u.bonusAtk += 1; u.bonusHp += 1; }
-  if(P.tiles[i].bio === "sandy" || (d.tags || []).includes("rush")) u.sick = false;
-  if(d.special === "wander") u.wander = 2;
-  P.units[i] = u;
-  return u;
-}
-const tileSel = (P, i) => "#tile-" + P.side + "-" + i;
-
-function damage(P, i, n, opts){
-  opts = opts || {};
-  const u = P.units[i];
-  if(!u || n <= 0) return 0;
-  const hp = hpOf(P, u, i);
-  u.dmg += n;
-  if(opts.reap) u.dmg = maxHpOf(P, u, i);
-  fx(tileSel(P, i), "-" + n, "dmg");
-  const over = Math.max(0, n - hp);
-  if(u.dmg >= maxHpOf(P, u, i)) kill(P, i);
-  return over;
-}
-function kill(P, i){
-  const u = P.units[i];
-  if(!u) return;
-  const d = base(u);
-  P.units[i] = null;
-  logLine("hit", d.name + " is destroyed.");
-  if(u.guest){                       // a collapsing structure turns its lodger out
-    const l = lane(i);
-    let out = -1;
-    for(let r=0;r<3;r++){ const k = idx(r,l); if(!P.units[k]){ out = k; break; } }
-    if(out >= 0){ P.units[out] = u.guest; u.guest.sick = true;
-      logLine("", base(u.guest).name + " is turned out of the wreckage."); }
-    else logLine("hit", base(u.guest).name + " goes down with it.");
-  }
-  if(d.special === "spores"){
-    const E = opp(P.side), t = frontIdx(E, lane(i));
-    if(t >= 0){ logLine("hit", "Spores burst over " + base(E.units[t]).name + "."); damage(E, t, 2); }
-  }
-}
-function hurtFace(P, n){
-  P.life = Math.max(0, P.life - n);
-  fx("#keep-" + P.side, "-" + n, "dmg");
-  shake();
-}
-function healFace(P, n){
-  const b = P.life;
-  P.life = Math.min(START_LIFE, P.life + n);
-  if(P.life > b) fx("#keep-" + P.side, "+" + (P.life - b), "heal");
-}
-function addJuice(P, n){
-  P.juice = Math.min(juiceCap(), P.juice + n);
-  fx("#juicenum", "+" + n, "juice");
-}
-function healUnit(P, u, n, i){
-  const before = u.dmg;
-  u.dmg = Math.max(0, u.dmg - n);
-  if(u.dmg < before && i >= 0) fx(tileSel(P, i), "+" + (before - u.dmg), "heal");
-}
 </script>
 <script>
 "use strict";
 /* =====================================================================
-   TURN FLOW
+   MATCH STATE
    ===================================================================== */
-function beginTurn(side){
-  const P = S[side], E = opp(side);
-  S.active = side; S.pending = null;
-  P.turns++; P.tileFlooped = false;
-  addJuice(P, juiceGain() + (side === "foe" && P.turns === 1 ? 2 : 0));
+let S = null, uidSeq = 1;
+const $ = (id) => document.getElementById(id);
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; } return a; }
+const clamp = (n,a,b) => n < a ? a : n > b ? b : n;
+const dist = (a,b) => Math.hypot(a.x - b.x, a.y - b.y);
+const other = (s) => s === "you" ? "foe" : "you";
+const laneOf = (x) => x < 200 ? 0 : x < 400 ? 1 : 2;
 
-  for(let i=0;i<9;i++){
-    const u = P.units[i];
-    if(!u) continue;
-    u.tapped = false; u.flooped = false; u.sick = false;
-    if(P.tiles[i].bio === "nice") healUnit(P, u, 1, i);
-  }
-  for(let i=0;i<9;i++){
-    const u = P.units[i];
-    if(!u) continue;
-    const d = base(u);
-    if(d.trigger === "silo"){
-      addJuice(P, u.guest ? 3 : 2);
-      if(u.guest) healUnit(P, u.guest, 2, -1);
-    }
-    if(d.trigger === "cave" && u.guest) healUnit(P, u.guest, 2, -1);
-    if(d.trigger === "school" && u.guest){
-      addJuice(P, 3);
-      if(u.guest.study < 4){
-        u.guest.study++; u.guest.bonusAtk++; u.guest.bonusHp++;
-        fx(tileSel(P, i), "STUDY +1/+1", "juice");
-        logLine(side === "you" ? "bmo" : "foe", base(u.guest).name + " studies. It comes back bigger.");
-      }
-    }
-  }
-  logLine("turn", (side === "you" ? "Your turn" : P.name + "'s turn") + " · round " + S.round +
-    (isOvertime() ? " · double juice" : ""));
-  render();
-  if(side === "foe") setTimeout(aiStep, 650);
+/* patches: 3 columns x 3 rows per side, indexed row*3+col from the river outward */
+function patchRect(side, i){
+  const col = i % 3, row = (i / 3) | 0;
+  const band = (AH / 2 - RIVER_H) / 3;
+  const y0 = side === "you" ? RIVER_Y + RIVER_H + row * band : RIVER_Y - RIVER_H - (row + 1) * band;
+  return {x:col * (AW / 3), y:y0, w:AW / 3, h:band};
+}
+function patchIndex(side, x, y){
+  const band = (AH / 2 - RIVER_H) / 3;
+  const col = clamp((x / (AW / 3)) | 0, 0, 2);
+  let row;
+  if(side === "you") row = clamp(((y - RIVER_Y - RIVER_H) / band) | 0, 0, 2);
+  else row = clamp(((RIVER_Y - RIVER_H - y) / band) | 0, 0, 2);
+  return row * 3 + col;
+}
+function bioAt(side, x, y){ return S[side].patches[patchIndex(side, x, y)]; }
+function myHalf(side, y){ return side === "you" ? y > RIVER_Y + RIVER_H : y < RIVER_Y - RIVER_H; }
+
+function makeSide(side, who, deckIds, levels){
+  const cycle = shuffle(deckIds.slice());
+  const patches = [];
+  for(let i=0;i<9;i++) patches.push(BIO_KEYS[(Math.random() * BIO_KEYS.length) | 0]);
+  return {
+    side, name:who.name, art:who.art, skill:who.skill || null, deckName:who.deckName || "",
+    taunts:who.taunts || null, levels:levels || {}, juice:5, patches,
+    hand:cycle.slice(0, HAND_SIZE), next:cycle[HAND_SIZE], rest:cycle.slice(HAND_SIZE + 1),
+    wallsDown:0, patchFlooped:0, aiNext:2,
+  };
 }
 
-function endTurn(){
-  if(S.over) return;
-  const side = S.active, P = S[side], E = opp(side);
-  S.pending = null;
-
-  for(let l=0;l<3;l++) fightLane(P, E, l);
-
-  for(let i=0;i<9;i++){
-    const u = P.units[i];
-    if(!u) continue;
-    if(u.wither) u.wither = 0;
-    if(u.wander !== undefined && --u.wander <= 0){
-      P.units[i] = null;
-      logLine("", "Wandering Bald Man wanders off. He had somewhere to be.");
-    }
-  }
-  if(checkOver()) return;
-  if(side === "foe") S.round++;
-  if(S.round > CALL_TURN){ finish(null, true); return; }
-  beginTurn(side === "you" ? "foe" : "you");
+function structure(side, kind, lane){
+  const isWall = kind === "wall";
+  const m = {
+    uid:uidSeq++, side, id:null, struct:kind, lane,
+    x: isWall ? LANEX[lane] : AW / 2,
+    y: isWall ? WALL_Y[side] : KEEP_Y[side],
+    hp: isWall ? 2700 : 5200, maxHp: isWall ? 2700 : 5200,
+    dmg: isWall ? 98 : 155, hit: isWall ? 1.05 : 1.0, rng: isWall ? 185 : 210,
+    cd:0, spd:0, r: isWall ? 40 : 52, alive:true, locked: !isWall,
+    plan: isWall ? "wall" : "keep",
+  };
+  return m;
 }
 
-/* every rested creature in a lane swings across the bridge. The defending
-   front creature counter-hits for half, but only against melee. */
-function fightLane(P, E, l){
-  const di = frontIdx(E, l);
-  const defU = di >= 0 ? E.units[di] : null;
-  const back = defU && base(defU).kind !== "structure" ? Math.floor(atkOf(E, defU, di) / 2) : 0;
-  const backReap = defU ? (base(defU).tags || []).includes("reap") : false;
-  const fi = frontIdx(P, l);
-  let swung = false;
-
-
-  const shots = [];
-  for(let r=0;r<3;r++){
-    const i = idx(r, l), u = P.units[i];
-    if(!u || u.tapped || u.sick) continue;
-    const d = base(u);
-    if(d.kind === "structure"){
-      if(d.trigger === "tower" && u.guest && isRanged(u.guest)){
-        const g = u.guest;
-        shots.push({i, n: CARDS[g.id].atk + (g.bonusAtk || 0) + 3, reap:false, nm:"Spirit Tower"});
-      }
-      continue;
-    }
-    shots.push({i, n:atkOf(P, u, i), reap:(d.tags || []).includes("reap"), nm:d.name});
-    swung = true;
+function newMatch(foeKey){
+  const foe = FOES[foeKey];
+  const ai = arenaIndex(SAVE.trophies);
+  const aiLvl = Math.min(3, 1 + Math.floor(ai / 2));
+  const foeLevels = {}, myLevels = {};
+  DECKS[foe.deck].cards.forEach(id => foeLevels[id] = aiLvl);
+  SAVE.deck.forEach(id => myLevels[id] = cardLevel(id));
+  S = {
+    t:0, over:null, foeKey, log:[], pending:null, floopMode:false, pendPatch:-1,
+    mobs:[], dead:[], lastTs:0, raf:0, ot:false,
+  };
+  S.you = makeSide("you", {name:SAVE.name, art:"\u{1F0CF}", deckName:"Your deck"}, SAVE.deck, myLevels);
+  S.foe = makeSide("foe", Object.assign({deckName:DECKS[foe.deck].name}, foe), DECKS[foe.deck].cards, foeLevels);
+  for(const side of ["you","foe"]){
+    for(let l=0;l<3;l++) S.mobs.push(structure(side, "wall", l));
+    S.mobs.push(structure(side, "keep", 1));
   }
-
-  for(const sh of shots){
-    if(sh.n <= 0 || !P.units[sh.i]) continue;
-    const ti = frontIdx(E, l);
-    if(ti < 0){
-      logLine("hit", sh.nm + " crosses bridge " + (l+1) + " for " + sh.n + ".");
-      hurtFace(E, sh.n);
-      continue;
-    }
-    const tn = base(E.units[ti]).name;
-    logLine("hit", sh.nm + " hits " + tn + " for " + sh.n + ".");
-    const over = damage(E, ti, sh.n, {reap:sh.reap});
-    if(over > 0){
-      const nxt = frontIdx(E, l);
-      if(nxt >= 0){ logLine("hit", "It breaks through into " + base(E.units[nxt]).name + " for " + over + "."); damage(E, nxt, over); }
-      else { logLine("hit", "It breaks through for " + over + "."); hurtFace(E, over); }
-    }
-  }
-
-  if(back > 0 && swung){
-    const mf = frontIdx(P, l);
-    if(mf >= 0 && P.units[mf]){
-      logLine("hit", base(P.units[mf]).name + " takes " + back + " back.");
-      damage(P, mf, back, {reap:backReap});
-    }
-  }
-}
-
-function checkOver(){
-  if(S.you.life <= 0 || S.foe.life <= 0){
-    finish(S.foe.life <= 0 && S.you.life > 0 ? "you" : (S.you.life <= 0 && S.foe.life > 0 ? "foe" : null));
-    return true;
-  }
-  return false;
-}
-function finish(winner, byCall){
-  if(byCall) winner = S.you.life === S.foe.life ? null : (S.you.life > S.foe.life ? "you" : "foe");
-  S.over = winner === null ? "draw" : winner;
-  awardMatch();
-  render();
-  showEnd(byCall);
+  logLine("bmo", "BMO: Card Wars! Break " + foe.name + "'s wall, then the keep. Go!");
 }
 
 /* =====================================================================
-   PLAYING CARDS
+   SPAWNING
    ===================================================================== */
+function statsFor(P, id){
+  const d = CARDS[id], rt = d.rt, lv = P.levels[id] || 1, lb = lvlBonus(id, lv);
+  return {hp:Math.round((rt.hp || 0) * (1 + 0.12 * (lv - 1))), dmg:Math.round((rt.dmg || 0) * (1 + 0.12 * (lv - 1)) + lb.atk * 0)};
+}
+function spawnMob(P, id, x, y, opts){
+  opts = opts || {};
+  const d = CARDS[id], rt = d.rt;
+  const st = statsFor(P, id);
+  const bio = myHalf(P.side, y) ? bioAt(P.side, x, y) : null;
+  let hp = st.hp, dmg = st.dmg;
+  if(bio === "blue") hp = Math.round(hp * 1.25);
+  if(bio === "rain"){ hp = Math.round(hp * 1.15); dmg = Math.round(dmg * 1.15); }
+  if(bio && (bio === d.bio || bio === "rain")){ hp = Math.round(hp * 1.1); dmg = Math.round(dmg * 1.1); }
+  const m = {
+    uid:uidSeq++, side:P.side, id, struct:rt.life !== undefined || rt.houses ? "bldg" : null,
+    x:clamp(x, 14, AW - 14), y:clamp(y, 14, AH - 14),
+    hp, maxHp:hp, baseDmg:dmg, dmg, hit:rt.hit || 1.2, cd:0.35,
+    baseSpd:rt.spd || 0, spd:rt.spd || 0, rng:rt.rng || 26, r:(PLAN[d.plan] || PLAN.scamp).sh,
+    lane:laneOf(x), alive:true, plan:d.plan, col:d.col, dwell:rt.dwell || null,
+    ttl:rt.ttl || 0, born:S.t, guest:null, study:0, buffT:0, buffM:1, slowT:0, witherT:0, witherM:1,
+    splash:rt.splash || 0, heal:rt.heal || 0, spellproof:!!rt.spellproof, taunt:!!rt.taunt,
+    onDeath:rt.onDeath || null, houses:rt.houses || null, life:rt.life || 0,
+  };
+  if(m.struct === "bldg"){ m.spd = 0; m.rng = rt.rng || 0; m.dmg = rt.dmg || 0; m.baseDmg = m.dmg; }
+  S.mobs.push(m);
+  return m;
+}
+function deployCost(P, id, x, y){
+  const d = CARDS[id];
+  let c = d.cost;
+  const bio = myHalf(P.side, y) ? bioAt(P.side, x, y) : null;
+  if(bio && (bio === d.bio || bio === "rain")) c -= 1;
+  return Math.max(1, c);
+}
+function canDeployAt(P, x, y){
+  if(x < 12 || x > AW - 12) return false;
+  if(myHalf(P.side, y)) return true;
+  // a broken enemy wall opens its lane for a push
+  const l = laneOf(x);
+  const w = S.mobs.find(m => m.struct === "wall" && m.side === other(P.side) && m.lane === l);
+  if(w && !w.alive){
+    return P.side === "you" ? y > WALL_Y.foe + 40 : y < WALL_Y.you - 40;
+  }
+  return false;
+}
 function cycleOut(P, h){
   const played = P.hand[h];
   P.hand[h] = P.next;
   P.next = P.rest.shift();
   P.rest.push(played);
 }
-function playCard(P, h, target, extra){
+function deploy(P, h, x, y){
   const id = P.hand[h], d = CARDS[id];
-  const who = P.side === "you" ? "You" : P.name;
-  if(d.kind === "spell"){
-    P.juice -= costOf(P, id);
-    logLine(P.side === "you" ? "" : "foe", who + " cast" + (P.side === "you" ? "" : "s") + " " + d.name + ".");
-    castSpell(P, d, target, extra);
-  } else if(d.special === "swarm"){
-    const first = P.units.findIndex(u => !u);
-    P.juice = Math.max(0, P.juice - costOf(P, id, first < 0 ? 0 : first));
-    let n = 0;
-    for(let i=0;i<9 && n<3;i++) if(!P.units[i]){ spawn(P, i, id); n++; }
-    logLine(P.side === "you" ? "" : "foe", who + " unleash" + (P.side === "you" ? "" : "es") + " " + n + " Earlings.");
-  } else {
-    P.juice -= costOf(P, id, target);
-    spawn(P, target, id);
-    logLine(P.side === "you" ? "" : "foe", who + " play" + (P.side === "you" ? "" : "s") + " " + d.name +
-      " on " + BIO[P.tiles[target].bio].name + ", lane " + (lane(target) + 1) + ".");
+  const cost = deployCost(P, id, x, y);
+  if(P.juice < cost) return false;
+  P.juice -= cost;
+  if(d.kind === "spell"){ castSpell(P, d, x, y); }
+  else {
+    const n = d.rt.n || 1;
+    for(let i=0;i<n;i++){
+      const a = (i / n) * Math.PI * 2, sp = n > 1 ? 16 + n * 2 : 0;
+      spawnMob(P, id, x + Math.cos(a) * sp, y + Math.sin(a) * sp * .6);
+    }
   }
+  logLine(P.side === "you" ? "" : "foe",
+    (P.side === "you" ? "You play " : P.name + " plays ") + d.name + ".");
   cycleOut(P, h);
-  checkOver();
+  return true;
 }
 
-function castSpell(P, d, target, extra){
-  const E = opp(P.side), sp = d.spell;
-  const n = sp.n ? spellPower(P, d, sp.n) : 0;
-  if(sp.id === "volcano"){
-    const ti = frontIdx(E, target);
-    if(ti < 0) hurtFace(E, n);
-    else if(spellSafe(E, ti)) logLine("", "The spell slides off " + base(E.units[ti]).name + ".");
-    else damage(E, ti, n);
-  } else if(sp.id === "lane"){
-    for(let r=0;r<3;r++){ const i = idx(r, target); if(E.units[i] && !spellSafe(E, i)) damage(E, i, n); }
-  } else if(sp.id === "sweep"){
-    for(let i=8;i>=0;i--) if(E.units[i] && !spellSafe(E, i)) damage(E, i, n);
-  } else if(sp.id === "front"){
-    for(let l=0;l<3;l++){ const i = frontIdx(E, l); if(i >= 0 && !spellSafe(E, i)) damage(E, i, n); }
-  } else if(sp.id === "heal"){
-    healFace(P, n);
-  } else if(sp.id === "wither"){
-    for(let i=0;i<9;i++) if(E.units[i] && !spellSafe(E, i)) E.units[i].wither = n;
-  } else if(sp.id === "teleport"){
-    const u = P.units[target];
-    P.units[target] = null; P.units[extra] = u; u.sick = false;
-    fx(tileSel(P, extra), "blorp", "juice");
-  } else if(sp.id === "buff"){
-    const u = P.units[target];
-    if(u){ u.bonusAtk += n; u.bonusHp += n; fx(tileSel(P, target), "+" + n + "/+" + n, "heal"); }
-  } else if(sp.id === "reclaim"){
-    const tl = Array.isArray(target) ? target : [target];
-    const bl = Array.isArray(extra) ? extra : [extra];
-    tl.forEach((ti, k) => {
-      const nb = bl[k] || bl[0];
-      if(ti === undefined || ti < 0 || !nb) return;
-      P.tiles[ti].bio = nb;
-      logLine("", "A tile in lane " + (lane(ti) + 1) + " is retilled into " + BIO[nb].name + ".");
-    });
-  } else if(sp.id === "frenzy"){
-    for(let i=0;i<9;i++) if(P.units[i] && base(P.units[i]).floop && !P.units[i].flooped) doFloop(P, i, {free:true});
-  }
-}
-
-/* ------------------------------------------------------------ flooping */
-function doFloop(P, i, opts){
-  opts = opts || {};
-  const u = P.units[i], d = base(u), f = d.floop;
-  if(!f) return;
-  u.flooped = true;
-  if(!opts.free) u.tapped = true;
-  fx(tileSel(P, i), "FLOOP!", "floop");
-  logLine(P.side === "you" ? "bmo" : "foe", (P.side === "you" ? "You floop " : P.name + " floops ") + d.name + ".");
-  const E = opp(P.side);
-  if(f.id === "heal") healFace(P, f.n);
-  else if(f.id === "juice") addJuice(P, f.n);
-  else if(f.id === "healall"){
-    for(let k=0;k<9;k++) if(P.units[k]) healUnit(P, P.units[k], f.n, k);
-  } else if(f.id === "snipe"){
-    let t = opts.target;
-    if(t === undefined || !E.units[t]){
-      t = -1; let best = -1;
-      for(let k=0;k<9;k++) if(E.units[k] && hpAt(E,k) > best){ best = hpAt(E,k); t = k; }
-    }
-    if(t >= 0 && E.units[t]) damage(E, t, f.n);
-  } else if(f.id === "move"){
-    let dest = opts.target;
-    if(dest === undefined || P.units[dest]) dest = P.units.findIndex(x => !x);
-    if(dest >= 0 && dest !== i && !P.units[dest]){ P.units[dest] = u; P.units[i] = null; }
-  } else if(f.id === "mend"){
-    const t = opts.target !== undefined ? opts.target : i;
-    if(P.units[t]) healUnit(P, P.units[t], 99, t);
-  } else if(f.id === "cycle"){
-    P.rest.push(P.next); P.next = P.rest.shift();
-    fx("#nextcard", "swapped", "juice");
-  }
-  checkOver();
-}
-
-/* ------------------------------------------------- tiles and structures */
-function floopTile(P, i, bio){
-  P.juice -= TILE_FLOOP_COST;
-  P.tileFlooped = true;
-  P.tiles[i].bio = bio;
-  fx(tileSel(P, i), BIO[bio].icon + " " + BIO[bio].name, "note");
-  logLine(P.side === "you" ? "bmo" : "foe",
-    (P.side === "you" ? "You floop " : P.name + " floops ") + "a tile into " + BIO[bio].name + ".");
-}
-function moveIn(P, si, ui){
-  const st = P.units[si], g = P.units[ui];
-  st.guest = g; P.units[ui] = null; g.tapped = true; g.sick = false;
-  fx(tileSel(P, si), "inside", "heal");
-  logLine(P.side === "you" ? "bmo" : "foe", base(g).name + " goes inside " + base(st).name + ".");
-}
-function moveOut(P, si, ti){
-  const st = P.units[si], g = st.guest;
-  st.guest = null; P.units[ti] = g; g.tapped = true; g.sick = false;
-  logLine(P.side === "you" ? "bmo" : "foe", base(g).name + " steps back out.");
-}
-function garrisonTargets(P, si){
-  const st = P.units[si], d = base(st), out = [];
-  if(!d.houses || st.guest) return out;
-  const l = lane(si);
-  for(let r=0;r<3;r++){
-    const i = idx(r, l), u = P.units[i];
-    if(!u || i === si || base(u).kind === "structure") continue;
-    if(houseTakes(d, u)) out.push(i);
-  }
-  return out;
-}
-</script>
-<script>
-"use strict";
 /* =====================================================================
-   THE OPPONENT
+   SPELLS
    ===================================================================== */
-let aiActions = 0;
-/* How keen the opponent is to act. Tuned by simulation - see README. */
-/* Simulation-tuned. The opponent's old thresholds made it act ~1.3 times a turn
-   against a bot doing 6, which was the whole of its weakness; see README. */
-const TUNE = {floorHard:-8, floorNorm:-6, floorEasy:2, slot:1.25, cost:1.35};
-
-function aiStep(){
-  if(S.over || S.active !== "foe") return;
-  const P = S.foe;
-  const moves = aiMoves();
-  let floor = P.skill === "hard" ? TUNE.floorHard : P.skill === "easy" ? TUNE.floorEasy : TUNE.floorNorm;
-  if(P.juice >= 9) floor -= 2;
-  let pick = null;
-  if(moves.length){
-    moves.sort((a,b) => b.score - a.score);
-    if(P.skill === "easy"){
-      const ok = moves.filter(m => m.score > floor);
-      if(ok.length && Math.random() < 0.7) pick = ok[(Math.random() * Math.min(4, ok.length)) | 0];
-    } else if(moves[0].score > floor) pick = moves[0];
-  }
-  if(pick && aiActions < 12){
-    aiActions++;
-    pick.run();
-    render();
-    setTimeout(aiStep, 520);
-  } else {
-    aiActions = 0;
-    if(P.taunts && Math.random() < 0.45) logLine("foe", P.name + ": " + P.taunts[(Math.random() * P.taunts.length) | 0]);
-    setTimeout(endTurn, 460);
-  }
-}
-
-function lanePower(X, l){
-  let p = 0;
-  const f = frontIdx(X, l);
-  for(let r=0;r<3;r++){
-    const i = idx(r, l), u = X.units[i];
-    if(!u || base(u).kind === "structure") continue;
-    if(isRanged(u) || i === f) p += atkOf(X, u, i);
-  }
-  return p;
-}
-
-function aiMoves(){
-  const P = S.foe, E = S.you, out = [];
-  const hard = P.skill === "hard";
-  const threat = [0,1,2].map(l => lanePower(E, l));
-  const openLane = [0,1,2].map(l => frontIdx(E, l) < 0);
-  const mineIn = [0,1,2].map(l => [0,1,2].filter(r => P.units[idx(r,l)]).length);
-
-  /* ---- garrisoning: the single best thing this deck does ---- */
-  for(let si=0; si<9; si++){
-    const st = P.units[si];
-    if(!st || base(st).kind !== "structure") continue;
-    const d = base(st);
-    if(st.guest || !d.houses) continue;
-    for(const gi of garrisonTargets(P, si)){
-      const g = P.units[gi];
-      let v = 4;
-      if(d.trigger === "school") v = 13;
-      else if(d.trigger === "tower") v = 10 + CARDS[g.id].atk;
-      else if(d.trigger === "cave") v = 5 + (g.dmg > 0 ? 5 : 0) + CARDS[g.id].cost;
-      else if(d.trigger === "silo") v = 6 + (g.dmg > 0 ? 3 : 0);
-      v -= atkOf(P, g, gi) * 0.8;
-      out.push({score:v, run:() => moveIn(P, si, gi)});
+function castSpell(P, d, x, y){
+  const rt = d.rt, E = other(P.side);
+  addFx("ping", x, y, rt.radius || 90);
+  if(rt.spell === "reclaim"){ return; }          // handled by the patch picker
+  for(const m of S.mobs){
+    if(!m.alive || m.inside) continue;
+    const within = Math.hypot(m.x - x, m.y - y) <= (rt.radius || 90) + m.r * 0.6;
+    if(!within) continue;
+    const enemy = m.side !== P.side;
+    if(rt.spell === "blast" && enemy){
+      if(spellImmune(m)) continue;
+      let dm = rt.dmg;
+      if(m.struct && rt.structures) dm *= rt.structures;
+      else if(m.struct) dm *= 0.55;
+      hurt(m, dm, P.side);
+    } else if(rt.spell === "slow" && enemy){
+      if(spellImmune(m)) continue;
+      hurt(m, rt.dmg, P.side);
+      m.slowT = Math.max(m.slowT, rt.dur);
+    } else if(rt.spell === "wither" && enemy){
+      if(spellImmune(m)) continue;
+      m.witherT = Math.max(m.witherT, rt.dur); m.witherM = rt.mult;
+    } else if(rt.spell === "mend" && !enemy && !m.struct){
+      m.hp = Math.min(m.maxHp, m.hp + rt.heal); floatAt(m.x, m.y, "+" + rt.heal, "heal");
+    } else if((rt.spell === "buff" || rt.spell === "haste") && !enemy && !m.struct){
+      m.buffT = Math.max(m.buffT, rt.dur); m.buffM = rt.mult;
+      if(rt.spell === "haste") m.hasteT = rt.dur;
+    } else if(rt.spell === "blink" && !enemy && !m.struct){
+      const dir = P.side === "you" ? -1 : 1;
+      m.y = clamp(m.y + dir * rt.dist, 20, AH - 20);
+      floatAt(m.x, m.y, "blorp", "juice");
     }
   }
+  if(rt.spell === "blast" || rt.spell === "slow") addFx("blast", x, y, rt.radius);
+}
+function spellImmune(m){
+  if(m.spellproof) return true;
+  if(m.struct) return false;
+  return myHalf(m.side, m.y) && bioAt(m.side, m.x, m.y) === "swamp";
+}
 
-  /* ---- cards ---- */
+/* =====================================================================
+   COMBAT
+   ===================================================================== */
+function hurt(m, n, bySide){
+  if(!m.alive || n <= 0) return;
+  m.hp -= n;
+  floatAt(m.x, m.y - 8, "-" + Math.round(n), "dmg");
+  if(m.hp <= 0){ m.hp = 0; die(m, bySide); }
+}
+function die(m, bySide){
+  if(!m.alive) return;
+  m.alive = false;
+  S.dead.push(m);
+  if(m.struct === "wall"){
+    const owner = S[m.side];
+    owner.wallsDown++;
+    S[other(m.side)].wallsDown = S[other(m.side)].wallsDown;
+    logLine("hit", (m.side === "you" ? "Your" : S.foe.name + "'s") + " wall in lane " + (m.lane + 1) + " is down!");
+    for(const k of S.mobs) if(k.struct === "keep" && k.side === m.side) k.locked = false;
+    shake();
+  } else if(m.struct === "keep"){
+    finish(other(m.side));
+  } else {
+    if(m.guest){ const g = m.guest; m.guest = null; g.inside = null; g.x = m.x; g.y = m.y + 22; g.alive = true;
+      logLine("", CARDS[g.id].name + " is turned out of the wreckage."); }
+    if(m.onDeath === "juice2" ) S[m.side].juice = Math.min(JUICE_MAX, S[m.side].juice + 2);
+    if(m.onDeath === "spores"){
+      for(const k of S.mobs) if(k.alive && k.side !== m.side && !k.inside && Math.hypot(k.x-m.x,k.y-m.y) < 70) hurt(k, 90, m.side);
+      addFx("blast", m.x, m.y, 70);
+    }
+  }
+}
+function effDmg(m){ return m.dmg * m.buffM * m.witherM; }
+function effSpd(m){ return m.spd * (m.slowT > 0 ? 0.5 : 1) * (m.hasteT > 0 ? 1.45 : 1); }
+
+function attackable(t, by){
+  if(!t.alive || t.inside) return false;
+  if(t.struct === "keep" && t.locked) return false;
+  return true;
+}
+function pickTarget(m){
+  let best = null, bd = 1e9;
+  const aggro = m.struct ? m.rng + 20 : Math.max(m.rng + 60, 150);
+  for(const t of S.mobs){
+    if(t.side === m.side || !attackable(t, m)) continue;
+    const d = Math.hypot(t.x - m.x, t.y - m.y) - t.r;
+    if(t.struct && d > m.rng + 10 && !m.struct) continue;   // walk to walls, don't aggro across the map
+    if(d < bd && (d < aggro || t.struct)){ bd = d; best = t; }
+  }
+  if(best) return best;
+  if(m.struct) return null;
+  // nothing near: head for the enemy wall in this lane, or the keep once it is open
+  const E = other(m.side);
+  const wall = S.mobs.find(t => t.struct === "wall" && t.side === E && t.lane === m.lane && t.alive);
+  if(wall) return wall;
+  const keep = S.mobs.find(t => t.struct === "keep" && t.side === E && t.alive && !t.locked);
+  if(keep) return keep;
+  return S.mobs.find(t => t.struct === "wall" && t.side === E && t.alive) || null;
+}
+
+function moveToward(m, tx, ty, dt){
+  const crossing = myHalf(m.side, m.y) !== myHalf(m.side, ty) && !myHalf(m.side, ty);
+  let gx = tx, gy = ty;
+  if(crossing && Math.abs(m.y - RIVER_Y) > RIVER_H + 6){
+    gx = LANEX[m.lane]; gy = RIVER_Y;                       // funnel onto the bridge
+  } else if(Math.abs(m.y - RIVER_Y) <= RIVER_H + 6){
+    gx = LANEX[m.lane];                                     // stay on the planks
+  }
+  const dx = gx - m.x, dy = gy - m.y, L = Math.hypot(dx, dy) || 1;
+  const step = effSpd(m) * dt;
+  m.x += dx / L * step; m.y += dy / L * step;
+  m.walking = true;
+}
+
+function separate(dt){
+  for(let i=0;i<S.mobs.length;i++){
+    const a = S.mobs[i];
+    if(!a.alive || a.struct || a.inside) continue;
+    for(let j=i+1;j<S.mobs.length;j++){
+      const b = S.mobs[j];
+      if(!b.alive || b.struct || b.inside) continue;
+      const dx = b.x - a.x, dy = (b.y - a.y) * 1.6, d = Math.hypot(dx, dy);
+      const want = (a.r + b.r) * 0.72;
+      if(d > 0.001 && d < want){
+        const push = (want - d) / d * 0.5 * Math.min(1, dt * 14);
+        a.x -= dx * push; a.y -= dy * push * .6;
+        b.x += dx * push; b.y += dy * push * .6;
+      }
+    }
+  }
+}
+
+/* -------------------------------------------------- structures & lodgers */
+function houseTakes(st, m){
+  if(!st.houses || st.guest || !m.dwell) return false;
+  return st.houses.includes("any") || st.houses.includes(m.dwell);
+}
+function structTick(m, dt){
+  const P = S[m.side];
+  if(m.life){ m.life -= dt; if(m.life <= 0){ die(m, m.side); return; } }
+  if(CARDS[m.id] && CARDS[m.id].rt.juice) P.juice = Math.min(JUICE_MAX, P.juice + dt * (m.guest ? 0.55 : 0.35));
+  if(m.houses && !m.guest){
+    for(const k of S.mobs){
+      if(!k.alive || k.inside || k.side !== m.side || k.struct) continue;
+      if(k.noHouse && k.noHouse > S.t) continue;      // just came out; let it fight
+      if(!houseTakes(m, k)) continue;
+      if(Math.hypot(k.x - m.x, k.y - m.y) < m.r + k.r + 24){
+        m.guest = k; k.inside = m.uid; k.studyT = 0;
+        logLine(m.side === "you" ? "bmo" : "foe", CARDS[k.id].name + " goes inside " + CARDS[m.id].name + ".");
+        floatAt(m.x, m.y, "inside", "heal");
+        break;
+      }
+    }
+  }
+  const g = m.guest;
+  if(g){
+    const rt = CARDS[m.id].rt;
+    if(rt.shelter) g.hp = Math.min(g.maxHp, g.hp + g.maxHp * 0.09 * dt);
+    if(rt.study){
+      g.studyT += dt;
+      g.dmg = g.baseDmg * (1 + Math.min(0.7, g.studyT * 0.07));
+      g.maxHp = Math.round(g.maxHp + g.maxHp * 0.05 * dt);
+      g.hp = Math.min(g.maxHp, g.hp + g.maxHp * 0.06 * dt);
+      if(g.studyT > 11){ evict(m); logLine(m.side === "you" ? "bmo" : "foe", CARDS[g.id].name + " graduates."); }
+    }
+    if(rt.shelter && g.hp >= g.maxHp - 1 && (S.t - (g.inAt || 0)) > 4) evict(m);
+  }
+}
+function evict(st){
+  const g = st.guest;
+  if(!g) return;
+  st.guest = null; g.inside = null; g.noHouse = S.t + 9;
+  g.x = st.x + (Math.random() * 30 - 15); g.y = st.y + (st.side === "you" ? -30 : 30);
+  g.baseDmg = g.dmg;
+  floatAt(g.x, g.y, "out!", "heal");
+}
+
+/* =====================================================================
+   THE TICK
+   ===================================================================== */
+function step(dt){
+  if(!S || S.over) return;
+  S.t += dt;
+  const x2 = S.t >= X2_AT ? 2 : 1;
+  for(const side of ["you","foe"]){
+    const P = S[side];
+    P.juice = Math.min(JUICE_MAX, P.juice + dt / JUICE_RATE * x2);
+  }
+
+  for(const m of S.mobs){
+    if(!m.alive) continue;
+    if(m.buffT > 0){ m.buffT -= dt; if(m.buffT <= 0) m.buffM = 1; }
+    if(m.hasteT > 0) m.hasteT -= dt;
+    if(m.slowT > 0) m.slowT -= dt;
+    if(m.witherT > 0){ m.witherT -= dt; if(m.witherT <= 0) m.witherM = 1; }
+    if(m.inside) continue;
+    if(m.struct){ if(m.struct === "bldg") structTick(m, dt); }
+    if(m.ttl && S.t - m.born > m.ttl){ die(m, m.side); continue; }
+
+    // biome underfoot
+    if(!m.struct || m.struct === "bldg"){
+      const own = myHalf(m.side, m.y);
+      const b = own ? bioAt(m.side, m.x, m.y) : null;
+      m.dmg = m.baseDmg * (b === "corn" ? 1.2 : 1);
+      m.spd = m.baseSpd * (b === "sandy" ? 1.3 : 1);
+      if(b === "nice") m.hp = Math.min(m.maxHp, m.hp + m.maxHp * 0.02 * dt);
+    }
+    if(m.heal){
+      for(const k of S.mobs){
+        if(!k.alive || k.inside || k.side !== m.side || k === m || k.struct) continue;
+        if(Math.hypot(k.x - m.x, k.y - m.y) < 110) k.hp = Math.min(k.maxHp, k.hp + m.heal * dt);
+      }
+    }
+
+    m.walking = false;
+    m.cd -= dt;
+    const t = pickTarget(m);
+    m.tuid = t ? t.uid : 0;
+    if(!t){ continue; }
+    const d = Math.hypot(t.x - m.x, t.y - m.y) - t.r;
+    if(d <= m.rng){
+      if(m.cd <= 0 && effDmg(m) > 0){
+        m.cd = m.hit;
+        m.strike = 0.2;
+        hurt(t, effDmg(m), m.side);
+        if(m.splash){
+          for(const k of S.mobs)
+            if(k.alive && k !== t && k.side !== m.side && !k.inside && Math.hypot(k.x-t.x,k.y-t.y) < m.splash)
+              hurt(k, effDmg(m) * 0.5, m.side);
+        }
+      }
+    } else if(m.spd > 0){
+      moveToward(m, t.x, t.y, dt);
+    }
+    if(m.strike > 0) m.strike -= dt;
+  }
+  separate(dt);
+  S.mobs = S.mobs.filter(m => m.alive || m.struct === "wall" || m.struct === "keep");
+
+  if(!S.over){
+    if(!S.ot && S.t >= MATCH_TIME){
+      const y = S.foe.wallsDown, f = S.you.wallsDown;   // walls *they* lost vs walls *you* lost
+      if(y !== f) finish(y > f ? "you" : "foe");
+      else { S.ot = true; logLine("bmo", "BMO: Time! Nobody is ahead. Sudden death — first wall down wins."); }
+    } else if(S.ot && S.t >= MATCH_TIME + OT_TIME){
+      finish(null);
+    } else if(S.ot){
+      const y = S.foe.wallsDown, f = S.you.wallsDown;
+      if(y !== f) finish(y > f ? "you" : "foe");
+    }
+  }
+}
+function finish(winner){
+  if(S.over) return;
+  S.over = winner === null ? "draw" : winner;
+  cancelAnimationFrame(S.raf);
+  awardMatch();
+  showEnd();
+}
+
+/* =====================================================================
+   THE OPPONENT - reacts on a timer, defends what is coming at it, and
+   pushes a lane when it can afford to.
+   ===================================================================== */
+const REACT = {easy:[2.4, 1.6], normal:[1.5, 1.0], hard:[0.9, 0.7]};
+
+function aiTick(dt){
+  const P = S.foe;
+  if(S.over) return;
+  P.aiNext -= dt;
+  if(P.aiNext > 0) return;
+  const rr = REACT[P.skill] || REACT.normal;
+  P.aiNext = rr[0] + Math.random() * rr[1];
+
+  const E = S.you;
+  const threats = S.mobs.filter(m => m.alive && !m.inside && m.side === "you" && !m.struct && m.y < RIVER_Y + 40);
+  const laneThreat = [0,0,0];
+  for(const m of threats) laneThreat[laneOf(m.x)] += m.hp * 0.01 + m.dmg * 0.1;
+
+  let best = null;
   for(let h=0; h<HAND_SIZE; h++){
-    const id = P.hand[h], d = CARDS[id];
-    const c = bestCost(P, id);
-    if(c > P.juice) continue;
+    const id = P.hand[h], d = CARDS[id], rt = d.rt;
 
     if(d.kind === "spell"){
-      const sp = d.spell, n = sp.n ? spellPower(P, d, sp.n) : 0;
-      if(sp.id === "volcano"){
-        let bl = -1, bv = 0;
-        for(let l=0;l<3;l++){
-          const ti = frontIdx(E, l);
-          let v;
-          if(ti < 0) v = E.life <= n ? 999 : n * 2.0;
-          else if(spellSafe(E, ti)) continue;
-          else v = n >= hpAt(E, ti) ? 9 + atkOf(E, E.units[ti], ti) * 1.6 + lanePower(P, l) * 1.2 : 4 + n * 0.4;
-          if(v > bv){ bv = v; bl = l; }
+      if(rt.spell === "reclaim"){
+        if(P.juice >= d.cost && Math.random() < 0.3){
+          const i = (Math.random() * 9) | 0;
+          const want = CARDS[P.hand[(h + 1) % HAND_SIZE]].bio;
+          const sc = 3;
+          if(!best || sc > best.score) best = {score:sc, run:() => { P.juice -= d.cost; P.patches[i] = want; cycleOut(P, h); }};
         }
-        if(bl >= 0) out.push({score:bv - c, run:() => playCard(P, h, bl)});
-      } else if(sp.id === "lane"){
-        let bl = -1, bv = 0;
-        for(let l=0;l<3;l++){
-          let v = 0;
-          for(let r=0;r<3;r++){
-            const i = idx(r,l);
-            if(!E.units[i] || spellSafe(E,i)) continue;
-            v += n >= hpAt(E,i) ? 7 + atkOf(E,E.units[i],i) * 1.3 : n * 1.05;
-          }
-          if(v > bv){ bv = v; bl = l; }
-        }
-        if(bl >= 0) out.push({score:bv - c, run:() => playCard(P, h, bl)});
-      } else if(sp.id === "sweep" || sp.id === "front"){
+        continue;
+      }
+      // find the fattest cluster of my enemies
+      let bx = 0, by = 0, bv = 0;
+      for(const m of threats.concat(S.mobs.filter(k => k.alive && k.side === "you" && !k.struct))){
         let v = 0;
-        const list = sp.id === "sweep" ? [0,1,2,3,4,5,6,7,8] : [0,1,2].map(l => frontIdx(E,l)).filter(i => i >= 0);
-        for(const i of list){
-          if(i < 0 || !E.units[i] || spellSafe(E,i)) continue;
-          v += n >= hpAt(E,i) ? 7 + atkOf(E,E.units[i],i) * 1.3 + lanePower(P, lane(i)) * 1.1 : n * 1.05;
+        for(const k of S.mobs){
+          if(!k.alive || k.inside || k.side !== "you" || k.struct) continue;
+          if(Math.hypot(k.x - m.x, k.y - m.y) <= (rt.radius || 90)) v += k.hp * 0.02 + 1;
         }
-        if(v > 0) out.push({score:v - c, run:() => playCard(P, h, 0)});
-      } else if(sp.id === "heal"){
-        const gain = Math.min(n, START_LIFE - P.life);
-        const urg = P.life <= 12 ? 2.5 : P.life <= 20 ? 1.4 : 0.25;
-        out.push({score:gain * urg - c, run:() => playCard(P, h, 0)});
-      } else if(sp.id === "wither"){
-        let v = 0;
-        for(let i=0;i<9;i++) if(E.units[i] && !spellSafe(E,i)) v += Math.min(n, atkOf(E,E.units[i],i)) * 1.7;
-        if(v > 0) out.push({score:v - c, run:() => playCard(P, h, 0)});
-      } else if(sp.id === "teleport"){
-        let bs = 0, from = -1, to = -1;
-        for(let i=0;i<9;i++){
-          const u = P.units[i];
-          if(!u || base(u).kind === "structure" || isRanged(u)) continue;
-          if(openLane[lane(i)] && frontIdx(P, lane(i)) === i) continue;
-          for(let l=0;l<3;l++){
-            if(!openLane[l]) continue;
-            const t = idx(0, l);
-            if(P.units[t]) continue;
-            const v = atkOf(P, u, i) * 1.9;
-            if(v > bs){ bs = v; from = i; to = t; }
-          }
-        }
-        if(from >= 0) out.push({score:bs - c, run:() => playCard(P, h, from, to)});
-      } else if(sp.id === "buff"){
-        let bi = -1, bv = 0;
-        for(let i=0;i<9;i++){
-          const u = P.units[i];
-          if(!u || base(u).kind === "structure") continue;
-          const v = 4 + atkOf(P, u, i) * 1.2 + (isRanged(u) ? 3 : 0);
-          if(v > bv){ bv = v; bi = i; }
-        }
-        if(bi >= 0) out.push({score:bv - c, run:() => playCard(P, h, bi)});
-      } else if(sp.id === "reclaim"){
-        const want = {};
-        for(let hh=0; hh<HAND_SIZE; hh++){
-          const hd = CARDS[P.hand[hh]];
-          if(hd.kind !== "spell") want[hd.bio] = (want[hd.bio] || 0) + 1;
-        }
-        const wish = Object.keys(want).sort((x, y) => want[y] - want[x])[0];
-        const tl = [], bl = [];
-        if(wish){
-          for(let i=0;i<9 && tl.length < (sp.n || 1);i++){
-            const b2 = P.tiles[i].bio;
-            if(b2 === "rain" || b2 === wish) continue;
-            const u = P.units[i];
-            if(u && base(u).kind === "structure") continue;
-            tl.push(i); bl.push(u ? base(u).bio : wish);
-          }
-        }
-        if(tl.length) out.push({score:3 + tl.length * 2.5 - c, run:() => playCard(P, h, tl, bl)});
-      } else if(sp.id === "frenzy"){
-        let n2 = 0;
-        for(let i=0;i<9;i++) if(P.units[i] && base(P.units[i]).floop) n2++;
-        if(n2 > 0) out.push({score:n2 * 3.2 - c, run:() => playCard(P, h, 0)});
+        if(v > bv){ bv = v; bx = m.x; by = m.y; }
+      }
+      const offensive = rt.spell === "buff" || rt.spell === "haste" || rt.spell === "mend" || rt.spell === "blink";
+      if(offensive) continue;
+      if(bv >= 3 && P.juice >= d.cost){
+        const sc = bv * 1.4 - d.cost;
+        if(!best || sc > best.score) best = {score:sc, run:() => deploy(P, h, bx, by)};
       }
       continue;
     }
 
-    if(d.special === "swarm"){
-      let v = 0, filled = 0;
-      for(let i=0;i<9 && filled<3;i++){
-        if(P.units[i]) continue;
-        filled++;
-        v += openLane[lane(i)] ? 4.2 : Math.min(threat[lane(i)] * 1.6, 7);
-      }
-      if(filled) out.push({score:3 + v - c * 1.2, run:() => playCard(P, h, 0)});
-      continue;
-    }
+    const cost = d.cost;
+    if(P.juice < cost) continue;
+    const power = (rt.hp || 0) * 0.012 + (rt.dmg || 0) * 0.09 * (rt.n || 1);
 
-    for(let i=0;i<9;i++){
-      if(P.units[i]) continue;
-      const cost = costOf(P, id, i);
-      if(cost > P.juice) continue;
-      const b = P.tiles[i].bio, l = lane(i), r = row(i);
-      const ranged = (d.tags || []).includes("ranged"), struct = d.kind === "structure";
-      let s = 5 + (d.atk || 0) * 2 + (d.hp || 0) * 1.1;
-      if(b === d.bio || b === "rain") s += 3;
-      if(b === "corn") s += 2; else if(b === "blue") s += 2; else if(b === "sandy") s += 2.5;
-      else if(b === "nice") s += 1.5; else if(b === "swamp") s += 1.5;
-      if(b === "rain") s += 2;
-      if(d.special === "husker") s += P.tiles.filter(t => t.bio === "corn").length * 2;
-      // everything in the lane swings, so the front row is simply the one that gets hit
-      if(r === 0) s += (d.hp || 0) * 0.5 - (d.atk || 0) * 0.3 + (struct ? 5 : 0) - (ranged ? 3 : 0);
-      else s += (d.atk || 0) * 0.35 + (ranged ? 3.5 : 1);
-      if(openLane[l]) s += (d.atk || 0) * 2.0 - (struct ? 5 : 0);
-      else s += Math.min(threat[l] * 1.7, 11) + (struct ? 3 : 0);
-      // hold all three bridges: an empty lane of yours is a free run at your castle
-      s -= mineIn[l] * 2.1;
-      if(mineIn[l] === 0) s += 5 + threat[l] * 1.4;
-      if(d.houses) s += 2;                                    // structures that take lodgers earn their slot
-      s -= cost * TUNE.cost;
-      s -= (9 - P.units.filter(u => !u).length) * TUNE.slot;   // the last tiles are worth holding
-      const after = P.juice - cost;
-      for(let k=0;k<HAND_SIZE;k++){
-        if(k !== h && bestCost(P, P.hand[k]) <= after){ s += 2; break; }
+    // defend the hottest lane
+    let dl = 0;
+    for(let l=1;l<3;l++) if(laneThreat[l] > laneThreat[dl]) dl = l;
+    if(laneThreat[dl] > 2){
+      const y = clamp(Math.min.apply(null, threats.filter(m => laneOf(m.x) === dl).map(m => m.y)) - 60, 90, RIVER_Y - RIVER_H - 20);
+      const sc = 6 + power + laneThreat[dl] * 0.7 - cost * 1.2;
+      if(!best || sc > best.score) best = {score:sc, run:() => deploy(P, h, LANEX[dl] + (Math.random() * 40 - 20), y)};
+    }
+    // otherwise build a push behind the bridge in the lane where they are thinnest
+    if(P.juice >= Math.min(8, cost + 3)){
+      let pl = 0, pv = 1e9;
+      for(let l=0;l<3;l++){
+        let v = 0;
+        for(const m of S.mobs) if(m.alive && m.side === "you" && !m.struct && laneOf(m.x) === l) v += m.hp * 0.01;
+        const w = S.mobs.find(k => k.struct === "wall" && k.side === "you" && k.lane === l);
+        if(w && !w.alive) v -= 6;
+        if(v < pv){ pv = v; pl = l; }
       }
-      if(P.juice >= 9) s += 4;
-      out.push({score:s, run:() => playCard(P, h, i)});
+      const sc = 3 + power - cost * 1.1 + (P.juice >= 9 ? 4 : 0);
+      if(!best || sc > best.score)
+        best = {score:sc, run:() => deploy(P, h, LANEX[pl] + (Math.random() * 30 - 15), RIVER_Y - RIVER_H - 40)};
     }
   }
-
-  /* ---- flooping creatures ---- */
-  for(let i=0;i<9;i++){
-    if(!canFloopUnit(P, i)) continue;
-    const u = P.units[i], f = base(u).floop, lost = atkOf(P, u, i) * 1.4;
-    if(f.id === "heal"){
-      const g = Math.min(f.n, START_LIFE - P.life);
-      out.push({score:g * (P.life <= 16 ? 2.3 : 1.1) - lost, run:() => doFloop(P, i)});
-    } else if(f.id === "juice"){
-      out.push({score:(P.juice < 6 ? 5 : 2.4) - lost, run:() => doFloop(P, i)});
-    } else if(f.id === "healall"){
-      let v = 0;
-      for(let k=0;k<9;k++) if(P.units[k]) v += Math.min(f.n, P.units[k].dmg) * 1.3;
-      out.push({score:v - lost, run:() => doFloop(P, i)});
-    } else if(f.id === "snipe"){
-      let bt = -1, bv = 0;
-      for(let k=0;k<9;k++){
-        if(!E.units[k]) continue;
-        const v = f.n >= hpAt(E,k) ? 9 + atkOf(E,E.units[k],k) * 1.4 : f.n * 1.1;
-        if(v > bv){ bv = v; bt = k; }
-      }
-      if(bt >= 0) out.push({score:bv - lost, run:() => doFloop(P, i, {target:bt})});
-    } else if(f.id === "mend"){
-      let bt = -1, bv = 0;
-      for(let k=0;k<9;k++){
-        if(!P.units[k] || !P.units[k].dmg) continue;
-        const v = P.units[k].dmg * 1.25;
-        if(v > bv){ bv = v; bt = k; }
-      }
-      if(bt >= 0) out.push({score:bv - lost, run:() => doFloop(P, i, {target:bt})});
-    } else if(f.id === "move"){
-      if(!openLane[lane(i)]){
-        for(let l=0;l<3;l++){
-          if(!openLane[l]) continue;
-          const t = idx(0, l);
-          if(!P.units[t]){ out.push({score:atkOf(P, u, i) * 1.7, run:() => doFloop(P, i, {target:t})}); break; }
-        }
-      }
-    } else if(f.id === "cycle"){
-      out.push({score:2.2 - lost, run:() => doFloop(P, i)});
-    }
+  if(best && best.score > 1){
+    best.run();
+    if(P.taunts && Math.random() < 0.12) logLine("foe", P.name + ": " + P.taunts[(Math.random() * P.taunts.length) | 0]);
   }
-
-  /* ---- retilling a tile under a card it would rather stand on ---- */
-  if(!P.tileFlooped && P.juice >= TILE_FLOOP_COST + 3){
-    let bi = -1, bb = null, bv = 0;
-    for(let i=0;i<9;i++){
-      if(P.tiles[i].bio === "rain") continue;
-      const u = P.units[i];
-      if(u){
-        const d2 = base(u);
-        if(d2.kind === "structure" || P.tiles[i].bio === d2.bio) continue;
-        const v = 3 + (d2.bio === "corn" ? 2 : d2.bio === "blue" ? 1.5 : 1);
-        if(v > bv){ bv = v; bi = i; bb = d2.bio; }
-      } else {
-        for(let hh=0; hh<HAND_SIZE; hh++){
-          const hd = CARDS[P.hand[hh]];
-          if(hd.kind === "spell" || P.tiles[i].bio === hd.bio) continue;
-          if(hd.cost > P.juice) continue;
-          const v = 2.5;
-          if(v > bv){ bv = v; bi = i; bb = hd.bio; }
-        }
-      }
-    }
-    if(bi >= 0) out.push({score:bv, run:() => floopTile(P, bi, bb)});
-  }
-  return out;
 }
 </script>
-<style>
-.river{display:grid; grid-template-columns:repeat(3,var(--tile-w)); gap:var(--gap)}
-.bcell{position:relative; transform-style:preserve-3d}
-.bcell .bridge{left:50%; transform:translateX(-50%)}
-#cardhint{
-  align-self:center; max-width:min(560px,94vw); margin:0 9px 5px;
-  padding:5px 13px; border:2.5px solid var(--ink); border-radius:11px;
-  background:linear-gradient(180deg,#24478A,#122A55); font-size:12px; line-height:1.35; color:#DCE9FB;
-  text-align:center; pointer-events:none; z-index:8;
-}
-#cardhint b{color:var(--gold)} #cardhint.off{display:none}
-.handdock{position:relative}
-</style>
+
 <script>
 "use strict";
-/* =====================================================================
-   FLOATERS, LOG, SHARED BITS
-   ===================================================================== */
-const fxq = [];
-function fx(sel, text, cls){ fxq.push({sel, text, cls}); }
-function flushFx(){
-  const layer = $("fx");
-  let n = 0;
-  while(fxq.length){
-    const f = fxq.shift();
-    const el = document.querySelector(f.sel);
-    if(!el) continue;
-    const r = el.getBoundingClientRect();
-    if(!r.width && !r.height) continue;
-    const d = document.createElement("div");
-    d.className = "float " + f.cls;
-    d.textContent = f.text;
-    d.style.left = (r.left + r.width / 2) + "px";
-    d.style.top = (r.top + r.height / 2 - (n % 4) * 16) + "px";
-    layer.appendChild(d);
-    setTimeout(() => d.remove(), 1200);
-    n++;
-  }
-}
-function shake(){
-  const w = $("arenawrap");
-  if(!w) return;
-  w.classList.remove("shake"); void w.offsetWidth; w.classList.add("shake");
-  setTimeout(() => w.classList.remove("shake"), 380);
-}
-function toast(msg){
-  const t = document.createElement("div");
-  t.className = "toast"; t.textContent = msg;
-  document.body.appendChild(t);
-  setTimeout(() => t.remove(), 2000);
-}
-function logLine(cls, text){
-  if(!S) return;
-  S.log.push({cls, text});
-  if(S.log.length > 80) S.log.shift();
-}
-function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
-function flash(msg){ fx("#handcards", msg, "note"); }
 
 /* =====================================================================
    CARD FACES
    ===================================================================== */
 function cardFace(id, opts){
   opts = opts || {};
-  const d = CARDS[id], lv = opts.lvl || 1, lb = lvlBonus(id, lv);
+  const d = CARDS[id], rt = d.rt || {}, lv = opts.lvl || 1;
   const cls = ["gc", "k-" + d.kind];
   if(opts.cls) cls.push(opts.cls);
-  let cost = opts.cost !== undefined ? opts.cost : d.cost;
-  const stats = d.kind === "spell" ? "" :
-    '<span class="sts">' +
-      (d.kind === "unit" ? '<span class="pip atk' + (lb.atk ? " up" : "") + '">' + (d.atk + lb.atk) + "</span>" : "") +
-      '<span class="pip hp' + (lb.hp ? " up" : "") + '">' + (d.hp + lb.hp) + "</span></span>";
+  const cost = opts.cost !== undefined ? opts.cost : d.cost;
+  const bump = 1 + 0.12 * (lv - 1);
+  let stats = "";
+  if(d.kind !== "spell"){
+    stats = '<span class="sts">' +
+      (rt.dmg ? '<span class="pip atk' + (lv > 1 ? " up" : "") + '">' + Math.round(rt.dmg * bump) + "</span>" : "") +
+      (rt.hp ? '<span class="pip hp' + (lv > 1 ? " up" : "") + '">' + Math.round(rt.hp * bump) + "</span>" : "") + "</span>";
+  }
   let dupes = "";
   if(opts.dupes){
     const need = UPGRADE[lv + 1] ? UPGRADE[lv + 1].copies : 0;
     const have = opts.copies || 0;
     const pct = need ? Math.min(100, have / need * 100) : 100;
-    dupes = '<span class="dupes"><i style="width:' + pct + '%"></i><span>' +
-      (need ? have + "/" + need : "MAX") + "</span></span>";
+    dupes = '<span class="dupes"><i style="width:' + pct + '%"></i><span>' + (need ? have + "/" + need : "MAX") + "</span></span>";
   }
   return '<div class="' + cls.join(" ") + '"' + (opts.attrs || "") + '>' +
-    '<span class="rar"></span>' +
-    '<span class="cost' + (opts.deal ? " deal" : "") + '">' + cost + "</span>" +
+    '<span class="rar"></span><span class="cost' + (opts.deal ? " deal" : "") + '">' + cost + "</span>" +
     '<span class="biome" title="' + esc(BIO[d.bio].name) + '">' + BIO[d.bio].icon + "</span>" +
     '<span class="art">' + d.art + "</span>" +
     '<span class="nm">' + esc(d.name) + "</span>" + stats +
     (lv > 1 ? '<span class="lvl2">lv' + lv + "</span>" : "") + dupes + "</div>";
 }
-function kindWord(d){ return d.kind === "unit" ? "Creature" : d.kind === "structure" ? "Structure" : "Spell"; }
 function cardBlurb(id){
-  const d = CARDS[id];
-  const kws = [];
-  if((d.tags || []).includes("ranged")) kws.push("Ranged");
-  if((d.tags || []).includes("rush")) kws.push("Rush");
-  if((d.tags || []).includes("reap")) kws.push("Reaper");
-  if((d.tags || []).includes("spellproof")) kws.push("Spell-proof");
-  if(d.houses) kws.push("Houses: " + d.houses.join("/"));
-  return "<b>" + esc(d.name) + "</b> · " + kindWord(d) + " · home " + BIO[d.bio].icon + " " +
-    esc(BIO[d.bio].name) + (kws.length ? " · " + esc(kws.join(" · ")) : "") + "<br>" + esc(d.text);
+  const d = CARDS[id], rt = d.rt || {}, k = [];
+  if(rt.n > 1) k.push("x" + rt.n);
+  if(rt.rng >= 90) k.push("ranged");
+  if(rt.splash) k.push("splash");
+  if(rt.spellproof) k.push("spell-proof");
+  if(rt.houses) k.push("takes lodgers");
+  if(rt.dwell) k.push("moves indoors");
+  const kind = d.kind === "unit" ? "Creature" : d.kind === "structure" ? "Structure" : "Spell";
+  return "<b>" + esc(d.name) + "</b> · " + kind + " · home " + BIO[d.bio].icon + " " + esc(BIO[d.bio].name) +
+    (k.length ? " · " + esc(k.join(" · ")) : "") + "<br>" + esc(d.text);
 }
-
 /* =====================================================================
    MENU + COLLECTION
    ===================================================================== */
@@ -1671,7 +1389,7 @@ function go(to){
   renderNav();
   if(to === "menu") renderMenu();
   if(to === "cards") renderCards();
-  if(to === "battle"){ render(); fitBoard(); }
+  if(to === "battle"){ renderHud(); fitGround(); }
 }
 function xpNeed(){ return 100; }
 function renderMenu(){
@@ -1712,342 +1430,381 @@ function renderCards(){
 }
 
 /* =====================================================================
-   BATTLE RENDER
+   FLOATERS + LOG
    ===================================================================== */
-/* Creatures and castles are counter-rotated children that stand out past the
-   board's own box, so fit to the union of what is actually drawn. */
-function fitBoard(){
-  const b = $("board"), w = $("arenawrap");
-  if(!b || !w || !w.clientHeight) return;
-  const prev = b.style.getPropertyValue("--bscale") || "1";
-  b.style.setProperty("--bdy", "0px");
-  b.style.setProperty("--bscale", "1");
-  let top = Infinity, bot = -Infinity, left = Infinity, right = -Infinity;
-  const parts = [b].concat(Array.prototype.slice.call(b.querySelectorAll(".keep, .standee")));
-  for(const e of parts){
-    const r = e.getBoundingClientRect();
-    if(!r.width || !r.height) continue;
-    top = Math.min(top, r.top); bot = Math.max(bot, r.bottom);
-    left = Math.min(left, r.left); right = Math.max(right, r.right);
-  }
-  const h = bot - top, wd = right - left;
-  if(!(h > 0) || !(wd > 0)){ b.style.setProperty("--bscale", prev); return; }
-  const s = Math.max(.34, Math.min(1, Math.min((w.clientWidth - 16) / wd, (w.clientHeight - 12) / h)));
-  // ignore hair-thin changes so the board doesn't twitch as creatures come and go
-  b.style.setProperty("--bscale", (Math.abs(s - parseFloat(prev)) < 0.02 ? parseFloat(prev) : s).toFixed(3));
-  // a transform doesn't move the layout box, so centre on what is actually drawn
-  let t2 = Infinity, b2 = -Infinity;
-  for(const e of parts){
-    const r = e.getBoundingClientRect();
-    if(!r.width || !r.height) continue;
-    t2 = Math.min(t2, r.top); b2 = Math.max(b2, r.bottom);
-  }
-  if(b2 > t2){
-    const wr = w.getBoundingClientRect();
-    b.style.setProperty("--bdy", ((wr.top + wr.bottom) / 2 - (t2 + b2) / 2).toFixed(1) + "px");
-  }
+const fxq = [], pending3d = [];
+function floatAt(wx, wy, text, cls){ fxq.push({wx, wy, text, cls}); }
+function addFx(kind, x, y, r){ pending3d.push({kind, x, y, r, t:0}); }
+function toast(msg){
+  const t = document.createElement("div");
+  t.className = "toast"; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2000);
 }
-function targets(){
-  const t = {mine:new Set(), foes:new Set(), tiles:new Set(), kind:null};
-  if(!S || S.over || S.active !== "you" || !S.pending) return t;
-  const p = S.pending, P = S.you, E = S.foe;
-  t.kind = p.kind;
-  if(p.kind === "place"){
-    const id = P.hand[p.h];
-    for(let i=0;i<9;i++) if(!P.units[i] && costOf(P, id, i) <= P.juice) t.mine.add(i);
-  } else if(p.kind === "myEmptyTile"){
-    for(let i=0;i<9;i++) if(!P.units[i] && (p.laneLock === undefined || lane(i) === p.laneLock)) t.mine.add(i);
-  } else if(p.kind === "myUnit" || p.kind === "garrison"){
-    (p.list || P.units.map((u, i) => u && base(u).kind !== "structure" ? i : -1).filter(i => i >= 0))
-      .forEach(i => t.mine.add(i));
-  } else if(p.kind === "myTile"){
-    for(let i=0;i<9;i++) t.mine.add(i);
-  } else if(p.kind === "enemyLane"){
-    for(let l=0;l<3;l++){ const i = frontIdx(E, l); for(let r=0;r<3;r++) t.foes.add(idx(r, l)); }
-  } else if(p.kind === "enemyUnit"){
-    for(let i=0;i<9;i++) if(E.units[i]) t.foes.add(i);
-  }
-  return t;
+function shake(){
+  const w = $("fieldwrap");
+  if(!w) return;
+  w.classList.remove("shake"); void w.offsetWidth; w.classList.add("shake");
+  setTimeout(() => w.classList.remove("shake"), 340);
 }
-function standeeHTML(P, i, hot){
-  const u = P.units[i];
-  if(!u) return "";
-  const d = base(u), a = atkOf(P, u, i), hp = hpOf(P, u, i), mx = maxHpOf(P, u, i);
-  const cls = ["standee"];
-  if(P.side === "foe") cls.push("foe");
-  if(d.kind === "structure") cls.push("structure");
-  if(u.sick) cls.push("sick");
-  if(u.tapped) cls.push("tapped");
-  if(!seenUnits.has(u.uid)) seenUnits.add(u.uid);
-  if(P.side === "you" && canFloopUnit(P, i) && S.active === "you" && !S.over && !S.pending) cls.push("canfloop");
-  if(hot) cls.push(P.side === "foe" ? "hot" : "pickme");
-  let tag = "";
-  if(u.sick) tag = '<span class="tagline zzz">zzz</span>';
-  else if(u.wither) tag = '<span class="tagline">−' + u.wither + "</span>";
-  else if(u.wander !== undefined) tag = '<span class="tagline">leaves</span>';
-  else if(isRanged(u)) tag = '<span class="tagline rng">ranged</span>';
-  else if(d.houses && u.guest) tag = '<span class="tagline safe">occupied</span>';
-  const sts = d.kind === "structure"
-    ? '<span class="pip hp">' + hp + "/" + mx + "</span>"
-    : '<span class="pip atk">' + a + '</span><span class="pip hp">' + hp + "/" + mx + "</span>";
-  return '<div class="' + cls.join(" ") + '" data-card="' + u.id + '">' + tag +
-    '<span class="shadow"></span>' +
-    '<span class="body"><span class="sart">' + d.art + "</span>" +
-    '<span class="snm">' + esc(d.name) + "</span>" +
-    '<span class="sst">' + sts + "</span></span>" +
-    (u.guest ? '<span class="inhab" title="' + esc(base(u.guest).name + " is inside") + '">' + base(u.guest).art + "</span>" : "") +
-    "</div>";
+function logLine(cls, text){
+  if(!S) return;
+  S.log.push({cls, text});
+  if(S.log.length > 60) S.log.shift();
 }
-function renderSide(P, elId, isFoe, t){
-  const rows = isFoe ? [2,1,0] : [0,1,2];
-  const hot = isFoe ? t.foes : t.mine;
-  let html = "";
-  for(const r of rows){
-    for(let l=0;l<3;l++){
-      const i = idx(r, l), b = BIO[P.tiles[i].bio], on = hot.has(i);
-      const unitHot = on && (t.kind === "enemyUnit" || t.kind === "myUnit" || t.kind === "garrison") && !!P.units[i];
-      const cls = ["tile"];
-      if(on && !unitHot) cls.push(isFoe ? "hittable" : (t.kind === "myTile" ? "floopable" : "legal"));
-      if(S.pending && !on && !unitHot) cls.push("dim");
-      html += '<div class="' + cls.join(" ") + '" id="tile-' + P.side + "-" + i + '" style="--bio:' + b.color +
-        '" data-side="' + P.side + '" data-i="' + i + '" title="' + esc(b.name + " — " + b.note) + '">' +
-        '<span class="bico">' + b.icon + "</span>" +
-        '<span class="bnm">' + esc(b.name) + "</span>" +
-        standeeHTML(P, i, unitHot) + "</div>";
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function flash(msg){ toast(msg); }
+
+/* =====================================================================
+   PROJECTION - the ground is a plane tilted on X inside a perspective
+   container, so screen <-> world is a closed form once we measure the
+   centre and the scale from two markers sitting on the plane.
+   ===================================================================== */
+const PERSP = 1500, TILT = 52;
+const CAL = {cx:0, cy:0, s:1};
+function calibrate(){
+  const a = $("mk-c"), b = $("mk-r");
+  if(!a || !b) return;
+  const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+  if(!ra.width && !ra.height) return;
+  CAL.cx = ra.left + ra.width / 2; CAL.cy = ra.top + ra.height / 2;
+  const sx = (rb.left + rb.width / 2) - CAL.cx;
+  if(Math.abs(sx) > 1) CAL.s = sx / 100;
+}
+function screenToWorld(sx, sy){
+  const th = TILT * Math.PI / 180, p = PERSP, s = CAL.s || 1;
+  const u = (sy - CAL.cy) / s, v = (sx - CAL.cx) / s;
+  const den = p * Math.cos(th) + u * Math.sin(th);
+  const y = Math.abs(den) < 1e-6 ? 0 : (u * p) / den;
+  const x = v * (p - y * Math.sin(th)) / p;
+  return {x:AW / 2 + x, y:AH / 2 + y};
+}
+function fitGround(){
+  const g = $("ground"), f = $("field"), w = $("fieldwrap");
+  if(!g || !f || !w || !w.clientHeight) return;
+  g.style.setProperty("--gscale", "1");
+  f.style.setProperty("--fdy", "0px");
+  let r = g.getBoundingClientRect();
+  if(!r.width || !r.height) return;
+  const s = Math.max(.25, Math.min(1.3, Math.min((w.clientWidth - 14) / r.width, (w.clientHeight - 86) / r.height)));
+  g.style.setProperty("--gscale", s.toFixed(3));
+  r = g.getBoundingClientRect();
+  const wr = w.getBoundingClientRect();
+  f.style.setProperty("--fdy", (((wr.top + wr.bottom) / 2 - (r.top + r.bottom) / 2) - 14).toFixed(1) + "px");
+  calibrate();
+}
+
+/* =====================================================================
+   THE GROUND
+   ===================================================================== */
+PLAN.wall = {sh:0, torso:[86,30,46], head:null, legs:null};
+PLAN.keep = {sh:0, torso:[112,54,58], head:[70,34,26], legs:null};
+
+function buildGround(){
+  const g = $("ground");
+  g.style.setProperty("--aw", AW + "px");
+  g.style.setProperty("--ah", AH + "px");
+  let h = "";
+  for(const side of ["foe","you"]){
+    for(let i=0;i<9;i++){
+      const r = patchRect(side, i);
+      h += '<div class="patch ' + (side === "you" ? "mine" : "theirs") + '" data-side="' + side + '" data-i="' + i +
+        '" style="left:' + r.x + "px; top:" + r.y + "px; width:" + r.w + "px; height:" + r.h + 'px"></div>';
     }
   }
-  $(elId).innerHTML = html;
+  h += '<div class="river" style="top:' + (RIVER_Y - RIVER_H) + "px; height:" + (RIVER_H * 2) + 'px"></div>';
+  for(let l=0;l<3;l++)
+    h += '<div class="bridge" style="left:' + (LANEX[l] - BRIDGE_W / 2) + "px; top:" + (RIVER_Y - RIVER_H - 6) +
+      "px; width:" + BRIDGE_W + "px; height:" + (RIVER_H * 2 + 12) + 'px"></div>';
+  h += '<div id="mk-c" style="position:absolute;width:2px;height:2px;left:' + (AW/2-1) + "px;top:" + (AH/2-1) + 'px;opacity:0"></div>';
+  h += '<div id="mk-r" style="position:absolute;width:2px;height:2px;left:' + (AW/2+99) + "px;top:" + (AH/2-1) + 'px;opacity:0"></div>';
+  h += '<div id="mobs" style="position:absolute;inset:0;transform-style:preserve-3d"></div>';
+  g.innerHTML = h;
+  paintPatches();
 }
-function renderRiver(){
-  let html = "";
-  for(let l=0;l<3;l++){
-    const youHas = frontIdx(S.you, l) >= 0, foeHas = frontIdx(S.foe, l) >= 0;
-    const held = youHas && !foeHas ? " held-you" : foeHas && !youHas ? " held-foe" : "";
-    html += '<div class="bcell"><div class="bridge' + held + '"></div></div>';
+function paintPatches(){
+  for(const el of document.querySelectorAll(".patch")){
+    const side = el.dataset.side, i = +el.dataset.i, b = BIO[S[side].patches[i]];
+    el.style.setProperty("--bio", b.color);
+    el.innerHTML = '<span class="pico">' + b.icon + '</span><span class="pnm">' + esc(b.name) + "</span>";
   }
-  $("river").innerHTML = html;
 }
-function renderPlate(P, elId){
-  $(elId).innerHTML = '<span class="face">' + P.art + "</span><span>" +
-    '<span class="fn">' + esc(P.name) + "</span><br>" +
-    '<span class="fd">' + esc(P.deckName || "") + "</span></span>";
+
+/* =====================================================================
+   CREATURES - every model is an original blocky puppet assembled from
+   boxes: three faces each, so they have real volume on the plane.
+   ===================================================================== */
+function boxHTML(cls, w, d, hgt, z, col, inner){
+  return '<div class="bx ' + cls + '" style="--w:' + w + "px;--d:" + d + "px;--h:" + hgt + "px;--z:" + z +
+    "px;--c:" + col + '"><b class="tp"></b><b class="fr">' + (inner || "") + '</b><b class="sd"></b></div>';
 }
-function render(){
-  if(!S || screen !== "battle") return;
-  const t = targets();
-  renderPlate(S.foe, "foe-plate"); renderPlate(S.you, "you-plate");
-  $("foe-life").textContent = S.foe.life; $("you-life").textContent = S.you.life;
-  $("foe-life-bar").style.width = (S.foe.life / START_LIFE * 100) + "%";
-  $("you-life-bar").style.width = (S.you.life / START_LIFE * 100) + "%";
-  $("keep-foe").textContent = S.foe.life; $("keep-you").textContent = S.you.life;
-  renderSide(S.foe, "side-foe", true, t);
-  renderSide(S.you, "side-you", false, t);
-  renderRiver();
+function mobHTML(m){
+  const plan = PLAN[m.plan] || PLAN.scamp;
+  const col = m.col || (m.struct === "wall" ? (m.side === "you" ? "#93A3B8" : "#D08FA2")
+                                            : (m.side === "you" ? "#6E8CA8" : "#A8697E"));
+  const t = plan.torso, hd = plan.head, lg = plan.legs;
+  let h = "";
+  if(plan.sh) h += '<div class="sh" style="--r:' + plan.sh + 'px"></div>';
+  h += '<div class="rig">';
+  let z = 0;
+  if(lg){
+    const [lw, ld, lh, cnt] = lg;
+    for(let i=0;i<cnt;i++){
+      const off = cnt === 2 ? (i ? 1 : -1) * (t[0] * 0.26) : (i % 2 ? 1 : -1) * (t[0] * 0.3);
+      const dep = cnt === 4 ? (i < 2 ? -t[1] * 0.28 : t[1] * 0.28) : 0;
+      h += '<div class="bx" style="--w:' + lw + "px;--d:" + ld + "px;--h:" + lh + "px;--z:0px;--c:" + col +
+        ';transform:translate3d(' + off + "px," + dep + "px,0)\"><b class=\"tp\"></b><b class=\"fr\"></b><b class=\"sd\"></b></div>";
+    }
+    z = lh;
+  }
+  h += boxHTML("torso", t[0], t[1], t[2], z, col);
+  if(hd){
+    const face = '<i class="ey l"></i><i class="ey r"></i>' + (m.id ? '<span class="mk">' + CARDS[m.id].art + "</span>" : "");
+    h += boxHTML("head", hd[0], hd[1], hd[2], z + t[2], col, face);
+  }
+  h += "</div>";
+  const top = z + t[2] + (hd ? hd[2] : 0) + 9;
+  h += '<div class="hpb" style="--top:' + top + 'px"><i style="width:100%"></i></div>';
+  return h;
+}
+function syncMobs(){
+  const host = $("mobs");
+  if(!host) return;
+  for(const m of S.mobs){
+    if(!m.alive) continue;
+    if(!m.el){
+      const el = document.createElement("div");
+      el.className = "mob" + (m.side === "foe" ? " foe" : "");
+      el.innerHTML = mobHTML(m);
+      host.appendChild(el);
+      m.el = el;
+      m.bar = el.querySelector(".hpb > i");
+      m.barWrap = el.querySelector(".hpb");
+    }
+    m.el.style.transform = "translate3d(" + m.x.toFixed(1) + "px," + m.y.toFixed(1) + "px,0)";
+    const f = Math.max(0, m.hp / m.maxHp);
+    if(m.bar) m.bar.style.width = (f * 100).toFixed(0) + "%";
+    if(m.barWrap) m.barWrap.classList.toggle("full", f > 0.995);
+    m.el.classList.toggle("walking", !!m.walking);
+    m.el.classList.toggle("striking", m.strike > 0);
+    m.el.style.opacity = m.inside ? "0" : "";
+  }
+  for(let i=S.dead.length - 1; i>=0; i--){
+    const m = S.dead[i];
+    if(m.el && !m.fading){
+      m.fading = true;
+      m.el.classList.add("dying");
+      m.el.style.setProperty("--dx", m.x.toFixed(0) + "px");
+      m.el.style.setProperty("--dy", m.y.toFixed(0) + "px");
+      setTimeout(() => { if(m.el) m.el.remove(); }, 380);
+    }
+    S.dead.splice(i, 1);
+  }
+}
+function syncFx(){
+  const host = $("mobs");
+  if(!host) return;
+  while(pending3d.length){
+    const f = pending3d.shift();
+    const el = document.createElement("div");
+    el.className = f.kind === "ping" ? "ping" : "blast";
+    const r = f.r || 80;
+    el.style.cssText = "left:" + (f.x - r) + "px;top:" + (f.y - r * 0.62) + "px;width:" + (r * 2) +
+      "px;height:" + (r * 1.24) + "px";
+    host.appendChild(el);
+    setTimeout(() => el.remove(), 620);
+  }
+  while(fxq.length){
+    const f = fxq.shift();
+    const th = TILT * Math.PI / 180, p = PERSP, s = CAL.s || 1;
+    const wy = f.wy - AH / 2, wx = f.wx - AW / 2;
+    const factor = p / (p - wy * Math.sin(th));
+    const sx = CAL.cx + s * wx * factor, sy = CAL.cy + s * wy * Math.cos(th) * factor;
+    const d = document.createElement("div");
+    d.className = "float " + f.cls;
+    d.textContent = f.text;
+    d.style.left = sx + "px"; d.style.top = sy + "px";
+    $("fx").appendChild(d);
+    setTimeout(() => d.remove(), 1050);
+  }
+}
 
-  const rc = $("roundchip");
-  rc.className = "roundchip" + (isOvertime() ? " ot" : (S.active === "you" ? " you" : ""));
-  rc.textContent = S.over ? "Match over" : (isOvertime() ? "DOUBLE JUICE · r" + S.round : "Round " + S.round + " of " + CALL_TURN);
-
+/* =====================================================================
+   HUD
+   ===================================================================== */
+function fmtTime(sec){
+  const s = Math.max(0, Math.ceil(sec));
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+}
+function wallPips(side){
+  const w = S.mobs.filter(m => m.struct === "wall" && m.side === side).sort((a,b) => a.lane - b.lane);
+  return w.map(m => '<i class="' + (m.alive ? "" : "gone") + '"></i>').join("");
+}
+function renderHud(){
   const P = S.you;
-  $("juicenum").textContent = P.juice;
-  let jb = "";
-  for(let i=0;i<juiceCap();i++) jb += '<span class="' + (i < P.juice ? (isOvertime() ? "ot" : "on") : "") + '"></span>';
-  $("juicebar").innerHTML = jb;
+  $("foe-plate").innerHTML = '<span class="face">' + S.foe.art + '</span><span><span class="fn">' +
+    esc(S.foe.name) + '</span><span class="fd">' + esc(S.foe.deckName) + "</span></span>";
+  $("you-plate").innerHTML = '<span class="face">' + P.art + '</span><span><span class="fn">' +
+    esc(P.name) + '</span><span class="fd">' + esc(P.deckName) + "</span></span>";
+  $("foe-walls").innerHTML = wallPips("foe");
+  $("you-walls").innerHTML = wallPips("you");
+
+  const c = $("clock");
+  const left = S.ot ? MATCH_TIME + OT_TIME - S.t : MATCH_TIME - S.t;
+  c.className = "clock" + (S.ot ? " ot" : S.t >= X2_AT ? " x2" : "");
+  c.textContent = (S.ot ? "SUDDEN DEATH " : S.t >= X2_AT ? "×2 " : "") + fmtTime(left);
+
+  $("juicenum").textContent = Math.floor(P.juice);
+  const jb = $("juicebar");
+  jb.classList.toggle("x2", S.t >= X2_AT);
+  if(jb.childElementCount !== JUICE_MAX){
+    let h = "";
+    for(let i=0;i<JUICE_MAX;i++) h += "<span><i></i></span>";
+    jb.innerHTML = h;
+  }
+  const cells = jb.children;
+  for(let i=0;i<JUICE_MAX;i++){
+    const fill = clamp(P.juice - i, 0, 1);
+    cells[i].firstChild.style.transform = "scaleX(" + fill.toFixed(2) + ")";
+  }
 
   let hand = "";
   for(let h=0; h<HAND_SIZE; h++){
-    const id = P.hand[h], d = CARDS[id], c = bestCost(P, id);
-    const broke = c > P.juice || S.active !== "you" || !!S.over;
-    hand += cardFace(id, {lvl:P.levels[id] || 1, cost:c, deal:c < d.cost,
+    const id = P.hand[h], d = CARDS[id];
+    const broke = d.cost > P.juice || !!S.over;
+    hand += cardFace(id, {lvl:P.levels[id] || 1, cost:d.cost,
       cls:(broke ? "broke" : "playable") + (S.pending && S.pending.h === h ? " sel" : ""),
-      attrs:' data-act="hand" data-h="' + h + '" tabindex="0"'});
+      attrs:' data-act="hand" data-h="' + h + '"'});
   }
   $("handcards").innerHTML = hand;
   $("nextcard").innerHTML = cardFace(P.next, {lvl:P.levels[P.next] || 1});
 
-  $("btn-end").disabled = S.active !== "you" || !!S.over;
-  $("btn-end").textContent = S.over ? "Done" : S.active === "you" ? "End turn" : S.foe.name + "…";
-  const ft = $("btn-floop-tile");
-  ft.disabled = S.active !== "you" || !!S.over || P.tileFlooped || P.juice < TILE_FLOOP_COST;
-  ft.textContent = P.tileFlooped ? "Tile flooped" : "Floop a tile · " + TILE_FLOOP_COST;
+  const hint = $("hint");
+  if(S.floopMode) hint.innerHTML = "<b>Pick one of your patches</b> to retill. Costs 2 juice.";
+  else if(S.pending) hint.innerHTML = cardBlurb(P.hand[S.pending.h]) + "<br><b>Tap your half of the mat to send it in.</b>";
+  else hint.innerHTML = "";
+  hint.classList.toggle("off", !S.pending && !S.floopMode);
 
-  const hint = $("cardhint");
-  if(hint){
-    const id = S.focus || (S.pending && S.pending.h !== undefined ? P.hand[S.pending.h] : null);
-    if(id && CARDS[id]){ hint.classList.remove("off"); hint.innerHTML = cardBlurb(id); }
-    else if(S.pending){ hint.classList.remove("off"); hint.innerHTML = PEND_HINT[S.pending.kind] || "Pick a target."; }
-    else hint.classList.add("off");
+  for(const el of document.querySelectorAll(".patch")){
+    el.classList.toggle("pickable", S.floopMode && el.dataset.side === "you");
+    el.classList.toggle("dropzone", !!S.pending && el.dataset.side === "you");
   }
   $("logfeed").innerHTML = S.log.map(l => '<p class="' + l.cls + '">' + esc(l.text) + "</p>").join("");
   $("logfeed").scrollTop = $("logfeed").scrollHeight;
-  flushFx();
-  fitBoard();
+  $("btn-floop").disabled = S.you.juice < 2 || !!S.over;
 }
-const PEND_HINT = {
-  place:"Pick a glowing tile. Its own biome knocks 1 off the cost and adds +1/+1.",
-  myEmptyTile:"Pick an empty tile of yours.",
-  myUnit:"Pick one of your creatures.",
-  myTile:"Pick one of your tiles to retill.",
-  enemyLane:"Pick an enemy lane.",
-  enemyUnit:"Pick an enemy creature.",
-  garrison:"Pick the creature to send inside.",
-};
+
+/* =====================================================================
+   THE LOOP
+   ===================================================================== */
+let hudAcc = 0;
+function frame(ts){
+  if(!S || S.over) return;
+  const dt = Math.min(0.05, (ts - (S.lastTs || ts)) / 1000);
+  S.lastTs = ts;
+  step(dt);
+  aiTick(dt);
+  syncMobs(); syncFx();
+  hudAcc += dt;
+  if(hudAcc > 0.1){ hudAcc = 0; renderHud(); }
+  if(!S.over) S.raf = requestAnimationFrame(frame);
+}
+function startLoop(){
+  buildGround();
+  syncMobs();
+  fitGround();
+  renderHud();
+  S.lastTs = 0;
+  S.raf = requestAnimationFrame(frame);
+}
 </script>
+
 <script>
 "use strict";
 /* =====================================================================
    INPUT
    ===================================================================== */
-let deckPick = -1, pendBio = null;
-const myTurn = () => S && !S.over && S.active === "you" && screen === "battle";
+let deckPick = -1;
+const live = () => S && !S.over && screen === "battle";
 
 function onHandClick(h){
-  if(!myTurn()) return;
-  const P = S.you, id = P.hand[h], d = CARDS[id];
-  S.focus = id;
-  if(S.pending && S.pending.h === h){ S.pending = null; render(); return; }
-  S.pending = null;
-  if(bestCost(P, id) > P.juice){ flash("Not enough juice"); render(); return; }
-
-  if(d.kind === "spell"){
-    const tg = d.spell.target;
-    if(tg === "enemyLane") S.pending = {kind:"enemyLane", h};
-    else if(tg === "myTile"){
-      P.juice -= costOf(P, id);
-      cycleOut(P, h);
-      logLine("", "You cast " + d.name + ".");
-      S.pending = {kind:"myTile", mode:"reclaim", def:d, left:d.spell.n || 1};
-    }
-    else if(tg === "myUnit"){
-      const list = P.units.map((u, i) => u && base(u).kind !== "structure" ? i : -1).filter(i => i >= 0);
-      if(!list.length){ flash("No creature to target"); render(); return; }
-      if(d.spell.id === "teleport" && P.units.every(u => u)){ flash("Nowhere to land"); render(); return; }
-      S.pending = {kind:"myUnit", h, then:d.spell.id, list};
-    } else { playCard(P, h, 0); render(); return; }
-  } else if(d.special === "swarm"){
-    if(P.units.every(u => u)){ flash("Every tile is full"); render(); return; }
-    playCard(P, h, 0); render(); return;
-  } else {
-    if(!P.units.some((u, i) => !u && costOf(P, id, i) <= P.juice)){ flash("No tile you can afford"); render(); return; }
-    S.pending = {kind:"place", h};
-  }
-  render();
+  if(!live()) return;
+  const P = S.you, d = CARDS[P.hand[h]];
+  S.floopMode = false;
+  if(S.pending && S.pending.h === h){ S.pending = null; renderHud(); return; }
+  if(d.cost > P.juice){ flash("Not enough juice"); return; }
+  S.pending = {h};
+  renderHud();
 }
-
-function onTileClick(side, i){
-  if(!myTurn()) return;
-  const P = S.you, E = S.foe, p = S.pending;
-  if(p){
-    if(p.kind === "place" && side === "you" && !P.units[i] && costOf(P, P.hand[p.h], i) <= P.juice){
-      S.pending = null; playCard(P, p.h, i); render(); return;
-    }
-    if(p.kind === "enemyLane" && side === "foe"){
-      S.pending = null; playCard(P, p.h, lane(i)); render(); return;
-    }
-    if(p.kind === "enemyUnit" && side === "foe" && E.units[i]){
-      S.pending = null; doFloop(P, p.floopFrom, {target:i}); render(); return;
-    }
-    if(p.kind === "myUnit" && side === "you" && P.units[i] && (!p.list || p.list.includes(i))){
-      if(p.then === "teleport"){ S.pending = {kind:"myEmptyTile", h:p.h, from:i, mode:"tele"}; render(); return; }
-      if(p.then === "buff"){ S.pending = null; playCard(P, p.h, i); render(); return; }
-      if(p.then === "mend"){ S.pending = null; doFloop(P, p.floopFrom, {target:i}); render(); return; }
-    }
-    if(p.kind === "myEmptyTile" && side === "you" && !P.units[i] &&
-       (p.laneLock === undefined || lane(i) === p.laneLock)){
-      S.pending = null;
-      if(p.mode === "tele") playCard(P, p.h, p.from, i);
-      else if(p.mode === "exit") moveOut(P, p.structIdx, i);
-      else doFloop(P, p.floopFrom, {target:i});
-      render(); return;
-    }
-    if(p.kind === "myTile" && side === "you"){ pendBio = i; showBiomePicker(); return; }
-    if(p.kind === "garrison" && side === "you" && p.list.includes(i)){
-      S.pending = null; moveIn(P, p.structIdx, i); render(); return;
-    }
-    S.pending = null; render(); return;
+function onFieldPoint(sx, sy){
+  if(!live()) return;
+  const P = S.you;
+  const w = screenToWorld(sx, sy);
+  if(S.floopMode){
+    if(!myHalf("you", w.y)){ flash("Your side only"); return; }
+    S.pendPatch = patchIndex("you", w.x, w.y);
+    showBiomePicker();
+    return;
   }
-
-  const u = (side === "you" ? P : E).units[i];
-  if(u) S.focus = u.id;
-  if(side === "you" && u){
-    const d = base(u);
-    if(d.kind === "structure" && d.houses){
-      if(u.guest){
-        if(P.units.some((x, k) => !x && lane(k) === lane(i)))
-          S.pending = {kind:"myEmptyTile", mode:"exit", structIdx:i, laneLock:lane(i)};
-        else flash("No room in this lane");
-      } else {
-        const list = garrisonTargets(P, i);
-        if(list.length) S.pending = {kind:"garrison", structIdx:i, list};
-        else flash("Nobody in this lane can go in");
-      }
-    } else if(canFloopUnit(P, i)){
-      const f = d.floop;
-      if(f.target === "enemyUnit"){
-        if(!E.units.some(x => x)){ flash("Nothing to shoot"); render(); return; }
-        S.pending = {kind:"enemyUnit", floopFrom:i};
-      } else if(f.target === "myEmptyTile"){
-        if(P.units.every(x => x)){ flash("No empty tile"); render(); return; }
-        S.pending = {kind:"myEmptyTile", floopFrom:i, mode:"move"};
-      } else if(f.target === "myUnit"){
-        const list = P.units.map((x, k) => x ? k : -1).filter(k => k >= 0);
-        S.pending = {kind:"myUnit", floopFrom:i, then:"mend", list};
-      } else doFloop(P, i);
-    }
+  if(!S.pending) return;
+  const id = P.hand[S.pending.h], d = CARDS[id];
+  if(d.kind === "spell" && d.rt.spell === "reclaim"){
+    if(!myHalf("you", w.y)){ flash("Your side only"); return; }
+    S.pendPatch = patchIndex("you", w.x, w.y);
+    showBiomePicker(true);
+    return;
   }
-  render();
+  const spellAnywhere = d.kind === "spell";
+  if(!spellAnywhere && !canDeployAt(P, w.x, w.y)){ flash("Your half of the mat"); return; }
+  if(deploy(P, S.pending.h, w.x, w.y)){ S.pending = null; renderHud(); }
 }
 
 document.addEventListener("click", (e) => {
   const act = e.target.closest("[data-act]");
   if(act){ handleAct(act.dataset.act, act.dataset); return; }
-  const tile = e.target.closest(".tile");
-  if(tile){ onTileClick(tile.dataset.side, +tile.dataset.i); return; }
-});
-document.addEventListener("mouseover", (e) => {
-  const c = e.target.closest("[data-h],[data-card]");
-  if(!c || !S || screen !== "battle") return;
-  const id = c.dataset.card || S.you.hand[+c.dataset.h];
-  if(id && id !== S.focus){ S.focus = id; render(); }
+  if(screen === "battle" && $("scrim").hidden){
+    const fw = e.target.closest("#fieldwrap");
+    if(fw){ onFieldPoint(e.clientX, e.clientY); return; }
+  }
 });
 document.addEventListener("keydown", (e) => {
   if(e.key === "Escape"){
     if(!$("scrim").hidden){ hideSheet(); return; }
-    if(S && S.pending){ S.pending = null; render(); }
+    if(S){ S.pending = null; S.floopMode = false; renderHud(); }
     return;
   }
-  if(!$("scrim").hidden || !myTurn()) return;
-  if(e.key >= "1" && e.key <= "5") onHandClick(+e.key - 1);
-  else if(e.key === "e" || e.key === "E") endTurn();
-  else if(e.key === "f" || e.key === "F") startTileFloop();
+  if(!$("scrim").hidden || !live()) return;
+  if(e.key >= "1" && e.key <= "4") onHandClick(+e.key - 1);
+  else if(e.key === "f" || e.key === "F") toggleFloop();
 });
-window.addEventListener("resize", fitBoard);
-$("btn-end").addEventListener("click", () => { if(myTurn()) endTurn(); });
-$("btn-battle").addEventListener("click", startBattle);
-$("btn-floop-tile").addEventListener("click", startTileFloop);
+window.addEventListener("resize", () => { if(screen === "battle") fitGround(); });
+$("btn-floop").addEventListener("click", toggleFloop);
 $("btn-log").addEventListener("click", () => $("logpop").classList.toggle("hidden"));
 $("btn-rules2").addEventListener("click", showRules);
 $("btn-howto").addEventListener("click", showRules);
-$("btn-quit").addEventListener("click", () => { if(S && !S.over){ S.you.life = 0; finish("foe"); } else go("menu"); });
+$("btn-battle").addEventListener("click", startBattle);
+$("btn-quit").addEventListener("click", () => {
+  if(S && !S.over){ const k = S.mobs.find(m => m.struct === "keep" && m.side === "you"); if(k) k.hp = 0, die(k, "foe"); }
+  else go("menu");
+});
 $("btn-reset").addEventListener("click", () => showSheet(
   "<h2>Start over?</h2><p>This wipes your trophies, gold, collection and deck. There is no undo.</p>" +
   '<div class="foot"><button class="cbtn blue" data-act="close" type="button">Keep my stuff</button>' +
   '<button class="cbtn red" data-act="reallyreset" type="button">Wipe it</button></div>'));
 
-function startTileFloop(){
-  if(!myTurn()) return;
-  const P = S.you;
-  if(P.tileFlooped){ flash("Already flooped a tile this turn"); return; }
-  if(P.juice < TILE_FLOOP_COST){ flash("Need " + TILE_FLOOP_COST + " juice"); return; }
-  S.pending = {kind:"myTile", mode:"floop"};
-  render();
+function toggleFloop(){
+  if(!live()) return;
+  if(S.you.juice < 2){ flash("Need 2 juice"); return; }
+  S.floopMode = !S.floopMode;
+  S.pending = null;
+  renderHud();
 }
 function startBattle(){
   const ai = arenaIndex(SAVE.trophies);
   const pool = Object.keys(FOES).filter(k => FOES[k].tier <= ai);
-  const key = pool[(Math.random() * pool.length) | 0] || "jake";
-  newMatch(key);
+  newMatch(pool[(Math.random() * pool.length) | 0] || "jake");
   go("battle");
+  startLoop();
 }
 
 /* =====================================================================
@@ -2057,20 +1814,21 @@ function showSheet(html){ $("sheet").innerHTML = html; $("scrim").hidden = false
 function hideSheet(){ $("scrim").hidden = true; }
 
 function handleAct(act, data){
-  if(act === "close"){ hideSheet(); if(S && screen === "battle") render(); }
+  if(act === "close"){ hideSheet(); }
   else if(act === "nav") go(data.to);
   else if(act === "hand") onHandClick(+data.h);
   else if(act === "closelog") $("logpop").classList.add("hidden");
   else if(act === "bio"){
     hideSheet();
-    const P = S.you, p = S.pending;
-    if(!p || pendBio === null) return;
-    if(p.mode === "floop"){ floopTile(P, pendBio, data.key); S.pending = null; }
-    else if(p.mode === "reclaim"){
-      castSpell(P, p.def, pendBio, data.key);
-      if(--p.left <= 0) S.pending = null;
+    const P = S.you;
+    if(S.pendPatch >= 0){
+      if(S.spellReclaim){ deploy(P, S.pending.h, LANEX[1], RIVER_Y + RIVER_H + 20); S.pending = null; S.spellReclaim = false; }
+      else P.juice -= 2;
+      P.patches[S.pendPatch] = data.key;
+      paintPatches();
+      logLine("bmo", "You retill a patch into " + BIO[data.key].name + ".");
     }
-    pendBio = null; render();
+    S.pendPatch = -1; S.floopMode = false; renderHud();
   }
   else if(act === "deckslot"){ deckPick = deckPick === +data.i ? -1 : +data.i; renderCards(); }
   else if(act === "collcard"){
@@ -2094,11 +1852,13 @@ function handleAct(act, data){
   else if(act === "reallyreset"){ SAVE = freshSave(); persist(); hideSheet(); renderMenu(); renderCards(); toast("Fresh mat"); }
   else if(act === "rematch"){ hideSheet(); startBattle(); }
   else if(act === "tomenu"){ hideSheet(); go("menu"); }
+  else if(act === "rules"){ showRules(); }
 }
 
-function showBiomePicker(){
-  showSheet("<h2>Pick a biome</h2><p>Retilling is permanent for the rest of the match. Creatures standing there " +
-    "take the new blessing immediately.</p>" +
+function showBiomePicker(fromSpell){
+  S.spellReclaim = !!fromSpell;
+  showSheet("<h2>Retill the patch</h2><p>Whatever is standing there takes the new blessing straight away, " +
+    "and anything you deploy onto it from now on comes in on its home ground.</p>" +
     '<div class="biokey">' + BIO_KEYS.map(k =>
       '<div class="tappable" data-act="bio" data-key="' + k + '" style="--bio:' + BIO[k].color + '"><b>' +
       BIO[k].icon + " " + esc(BIO[k].name) + "</b>" + esc(BIO[k].note) + "</div>").join("") + "</div>" +
@@ -2106,53 +1866,52 @@ function showBiomePicker(){
 }
 function showCardDetail(id){
   const d = CARDS[id], o = SAVE.owned[id], lv = o ? o.lvl : 1, need = UPGRADE[lv + 1];
-  const tags = [];
-  (d.tags || []).forEach(t => tags.push('<span class="tag kw">' + esc(t) + "</span>"));
-  if(d.houses) tags.push('<span class="tag kw">houses ' + esc(d.houses.join("/")) + "</span>");
-  if(d.floop) tags.push('<span class="tag kw">floop</span>');
+  const rt = d.rt, tags = [];
+  if(rt.n > 1) tags.push('<span class="tag kw">x' + rt.n + "</span>");
+  if(rt.rng >= 90) tags.push('<span class="tag kw">ranged</span>');
+  if(rt.splash) tags.push('<span class="tag kw">splash</span>');
+  if(rt.spellproof) tags.push('<span class="tag kw">spell-proof</span>');
+  if(rt.houses) tags.push('<span class="tag kw">houses ' + esc(rt.houses.join("/")) + "</span>");
+  if(rt.dwell) tags.push('<span class="tag kw">moves indoors</span>');
   showSheet("<h2>" + esc(d.name) + "</h2>" +
     '<div class="detail"><div class="big">' + cardFace(id, {lvl:lv}) + "</div>" +
     '<div class="info"><div class="tags">' +
       '<span class="tag cost">' + d.cost + " juice</span>" +
-      (d.kind === "unit" ? '<span class="tag atk">' + (d.atk + lvlBonus(id,lv).atk) + " ATK</span>" : "") +
-      (d.kind !== "spell" ? '<span class="tag hp">' + (d.hp + lvlBonus(id,lv).hp) + " HP</span>" : "") +
+      (rt.hp ? '<span class="tag hp">' + rt.hp + " HP</span>" : "") +
+      (rt.dmg ? '<span class="tag atk">' + rt.dmg + " dmg</span>" : "") +
       '<span class="tag bio" style="--bio:' + BIO[d.bio].color + '">' + BIO[d.bio].icon + " " + esc(BIO[d.bio].name) + "</span>" +
       tags.join("") + "</div>" +
     "<p>" + esc(d.text) + "</p><p style=\"font-style:italic;color:#9FBCE4\">" + esc(d.flavor || "") + "</p>" +
-    (o && need ? "<p><b>" + o.copies + " / " + need.copies + "</b> copies · <b>" + need.gold + "</b> gold to reach level " + (lv + 1) + "</p>" : "") +
+    (o && need ? "<p><b>" + o.copies + " / " + need.copies + "</b> copies · <b>" + need.gold + "</b> gold for level " + (lv + 1) + "</p>" : "") +
     "</div></div>" +
-    '<div class="foot">' +
-      (o && need ? '<button class="cbtn" data-act="upgrade" data-id="' + id + '" type="button">Upgrade</button>' : "") +
-      '<button class="cbtn blue" data-act="close" type="button">Close</button></div>');
+    '<div class="foot">' + (o && need ? '<button class="cbtn" data-act="upgrade" data-id="' + id + '" type="button">Upgrade</button>' : "") +
+    '<button class="cbtn blue" data-act="close" type="button">Close</button></div>');
 }
 function showRules(){
   showSheet("<h2>How to play</h2>" +
-    "<p>Two sides of a mat, a river between them and three bridges across it. Get your opponent from 34 life to 0, " +
-    "or be ahead when BMO calls it on round " + CALL_TURN + ".</p>" +
-    "<h3>The mat</h3><ol>" +
-    "<li>Your half is <b>three lanes by three rows</b>. Every tile is one of six biomes, rolled at random when the match starts.</li>" +
-    "<li>Play a creature onto any empty tile of yours. On <b>its own home biome</b> (the little icon on the card) it costs 1 less juice and arrives with +1/+1.</li>" +
-    "<li>Spells cost 1 less and hit 1 harder while you control a tile of their home biome.</li>" +
-    "<li><b>Floop a tile</b> for " + TILE_FLOOP_COST + " juice, once a turn, to retill it into any biome you like. That's how you bend the mat toward your deck.</li>" +
-    "</ol><h3>The fight</h3><ol>" +
-    "<li>At the end of your turn, each lane fights across its bridge. <b>Every rested creature in the lane swings</b> — stack a lane and the whole push lands at once.</li><li>All of that damage goes at the enemy's <b>frontmost</b> creature in that lane. Whoever you leave in your own front row is the one who gets hit, so put your tough creatures there.</li>" +
-    "<li><b>Ranged</b> creatures reach across from any row, so they can shoot from safety in the back. Melee creatures swing from anywhere too — they just have nowhere to hide.</li>" +
-    "<li>The defender hits back for <b>half its attack, rounded down</b>, and that lands on whoever is in <b>your</b> front row — whatever they are. Nothing with 0 attack ever hits back, which is why structures make such good front-row tanks.</li>" +
-    "<li>Kill a defender with damage to spare and the rest <b>breaks through</b> into whatever is behind it — and into their life if the lane is empty.</li>" +
-    "<li>Structures never swing, but they make excellent front-row tanks — and nothing with 0 attack ever takes a counter-hit.</li>" +
-    "</ol><h3>Flooping</h3>" +
-    "<p>Tap a creature ringed in purple to <b>floop</b> it: you get its ability, but it doesn't attack this turn. FLOOP THE PIG.</p>" +
-    "<h3>Going indoors</h3>" +
-    "<p>Some structures take lodgers. Tap a structure, then a creature in the same lane, and it moves in:</p><ul>" +
-    "<li><b>The Cave of Solitude</b> — whatever naps inside is invulnerable to all harm, exactly as Finn used it.</li>" +
-    "<li><b>The Schoolhouse</b> — a scholar studies: 3 juice a turn and a permanent +1/+1 each time, up to +4/+4.</li>" +
-    "<li><b>Spirit Tower</b> — a ranged creature shoots from inside at +3 attack and cannot be touched.</li>" +
-    "<li><b>Silo of Truth</b> — pays 2 juice a turn, 3 with a corn creature inside, and heals its lodger.</li>" +
-    "</ul><p>If the structure falls, the lodger is turned out into an empty tile in that lane — or goes down with it if there's nowhere to stand.</p>" +
-    "<h3>Biomes</h3>" +
+    "<p>No turns. Juice fills on its own, creatures fight the moment they land, and the clock runs. " +
+    "Break all the way through to their <b>keep</b> — or be ahead on walls when time is called.</p>" +
+    "<h3>Winning</h3><ol>" +
+    "<li>Each side has <b>three walls</b>, one per bridge, and a <b>keep</b> behind them.</li>" +
+    "<li>The keep is sealed until one of its walls falls. Knock a wall down and the keep opens up — and that lane opens for you to deploy past the river.</li>" +
+    "<li>Destroy the keep and you win outright. At " + Math.round(MATCH_TIME/60) + " minutes, whoever has broken more walls wins; level and it goes to sudden death.</li>" +
+    "</ol><h3>Playing</h3><ol>" +
+    "<li>Tap a card, then tap your half of the mat to send it in. Creatures walk to the nearest bridge and fight whatever they meet.</li>" +
+    "<li><b>Juice</b> refills by itself, up to " + JUICE_MAX + ". It comes in twice as fast for the last minute.</li>" +
+    "<li>You hold four cards; play one and the next slides in. Twelve in the deck, so you always know roughly what is coming back around.</li>" +
+    "</ol><h3>The ground matters</h3>" +
+    "<p>Your half is nine patches of biome, rolled at random. Creatures take the blessing of whatever they are standing on, " +
+    "and a card deployed onto <b>its own biome</b> costs 1 less and arrives stronger. " +
+    "<b>Floop a patch</b> for 2 juice to retill it into anything you like.</p>" +
     '<div class="biokey">' + BIO_KEYS.map(k =>
       '<div style="--bio:' + BIO[k].color + '"><b>' + BIO[k].icon + " " + esc(BIO[k].name) + "</b>" + esc(BIO[k].note) + "</div>").join("") + "</div>" +
-    "<h3>Shortcuts</h3><p><b>1–5</b> pick a card · <b>F</b> floop a tile · <b>E</b> end turn · <b>Esc</b> cancel.</p>" +
+    "<h3>Going indoors</h3>" +
+    "<p>Structures take lodgers, and creatures walk in by themselves if one is near:</p><ul>" +
+    "<li><b>The Cave of Solitude</b> — whatever naps inside is safe from everything and heals fast, then walks back out.</li>" +
+    "<li><b>The Schoolhouse</b> — a scholar studies, growing steadily stronger, then graduates onto the field.</li>" +
+    "<li><b>Spirit Tower</b> — a ranged creature shoots from inside, harder, and cannot be touched.</li>" +
+    "<li><b>Silo of Truth</b> — pays juice while it stands, more with a corn creature inside.</li>" +
+    "</ul><h3>Shortcuts</h3><p><b>1–4</b> pick a card · <b>F</b> floop a patch · <b>Esc</b> cancel.</p>" +
     '<div class="foot"><button class="cbtn" data-act="close" type="button">Got it</button></div>');
 }
 
@@ -2165,7 +1924,6 @@ const CHEST_TIERS = [
   {name:"Golden", gold:[180,280], cards:[8,13]},
 ];
 const rnd = (a, b) => a + ((Math.random() * (b - a + 1)) | 0);
-
 function awardMatch(){
   const won = S.over === "you", draw = S.over === "draw";
   if(won){
@@ -2175,11 +1933,8 @@ function awardMatch(){
       const tier = Math.min(2, Math.floor(arenaIndex(SAVE.trophies) / 2));
       SAVE.chests[slot] = {tier, name:CHEST_TIERS[tier].name};
     }
-  } else if(draw){
-    SAVE.gold += 40; SAVE.xp += 10;
-  } else {
-    SAVE.trophies = Math.max(0, SAVE.trophies - 22); SAVE.gold += 25; SAVE.xp += 8; SAVE.losses++;
-  }
+  } else if(draw){ SAVE.gold += 40; SAVE.xp += 10; }
+  else { SAVE.trophies = Math.max(0, SAVE.trophies - 22); SAVE.gold += 25; SAVE.xp += 8; SAVE.losses++; }
   SAVE.lvl = 1 + Math.floor(SAVE.xp / xpNeed());
   persist();
 }
@@ -2195,43 +1950,40 @@ function openChest(i){
   if(locked.length && Math.random() < 0.55){
     const nid = locked[(Math.random() * locked.length) | 0];
     SAVE.owned[nid] = {copies:0, lvl:1};
-    got[nid] = (got[nid] || 0) + 1;
-    left = Math.max(0, left - 1);
+    got[nid] = 1; left = Math.max(0, left - 1);
   }
   const pool = Object.keys(SAVE.owned);
   while(left > 0){
     const id = pool[(Math.random() * pool.length) | 0];
     const n = Math.min(left, rnd(1, 3));
-    SAVE.owned[id].copies += n;
-    got[id] = (got[id] || 0) + n;
-    left -= n;
+    SAVE.owned[id].copies += n; got[id] = (got[id] || 0) + n; left -= n;
   }
   SAVE.chests[i] = null;
   persist();
-  showSheet("<h2>" + esc(t.name) + " chest</h2>" +
-    "<p>🪙 <b>" + gold + " gold</b></p>" +
+  showSheet("<h2>" + esc(t.name) + " chest</h2><p>🪙 <b>" + gold + " gold</b></p>" +
     '<div class="collgrid">' + Object.keys(got).map(id =>
       cardFace(id, {lvl:SAVE.owned[id].lvl, copies:SAVE.owned[id].copies, dupes:true})).join("") + "</div>" +
     "<p>" + Object.keys(got).map(id => "+" + got[id] + " " + CARDS[id].name).join(" · ") + "</p>" +
     '<div class="foot"><button class="cbtn" data-act="close" type="button">Nice</button></div>');
   renderMenu();
 }
-function showEnd(byCall){
+function showEnd(){
   const won = S.over === "you", draw = S.over === "draw";
   const head = draw ? "A dead heat" : won ? "You win!" : S.foe.name + " wins";
+  const yourWalls = 3 - S.you.wallsDown, theirWalls = 3 - S.foe.wallsDown;
   const verdict = draw
-    ? "BMO: Eighteen rounds and you both look the same. BMO is calling it a draw and going to bed."
-    : won
-      ? (byCall ? "BMO: Time! You were ahead on life, so the mat is yours." : "BMO: " + S.foe.name + " is out of life points. You are the Cornlord now.")
-      : (byCall ? "BMO: Time! " + S.foe.name + " was ahead." : "BMO: You are out of life points. Rough one.");
-  const dTro = won ? "+30" : draw ? "0" : "−22";
-  const dGold = won ? "+90" : draw ? "+40" : "+25";
+    ? "BMO: Sudden death ran out and both keeps are still standing. BMO is going to bed."
+    : won ? "BMO: Their keep is rubble. You are the Cornlord now."
+          : "BMO: Your keep is rubble. Rough one.";
   showSheet("<h2>" + esc(head) + "</h2><p>" + esc(verdict) + "</p>" +
     '<div class="picker">' +
-      '<div class="pick"><span class="pt">🏆 ' + dTro + "</span><span class=\"pd\">now " + SAVE.trophies + "</span></div>" +
-      '<div class="pick"><span class="pt">🪙 ' + dGold + "</span><span class=\"pd\">now " + SAVE.gold + "</span></div>" +
-      '<div class="pick"><span class="pt">' + S.you.life + " vs " + S.foe.life + "</span><span class=\"pd\">life left</span></div>" +
-    "</div>" + (won && SAVE.chests.some(c => c) ? "<p>A chest is waiting on the menu.</p>" : "") +
+      '<div class="pick"><span class="pt">🏆 ' + (won ? "+30" : draw ? "0" : "−22") + "</span>" +
+      '<span class="pd">now ' + SAVE.trophies + "</span></div>" +
+      '<div class="pick"><span class="pt">🪙 ' + (won ? "+90" : draw ? "+40" : "+25") + "</span>" +
+      '<span class="pd">now ' + SAVE.gold + "</span></div>" +
+      '<div class="pick"><span class="pt">' + theirWalls + " vs " + yourWalls + "</span>" +
+      '<span class="pd">walls left standing</span></div></div>' +
+    (won && SAVE.chests.some(c => c) ? "<p>A chest is waiting on the menu.</p>" : "") +
     '<div class="foot"><button class="cbtn blue" data-act="tomenu" type="button">Menu</button>' +
     '<button class="cbtn" data-act="rematch" type="button">Again</button></div>');
 }
@@ -2240,7 +1992,6 @@ function showEnd(byCall){
    GO
    ===================================================================== */
 SAVE = loadSave();
-document.querySelector(".juicewrap").insertAdjacentHTML("beforebegin", '<div id="cardhint" class="off"></div>');
 renderNav();
 go("menu");
 </script>

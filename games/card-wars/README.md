@@ -1,97 +1,87 @@
 # Floop the Pig
 
-A turn-based **Card Wars** game — the one Finn and Jake play on the treehouse floor in
-Adventure Time S4E14, not the mobile game — played on a 3D mat, with [Clash Royale][cr]'s
-economy, card cycle and menu bolted on. One self-contained HTML file, no build step, no
-dependencies.
+A real-time **Card Wars** game — the one Finn and Jake play on the treehouse floor in
+Adventure Time S4E14, not the mobile game — played on a 3D mat with blocky creatures that
+walk, cross bridges and fight on their own, and a [Clash Royale][cr]-shaped shell around it.
+One self-contained HTML file, no build step, no dependencies, no libraries.
 
 ```
 open games/card-wars/index.html
 ```
 
-## The mat
+## No turns
 
-Two sides of a 3×3 grid facing each other across a river, with **three bridges** — one per
-lane. Every one of the eighteen tiles rolls a random biome at the start of the match, and
-you can **floop a tile** for 2 juice, once a turn, to retill it into whatever you like.
-That's the loop: bend the ground under your feet toward the deck you brought.
+Juice fills on its own. Creatures fight the moment they land. The clock runs the whole time.
 
-It's built with CSS 3D transforms — the mat is a plane rotated on X, creatures are
-counter-rotated standees that stand up off their tiles, and the whole thing is scaled to
-fit the viewport by measuring what's actually drawn (the castles and standees lean out past
-the board's own box, so fitting to that box alone cuts the near row off).
+- **150 seconds**, double juice for the last minute, then sudden death if nobody is ahead.
+- Tap a card, tap your half of the mat, and it walks in. Creatures pick the nearest bridge,
+  cross, and attack whatever they meet.
+- Four cards in hand out of a twelve-card deck; play one and the next slides in.
 
-## Depth means something
+## The objective is the wall
 
-- **Every rested creature in a lane swings**, so stacking a lane lands the whole push at once.
-- All of it goes at the enemy's **frontmost** creature. Whoever you leave in *your* front row
-  is the one who gets hit — so that row is the tank slot, which is what structures are for.
-- **Ranged** creatures reach across from any row, so they can shoot from the back.
-- The defender hits back for **half its attack, rounded down**, onto your front row, whatever
-  is standing there. Nothing with 0 attack ever hits back.
-- Kill with damage to spare and it **breaks through** into whatever is behind — and into
-  their life if the lane is empty.
+Each side has **three walls**, one per bridge, and a **keep** behind them.
 
-## Going indoors
+- The keep is sealed while its walls stand. Break a wall and two things happen: the keep
+  opens up, and **that lane opens for you** — you can deploy past the river in it.
+- Destroy the keep and you win outright. At time, whoever broke more walls wins.
+- Walls shoot back, so a lane is genuinely defensible. Keeping them off yours is half the game.
 
-Straight out of the episode: Finn sends the Pig to the Cave of Solitude for a nap, and the
-Ancient Scholar to study in the Schoolhouse. Tap a structure, then a creature in the same
-lane, and it moves in.
+## The creatures are models, not cards
 
-| Structure | What the lodger gets |
-| --- | --- |
-| **The Cave of Solitude** | Invulnerable to all harm — spells and combat both — and heals 2 a turn. Jake simply could not reach the Pig. |
-| **The Schoolhouse** | Studies: 3 juice a turn, and a permanent +1/+1 each turn up to +4/+4. |
-| **Spirit Tower** | A ranged creature shoots from inside at +3 attack and cannot be touched. |
-| **Silo of Truth** | 2 juice a turn, 3 with a corn creature inside, and it heals its lodger. |
+Every creature is an original blocky puppet assembled from real CSS 3D boxes — each box is
+three faces (top, front, side) standing up off the tilted ground plane, so they have actual
+volume, catch the light differently per face, and sort by depth against each other. Body
+plans (`brute`, `scamp`, `lanky`, `crawler`, `hulk`, `tower`, `bunker`) give each card its
+silhouette, and each card its own colour. Nothing is a picture; it's all geometry.
 
-Each structure only takes lodgers it's built for. If the structure falls, the lodger is
-turned out into an empty tile in that lane — or goes down with it if there's nowhere to stand.
+No Three.js, no WebGL, no sprites. The whole thing is transformed DOM, which keeps the text
+crisp and every creature clickable.
 
-## Biomes
+Screen↔world is a closed form: the ground is a plane tilted on X inside a perspective
+container, so two invisible markers on the plane give the centre and the scale, and the
+projection inverts exactly. Round-trip error measures **0.00 world pixels**, which is what
+makes tap-to-deploy land precisely where you tapped.
 
-Six, as in the show. Every tile blesses whoever stands on it. Every card has a **home
-biome**: a creature played onto its own biome costs 1 less and arrives with +1/+1, and a
-spell costs 1 less and hits 1 harder while you control a tile of its biome.
+## The ground still matters
+
+Your half is nine patches of biome, rolled at random each match. Creatures take the blessing
+of whatever they're standing on — and it updates as they walk. A card deployed onto **its own
+biome** costs 1 less and arrives stronger. **Floop a patch** for 2 juice to retill it.
 
 | Biome | Blessing |
 | --- | --- |
-| 🌽 Cornfields | +1 ATK |
-| 💧 Blue Plains | +2 max HP |
-| 🌸 Nice Lands | heals 1 at the start of your turn |
-| 🏜️ SandyLands | Rush — attacks the turn it lands |
-| 🪵 Useless Swamp | no stats at all, but nobody aims a spell at the swamp: untargetable |
-| 🌈 Rainbow | +1/+1, and it counts as every card's home |
+| 🌽 Cornfields | +20% attack while standing on it |
+| 💧 Blue Plains | +25% health on arrival |
+| 🌸 Nice Lands | regenerates 2% a second |
+| 🏜️ SandyLands | +30% move speed |
+| 🪵 Useless Swamp | no stats at all — but enemy spells simply don't land there |
+| 🌈 Rainbow | +15% everything, and it counts as every card's home |
 
-## What came from Clash Royale
+## Going indoors, automatically
 
-| Clash Royale | Here |
+From the episode: Finn sends the Pig to the Cave of Solitude for a nap, and the Ancient
+Scholar to study in the Schoolhouse. Here creatures walk in **by themselves** when they pass
+a structure that will take them:
+
+| Structure | What the lodger gets |
 | --- | --- |
-| Elixir regenerating in real time | **Juice** at the top of each turn, 4 → 8, banking to 10 |
-| Double elixir | Double juice from round 11 |
-| 8-card deck, 4-card hand, next-card preview | 12-card deck, 5-card hand, same cycle — play a card, the next slides into its slot, no drawing or shuffling |
-| Lanes, bridges, units auto-fighting | Three bridges, lanes resolving at end of turn |
-| Crown towers | Empty lane → damage straight to life |
-| 3-minute cap | BMO calls it on round 18, most life wins |
-| The menu | Arena banner, trophy road, level badge, gold, chest slots, deck builder, card levels |
+| **The Cave of Solitude** | Safe from everything — spells and combat both — and heals fast, then walks back out |
+| **The Schoolhouse** | A scholar studies, growing steadily stronger, then graduates onto the field |
+| **Spirit Tower** | A ranged creature shoots from inside, harder, and can't be touched |
+| **Silo of Truth** | Pays juice while it stands, more with a corn creature inside |
 
-Trophies move ±30/22 and carry you through six arenas; chests drop gold and card copies;
-copies plus gold level a card up (+1 HP at level 2, +1 ATK at level 3). It all lives in
-`localStorage`, wrapped in try/catch so a private window just starts fresh. The opponent's
-cards level with your arena, so the ladder keeps pace.
+Each structure only takes lodgers it's built for. If it falls, the lodger is turned out
+rather than lost — and gets a spell out of doors before it'll go back in.
 
-## 36 cards
+## The shell
 
-Card Wars cards actually named on screen in the episode — Husker Knights, the Immortal Maize
-Walker, Cool Dog, The Pig, Summon Archer Dan, Legion of Earlings, Ancient Scholar, The Field
-Reaper, Wandering Bald Man, Silo of Truth, Spirit Tower, The Cave of Solitude, Cerebral Blood
-Storm, Volcano, Field of Nightmares, Reclaim Landscape, Teleport — plus the Schoolhouse, and
-the rest built in the same spirit with some Adventure Time deep cuts (Banana Guard, Choose
-Goose, Tree Trunks, Cosmic Owl, the snail).
+The menu is the original Clash Royale layout: arena banner and trophy road over six arenas,
+level badge, gold, four chest slots, deck builder, card levels bought with duplicates plus
+gold. It all lives in `localStorage`, wrapped in try/catch so a private window just starts
+fresh. The opponent's card levels scale with your arena.
 
-Five decks: **Cornlord**, **Blue Plains Blitz**, **Swamp Doctor**, **Study Hall**, and
-**Jake's Spare Deck** — the pile of expensive weirdos Jake lends Finn, which is exactly as
-clunky as it sounds and is what the easy opponent plays.
+36 cards, five decks, five opponents.
 
 ## Tests
 
@@ -99,42 +89,41 @@ clunky as it sounds and is what the easy opponent plays.
 test/run.sh            # rules, click paths, balance
 ```
 
-The engine runs headless in a `vm` with a stub DOM, so all three suites test the real code:
+The engine runs headless in a `vm` with a stub DOM and is stepped at a fixed `dt`, so all
+three suites drive the real code:
 
-- `rules.test.js` — 19 checks on the garrison and biome rules, driven through the actual
-  click handlers. The Cave really does make its sleeper untouchable by spells *and* combat.
-- `ui.test.js` — 200+ whole matches driven only through `onHandClick` / `onTileClick` /
-  `handleAct`, plus the deck builder, chests and upgrades. Asserts nothing crashes and no
-  targeting state ever wedges. This is what caught a crash in the card detail sheet.
-- `sim.js` — a few hundred matches for pacing and balance.
+- **rules.test.js** — 25 checks: walls sealing and unsealing the keep, creatures funnelling
+  onto bridges and reaching the far wall, every biome blessing, the swamp turning spells away,
+  and the whole lodger cycle from walking in to graduating back out.
+- **ui.test.js** — 100 whole matches driven only through `onHandClick` / `onFieldPoint` /
+  `handleAct`, plus the menu, deck builder, chests and upgrades. 10,000 simulated clicks,
+  asserting nothing crashes and no selection is ever left hanging.
+- **sim.js** — a few hundred matches for pacing and balance.
 
-Current numbers: ~9 rounds a match, 0% draws, opponents winning 20–58%, all four player
-decks landing between 54% and 81%.
+Current numbers: ~100s a match, no draws to speak of, opponents winning 34–91%.
 
-### What the simulation actually changed
+### What testing actually caught
 
-Three rules exist because the numbers said so, not because they were designed in:
+- A graduate walked straight back into the Schoolhouse on the next tick and studied forever.
+- Destroyed walls were filtered out of the sim list, so the lane they guarded could never be
+  recognised as open — the reward for breaking a wall silently did nothing.
+- The ground overflowed its container, because a perspective projection isn't symmetric about
+  the layout box: the near edge reaches further than the far edge contracts. It sat under the
+  card dock and swallowed every deploy tap.
 
-- **Whole lanes swing.** With only the frontmost creature attacking, eighteen tiles of
-  blocking deadlocked the board: 25% of matches timed out as draws at 16 rounds.
-- **Break through.** Without overkill carrying, the deadlock came back in a different shape.
-- **The defender hits back at your front row, whoever they are.** Ranged creatures used to be
-  exempt, which made cheap-ranged decks strictly dominant.
-
-And one honest caveat: the opponent AI is competent — it garrisons, floops, contests all
-three bridges and times its spells — but a strong player will beat it. Its weakness is action
-economy: it averages ~3.5 actions a turn against a bot that manages 6. I tuned its
-thresholds by sweep (that alone took it from ~1.3 actions a turn to ~3.5, roughly doubling
-its win rate), but the remaining gap is in its greedy one-move-at-a-time search, not in a
-coefficient. Difficulty also rides on deck matchup more than on the skill setting.
+**Honest caveat:** the opponent reacts on a timer, defends the lane being pushed and commits
+when it has juice to spare, but it doesn't read a push the way a person does. Against the
+benchmark bot it wins around 76%, though that bot is deliberately simple. Difficulty still
+rides on deck matchup more than on the reaction-speed setting.
 
 ## Controls
 
-`1`–`5` pick a card · `F` floop a tile · `E` end turn · `Esc` cancel · everything is clickable.
+`1`–`4` pick a card · `F` floop a patch · `Esc` cancel · everything is tappable.
 
 ## Fan work
 
 Card Wars and Adventure Time belong to Cartoon Network. This is an unofficial fan project
-made for fun, not affiliated with or endorsed by anyone who owns any of it.
+made for fun, not affiliated with or endorsed by anyone who owns any of it. All the creature
+models are original geometry.
 
 [cr]: https://en.wikipedia.org/wiki/Clash_Royale

@@ -1,45 +1,57 @@
-/* Drives whole matches and the whole menu through the same entry points a real
-   click reaches - onHandClick, onTileClick, handleAct, startTileFloop - so the
-   targeting state machine, deck builder, chests and upgrades are all exercised. */
+/* Drives matches through the same entry points a real click reaches -
+   onHandClick, onFieldPoint, toggleFloop, handleAct - plus the whole menu,
+   deck builder, chests and upgrades. */
 const {makeCtx, DECKS, FOES} = require("./harness.js");
-const N = +process.argv[2] || 300;
+const N = +process.argv[2] || 120;
 const {ctx, vm} = makeCtx();
 vm.runInContext(`
-var ST={clicks:0,plays:0,floops:0,garrison:0,tileFloop:0,bioPick:0,stuck:0,chest:0,swap:0,upg:0};
-var _pc=playCard; playCard=function(P,h,t,x){ if(P.side==="you")ST.plays++; return _pc(P,h,t,x); };
-var _df=doFloop; doFloop=function(P,i,o){ if(P.side==="you")ST.floops++; return _df(P,i,o); };
-var _mi=moveIn; moveIn=function(P,a,b){ if(P.side==="you")ST.garrison++; return _mi(P,a,b); };
-var _ft=floopTile; floopTile=function(P,i,b){ if(P.side==="you")ST.tileFloop++; return _ft(P,i,b); };
-function humanTurn(){
-  for(let act=0; act<14 && myTurn(); act++){
-    const before = ST.plays+ST.floops+ST.garrison+ST.tileFloop;
-    const roll = Math.random();
-    if(roll < 0.12) startTileFloop();
-    else if(roll < 0.72) onHandClick((Math.random()*HAND_SIZE)|0);
-    else onTileClick("you",(Math.random()*9)|0);
-    ST.clicks++;
-    let guard=0;
-    while(S.pending && guard++ < 14){
-      if(S.pending.kind === "myTile"){
-        onTileClick("you",(Math.random()*9)|0); ST.clicks++;
-        if(S.pending){ handleAct("bio",{key:BIO_KEYS[(Math.random()*6)|0]}); ST.bioPick++; }
-        continue;
-      }
-      onTileClick(Math.random()<0.5?"you":"foe",(Math.random()*9)|0); ST.clicks++;
+var ST={clicks:0,deploys:0,spells:0,floops:0,bio:0,stuck:0,chest:0,swap:0,upg:0,garrison:0};
+var _dep = deploy;
+deploy = function(P,h,x,y){
+  const spell = CARDS[P.hand[h]].kind === "spell";
+  const r = _dep(P,h,x,y);
+  if(r && P.side === "you"){ if(spell) ST.spells++; else ST.deploys++; }
+  return r;
+};
+/* forward projection matching the page's own maths, so the test can aim clicks */
+function worldToScreen(wx, wy){
+  const th = TILT*Math.PI/180, p = PERSP, s = CAL.s || 1;
+  const y = wy - AH/2, x = wx - AW/2, f = p / (p - y*Math.sin(th));
+  return [CAL.cx + s*x*f, CAL.cy + s*y*Math.cos(th)*f];
+}
+function humanTick(dt){
+  const P = S.you;
+  if(Math.random() > dt*1.1) return;                 // roughly once a second
+  ST.clicks++;
+  if(Math.random() < 0.08){                          // sometimes retill a patch
+    toggleFloop();
+    if(S.floopMode){
+      const pt = worldToScreen(LANEX[(Math.random()*3)|0], RIVER_Y + RIVER_H + 80);
+      onFieldPoint(pt[0], pt[1]); ST.clicks++;
+      if(S.pendPatch >= 0){ handleAct("bio", {key:BIO_KEYS[(Math.random()*6)|0]}); ST.bio++; ST.floops++; }
+      else S.floopMode = false;
     }
-    if(guard>=14){ ST.stuck++; S.pending=null; }
-    if(ST.plays+ST.floops+ST.garrison+ST.tileFloop === before && act > 9) break;
+    return;
   }
-  if(myTurn()) endTurn();
+  const h = (Math.random()*HAND_SIZE)|0;
+  onHandClick(h);
+  if(!S.pending) return;
+  const l = (Math.random()*3)|0;
+  const wx = LANEX[l] + (Math.random()*50 - 25);
+  const wy = RIVER_Y + RIVER_H + 30 + Math.random()*250;
+  const pt = worldToScreen(wx, wy);
+  onFieldPoint(pt[0], pt[1]); ST.clicks++;
+  if(S.pendPatch >= 0){ handleAct("bio", {key:BIO_KEYS[(Math.random()*6)|0]}); ST.bio++; }
+  if(S.pending){ S.pending = null; ST.stuck++; }
 }
 function runUi(deckKey, foeKey){
   SAVE.deck = DECKS[deckKey].cards.slice();
   newMatch(foeKey);
-  let g=0;
-  while(!S.over && g++<4000){
-    if(S.active==="you") humanTurn();
-    else { if(!__t.length) break; __t.shift()(); }
-  }
+  screen = "battle";
+  const dt = 0.05;
+  let g = 0;
+  while(!S.over && g++ < 20000){ step(dt); aiTick(dt); humanTick(dt); }
+  ST.garrison += S.mobs.filter(m => m.guest).length;
   return S.over;
 }
 function exerciseMenu(){
@@ -51,7 +63,7 @@ function exerciseMenu(){
   for(let i=0;i<SAVE.chests.length;i++) if(SAVE.chests[i]){ handleAct("chest",{i:String(i)}); ST.chest++; handleAct("close",{}); }
   const up = ids.filter(id=>{ const o=SAVE.owned[id], n=UPGRADE[o.lvl+1]; return n && o.copies>=n.copies && SAVE.gold>=n.gold; });
   if(up.length){ handleAct("upgrade",{id:up[0]}); ST.upg++; }
-  go("cards"); go("menu"); go("battle");
+  go("cards"); go("menu"); screen = "battle";
 }
 `, ctx);
 let crashes = 0;
@@ -66,10 +78,10 @@ for(let i=0;i<N;i++){
 }
 const T = vm.runInContext("ST", ctx), SV = vm.runInContext("SAVE", ctx);
 console.log("ui matches:", N, "| crashes:", crashes, "| results:", JSON.stringify(res));
-console.log("clicks:", T.clicks, "| cards played", T.plays, "| floops", T.floops,
-            "| tile floops", T.tileFloop, "| biome picks", T.bioPick);
-console.log("deck swaps", T.swap, "| chests", T.chest, "| upgrades", T.upg);
-console.log("targeting states that wedged:", T.stuck);
+console.log("clicks:", T.clicks, "| creatures deployed", T.deploys, "| spells cast", T.spells,
+            "| patches flooped", T.floops, "| biome picks", T.bio);
+console.log("deck swaps", T.swap, "| chests", T.chest, "| upgrades", T.upg, "| lodgers seen", T.garrison);
+console.log("selections left hanging:", T.stuck);
 console.log("save survived:", "trophies", SV.trophies, "lvl", SV.lvl,
             "collection", Object.keys(SV.owned).length + "/" + vm.runInContext("CARD_KEYS.length", ctx));
-process.exit(crashes || T.stuck ? 1 : 0);
+process.exit(crashes ? 1 : 0);

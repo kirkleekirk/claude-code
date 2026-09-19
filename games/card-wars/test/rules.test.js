@@ -1,77 +1,93 @@
+/* Rules checks against the real engine, stepped like the live loop. */
 const {makeCtx} = require("./harness.js");
 const {ctx, vm} = makeCtx();
-const t = (name, expr) => {
+let pass = 0, total = 0;
+function check(name, expr){
+  total++;
   let ok, got;
   try{ got = vm.runInContext(expr, ctx); ok = got === true; }
   catch(e){ ok = false; got = "threw: " + e.message; }
   console.log((ok ? "  PASS  " : "  FAIL  ") + name + (ok ? "" : "   -> " + got));
-  return ok;
-};
-let pass = 0, total = 0;
-function check(name, expr){ total++; if(t(name, expr)) pass++; }
-
+  if(ok) pass++;
+}
 vm.runInContext(`
 function setup(){
   SAVE.deck = DECKS.studyhall.cards.slice();
   newMatch("jake");
-  screen="battle"; S.active="you"; S.pending=null; S.you.juice=30;
-  for(let i=0;i<9;i++){ S.you.units[i]=null; S.foe.units[i]=null; }
+  screen = "battle";
+  S.mobs = S.mobs.filter(m => m.struct);      // keep walls and keeps, clear the field
+  S.you.juice = 10; S.foe.juice = 10;
 }
-function put(side,i,id){ const u = spawn(S[side], i, id); u.sick=false; return u; }
+function run(sec, dt){ dt = dt || 0.05; for(let i=0;i<Math.round(sec/dt);i++){ step(dt); } }
+function put(side, id, x, y){ return spawnMob(S[side], id, x, y); }
+function wall(side, lane){ return S.mobs.find(m => m.struct === "wall" && m.side === side && m.lane === lane); }
+function keep(side){ return S.mobs.find(m => m.struct === "keep" && m.side === side); }
 `, ctx);
 
-console.log("Schoolhouse + Ancient Scholar (Finn sends the scholar to study)");
-vm.runInContext("setup(); put('you', idx(1,0), 'school'); put('you', idx(2,0), 'scholar');", ctx);
-check("clicking the structure opens the garrison picker",
-  "onTileClick('you', idx(1,0)); S.pending && S.pending.kind==='garrison' && S.pending.list.includes(idx(2,0))");
-check("clicking the scholar moves it inside",
-  "onTileClick('you', idx(2,0)); !!S.you.units[idx(1,0)].guest && S.you.units[idx(2,0)]===null");
-vm.runInContext("const j=S.you.juice; S.active='you'; beginTurn('you'); ctxJ=S.you.juice-j;", ctx);
-check("studying pays 3 juice a turn", "S.you.units[idx(1,0)].guest.study===1");
-check("and the scholar permanently grows +1/+1", "S.you.units[idx(1,0)].guest.bonusAtk>=1 && S.you.units[idx(1,0)].guest.bonusHp>=1");
-check("study caps at +4/+4",
-  "for(let k=0;k<9;k++) beginTurn('you'); S.you.units[idx(1,0)].guest.study===4");
-check("sending it back out lands it on an empty tile in the same lane",
-  "S.pending=null; onTileClick('you', idx(1,0)); " +
-  "onTileClick('you', idx(0,0)); !S.you.units[idx(1,0)].guest && !!S.you.units[idx(0,0)]");
-
-console.log("\nThe Cave of Solitude (whatever naps inside is invulnerable)");
-vm.runInContext("setup(); S.you.tiles[idx(1,1)].bio='corn'; put('you', idx(1,1), 'cave'); put('you', idx(2,1), 'pig');", ctx);
-check("the Pig goes in for a nap",
-  "onTileClick('you', idx(1,1)); onTileClick('you', idx(2,1)); base(S.you.units[idx(1,1)].guest).name==='The Pig'");
-check("a sweep spell cannot touch the sleeper",
-  "S.you.units[idx(1,1)].guest.dmg=0; castSpell(S.foe, CARDS.bloodstorm, 0); " +
-  "S.you.units[idx(1,1)].dmg>0 && S.you.units[idx(1,1)].guest.dmg===0");
-check("neither can combat, because only the cave is a target",
-  "S.you.units[idx(1,1)].dmg=0; var g=S.you.units[idx(1,1)].guest; " +
-  "put('foe', idx(0,1),'cooldog'); fightLane(S.foe,S.you,1); " +
-  "S.you.units[idx(1,1)].dmg>0 && g.dmg===0");
-check("if the cave falls the lodger is turned out, not lost",
-  "kill(S.you, idx(1,1)); !S.you.units[idx(1,1)] && S.you.units.some(u=>u && base(u).name==='The Pig')");
-
-console.log("\nSpirit Tower (a ranged creature shoots from inside)");
-vm.runInContext("setup(); put('you', idx(1,2), 'tower'); put('you', idx(2,2), 'archer'); put('foe', idx(0,2), 'banana');", ctx);
-check("Archer Dan moves into the tower",
-  "onTileClick('you', idx(1,2)); onTileClick('you', idx(2,2)); !!S.you.units[idx(1,2)].guest");
-check("the tower shoots for the lodger's attack +3",
-  "var before=S.foe.units[idx(0,2)].dmg; S.you.units[idx(1,2)].tapped=false; S.you.units[idx(1,2)].sick=false; " +
-  "fightLane(S.you,S.foe,2); S.foe.units[idx(0,2)] ? S.foe.units[idx(0,2)].dmg>before : true");
-check("a structure only takes lodgers it is built for",
-  "setup(); put('you', idx(1,0),'school'); put('you', idx(2,0),'banana'); garrisonTargets(S.you, idx(1,0)).length===0");
-
-console.log("\nBiome rules");
+console.log("Walls, keeps and winning");
 vm.runInContext("setup();", ctx);
-check("a creature on its home biome costs 1 less",
-  "S.you.tiles[0].bio='corn'; S.you.tiles[1].bio='swamp'; costOf(S.you,'husker',0) === costOf(S.you,'husker',1)-1");
-check("and arrives with +1/+1",
-  "S.you.units[0]=null; var u=spawn(S.you,0,'husker'); u.bonusAtk>=1 && u.bonusHp>=1");
-check("the swamp makes its occupant spell-proof",
-  "S.you.units[3]=null; S.you.tiles[3].bio='swamp'; spawn(S.you,3,'pig'); spellSafe(S.you,3)===true");
-check("rainbow counts as every card's home",
-  "S.you.tiles[4].bio='rain'; costOf(S.you,'reaper',4) === CARDS.reaper.cost-1");
-check("flooping a tile costs juice and changes the biome",
-  "var jj=S.you.juice; floopTile(S.you,8,'nice'); S.you.tiles[8].bio==='nice' && S.you.juice===jj-TILE_FLOOP_COST");
-check("only one tile floop per turn",
-  "S.you.tileFlooped===true");
+check("the keep starts sealed while its walls stand", "keep('foe').locked === true");
+check("breaking a wall opens the keep", "hurt(wall('foe',1), 99999, 'you'); run(0.2); keep('foe').locked === false");
+check("and opens that lane for you to deploy past the river", "canDeployAt(S.you, LANEX[1], WALL_Y.foe + 80) === true");
+check("the other lanes stay closed", "canDeployAt(S.you, LANEX[0], WALL_Y.foe + 80) === false");
+check("destroying the keep wins the match", "keep('foe').hp = 1; die(keep('foe'), 'you'); S.over === 'you'");
+
+console.log("\nCreatures walk to a bridge and cross");
+vm.runInContext("setup();", ctx);
+check("a creature deployed at the back heads for its lane's bridge",
+  "var u = put('you','cooldog', LANEX[0], 900); var y0 = u.y; run(3); u.y < y0 - 40");
+check("it funnels onto the bridge rather than swimming",
+  "run(6); Math.abs(u.x - LANEX[0]) < 26");
+check("it reaches the far side and attacks the wall",
+  "run(12); var w = wall('foe',0); w.hp < w.maxHp");
+
+console.log("\nBiomes");
+vm.runInContext("setup();", ctx);
+check("deploying on a card's home biome costs 1 less",
+  "S.you.patches[patchIndex('you', LANEX[1], 700)] = 'corn'; " +
+  "deployCost(S.you,'husker', LANEX[1], 700) === CARDS.husker.cost - 1");
+check("Cornfields raises attack while you stand on it",
+  "var a = put('you','husker', LANEX[1], 700); a.baseDmg=100; run(0.1); Math.round(a.dmg) === 120");
+check("SandyLands raises speed",
+  "S.you.patches[patchIndex('you', LANEX[1], 700)] = 'sandy'; run(0.1); Math.round(a.spd) === Math.round(a.baseSpd*1.3)");
+check("the swamp shrugs off enemy spells",
+  "S.you.patches[patchIndex('you', LANEX[1], 700)] = 'swamp'; run(0.1); " +
+  "var h0 = a.hp; castSpell(S.foe, CARDS.bloodstorm, a.x, a.y); a.hp === h0");
+check("and the same spell does land on open ground",
+  "S.you.patches[patchIndex('you', LANEX[1], 700)] = 'corn'; run(0.1); " +
+  "var h1 = a.hp; castSpell(S.foe, CARDS.bloodstorm, a.x, a.y); a.hp < h1");
+
+console.log("\nGoing indoors");
+vm.runInContext("setup();", ctx);
+check("a scholar walks into a Schoolhouse on its own",
+  "var st = put('you','school', LANEX[1], 760); var g = put('you','scholar', LANEX[1], 790); " +
+  "run(2); st.guest === g && g.inside === st.uid");
+check("studying makes it stronger",
+  "var d0 = g.dmg; run(5); g.dmg > d0");
+check("and it graduates back onto the field",
+  "run(8); st.guest === null && g.inside === null && g.alive === true");
+check("the Cave shelters whatever naps in it",
+  "setup(); var c = put('you','cave', LANEX[0], 760); var pgg = put('you','pig', LANEX[0], 790); " +
+  "run(2); c.guest === pgg");
+check("nothing can touch the sleeper",
+  "pgg.hp = 100; var before = pgg.hp; castSpell(S.foe, CARDS.bloodstorm, c.x, c.y); " +
+  "put('foe','wyrm', LANEX[0], 700); run(3); pgg.hp >= before");
+check("if the shelter falls the lodger is turned out, not lost",
+  "die(c, 'foe'); pgg.inside === null && pgg.alive === true");
+check("a structure only takes the lodgers it is built for",
+  "setup(); var sc = put('you','school', LANEX[2], 760); put('you','banana', LANEX[2], 790); " +
+  "run(2); sc.guest === null");
+
+console.log("\nDeploying");
+vm.runInContext("setup();", ctx);
+check("you cannot deploy on their half", "canDeployAt(S.you, 300, 200) === false");
+check("you can deploy on yours", "canDeployAt(S.you, 300, 700) === true");
+check("a swarm card brings its whole group",
+  "var n0 = S.mobs.length; S.you.hand[0] = 'earlings'; S.you.juice = 10; " +
+  "deploy(S.you, 0, 300, 700); S.mobs.length === n0 + CARDS.earlings.rt.n");
+check("juice is actually spent", "S.you.juice < 10");
+check("juice refills over time and stops at the cap",
+  "S.you.juice = 0; run(40); Math.abs(S.you.juice - JUICE_MAX) < 0.01");
+
 console.log("\n" + pass + "/" + total + " checks passed");
-process.exit(pass===total ? 0 : 1);
+process.exit(pass === total ? 0 : 1);
