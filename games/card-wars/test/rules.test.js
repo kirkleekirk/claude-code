@@ -46,15 +46,18 @@ vm.runInContext("setup();", ctx);
 check("deploying on a card's home biome costs 1 less",
   "S.you.patches[patchIndex('you', LANEX[1], 700)] = 'corn'; " +
   "deployCost(S.you,'husker', LANEX[1], 700) === CARDS.husker.cost - 1");
+/* the creature walks between checks, so always address the patch it is on now */
 check("Cornfields raises attack while you stand on it",
-  "var a = put('you','husker', LANEX[1], 700); a.baseDmg=100; run(0.1); Math.round(a.dmg) === 120");
+  "var a = put('you','husker', LANEX[1], 700); a.baseDmg=100; " +
+  "run(0.1); S.you.patches[patchIndex('you', a.x, a.y)] = 'corn'; run(0.05); Math.round(a.dmg) === 120");
 check("SandyLands raises speed",
-  "S.you.patches[patchIndex('you', LANEX[1], 700)] = 'sandy'; run(0.1); Math.round(a.spd) === Math.round(a.baseSpd*1.3)");
+  "run(0.1); S.you.patches[patchIndex('you', a.x, a.y)] = 'sandy'; run(0.05); " +
+  "Math.round(a.spd) === Math.round(a.baseSpd*1.3)");
 check("the swamp shrugs off enemy spells",
-  "S.you.patches[patchIndex('you', LANEX[1], 700)] = 'swamp'; run(0.1); " +
+  "run(0.1); S.you.patches[patchIndex('you', a.x, a.y)] = 'swamp'; run(0.05); " +
   "var h0 = a.hp; castSpell(S.foe, CARDS.bloodstorm, a.x, a.y); a.hp === h0");
 check("and the same spell does land on open ground",
-  "S.you.patches[patchIndex('you', LANEX[1], 700)] = 'corn'; run(0.1); " +
+  "run(0.1); S.you.patches[patchIndex('you', a.x, a.y)] = 'corn'; run(0.05); " +
   "var h1 = a.hp; castSpell(S.foe, CARDS.bloodstorm, a.x, a.y); a.hp < h1");
 
 console.log("\nGoing indoors");

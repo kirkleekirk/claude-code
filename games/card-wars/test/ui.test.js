@@ -56,10 +56,15 @@ function runUi(deckKey, foeKey){
 }
 function exerciseMenu(){
   const ids = Object.keys(SAVE.owned);
+  handleAct("sort",{k:["cost","rarity","name"][(Math.random()*3)|0]});
   handleAct("deckslot",{i:String((Math.random()*DECK_SIZE)|0)});
   handleAct("collcard",{id:ids[(Math.random()*ids.length)|0]}); ST.swap++;
+  handleAct("deckslot",{i:"2"}); handleAct("deckslot",{i:"2"});   // pick and cancel
   handleAct("collcard",{id:ids[(Math.random()*ids.length)|0]});
+  handleAct("usecard",{id:ids[(Math.random()*ids.length)|0]}); ST.swap++;
   handleAct("close",{});
+  if(SAVE.deck.length !== DECK_SIZE) throw new Error("deck size broke: " + SAVE.deck.length);
+  if(new Set(SAVE.deck).size !== DECK_SIZE) throw new Error("duplicate card in deck");
   for(let i=0;i<SAVE.chests.length;i++) if(SAVE.chests[i]){ handleAct("chest",{i:String(i)}); ST.chest++; handleAct("close",{}); }
   const up = ids.filter(id=>{ const o=SAVE.owned[id], n=UPGRADE[o.lvl+1]; return n && o.copies>=n.copies && SAVE.gold>=n.gold; });
   if(up.length){ handleAct("upgrade",{id:up[0]}); ST.upg++; }

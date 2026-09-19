@@ -14,8 +14,9 @@ open games/card-wars/index.html
 Juice fills on its own. Creatures fight the moment they land. The clock runs the whole time.
 
 - **150 seconds**, double juice for the last minute, then sudden death if nobody is ahead.
-- Tap a card, tap your half of the mat, and it walks in. Creatures pick the nearest bridge,
-  cross, and attack whatever they meet.
+- **Drag a card onto the mat** and it walks in. While you drag, the legal ground lights up, a
+  ring shows exactly where the creature will land, and it turns red where you can't deploy.
+  Tap-then-tap still works, so it's fine one-handed.
 - Four cards in hand out of a twelve-card deck; play one and the next slides in.
 
 ## The objective is the wall
@@ -77,11 +78,26 @@ rather than lost — and gets a spell out of doors before it'll go back in.
 ## The shell
 
 The menu is the original Clash Royale layout: arena banner and trophy road over six arenas,
-level badge, gold, four chest slots, deck builder, card levels bought with duplicates plus
-gold. It all lives in `localStorage`, wrapped in try/catch so a private window just starts
-fresh. The opponent's card levels scale with your arena.
+level badge, gold, four chest slots, card levels bought with duplicates plus gold. It all
+lives in `localStorage`, wrapped in try/catch so a private window just starts fresh. The
+opponent's card levels scale with your arena.
+
+The **deck builder** works the way that shell implies: tap a deck slot and it lifts, the
+collection dims anything you can't swap in, and tapping a card drops it into the slot with a
+pop. Cards carry rarity frames (common / rare / epic / legendary, the legendary ones with a
+slow shine), a level badge, an upgrade progress bar, and an IN DECK marker. The deck's
+average juice cost sits in the header, and the collection sorts by cost, rarity or name.
+Tapping a card on its own opens it full size with **Use card** and **Upgrade**.
 
 36 cards, five decks, five opponents.
+
+### Smoothness
+
+The HUD used to rewrite its own `innerHTML` ten times a second, which threw away every hover
+state and restarted every transition — the single biggest reason it felt choppy. Now each
+piece keeps a cached string and only touches the DOM when its content actually changes, while
+the juice bar (the one thing that really is continuous) updates every frame on transforms
+alone.
 
 ## Tests
 

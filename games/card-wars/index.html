@@ -47,6 +47,8 @@ button{font:inherit; color:inherit; cursor:pointer}
 #app{position:relative; width:100%; height:100dvh; overflow:hidden}
 .screen{position:absolute; inset:0; display:flex; flex-direction:column; overflow:hidden}
 .screen.off{display:none}
+.screen{animation:scrIn .22s ease both}
+@keyframes scrIn{from{opacity:0; transform:translateY(6px)}}
 
 /* ------------------------------------------------- clash-royale buttons */
 .cbtn{
@@ -171,25 +173,60 @@ button{font:inherit; color:inherit; cursor:pointer}
 
 /* ============================================================ CARDS / DECK */
 #cards{background:linear-gradient(180deg,var(--sky-2) 0%,var(--sky-3) 100%)}
-.cardsbody{flex:1; min-height:0; overflow-y:auto; padding:10px 12px 14px; display:flex; flex-direction:column; gap:10px}
+.cardsbody{flex:1; min-height:0; overflow-y:auto; padding:10px 12px 14px; display:flex; flex-direction:column;
+  gap:9px; width:100%; max-width:940px; margin:0 auto}
 .sechead{
   display:flex; align-items:center; gap:9px; font-family:"Lilita One",Impact,fantasy;
   font-size:16px; letter-spacing:.5px; color:var(--gold); text-shadow:0 2px 0 var(--ink);
 }
 .sechead .hint{font-family:Nunito,sans-serif; font-size:11.5px; font-weight:700; color:#BBD3F2;
   letter-spacing:0; text-shadow:none; margin-left:auto}
-.deckgrid{display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:7px}
-.collgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(82px,1fr)); gap:7px}
+.deckgrid{display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:7px; justify-items:center}
+.deckgrid .gc{width:100%; max-width:98px}
+.collgrid .gc{width:100%; max-width:88px}
+.avgcost{
+  margin-left:auto; display:flex; align-items:center; gap:5px; padding:3px 11px 3px 6px;
+  border:2.5px solid var(--ink); border-radius:999px; background:linear-gradient(180deg,#2A56A8,#17325F);
+}
+.avgcost i{font-style:normal; font-size:13px; line-height:1}
+.avgcost b{font-family:"JetBrains Mono",monospace; font-size:14px; color:#8FD6F5; font-variant-numeric:tabular-nums}
+.avgcost span{font-size:9px; font-weight:900; letter-spacing:.1em; text-transform:uppercase; color:#9FBCE4}
+.sortrow{margin-left:auto; display:flex; gap:5px}
+.sortbtn{
+  border:2.5px solid var(--ink); border-radius:999px; padding:2px 11px; font-size:10.5px; font-weight:800;
+  letter-spacing:.05em; text-transform:uppercase; background:linear-gradient(180deg,#2A56A8,#17325F);
+  color:#BBD3F2; font-family:Nunito,sans-serif;
+}
+.sortbtn.on{background:linear-gradient(180deg,#FFD866,var(--gold-2)); color:#4A2F04}
+.hintline{
+  font-size:11.5px; color:#BBD3F2; font-weight:700; margin:-4px 0 2px; min-height:16px;
+  transition:color .2s;
+}
+.hintline.active{color:var(--gold)}
+.collgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(74px,1fr)); gap:7px; justify-items:center}
 @media (max-width:620px){ .deckgrid{grid-template-columns:repeat(4,minmax(0,1fr))} }
 
 /* ------------------------------------------------------------ card faces */
 .gc{
   position:relative; border:2.5px solid var(--ink); border-radius:9px; overflow:hidden;
-  background:linear-gradient(180deg,#F7EFDC,#DCCDAC); color:var(--ink);
+  background:linear-gradient(180deg,var(--r1,#F7EFDC),var(--r2,#DCCDAC)); color:var(--ink);
   display:flex; flex-direction:column; align-items:center; padding:13px 3px 3px;
   box-shadow:0 3px 0 rgba(0,0,0,.4); aspect-ratio:3/4; min-width:0;
+  transition:transform .16s cubic-bezier(.2,.9,.3,1.2), box-shadow .16s, filter .16s;
 }
-.gc .rar{position:absolute; inset:0 0 auto; height:9px; background:var(--b-corn)}
+/* rarity frames, in the spirit of a collectible card game shelf */
+.gc.r-common{--r1:#EFE6D2; --r2:#C9BCA0}
+.gc.r-rare{--r1:#CFE6F7; --r2:#8FB4D6}
+.gc.r-epic{--r1:#E3D2F7; --r2:#A98BD6}
+.gc.r-legend{--r1:#FBE9C2; --r2:#E0B455}
+.gc.r-legend::before{
+  content:""; position:absolute; inset:0; pointer-events:none; z-index:3;
+  background:linear-gradient(115deg,transparent 38%,rgba(255,255,255,.75) 48%,transparent 58%);
+  background-size:260% 100%; animation:shine 3.4s ease-in-out infinite;
+}
+@keyframes shine{0%,62%{background-position:180% 0} 100%{background-position:-60% 0}}
+.gc .rar{position:absolute; inset:0 0 auto; height:9px; background:var(--b-corn);
+  box-shadow:inset 0 -1.5px 0 rgba(0,0,0,.28)}
 .gc.k-spell .rar{background:var(--spell)} .gc.k-structure .rar{background:var(--wood)}
 .gc .cost{
   position:absolute; top:-2px; left:-2px; min-width:23px; height:23px; padding:0 4px;
@@ -212,8 +249,17 @@ button{font:inherit; color:inherit; cursor:pointer}
 .gc.locked{filter:grayscale(.85) brightness(.62)}
 .gc.locked::after{content:"🔒"; position:absolute; inset:0; display:grid; place-items:center; font-size:20px}
 .gc.picked{outline:3px solid var(--gold); outline-offset:1px}
+.gc.inuse::after{
+  content:"IN DECK"; position:absolute; left:0; right:0; bottom:11px; text-align:center;
+  font-size:7px; font-weight:900; letter-spacing:.09em; color:#FFF; z-index:3;
+  background:rgba(20,40,80,.88); padding:1.5px 0;
+}
+.gc.dimmed{filter:grayscale(.6) brightness(.66)}
+.gc.swapping{animation:swapPop .34s cubic-bezier(.2,1.4,.4,1)}
+@keyframes swapPop{0%{transform:scale(.72) rotate(-7deg)} 60%{transform:scale(1.09)} 100%{transform:scale(1)}}
 .gc.tappable{cursor:pointer}
-.gc.tappable:hover{transform:translateY(-3px); box-shadow:0 6px 0 rgba(0,0,0,.4)}
+.gc.tappable:hover{transform:translateY(-4px) scale(1.04); box-shadow:0 8px 0 rgba(0,0,0,.4)}
+.gc.tappable:active{transform:translateY(-1px) scale(.99)}
 .gc .dupes{position:absolute; bottom:0; left:0; right:0; height:11px; background:#0D1F3E;
   border-top:2px solid var(--ink); display:flex; align-items:center; justify-content:center}
 .gc .dupes i{position:absolute; left:0; top:0; bottom:0; background:linear-gradient(90deg,#5FA8F0,#2D6FD6)}
@@ -360,6 +406,32 @@ button{font:inherit; color:inherit; cursor:pointer}
 .ping{position:absolute; border-radius:50%; border:2px dashed rgba(245,197,66,.9); pointer-events:none;
   animation:blast .6s ease-out forwards}
 
+/* where a card may land, and where it will land */
+.zone{
+  position:absolute; opacity:0; pointer-events:none; border-radius:7px;
+  transition:opacity .2s ease;
+  background:linear-gradient(180deg, rgba(255,214,102,.30), rgba(255,214,102,.10));
+  box-shadow:inset 0 0 0 3px rgba(255,214,102,.8);
+}
+.zone.on{opacity:1}
+.dropmark{
+  position:absolute; border-radius:50%; pointer-events:none; transition:opacity .12s;
+  border:3px solid rgba(150,240,170,.95); background:rgba(150,240,170,.17);
+  box-shadow:0 0 20px rgba(150,240,170,.55);
+}
+.dropmark.bad{
+  border-color:rgba(255,125,155,.95); background:rgba(255,125,155,.17);
+  box-shadow:0 0 20px rgba(255,125,155,.55);
+}
+.dragghost{
+  position:fixed; z-index:80; width:74px; pointer-events:none; will-change:transform; opacity:.92;
+  filter:drop-shadow(0 14px 16px rgba(0,0,0,.55));
+}
+.handcards .gc{touch-action:none}
+.handcards .gc.ghosted{opacity:.25; transform:translateY(0) scale(.9)}
+.juicebar span{transition:transform .12s}
+.juicebar span.done i{filter:brightness(1.3)}
+
 /* ------------------------------------------------------------------ dock */
 .dock{display:flex; align-items:flex-end; gap:8px; padding:0 9px 7px; flex:none; z-index:6}
 .nextslot{display:flex; flex-direction:column; align-items:center; gap:3px; flex:none}
@@ -370,6 +442,8 @@ button{font:inherit; color:inherit; cursor:pointer}
 .handcards .gc.playable{cursor:pointer}
 .handcards .gc.playable:hover{transform:translateY(-7px); box-shadow:0 9px 0 rgba(0,0,0,.4)}
 .handcards .gc.sel{transform:translateY(-12px); box-shadow:0 13px 0 rgba(0,0,0,.4), 0 0 0 3px var(--gold)}
+.handcards .gc.playable{animation:dealIn .26s cubic-bezier(.2,1.3,.4,1)}
+@keyframes dealIn{from{transform:translateY(26px) scale(.86); opacity:0}}
 .handcards .gc.broke{filter:grayscale(.55) brightness(.7)}
 .juicewrap{display:flex; align-items:center; gap:7px; padding:0 9px 6px; z-index:6}
 .juicebar{flex:1; height:16px; border:2.5px solid var(--ink); border-radius:999px; background:#0D1F3E;
@@ -508,9 +582,14 @@ button{font:inherit; color:inherit; cursor:pointer}
       <div class="purse"><span class="coin gold">🪙 <b id="c-gold">0</b></span></div>
     </header>
     <div class="cardsbody">
-      <div class="sechead">Battle deck <span class="hint" id="deck-stat">avg cost 0.0</span></div>
+      <div class="sechead">Battle deck
+        <span class="avgcost" id="deck-stat"><i>\u{1F4A7}</i><b>0.0</b><span>avg</span></span>
+      </div>
       <div class="deckgrid" id="deckgrid"></div>
-      <div class="sechead">Collection <span class="hint">Tap a card to swap it in, or to level it up</span></div>
+      <div class="sechead">Collection
+        <span class="sortrow" id="sortrow"></span>
+      </div>
+      <div class="hintline" id="collhint">Tap a deck slot, then a card, to swap it in.</div>
       <div class="collgrid" id="collgrid"></div>
     </div>
     <nav class="navbar" id="nav2"></nav>
@@ -742,6 +821,14 @@ const CARDS = {
     text:"Quick and long-legged.", flavor:"Hello there. Nice day for it."}),
 };
 const CARD_KEYS = Object.keys(CARDS);
+/* Rarity is a shelf-appeal thing: it colours the frame and nothing else. */
+const LEGENDS = ["maize","owl","reaper","wyrm","niceking"];
+const EPICS = ["squatch","tower","cave","school","bloodstorm","volcano","frenzy","earlings","rainrider"];
+function rarityOf(id){
+  if(LEGENDS.indexOf(id) >= 0) return "legend";
+  if(EPICS.indexOf(id) >= 0) return "epic";
+  return CARDS[id].cost <= 2 ? "common" : "rare";
+}
 
 const DECKS = {
   cornlord:{name:"Cornlord", blurb:"Corn, a silo full of corn, and an eight-cost apology.",
@@ -1331,7 +1418,7 @@ function aiTick(dt){
 function cardFace(id, opts){
   opts = opts || {};
   const d = CARDS[id], rt = d.rt || {}, lv = opts.lvl || 1;
-  const cls = ["gc", "k-" + d.kind];
+  const cls = ["gc", "k-" + d.kind, "r-" + rarityOf(id)];
   if(opts.cls) cls.push(opts.cls);
   const cost = opts.cost !== undefined ? opts.cost : d.cost;
   const bump = 1 + 0.12 * (lv - 1);
@@ -1414,20 +1501,62 @@ function renderMenu(){
     : '<div class="chest"><span class="cico" style="opacity:.3">\u{1F381}</span><span class="cempty">Empty</span></div>'
   ).join("");
 }
+let sortBy = "cost", lastSwap = -1;
+const SORTS = [{k:"cost", lab:"Cost"}, {k:"rarity", lab:"Rarity"}, {k:"name", lab:"A–Z"}];
+const RARORDER = {legend:0, epic:1, rare:2, common:3};
+function sortIds(ids){
+  const a = ids.slice();
+  if(sortBy === "cost") a.sort((x, y) => CARDS[x].cost - CARDS[y].cost || CARDS[x].name.localeCompare(CARDS[y].name));
+  else if(sortBy === "rarity") a.sort((x, y) => RARORDER[rarityOf(x)] - RARORDER[rarityOf(y)] || CARDS[x].cost - CARDS[y].cost);
+  else a.sort((x, y) => CARDS[x].name.localeCompare(CARDS[y].name));
+  return a;
+}
 function renderCards(){
   const avg = SAVE.deck.reduce((a, id) => a + CARDS[id].cost, 0) / DECK_SIZE;
-  $("deck-stat").textContent = "avg cost " + avg.toFixed(1);
+  $("deck-stat").innerHTML = '<i>\u{1F4A7}</i><b>' + avg.toFixed(1) + "</b><span>avg</span>";
   $("deckgrid").innerHTML = SAVE.deck.map((id, i) => cardFace(id, {
-    lvl:cardLevel(id), cls:"tappable" + (deckPick === i ? " picked" : ""),
+    lvl:cardLevel(id),
+    cls:"tappable" + (deckPick === i ? " picked" : "") + (lastSwap === i ? " swapping" : ""),
     attrs:' data-act="deckslot" data-i="' + i + '"',
   })).join("");
-  const owned = Object.keys(SAVE.owned).sort((a, b) => CARDS[a].cost - CARDS[b].cost || a.localeCompare(b));
-  const locked = CARD_KEYS.filter(id => !SAVE.owned[id]);
+  lastSwap = -1;
+
+  $("sortrow").innerHTML = SORTS.map(o =>
+    '<button class="sortbtn' + (sortBy === o.k ? " on" : "") + '" data-act="sort" data-k="' + o.k +
+    '" type="button">' + o.lab + "</button>").join("");
+
+  const hint = $("collhint");
+  if(deckPick >= 0){
+    hint.textContent = "Swapping slot " + (deckPick + 1) + " — tap a card to put it in, or tap the slot again to cancel.";
+    hint.classList.add("active");
+  } else {
+    hint.textContent = "Tap a deck slot, then a card, to swap it in. Tap a card on its own for details.";
+    hint.classList.remove("active");
+  }
+
+  const owned = sortIds(Object.keys(SAVE.owned));
+  const locked = sortIds(CARD_KEYS.filter(id => !SAVE.owned[id]));
   $("collgrid").innerHTML =
-    owned.map(id => cardFace(id, {lvl:SAVE.owned[id].lvl, copies:SAVE.owned[id].copies, dupes:true,
-      cls:"tappable" + (SAVE.deck.includes(id) ? " picked" : ""), attrs:' data-act="collcard" data-id="' + id + '"'})).join("") +
+    owned.map(id => {
+      const inDeck = SAVE.deck.indexOf(id);
+      const blocked = deckPick >= 0 && inDeck >= 0 && inDeck !== deckPick;
+      return cardFace(id, {lvl:SAVE.owned[id].lvl, copies:SAVE.owned[id].copies, dupes:true,
+        cls:"tappable" + (inDeck >= 0 ? " inuse" : "") + (blocked ? " dimmed" : ""),
+        attrs:' data-act="collcard" data-id="' + id + '"'});
+    }).join("") +
     locked.map(id => cardFace(id, {cls:"locked"})).join("");
 }
+function swapIntoDeck(id, slot){
+  if(slot < 0 || slot >= DECK_SIZE) return false;
+  const at = SAVE.deck.indexOf(id);
+  if(at === slot) return false;
+  if(at >= 0) SAVE.deck[at] = SAVE.deck[slot];      // already in the deck: trade places
+  SAVE.deck[slot] = id;
+  lastSwap = slot; deckPick = -1;
+  persist(); renderCards();
+  return true;
+}
+
 
 /* =====================================================================
    FLOATERS + LOG
@@ -1640,58 +1769,114 @@ function wallPips(side){
   const w = S.mobs.filter(m => m.struct === "wall" && m.side === side).sort((a,b) => a.lane - b.lane);
   return w.map(m => '<i class="' + (m.alive ? "" : "gone") + '"></i>').join("");
 }
-function renderHud(){
+const HUD = {hand:"", next:"", walls:"", clock:"", hint:"", log:"", plates:""};
+function renderJuice(){                    /* cheap, runs every frame */
   const P = S.you;
-  $("foe-plate").innerHTML = '<span class="face">' + S.foe.art + '</span><span><span class="fn">' +
-    esc(S.foe.name) + '</span><span class="fd">' + esc(S.foe.deckName) + "</span></span>";
-  $("you-plate").innerHTML = '<span class="face">' + P.art + '</span><span><span class="fn">' +
-    esc(P.name) + '</span><span class="fd">' + esc(P.deckName) + "</span></span>";
-  $("foe-walls").innerHTML = wallPips("foe");
-  $("you-walls").innerHTML = wallPips("you");
-
-  const c = $("clock");
-  const left = S.ot ? MATCH_TIME + OT_TIME - S.t : MATCH_TIME - S.t;
-  c.className = "clock" + (S.ot ? " ot" : S.t >= X2_AT ? " x2" : "");
-  c.textContent = (S.ot ? "SUDDEN DEATH " : S.t >= X2_AT ? "×2 " : "") + fmtTime(left);
-
-  $("juicenum").textContent = Math.floor(P.juice);
+  const n = $("juicenum");
+  const whole = Math.floor(P.juice);
+  if(n.__v !== whole){ n.__v = whole; n.textContent = whole; }
   const jb = $("juicebar");
-  jb.classList.toggle("x2", S.t >= X2_AT);
   if(jb.childElementCount !== JUICE_MAX){
     let h = "";
     for(let i=0;i<JUICE_MAX;i++) h += "<span><i></i></span>";
     jb.innerHTML = h;
   }
+  jb.classList.toggle("x2", S.t >= X2_AT);
   const cells = jb.children;
   for(let i=0;i<JUICE_MAX;i++){
     const fill = clamp(P.juice - i, 0, 1);
-    cells[i].firstChild.style.transform = "scaleX(" + fill.toFixed(2) + ")";
+    const cell = cells[i];
+    cell.firstChild.style.transform = "scaleX(" + fill.toFixed(3) + ")";
+    const done = fill >= 1;
+    if(done !== cell.__done){ cell.__done = done; cell.classList.toggle("done", done); }
   }
-
+}
+function renderHud(){
+  const P = S.you;
+  const plates = S.foe.name + "|" + P.name;
+  if(HUD.plates !== plates){
+    HUD.plates = plates;
+    $("foe-plate").innerHTML = '<span class="face">' + S.foe.art + '</span><span><span class="fn">' +
+      esc(S.foe.name) + '</span><span class="fd">' + esc(S.foe.deckName) + "</span></span>";
+    $("you-plate").innerHTML = '<span class="face">' + P.art + '</span><span><span class="fn">' +
+      esc(P.name) + '</span><span class="fd">' + esc(P.deckName) + "</span></span>";
+  }
+  const walls = wallPips("foe") + "//" + wallPips("you");
+  if(HUD.walls !== walls){
+    HUD.walls = walls;
+    $("foe-walls").innerHTML = wallPips("foe");
+    $("you-walls").innerHTML = wallPips("you");
+  }
+  const left = S.ot ? MATCH_TIME + OT_TIME - S.t : MATCH_TIME - S.t;
+  const ck = (S.ot ? "SUDDEN DEATH " : S.t >= X2_AT ? "\u00d72 " : "") + fmtTime(left);
+  if(HUD.clock !== ck){
+    HUD.clock = ck;
+    const c = $("clock");
+    c.className = "clock" + (S.ot ? " ot" : S.t >= X2_AT ? " x2" : "");
+    c.textContent = ck;
+  }
   let hand = "";
   for(let h=0; h<HAND_SIZE; h++){
     const id = P.hand[h], d = CARDS[id];
     const broke = d.cost > P.juice || !!S.over;
+    const dragging = S.drag && S.drag.active && S.drag.h === h;
     hand += cardFace(id, {lvl:P.levels[id] || 1, cost:d.cost,
-      cls:(broke ? "broke" : "playable") + (S.pending && S.pending.h === h ? " sel" : ""),
+      cls:(broke ? "broke" : "playable") + (S.pending && S.pending.h === h ? " sel" : "") + (dragging ? " ghosted" : ""),
       attrs:' data-act="hand" data-h="' + h + '"'});
   }
-  $("handcards").innerHTML = hand;
-  $("nextcard").innerHTML = cardFace(P.next, {lvl:P.levels[P.next] || 1});
+  if(HUD.hand !== hand){ HUD.hand = hand; $("handcards").innerHTML = hand; }
+  const nx = cardFace(P.next, {lvl:P.levels[P.next] || 1});
+  if(HUD.next !== nx){ HUD.next = nx; $("nextcard").innerHTML = nx; }
 
-  const hint = $("hint");
-  if(S.floopMode) hint.innerHTML = "<b>Pick one of your patches</b> to retill. Costs 2 juice.";
-  else if(S.pending) hint.innerHTML = cardBlurb(P.hand[S.pending.h]) + "<br><b>Tap your half of the mat to send it in.</b>";
-  else hint.innerHTML = "";
-  hint.classList.toggle("off", !S.pending && !S.floopMode);
-
-  for(const el of document.querySelectorAll(".patch")){
-    el.classList.toggle("pickable", S.floopMode && el.dataset.side === "you");
-    el.classList.toggle("dropzone", !!S.pending && el.dataset.side === "you");
+  let hint = "";
+  if(S.floopMode) hint = "<b>Pick one of your patches</b> to retill. Costs 2 juice.";
+  else if(S.pending) hint = cardBlurb(P.hand[S.pending.h]) + "<br><b>Drag onto your half of the mat, or tap it.</b>";
+  if(HUD.hint !== hint){
+    HUD.hint = hint;
+    const el = $("hint");
+    el.innerHTML = hint;
+    el.classList.toggle("off", !hint);
   }
-  $("logfeed").innerHTML = S.log.map(l => '<p class="' + l.cls + '">' + esc(l.text) + "</p>").join("");
-  $("logfeed").scrollTop = $("logfeed").scrollHeight;
-  $("btn-floop").disabled = S.you.juice < 2 || !!S.over;
+  showZone(!!S.pending || !!(S.drag && S.drag.active), S.floopMode);
+  const log = S.log.map(l => '<p class="' + l.cls + '">' + esc(l.text) + "</p>").join("");
+  if(HUD.log !== log){
+    HUD.log = log;
+    const f = $("logfeed");
+    f.innerHTML = log;
+    f.scrollTop = f.scrollHeight;
+  }
+  const fb = $("btn-floop"), dis = S.you.juice < 2 || !!S.over;
+  if(fb.disabled !== dis) fb.disabled = dis;
+  renderJuice();
+}
+
+/* ------------------------------------------------- the deploy zone overlay */
+function showZone(on, floop){
+  const g = $("ground");
+  if(!g) return;
+  let z = $("zone");
+  if(!z){
+    z = document.createElement("div");
+    z.id = "zone"; z.className = "zone";
+    g.appendChild(z);
+  }
+  z.classList.toggle("on", !!on && !floop);
+  if(!on || floop) return;
+  const top = RIVER_Y + RIVER_H;
+  z.style.cssText = "left:0;top:" + top + "px;width:" + AW + "px;height:" + (AH - top) + "px";
+  for(let l=0;l<3;l++){
+    let ex = document.getElementById("zx" + l);
+    const w = S.mobs.find(m => m.struct === "wall" && m.side === "foe" && m.lane === l);
+    const open = w && !w.alive;
+    if(open && !ex){
+      ex = document.createElement("div");
+      ex.id = "zx" + l; ex.className = "zone on";
+      ex.style.cssText = "left:" + (LANEX[l] - AW / 6) + "px;top:" + (WALL_Y.foe + 40) +
+        "px;width:" + (AW / 3) + "px;height:" + (RIVER_Y - RIVER_H - WALL_Y.foe - 40) + "px";
+      g.appendChild(ex);
+    }
+    if(ex) ex.classList.toggle("on", !!open);
+  }
 }
 
 /* =====================================================================
@@ -1705,11 +1890,14 @@ function frame(ts){
   step(dt);
   aiTick(dt);
   syncMobs(); syncFx();
+  renderJuice();
   hudAcc += dt;
-  if(hudAcc > 0.1){ hudAcc = 0; renderHud(); }
+  if(hudAcc > 0.12){ hudAcc = 0; renderHud(); }
+  if(S.drag && S.drag.active) updateDragMark();
   if(!S.over) S.raf = requestAnimationFrame(frame);
 }
 function startLoop(){
+  HUD.hand = HUD.next = HUD.walls = HUD.clock = HUD.hint = HUD.log = HUD.plates = "";
   buildGround();
   syncMobs();
   fitGround();
@@ -1761,11 +1949,95 @@ function onFieldPoint(sx, sy){
 
 document.addEventListener("click", (e) => {
   const act = e.target.closest("[data-act]");
-  if(act){ handleAct(act.dataset.act, act.dataset); return; }
+  if(act){
+    if(act.dataset.act === "hand" && S && S.suppressTap > Date.now()) return;
+    handleAct(act.dataset.act, act.dataset); return;
+  }
   if(screen === "battle" && $("scrim").hidden){
+    if(S && S.suppressTap > Date.now()) return;
     const fw = e.target.closest("#fieldwrap");
     if(fw){ onFieldPoint(e.clientX, e.clientY); return; }
   }
+});
+
+/* ---------------------------------------------------------------------
+   Drag a card onto the mat. A short press still works as tap-then-tap,
+   so this stays usable one-handed and with a keyboard.
+   --------------------------------------------------------------------- */
+function dropMark(){
+  let el = document.getElementById("dropmark");
+  if(!el){
+    el = document.createElement("div");
+    el.id = "dropmark"; el.className = "dropmark";
+    const host = $("mobs");
+    if(!host) return null;
+    host.appendChild(el);
+  }
+  return el;
+}
+function updateDragMark(){
+  const d = S.drag;
+  if(!d || !d.active) return;
+  const w = screenToWorld(d.x, d.y);
+  const P = S.you, def = CARDS[P.hand[d.h]];
+  const ok = def.kind === "spell" ? true : canDeployAt(P, w.x, w.y);
+  d.ok = ok; d.world = w;
+  const el = dropMark();
+  if(!el) return;
+  const r = def.kind === "spell" ? (def.rt.radius || 90) : Math.max(26, (PLAN[def.plan] || PLAN.scamp).sh * 1.8);
+  el.style.cssText = "left:" + (w.x - r) + "px;top:" + (w.y - r * 0.62) + "px;width:" + (r * 2) +
+    "px;height:" + (r * 1.24) + "px";
+  el.classList.toggle("bad", !ok);
+  el.style.display = "";
+}
+function onDragMove(e){
+  const d = S.drag;
+  if(!d) return;
+  d.x = e.clientX; d.y = e.clientY;
+  if(!d.active && Math.hypot(d.x - d.x0, d.y - d.y0) > 7){
+    d.active = true;
+    S.pending = {h:d.h};
+    const g = document.createElement("div");
+    g.className = "dragghost";
+    g.innerHTML = cardFace(S.you.hand[d.h], {lvl:S.you.levels[S.you.hand[d.h]] || 1, cost:CARDS[S.you.hand[d.h]].cost});
+    document.body.appendChild(g);
+    d.ghost = g;
+    renderHud();
+  }
+  if(d.active){
+    // ride above the pointer so the drop ring underneath stays readable
+    d.ghost.style.left = d.x + "px";
+    d.ghost.style.top = (d.y - 86) + "px";
+    d.ghost.style.transform = "translate(-50%,-50%) scale(1.05) rotate(-3deg)";
+    updateDragMark();
+    e.preventDefault();
+  }
+}
+function onDragEnd(){
+  const d = S.drag;
+  document.removeEventListener("pointermove", onDragMove);
+  document.removeEventListener("pointerup", onDragEnd);
+  document.removeEventListener("pointercancel", onDragEnd);
+  if(!d) return;
+  S.drag = null;
+  if(d.ghost) d.ghost.remove();
+  const mk = document.getElementById("dropmark");
+  if(mk) mk.style.display = "none";
+  if(d.active){
+    S.suppressTap = Date.now() + 320;
+    if(d.ok && d.world) onFieldPoint(d.x, d.y);
+    else { S.pending = null; flash("Your half of the mat"); }
+    renderHud();
+  }
+}
+document.addEventListener("pointerdown", (e) => {
+  if(screen !== "battle" || !$("scrim").hidden || !live()) return;
+  const card = e.target.closest(".handcards .gc");
+  if(!card || card.classList.contains("broke")) return;
+  S.drag = {h:+card.dataset.h, x:e.clientX, y:e.clientY, x0:e.clientX, y0:e.clientY, active:false};
+  document.addEventListener("pointermove", onDragMove);
+  document.addEventListener("pointerup", onDragEnd);
+  document.addEventListener("pointercancel", onDragEnd);
 });
 document.addEventListener("keydown", (e) => {
   if(e.key === "Escape"){
@@ -1831,14 +2103,23 @@ function handleAct(act, data){
     S.pendPatch = -1; S.floopMode = false; renderHud();
   }
   else if(act === "deckslot"){ deckPick = deckPick === +data.i ? -1 : +data.i; renderCards(); }
+  else if(act === "sort"){ sortBy = data.k; renderCards(); }
   else if(act === "collcard"){
     const id = data.id;
     if(deckPick >= 0){
-      const at = SAVE.deck.indexOf(id);
-      if(at >= 0) SAVE.deck[at] = SAVE.deck[deckPick];
-      SAVE.deck[deckPick] = id;
-      deckPick = -1; persist(); renderCards();
+      if(!swapIntoDeck(id, deckPick)){ deckPick = -1; renderCards(); }
     } else showCardDetail(id);
+  }
+  else if(act === "usecard"){
+    // no slot picked: take the priciest card's place, which is what you usually mean
+    let slot = deckPick;
+    if(slot < 0){
+      slot = 0;
+      for(let i=1;i<DECK_SIZE;i++) if(CARDS[SAVE.deck[i]].cost > CARDS[SAVE.deck[slot]].cost) slot = i;
+    }
+    hideSheet();
+    if(swapIntoDeck(data.id, slot)) toast(CARDS[data.id].name + " is in the deck");
+    else toast("Already in the deck");
   }
   else if(act === "upgrade"){
     const id = data.id, o = SAVE.owned[id], need = UPGRADE[o.lvl + 1];
@@ -1884,8 +2165,10 @@ function showCardDetail(id){
     "<p>" + esc(d.text) + "</p><p style=\"font-style:italic;color:#9FBCE4\">" + esc(d.flavor || "") + "</p>" +
     (o && need ? "<p><b>" + o.copies + " / " + need.copies + "</b> copies · <b>" + need.gold + "</b> gold for level " + (lv + 1) + "</p>" : "") +
     "</div></div>" +
-    '<div class="foot">' + (o && need ? '<button class="cbtn" data-act="upgrade" data-id="' + id + '" type="button">Upgrade</button>' : "") +
-    '<button class="cbtn blue" data-act="close" type="button">Close</button></div>');
+    '<div class="foot">' +
+      (o && SAVE.deck.indexOf(id) < 0 ? '<button class="cbtn blue" data-act="usecard" data-id="' + id + '" type="button">Use card</button>' : "") +
+      (o && need ? '<button class="cbtn" data-act="upgrade" data-id="' + id + '" type="button">Upgrade</button>' : "") +
+      '<button class="cbtn blue" data-act="close" type="button">Close</button></div>');
 }
 function showRules(){
   showSheet("<h2>How to play</h2>" +
