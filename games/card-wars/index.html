@@ -1,0 +1,2282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Floop the Pig</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@400;600;700;800;900&family=JetBrains+Mono:wght@700&display=swap">
+<style>
+/* =====================================================================
+   FLOOP THE PIG - Card Wars on a 3D mat
+   Chrome borrowed from the original Clash Royale menu: deep blue panels,
+   gold bevelled buttons, thick ink outlines. Board palette is Card Wars.
+   ===================================================================== */
+:root{
+  /* clash-royale chrome */
+  --sky-1:#4FA3E3; --sky-2:#2D6FD6; --sky-3:#1B4F9C;
+  --panel:#1E3F7A; --panel-2:#17325F; --panel-3:#0F2247;
+  --gold:#F5C542; --gold-2:#E09A1E; --gold-3:#A96C0A;
+  --wood:#8B5A2B; --wood-2:#6B4220; --stone:#7D93B5;
+  /* card wars mat */
+  --mat:#1E4034; --mat-2:#183429; --mat-3:#0E211B; --mat-4:#091612;
+  --ink:#10100E; --cream:#F7EFDC; --cream-2:#E7DBC0; --cream-3:#CBBB9B;
+  --candy:#E8547C; --sky-ink:#6EC6E8; --spell:#A184DB; --good:#7CD98C;
+  --moss:#93AA9D; --moss-dim:#6C8579;
+  /* biomes */
+  --b-corn:#E9C55C; --b-blue:#8ECDE8; --b-nice:#F2A8C4;
+  --b-sandy:#E5C89A; --b-swamp:#93A97C; --b-rain:#C9A8E8;
+  --stroke:3px; --tilt:52deg;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; overflow:hidden;
+  background:linear-gradient(180deg,var(--sky-1) 0%,var(--sky-2) 46%,var(--sky-3) 100%);
+  color:var(--cream); font-family:Nunito,"Segoe UI",system-ui,sans-serif;
+  font-size:14px; line-height:1.45; -webkit-font-smoothing:antialiased;
+  user-select:none; -webkit-tap-highlight-color:transparent;
+}
+button{font:inherit; color:inherit; cursor:pointer}
+:focus-visible{outline:3px solid var(--gold); outline-offset:2px}
+.hidden{display:none !important}
+
+/* ---------------------------------------------------------------- shell */
+#app{position:relative; width:100%; height:100dvh; overflow:hidden}
+.screen{position:absolute; inset:0; display:flex; flex-direction:column; overflow:hidden}
+.screen.off{display:none}
+.screen{animation:scrIn .22s ease both}
+@keyframes scrIn{from{opacity:0; transform:translateY(6px)}}
+
+/* ------------------------------------------------- clash-royale buttons */
+.cbtn{
+  position:relative; border:var(--stroke) solid var(--ink); border-radius:12px;
+  background:linear-gradient(180deg,#FFD866 0%,var(--gold) 42%,var(--gold-2) 100%);
+  color:#4A2F04; font-family:"Lilita One",Impact,fantasy; font-weight:400;
+  letter-spacing:.6px; padding:9px 20px; font-size:17px; line-height:1.2;
+  box-shadow:0 5px 0 var(--gold-3), 0 8px 10px rgba(0,0,0,.35);
+  transition:transform .07s, box-shadow .07s; text-shadow:0 1.5px 0 rgba(255,255,255,.45);
+}
+.cbtn::after{
+  content:""; position:absolute; left:6px; right:6px; top:4px; height:32%;
+  border-radius:8px; background:linear-gradient(180deg,rgba(255,255,255,.55),transparent);
+  pointer-events:none;
+}
+.cbtn:hover{transform:translateY(2px); box-shadow:0 3px 0 var(--gold-3), 0 5px 8px rgba(0,0,0,.35)}
+.cbtn:active{transform:translateY(5px); box-shadow:0 0 0 var(--gold-3)}
+.cbtn:disabled{filter:grayscale(.7) brightness(.8); cursor:not-allowed; transform:none}
+.cbtn.blue{
+  background:linear-gradient(180deg,#5FA8F0 0%,#2D6FD6 45%,#1B4F9C 100%);
+  color:#EAF4FF; box-shadow:0 5px 0 #123A76, 0 8px 10px rgba(0,0,0,.35);
+  text-shadow:0 1.5px 0 rgba(0,0,0,.3);
+}
+.cbtn.blue:hover{box-shadow:0 3px 0 #123A76, 0 5px 8px rgba(0,0,0,.35)}
+.cbtn.red{
+  background:linear-gradient(180deg,#F5798F 0%,#D8365C 45%,#9E1E3C 100%);
+  color:#FFF0F4; box-shadow:0 5px 0 #6E1029, 0 8px 10px rgba(0,0,0,.35);
+  text-shadow:0 1.5px 0 rgba(0,0,0,.3);
+}
+.cbtn.sm{padding:6px 13px; font-size:13px; border-radius:10px; box-shadow:0 4px 0 var(--gold-3)}
+.cbtn.blue.sm{box-shadow:0 4px 0 #123A76}
+.cbtn.huge{font-size:31px; padding:15px 54px; border-radius:16px; letter-spacing:1.4px}
+
+.panel{
+  border:var(--stroke) solid var(--ink); border-radius:14px;
+  background:linear-gradient(180deg,var(--panel) 0%,var(--panel-2) 100%);
+  box-shadow:inset 0 2px 0 rgba(255,255,255,.14), 0 5px 0 rgba(0,0,0,.34);
+}
+.panel.dark{background:linear-gradient(180deg,var(--panel-2) 0%,var(--panel-3) 100%)}
+
+/* ==================================================================== MENU */
+#menu{
+  background:
+    radial-gradient(60% 40% at 18% 8%, rgba(255,255,255,.22), transparent 60%),
+    radial-gradient(48% 34% at 84% 16%, rgba(255,255,255,.17), transparent 60%),
+    linear-gradient(180deg,var(--sky-1) 0%,var(--sky-2) 52%,var(--sky-3) 100%);
+}
+.topbar{
+  display:flex; align-items:center; gap:10px; padding:8px 12px;
+  background:linear-gradient(180deg,var(--panel-2),var(--panel-3));
+  border-bottom:var(--stroke) solid var(--ink); flex:none;
+}
+.plate{
+  display:flex; align-items:center; gap:9px; padding:5px 12px 5px 6px;
+  border:2.5px solid var(--ink); border-radius:999px;
+  background:linear-gradient(180deg,#2A56A8,#17325F); min-width:0;
+}
+.lvl{
+  width:36px; height:36px; flex:none; display:grid; place-items:center;
+  border:2.5px solid var(--ink); border-radius:50%;
+  background:radial-gradient(circle at 34% 28%, #FFE9A0, var(--gold) 55%, var(--gold-2));
+  font-family:"Lilita One",Impact,fantasy; font-size:17px; color:#4A2F04;
+}
+.pinfo{min-width:0}
+.pinfo .nm{display:block; font-family:"Lilita One",Impact,fantasy; font-size:15px; letter-spacing:.4px; line-height:1.1;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:150px}
+.xpwrap{display:block; width:110px; height:9px; border:2px solid var(--ink); border-radius:999px; background:#0D1F3E; overflow:hidden; margin-top:2px}
+.xpwrap i{display:block; height:100%; background:linear-gradient(90deg,#7CD98C,#3FA85A)}
+.purse{margin-left:auto; display:flex; gap:7px}
+.coin{
+  display:flex; align-items:center; gap:5px; padding:4px 11px;
+  border:2.5px solid var(--ink); border-radius:999px;
+  background:linear-gradient(180deg,#2A56A8,#17325F);
+  font-family:"JetBrains Mono",monospace; font-size:13px; font-variant-numeric:tabular-nums;
+}
+.coin b{font-weight:700}
+.coin.gold b{color:var(--gold)} .coin.gem b{color:#8FE3B0}
+
+.menubody{flex:1; min-height:0; display:flex; flex-direction:column; align-items:center;
+  justify-content:center; gap:11px; padding:12px; overflow-y:auto}
+
+.arenacard{
+  width:min(520px,100%); padding:14px 18px; text-align:center; position:relative;
+  display:flex; flex-direction:column; align-items:center; gap:6px;
+}
+.arenacard .ico{font-size:52px; line-height:1; filter:drop-shadow(0 4px 0 rgba(0,0,0,.35))}
+.arenacard .anm{font-family:"Lilita One",Impact,fantasy; font-size:26px; letter-spacing:.6px;
+  color:var(--gold); text-shadow:0 2.5px 0 var(--ink); line-height:1.1}
+.arenacard .asub{font-size:12px; color:#BBD3F2; font-weight:700; letter-spacing:.06em}
+.trophybar{display:flex; align-items:center; gap:8px; margin-top:2px}
+.trophybar .tro{display:flex; align-items:center; gap:5px; font-family:"Lilita One",Impact,fantasy;
+  font-size:20px; color:var(--gold); text-shadow:0 2px 0 var(--ink)}
+.progwrap{width:190px; height:13px; border:2.5px solid var(--ink); border-radius:999px; background:#0D1F3E; overflow:hidden}
+.progwrap i{display:block; height:100%; background:linear-gradient(90deg,#FFD866,var(--gold-2))}
+
+.chestrow{display:flex; gap:9px; width:min(520px,100%); justify-content:center}
+.chest{
+  flex:1; max-width:110px; aspect-ratio:1/1.05; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:3px; padding:6px;
+  border:2.5px solid var(--ink); border-radius:12px;
+  background:linear-gradient(180deg,#24478A,#122A55); position:relative;
+}
+.chest.full{background:linear-gradient(180deg,#3C6FBE,#1C4386); cursor:pointer}
+.chest.full:hover{filter:brightness(1.13)}
+.chest .cico{font-size:30px; line-height:1}
+.chest .clab{font-size:9.5px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#A8C4E8}
+.chest.full .clab{color:var(--gold)}
+.chest .cempty{font-size:9.5px; color:#5C7CAE; font-weight:800; letter-spacing:.08em; text-transform:uppercase}
+
+.navbar{
+  display:flex; gap:0; flex:none; border-top:var(--stroke) solid var(--ink);
+  background:linear-gradient(180deg,var(--panel-2),var(--panel-3));
+}
+.navtab{
+  flex:1; border:0; background:transparent; padding:9px 4px 8px; display:flex; flex-direction:column;
+  align-items:center; gap:2px; border-top:4px solid transparent; color:#9FBCE4;
+}
+.navtab .nico{font-size:21px; line-height:1}
+.navtab .nlab{font-family:"Lilita One",Impact,fantasy; font-size:11.5px; letter-spacing:.5px}
+.navtab.on{border-top-color:var(--gold); color:var(--gold); background:rgba(245,197,66,.10)}
+.navtab:hover{color:#D6E6FF}
+
+/* ============================================================ CARDS / DECK */
+#cards{background:linear-gradient(180deg,var(--sky-2) 0%,var(--sky-3) 100%)}
+.cardsbody{flex:1; min-height:0; overflow-y:auto; padding:10px 12px 14px; display:flex; flex-direction:column;
+  gap:9px; width:100%; max-width:940px; margin:0 auto}
+.sechead{
+  display:flex; align-items:center; gap:9px; font-family:"Lilita One",Impact,fantasy;
+  font-size:16px; letter-spacing:.5px; color:var(--gold); text-shadow:0 2px 0 var(--ink);
+}
+.sechead .hint{font-family:Nunito,sans-serif; font-size:11.5px; font-weight:700; color:#BBD3F2;
+  letter-spacing:0; text-shadow:none; margin-left:auto}
+.deckgrid{display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:7px; justify-items:center}
+.deckgrid .gc{width:100%; max-width:98px}
+.collgrid .gc{width:100%; max-width:88px}
+.avgcost{
+  margin-left:auto; display:flex; align-items:center; gap:5px; padding:3px 11px 3px 6px;
+  border:2.5px solid var(--ink); border-radius:999px; background:linear-gradient(180deg,#2A56A8,#17325F);
+}
+.avgcost i{font-style:normal; font-size:13px; line-height:1}
+.avgcost b{font-family:"JetBrains Mono",monospace; font-size:14px; color:#8FD6F5; font-variant-numeric:tabular-nums}
+.avgcost span{font-size:9px; font-weight:900; letter-spacing:.1em; text-transform:uppercase; color:#9FBCE4}
+.sortrow{margin-left:auto; display:flex; gap:5px}
+.sortbtn{
+  border:2.5px solid var(--ink); border-radius:999px; padding:2px 11px; font-size:10.5px; font-weight:800;
+  letter-spacing:.05em; text-transform:uppercase; background:linear-gradient(180deg,#2A56A8,#17325F);
+  color:#BBD3F2; font-family:Nunito,sans-serif;
+}
+.sortbtn.on{background:linear-gradient(180deg,#FFD866,var(--gold-2)); color:#4A2F04}
+.hintline{
+  font-size:11.5px; color:#BBD3F2; font-weight:700; margin:-4px 0 2px; min-height:16px;
+  transition:color .2s;
+}
+.hintline.active{color:var(--gold)}
+.collgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(74px,1fr)); gap:7px; justify-items:center}
+@media (max-width:620px){ .deckgrid{grid-template-columns:repeat(4,minmax(0,1fr))} }
+
+/* ------------------------------------------------------------ card faces */
+.gc{
+  position:relative; border:2.5px solid var(--ink); border-radius:9px; overflow:hidden;
+  background:linear-gradient(180deg,var(--r1,#F7EFDC),var(--r2,#DCCDAC)); color:var(--ink);
+  display:flex; flex-direction:column; align-items:center; padding:13px 3px 3px;
+  box-shadow:0 3px 0 rgba(0,0,0,.4); aspect-ratio:3/4; min-width:0;
+  transition:transform .16s cubic-bezier(.2,.9,.3,1.2), box-shadow .16s, filter .16s;
+}
+/* rarity frames, in the spirit of a collectible card game shelf */
+.gc.r-common{--r1:#EFE6D2; --r2:#C9BCA0}
+.gc.r-rare{--r1:#CFE6F7; --r2:#8FB4D6}
+.gc.r-epic{--r1:#E3D2F7; --r2:#A98BD6}
+.gc.r-legend{--r1:#FBE9C2; --r2:#E0B455}
+.gc.r-legend::before{
+  content:""; position:absolute; inset:0; pointer-events:none; z-index:3;
+  background:linear-gradient(115deg,transparent 38%,rgba(255,255,255,.75) 48%,transparent 58%);
+  background-size:260% 100%; animation:shine 3.4s ease-in-out infinite;
+}
+@keyframes shine{0%,62%{background-position:180% 0} 100%{background-position:-60% 0}}
+.gc .rar{position:absolute; inset:0 0 auto; height:9px; background:var(--b-corn);
+  box-shadow:inset 0 -1.5px 0 rgba(0,0,0,.28)}
+.gc.k-spell .rar{background:var(--spell)} .gc.k-structure .rar{background:var(--wood)}
+.gc .cost{
+  position:absolute; top:-2px; left:-2px; min-width:23px; height:23px; padding:0 4px;
+  display:grid; place-items:center; border:2.5px solid var(--ink);
+  border-radius:0 0 9px 0; background:linear-gradient(180deg,#8FD6F5,#3E93C8); color:#06263A;
+  font-family:"JetBrains Mono",monospace; font-size:12px; font-weight:700; z-index:2;
+}
+.gc .cost.deal{background:linear-gradient(180deg,#A8E9A8,#3FA85A); color:#06301A}
+.gc .biome{position:absolute; top:11px; right:2px; font-size:12px; line-height:1; z-index:2;
+  filter:drop-shadow(0 1px 0 rgba(0,0,0,.35))}
+.gc .art{font-size:26px; line-height:1.05; margin-top:2px}
+.gc .nm{font-family:"Lilita One",Impact,fantasy; font-size:9.5px; line-height:1.05; text-align:center;
+  letter-spacing:.2px; overflow-wrap:anywhere; padding:0 1px}
+.gc .sts{display:flex; gap:3px; margin-top:auto}
+.gc .lvl2{position:absolute; bottom:1px; left:2px; font-family:"JetBrains Mono",monospace;
+  font-size:8.5px; font-weight:700; color:#5A4A2A}
+.pip{border:2px solid var(--ink); border-radius:5px; padding:0 4px; font-family:"JetBrains Mono",monospace;
+  font-size:10px; font-weight:700; background:var(--cream-2)}
+.pip.atk{background:var(--b-corn)} .pip.hp{background:#F2A0B6} .pip.up{background:var(--good)}
+.gc.locked{filter:grayscale(.85) brightness(.62)}
+.gc.locked::after{content:"🔒"; position:absolute; inset:0; display:grid; place-items:center; font-size:20px}
+.gc.picked{outline:3px solid var(--gold); outline-offset:1px}
+.gc.inuse::after{
+  content:"IN DECK"; position:absolute; left:0; right:0; bottom:11px; text-align:center;
+  font-size:7px; font-weight:900; letter-spacing:.09em; color:#FFF; z-index:3;
+  background:rgba(20,40,80,.88); padding:1.5px 0;
+}
+.gc.dimmed{filter:grayscale(.6) brightness(.66)}
+.gc.swapping{animation:swapPop .34s cubic-bezier(.2,1.4,.4,1)}
+@keyframes swapPop{0%{transform:scale(.72) rotate(-7deg)} 60%{transform:scale(1.09)} 100%{transform:scale(1)}}
+.gc.tappable{cursor:pointer}
+.gc.tappable:hover{transform:translateY(-4px) scale(1.04); box-shadow:0 8px 0 rgba(0,0,0,.4)}
+.gc.tappable:active{transform:translateY(-1px) scale(.99)}
+.gc .dupes{position:absolute; bottom:0; left:0; right:0; height:11px; background:#0D1F3E;
+  border-top:2px solid var(--ink); display:flex; align-items:center; justify-content:center}
+.gc .dupes i{position:absolute; left:0; top:0; bottom:0; background:linear-gradient(90deg,#5FA8F0,#2D6FD6)}
+.gc .dupes span{position:relative; font-family:"JetBrains Mono",monospace; font-size:8px; color:#DCE9FB}
+</style>
+<style>
+/* ================================================================= BATTLE
+   The arena is a ground plane tilted on X. Creatures are real boxes built
+   from three faces each (top / front / side), standing up off that plane,
+   so they have actual volume and sort by depth like solid objects.
+   ======================================================================= */
+#battle{
+  background:
+    radial-gradient(70% 45% at 50% -8%, rgba(255,255,255,.15), transparent 62%),
+    linear-gradient(180deg,#3E86C8 0%,#1F4F86 40%,#0C2542 100%);
+}
+.bhud{display:flex; align-items:center; gap:8px; padding:6px 9px; flex:none; z-index:6}
+.fighter{
+  display:flex; align-items:center; gap:8px; padding:4px 11px 4px 4px;
+  border:2.5px solid var(--ink); border-radius:999px;
+  background:linear-gradient(180deg,#24478A,#122A55); min-width:0;
+}
+.fighter .face{width:30px; height:30px; flex:none; display:grid; place-items:center; font-size:17px;
+  border:2.5px solid var(--ink); border-radius:50%; background:var(--cream)}
+.fighter .fn{display:block; font-family:"Lilita One",Impact,fantasy; font-size:13px; line-height:1.1;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:110px}
+.fighter .fd{display:block; font-size:9px; color:#9FBCE4; font-weight:800; letter-spacing:.06em; text-transform:uppercase}
+
+/* wall pips - three per side, they go dark as a wall falls */
+.wallpips{display:flex; gap:4px}
+.wallpips i{
+  width:15px; height:19px; border:2.5px solid var(--ink); border-radius:3px;
+  background:repeating-linear-gradient(180deg,#9AA5B5 0 4px,#7A8494 4px 6px);
+  box-shadow:inset 0 -3px 0 rgba(0,0,0,.25);
+}
+.wallpips i.gone{background:#2A3550; box-shadow:none; opacity:.55}
+.wallpips.foe i{background:repeating-linear-gradient(180deg,#E29AAB 0 4px,#C1758A 4px 6px)}
+.wallpips.foe i.gone{background:#4A2438}
+
+.clock{
+  margin-left:auto; display:flex; align-items:center; gap:7px; padding:4px 13px;
+  border:2.5px solid var(--ink); border-radius:999px; background:#0D1F3E;
+  font-family:"Lilita One",Impact,fantasy; font-size:16px; color:#DCE9FB; letter-spacing:.5px;
+}
+.clock.x2{background:linear-gradient(180deg,#C455B0,#7A2E6E); color:#FFEAFB}
+.clock.ot{background:linear-gradient(180deg,#F5798F,#9E1E3C); color:#FFF0F4}
+
+/* -------------------------------------------------------------- the field */
+.fieldwrap{flex:1; min-height:0; position:relative; overflow:hidden; display:grid; place-items:center}
+.field{perspective:1500px; perspective-origin:50% 50%; transform:translateY(var(--fdy,0px))}
+.ground{
+  position:relative; width:var(--aw); height:var(--ah);
+  transform:rotateX(var(--tilt)) scale(var(--gscale,1));
+  transform-style:preserve-3d;
+  background:#16352A; border-radius:16px;
+  box-shadow:0 0 0 3px var(--ink), inset 0 0 80px rgba(0,0,0,.5), 0 30px 46px rgba(0,0,0,.45);
+}
+.patch{
+  position:absolute; transform-style:preserve-3d; background:var(--bio);
+  box-shadow:inset 0 0 0 1.5px rgba(0,0,0,.30), inset 0 0 22px rgba(0,0,0,.18);
+}
+.patch .pico{
+  position:absolute; top:5px; left:7px; font-size:15px; line-height:1; opacity:.9;
+  filter:drop-shadow(0 1px 1px rgba(0,0,0,.45));
+}
+.patch .pnm{
+  position:absolute; left:0; right:0; top:24px; text-align:center; font-size:8.5px; font-weight:900;
+  letter-spacing:.1em; text-transform:uppercase; color:rgba(16,16,14,.62);
+  transform:scaleY(1.55); transform-origin:center top;
+}
+.patch.mine.pickable{box-shadow:inset 0 0 0 3px var(--gold), inset 0 0 26px rgba(245,197,66,.4); cursor:pointer}
+.patch.mine.pickable:hover{filter:brightness(1.25)}
+.patch.dropzone{box-shadow:inset 0 0 0 2px rgba(245,197,66,.65), inset 0 0 26px rgba(245,197,66,.22)}
+
+.river{
+  position:absolute; left:0; width:100%; transform-style:preserve-3d;
+  background:
+    repeating-linear-gradient(90deg, rgba(255,255,255,.09) 0 10px, transparent 10px 24px),
+    linear-gradient(180deg,#2E7FB8,#1B5B8E 48%,#12416B);
+  box-shadow:inset 0 0 0 2px rgba(16,16,14,.55), inset 0 8px 18px rgba(0,0,0,.4);
+  animation:flow 7s linear infinite;
+}
+@keyframes flow{to{background-position:48px 0, 0 0}}
+.bridge{
+  position:absolute; transform-style:preserve-3d; border:2.5px solid var(--ink); border-radius:4px;
+  background:repeating-linear-gradient(180deg,#B07B45 0 8px,#8B5A2B 8px 12px);
+  box-shadow:0 0 10px rgba(0,0,0,.5);
+}
+
+/* ------------------------------------------------------------- creatures */
+.mob{position:absolute; left:0; top:0; width:0; height:0; transform-style:preserve-3d}
+.mob .sh{
+  position:absolute; border-radius:50%; background:rgba(0,0,0,.36); filter:blur(3px);
+  left:calc(var(--r) * -1); top:calc(var(--r) * -0.62);
+  width:calc(var(--r) * 2); height:calc(var(--r) * 1.24);
+}
+.rig{position:absolute; left:0; top:0; transform-style:preserve-3d}
+.bx{position:absolute; left:0; top:0; transform-style:preserve-3d; transform:translateZ(var(--z,0px))}
+.bx > b{
+  position:absolute; left:0; top:0; transform-origin:0 0; display:block; background:var(--c);
+  box-shadow:inset 0 0 0 1.5px rgba(0,0,0,.42);
+}
+.bx > b.tp{
+  width:var(--w); height:var(--d); filter:brightness(1.24);
+  transform:translate3d(calc(var(--w) / -2), calc(var(--d) / -2), var(--h));
+}
+.bx > b.fr{
+  width:var(--w); height:var(--h);
+  transform:translate3d(calc(var(--w) / -2), calc(var(--d) / 2), var(--h)) rotateX(-90deg);
+}
+.bx > b.sd{
+  width:var(--d); height:var(--h); filter:brightness(.68);
+  transform:translate3d(calc(var(--w) / 2), calc(var(--d) / 2), var(--h)) rotateX(-90deg) rotateY(90deg);
+}
+.bx > b.fr > i.ey{
+  position:absolute; top:24%; width:24%; height:24%; border-radius:50%;
+  background:#12100C; box-shadow:0 0 0 2.5px rgba(255,255,255,.95);
+}
+.bx > b.fr > i.ey.l{left:15%} .bx > b.fr > i.ey.r{right:15%}
+.bx > b.fr > span.mk{
+  position:absolute; left:0; right:0; bottom:6%; text-align:center; font-size:11px; line-height:1;
+}
+.walking .rig{animation:bob .42s ease-in-out infinite alternate}
+@keyframes bob{to{transform:translateZ(2.5px)}}
+.striking .rig{animation:lunge .22s ease-out}
+@keyframes lunge{40%{transform:translate3d(0,6px,0)}}
+.mob.dying{animation:die .34s ease-in forwards}
+@keyframes die{to{opacity:0; transform:translate3d(var(--dx),var(--dy),0) scale(.3)}}
+
+.hpb{
+  position:absolute; left:-17px; width:34px; height:5px; border:1.5px solid rgba(0,0,0,.7);
+  border-radius:3px; background:#2A1520; overflow:hidden;
+  transform:translate3d(0,0,var(--top)) rotateX(calc(-1 * var(--tilt)));
+}
+.hpb > i{display:block; height:100%; background:linear-gradient(180deg,#8FE3A0,#3FA85A)}
+.mob.foe .hpb > i{background:linear-gradient(180deg,#F5798F,#C1304F)}
+.hpb.full{opacity:0}
+
+.blast{
+  position:absolute; border-radius:50%; transform-style:preserve-3d; pointer-events:none;
+  border:3px solid rgba(255,255,255,.85); animation:blast .5s ease-out forwards;
+}
+@keyframes blast{from{transform:scale(.2); opacity:1} to{transform:scale(1); opacity:0}}
+.ping{position:absolute; border-radius:50%; border:2px dashed rgba(245,197,66,.9); pointer-events:none;
+  animation:blast .6s ease-out forwards}
+
+/* where a card may land, and where it will land */
+.zone{
+  position:absolute; opacity:0; pointer-events:none; border-radius:7px;
+  transition:opacity .2s ease;
+  background:linear-gradient(180deg, rgba(255,214,102,.30), rgba(255,214,102,.10));
+  box-shadow:inset 0 0 0 3px rgba(255,214,102,.8);
+}
+.zone.on{opacity:1}
+.dropmark{
+  position:absolute; border-radius:50%; pointer-events:none; transition:opacity .12s;
+  border:3px solid rgba(150,240,170,.95); background:rgba(150,240,170,.17);
+  box-shadow:0 0 20px rgba(150,240,170,.55);
+}
+.dropmark.bad{
+  border-color:rgba(255,125,155,.95); background:rgba(255,125,155,.17);
+  box-shadow:0 0 20px rgba(255,125,155,.55);
+}
+.dragghost{
+  position:fixed; z-index:80; width:74px; pointer-events:none; will-change:transform; opacity:.92;
+  filter:drop-shadow(0 14px 16px rgba(0,0,0,.55));
+}
+.handcards .gc{touch-action:none}
+.handcards .gc.ghosted{opacity:.25; transform:translateY(0) scale(.9)}
+.juicebar span{transition:transform .12s}
+.juicebar span.done i{filter:brightness(1.3)}
+
+/* ------------------------------------------------------------------ dock */
+.dock{display:flex; align-items:flex-end; gap:8px; padding:0 9px 7px; flex:none; z-index:6}
+.nextslot{display:flex; flex-direction:column; align-items:center; gap:3px; flex:none}
+.nextslot .lab{font-size:8.5px; font-weight:900; letter-spacing:.1em; text-transform:uppercase; color:#9FBCE4}
+.nextslot .gc{width:42px; opacity:.85}
+.handcards{display:flex; gap:6px; flex:1; min-width:0; justify-content:center}
+.handcards .gc{width:clamp(58px,11vw,82px); flex:none; transition:transform .12s, box-shadow .12s}
+.handcards .gc.playable{cursor:pointer}
+.handcards .gc.playable:hover{transform:translateY(-7px); box-shadow:0 9px 0 rgba(0,0,0,.4)}
+.handcards .gc.sel{transform:translateY(-12px); box-shadow:0 13px 0 rgba(0,0,0,.4), 0 0 0 3px var(--gold)}
+.handcards .gc.playable{animation:dealIn .26s cubic-bezier(.2,1.3,.4,1)}
+@keyframes dealIn{from{transform:translateY(26px) scale(.86); opacity:0}}
+.handcards .gc.broke{filter:grayscale(.55) brightness(.7)}
+.juicewrap{display:flex; align-items:center; gap:7px; padding:0 9px 6px; z-index:6}
+.juicebar{flex:1; height:16px; border:2.5px solid var(--ink); border-radius:999px; background:#0D1F3E;
+  display:flex; gap:2px; padding:2px; overflow:hidden; position:relative}
+.juicebar span{flex:1; border-radius:999px; background:#16305C; position:relative; overflow:hidden}
+.juicebar span i{position:absolute; inset:0; background:linear-gradient(180deg,#8FD6F5,#3E93C8);
+  transform-origin:left center}
+.juicebar.x2 span i{background:linear-gradient(180deg,#F5B8E8,#C455B0)}
+.juicenum{font-family:"Lilita One",Impact,fantasy; font-size:19px; color:#8FD6F5;
+  text-shadow:0 2px 0 var(--ink); min-width:26px}
+
+#hint{
+  align-self:center; max-width:min(560px,94vw); margin:0 9px 5px; padding:5px 13px;
+  border:2.5px solid var(--ink); border-radius:11px; background:linear-gradient(180deg,#24478A,#122A55);
+  font-size:12px; line-height:1.35; color:#DCE9FB; text-align:center; z-index:6;
+}
+#hint b{color:var(--gold)} #hint.off{display:none}
+
+.side-pop{position:absolute; right:9px; top:8px; width:min(270px,62vw); max-height:64%;
+  display:flex; flex-direction:column; z-index:12; overflow:hidden}
+.side-pop h4{margin:0; padding:6px 11px; font-family:"Lilita One",Impact,fantasy; font-size:12px;
+  letter-spacing:.5px; color:var(--gold); background:var(--panel-3); border-bottom:2.5px solid var(--ink);
+  display:flex; align-items:center; gap:7px}
+.side-pop h4 button{margin-left:auto; background:transparent; border:0; color:#9FBCE4; font-size:15px}
+.logfeed{overflow-y:auto; padding:7px 11px; display:flex; flex-direction:column; gap:4px; font-size:11.5px}
+.logfeed p{margin:0; color:#C6D8F0; line-height:1.35}
+.logfeed p.hit{color:#FF9FB4} .logfeed p.bmo{color:#8FD6F5; font-weight:700}
+.logfeed p.foe{color:#E9D8B8}
+
+.scrim{position:fixed; inset:0; background:rgba(6,18,36,.88); backdrop-filter:blur(3px);
+  display:grid; place-items:center; padding:16px; z-index:50; overflow-y:auto}
+.scrim[hidden]{display:none}
+.sheet{width:min(640px,100%); border:var(--stroke) solid var(--ink); border-radius:18px;
+  background:linear-gradient(180deg,var(--panel),var(--panel-3)); padding:17px 19px; margin:auto;
+  display:flex; flex-direction:column; gap:12px; box-shadow:0 12px 0 rgba(0,0,0,.42)}
+.sheet h2{margin:0; font-family:"Lilita One",Impact,fantasy; font-size:25px; letter-spacing:.6px;
+  color:var(--gold); text-shadow:0 3px 0 var(--ink); text-wrap:balance}
+.sheet h3{margin:5px 0 0; font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:#9FBCE4; font-weight:900}
+.sheet p{margin:0; font-size:13.5px; color:#DCE9FB; max-width:64ch}
+.sheet ol,.sheet ul{margin:0; padding-left:19px; display:flex; flex-direction:column; gap:5px;
+  font-size:13.5px; color:#DCE9FB; max-width:64ch}
+.sheet b{color:#FFF}
+.sheet .foot{display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; margin-top:4px}
+.biokey{display:grid; grid-template-columns:repeat(auto-fit,minmax(178px,1fr)); gap:6px}
+.biokey div{border:2.5px solid var(--ink); border-radius:9px; padding:5px 9px; color:var(--ink);
+  background:var(--bio,#3A5A4C); font-size:11.5px; font-weight:700}
+.biokey b{display:block; font-size:12.5px}
+.biokey div.tappable{cursor:pointer}
+.biokey div.tappable:hover{filter:brightness(1.15)}
+.picker{display:grid; grid-template-columns:repeat(auto-fit,minmax(146px,1fr)); gap:8px}
+.pick{text-align:left; border:2.5px solid var(--ink); border-radius:11px; padding:8px 11px;
+  background:linear-gradient(180deg,#24478A,#122A55); color:#DCE9FB; display:flex; flex-direction:column; gap:2px}
+.pick:hover{filter:brightness(1.15)}
+.pick.on{background:linear-gradient(180deg,#FFD866,var(--gold-2)); color:#4A2F04}
+.pick .pt{font-family:"Lilita One",Impact,fantasy; font-size:14.5px; letter-spacing:.3px}
+.pick .pd{font-size:11.5px; line-height:1.32; opacity:.88}
+.detail{display:flex; gap:14px; flex-wrap:wrap}
+.detail .big{width:112px; flex:none}
+.detail .info{flex:1; min-width:190px; display:flex; flex-direction:column; gap:7px}
+.detail .tags{display:flex; gap:5px; flex-wrap:wrap}
+.tag{border:2.5px solid var(--ink); border-radius:999px; padding:1px 9px; font-size:11px; font-weight:800;
+  background:#0D1F3E; color:#DCE9FB}
+.tag.atk{background:var(--b-corn); color:var(--ink)} .tag.hp{background:#F2A0B6; color:var(--ink)}
+.tag.cost{background:#8FD6F5; color:#06263A} .tag.bio{background:var(--bio,#fff); color:var(--ink)}
+.tag.kw{background:var(--spell); color:#FFF}
+
+.fxlayer{position:fixed; inset:0; pointer-events:none; z-index:60}
+.float{position:absolute; transform:translate(-50%,-50%); font-family:"Lilita One",Impact,fantasy;
+  font-size:20px; text-shadow:0 2.5px 0 var(--ink); animation:rise 1s ease-out forwards; white-space:nowrap}
+.float.dmg{color:#FF7E9C} .float.heal{color:#8FE3A0} .float.juice{color:#8FD6F5}
+.float.note{font-family:Nunito,sans-serif; font-weight:900; font-size:13px; color:#FFF}
+@keyframes rise{to{transform:translate(-50%,-160%); opacity:0}}
+.toast{position:fixed; left:50%; top:13%; transform:translateX(-50%); z-index:70;
+  border:var(--stroke) solid var(--ink); border-radius:14px; padding:9px 22px;
+  background:linear-gradient(180deg,#FFD866,var(--gold-2)); color:#4A2F04;
+  font-family:"Lilita One",Impact,fantasy; font-size:20px; letter-spacing:.5px;
+  box-shadow:0 6px 0 var(--gold-3); animation:pop 1.9s ease forwards; pointer-events:none}
+@keyframes pop{0%{transform:translateX(-50%) scale(.6); opacity:0}14%{transform:translateX(-50%) scale(1); opacity:1}
+  78%{opacity:1}100%{opacity:0; transform:translateX(-50%) translateY(-18px)}}
+.fieldwrap.shake{animation:shk .3s}
+@keyframes shk{25%{transform:translateX(-5px)}50%{transform:translateX(5px)}75%{transform:translateX(-3px)}}
+
+@media (max-width:560px){ .nextslot{display:none} .fighter .fd{display:none} }
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms !important; animation-iteration-count:1 !important;
+    transition-duration:.01ms !important}
+}
+</style>
+
+</head>
+<body>
+<div id="app">
+
+  <!-- ============================================================ MENU -->
+  <section class="screen" id="menu">
+    <header class="topbar">
+      <div class="plate">
+        <span class="lvl" id="m-lvl">1</span>
+        <span class="pinfo">
+          <span class="nm" id="m-name">Cornlord</span>
+          <span class="xpwrap"><i id="m-xp" style="width:0%"></i></span>
+        </span>
+      </div>
+      <div class="purse">
+        <span class="coin gold">🪙 <b id="m-gold">0</b></span>
+        <span class="coin gem">🌽 <b id="m-corn">0</b></span>
+      </div>
+    </header>
+    <div class="menubody">
+      <div class="panel arenacard">
+        <span class="ico" id="m-arena-ico">🌳</span>
+        <span class="anm" id="m-arena">Treehouse Floor</span>
+        <span class="asub" id="m-arena-sub">Arena 1</span>
+        <div class="trophybar">
+          <span class="tro">🏆 <span id="m-trophies">0</span></span>
+          <span class="progwrap"><i id="m-prog" style="width:0%"></i></span>
+          <span class="asub" id="m-next">150 to go</span>
+        </div>
+      </div>
+      <button class="cbtn huge" id="btn-battle" type="button">BATTLE</button>
+      <div class="chestrow" id="m-chests"></div>
+      <div class="actrow">
+        <button class="cbtn blue sm" id="btn-howto" type="button">How to play</button>
+        <button class="cbtn blue sm" id="btn-reset" type="button">Reset save</button>
+      </div>
+    </div>
+    <nav class="navbar" id="nav"></nav>
+  </section>
+
+  <!-- =========================================================== CARDS -->
+  <section class="screen off" id="cards">
+    <header class="topbar">
+      <div class="plate"><span class="lvl" id="c-lvl">1</span>
+        <span class="pinfo"><span class="nm">Your collection</span>
+        <span class="xpwrap"><i id="c-xp" style="width:0%"></i></span></span></div>
+      <div class="purse"><span class="coin gold">🪙 <b id="c-gold">0</b></span></div>
+    </header>
+    <div class="cardsbody">
+      <div class="sechead">Battle deck
+        <span class="avgcost" id="deck-stat"><i>\u{1F4A7}</i><b>0.0</b><span>avg</span></span>
+      </div>
+      <div class="deckgrid" id="deckgrid"></div>
+      <div class="sechead">Collection
+        <span class="sortrow" id="sortrow"></span>
+      </div>
+      <div class="hintline" id="collhint">Tap a deck slot, then a card, to swap it in.</div>
+      <div class="collgrid" id="collgrid"></div>
+    </div>
+    <nav class="navbar" id="nav2"></nav>
+  </section>
+
+  <!-- ========================================================== BATTLE -->
+  <section class="screen off" id="battle">
+    <div class="bhud">
+      <div class="fighter" id="foe-plate"></div>
+      <div class="wallpips foe" id="foe-walls"></div>
+      <div class="clock" id="clock">2:30</div>
+    </div>
+
+    <div class="fieldwrap" id="fieldwrap">
+      <div class="field" id="field"><div class="ground" id="ground"></div></div>
+      <div class="panel side-pop hidden" id="logpop">
+        <h4>BMO is calling it <button type="button" data-act="closelog">✕</button></h4>
+        <div class="logfeed" id="logfeed"></div>
+      </div>
+    </div>
+
+    <div class="bhud">
+      <div class="fighter" id="you-plate"></div>
+      <div class="wallpips" id="you-walls"></div>
+      <div class="actrow" style="margin-left:auto; display:flex; gap:6px">
+        <button class="cbtn sm" id="btn-floop" type="button">Floop a patch · 2</button>
+        <button class="cbtn blue sm" id="btn-log" type="button">Log</button>
+        <button class="cbtn blue sm" id="btn-rules2" type="button">?</button>
+        <button class="cbtn blue sm" id="btn-quit" type="button">Forfeit</button>
+      </div>
+    </div>
+
+    <div id="hint" class="off"></div>
+    <div class="juicewrap">
+      <span class="juicenum" id="juicenum">0</span>
+      <span class="juicebar" id="juicebar"></span>
+    </div>
+    <div class="dock">
+      <div class="nextslot"><span class="lab">Next</span><div id="nextcard"></div></div>
+      <div class="handcards" id="handcards"></div>
+    </div>
+  </section>
+</div>
+
+<div class="scrim" id="scrim" hidden><div class="sheet" id="sheet"></div></div>
+<div class="fxlayer" id="fx"></div>
+
+<script>
+"use strict";
+/* =====================================================================
+   THE ARENA - world units are pixels on the un-scaled ground plane
+   ===================================================================== */
+const AW = 600, AH = 980;
+const RIVER_Y = 490, RIVER_H = 46;
+const LANEX = [100, 300, 500], BRIDGE_W = 80;
+const WALL_Y = {foe:154, you:826}, KEEP_Y = {foe:64, you:916};
+const MATCH_TIME = 150, OT_TIME = 60, X2_AT = 90;
+const JUICE_MAX = 10, JUICE_RATE = 2.6;
+const HAND_SIZE = 4, DECK_SIZE = 12;
+
+/* =====================================================================
+   BIOMES - the ground is patched into 3x3 per side. Whatever stands on a
+   patch takes its blessing; a card deployed onto its own biome is cheaper
+   and comes in stronger. Floop a patch to retill it.
+   ===================================================================== */
+const BIO = {
+  corn:  {name:"Cornfields",    icon:"\u{1F33D}", buff:"+20% attack",  color:"#D9B54C",
+          note:"Creatures standing here hit 20% harder."},
+  blue:  {name:"Blue Plains",   icon:"\u{1F4A7}", buff:"+25% health",  color:"#7FBEDC",
+          note:"Creatures deployed here arrive with 25% more health."},
+  nice:  {name:"Nice Lands",    icon:"\u{1F338}", buff:"regenerates",  color:"#E39AB8",
+          note:"Creatures standing here heal 2% of their health a second."},
+  sandy: {name:"SandyLands",    icon:"\u{1F3DC}", buff:"+30% speed",   color:"#D9BC8C",
+          note:"Creatures standing here move 30% faster."},
+  swamp: {name:"Useless Swamp", icon:"\u{1FAB5}", buff:"spell-proof",  color:"#879C70",
+          note:"No stats at all. But nobody aims a spell at the swamp — creatures here ignore enemy spells."},
+  rain:  {name:"Rainbow",       icon:"\u{1F308}", buff:"+15% all, any home", color:"#BB9ADD",
+          note:"+15% health and attack, and it counts as every card's home biome."},
+};
+const BIO_KEYS = Object.keys(BIO);
+
+/* =====================================================================
+   BODY PLANS - every creature is built from boxes, so they are original
+   blocky puppets rather than pictures. Dimensions are w / d / h.
+   ===================================================================== */
+const PLAN = {
+  brute:   {sh:17, torso:[39,28,30], head:[28,22,22], legs:[12,12,13,2],  arms:true},
+  scamp:   {sh:13, torso:[26,22,17], head:[30,25,23], legs:[9,9,9,2]},
+  lanky:   {sh:12, torso:[22,19,36], head:[22,19,19], legs:[9,9,19,2], arms:true},
+  crawler: {sh:19, torso:[52,25,17], head:[23,20,17], legs:[9,9,12,4]},
+  hulk:    {sh:22, torso:[52,35,41], head:[32,26,25], legs:[14,14,14,2], arms:true},
+  tower:   {sh:20, torso:[44,38,46], head:[32,29,19], legs:null},
+  bunker:  {sh:22, torso:[55,44,29], head:[38,32,14], legs:null},
+};
+
+/* =====================================================================
+   CARDS - 36. Names in quotes are cards actually named on screen in
+   Adventure Time S4E14; the rest are built in the same spirit.
+   rt: hp, dmg per hit, hit interval (s), speed (px/s), range (px),
+       n (how many spawn), splash radius, targets
+   ===================================================================== */
+const C = (o) => o;
+const CARDS = {
+  /* ---------------------------------------------------------- CORNFIELDS */
+  husker:C({name:"Husker Knights", kind:"unit", cost:4, bio:"corn", art:"\u{1F33D}", plan:"brute", col:"#E3C25A",
+    rt:{hp:620, dmg:105, hit:1.2, spd:46, rng:26, n:2}, text:"Two of them, shoulder to shoulder.",
+    flavor:"“Husker Knights, attack!”"}),
+  maize:C({name:"Immortal Maize Walker", kind:"unit", cost:8, bio:"corn", art:"\u{1F3DA}", plan:"hulk", col:"#C9A83E",
+    rt:{hp:2600, dmg:330, hit:1.6, spd:32, rng:30, n:1, spellproof:true},
+    text:"Enormous, slow, and spells slide right off it.", flavor:"Jake's closer. Of course it's corn."}),
+  sprout:C({name:"Corn Sprout", kind:"unit", cost:1, bio:"corn", art:"\u{1F331}", plan:"scamp", col:"#8FCF6A",
+    rt:{hp:190, dmg:34, hit:1.1, spd:56, rng:24, n:3, dwell:"corn"},
+    text:"Three of them. They are trying their best.", flavor:"Give it a season."}),
+  squatch:C({name:"Cornsquatch", kind:"unit", cost:5, bio:"corn", art:"\u{1F43B}", plan:"brute", col:"#B9823F",
+    rt:{hp:1150, dmg:190, hit:1.3, spd:64, rng:26, n:1}, text:"Fast for its size. Unreasonably so.",
+    flavor:"Six foot four of creamed style."}),
+  silo:C({name:"Silo of Truth", kind:"structure", cost:4, bio:"corn", art:"\u{1F3ED}", plan:"tower", col:"#C9A055",
+    rt:{hp:900, life:40, houses:["corn"], juice:true},
+    text:"Pays you juice while it stands. A corn creature will move in and speed it up.",
+    flavor:"The truth is corn."}),
+  kernel:C({name:"Kernel Storm", kind:"spell", cost:3, bio:"corn", art:"\u{1F32C}",
+    rt:{spell:"blast", dmg:210, radius:95}, text:"A burst of scalding kernels over one spot.",
+    flavor:"Weaponised popcorn. Exactly as bad as it sounds."}),
+
+  /* --------------------------------------------------------- BLUE PLAINS */
+  cooldog:C({name:"Cool Dog", kind:"unit", cost:3, bio:"blue", art:"\u{1F576}", plan:"crawler", col:"#6FB6E0",
+    rt:{hp:420, dmg:88, hit:1.0, spd:84, rng:24, n:1}, text:"Very fast. Does not stop.",
+    flavor:"Cool Dog, doin' a barrel roll."}),
+  scholar:C({name:"Ancient Scholar", kind:"unit", cost:3, bio:"blue", art:"\u{1F9D9}", plan:"lanky", col:"#7E8FD6",
+    rt:{hp:480, dmg:70, hit:1.4, spd:40, rng:120, n:1, dwell:"scholar"},
+    text:"Attacks at range. Walks into a Schoolhouse if one is near, and studies.",
+    flavor:"Two hours to explain the rules. Two."}),
+  school:C({name:"The Schoolhouse", kind:"structure", cost:4, bio:"blue", art:"\u{1F3EB}", plan:"bunker", col:"#8DA4DE",
+    rt:{hp:1000, life:50, houses:["scholar"], study:true},
+    text:"A scholar inside studies: it grows steadily stronger, then comes back out.",
+    flavor:"Finn sent the Ancient Scholar here to study. It worked."}),
+  rider:C({name:"Blue Plains Rider", kind:"unit", cost:4, bio:"blue", art:"\u{1F3C7}", plan:"crawler", col:"#5FA0CE",
+    rt:{hp:560, dmg:120, hit:1.2, spd:70, rng:100, n:1, dwell:"ranged"},
+    text:"Fast, and hits from a distance.", flavor:"Rides the long grass all day, hits you from it."}),
+  teleport:C({name:"Teleport", kind:"spell", cost:2, bio:"blue", art:"\u{1F300}",
+    rt:{spell:"blink", radius:110, dist:190}, text:"Your creatures in the area blorp forward, straight past the river.",
+    flavor:"Blorp."}),
+  blizzard:C({name:"Blue Plains Blizzard", kind:"spell", cost:4, bio:"blue", art:"\u{2744}",
+    rt:{spell:"slow", radius:130, dur:5, dmg:90}, text:"Chills everything in the area: damage, and half speed for 5 seconds.",
+    flavor:"The plains do not care for you."}),
+
+  /* ---------------------------------------------------------- NICE LANDS */
+  pig:C({name:"The Pig", kind:"unit", cost:2, bio:"nice", art:"\u{1F437}", plan:"scamp", col:"#F0A8C0",
+    rt:{hp:760, dmg:0, hit:1, spd:44, rng:24, n:1, dwell:"any", taunt:true},
+    text:"Cannot attack anything. Soaks an enormous amount and naps in the Cave.",
+    flavor:"FLOOP THE PIG!"}),
+  niceking:C({name:"Nice King", kind:"unit", cost:5, bio:"nice", art:"\u{1F934}", plan:"lanky", col:"#E9C6E6",
+    rt:{hp:900, dmg:60, hit:1.5, spd:42, rng:90, n:1, heal:34},
+    text:"Mends nearby friends while he walks.", flavor:"He is nice. That is the whole of his deal."}),
+  tower:C({name:"Spirit Tower", kind:"structure", cost:5, bio:"nice", art:"\u{1F5FC}", plan:"tower", col:"#C9A8D8",
+    rt:{hp:1150, life:45, dmg:110, hit:1.1, rng:180, houses:["ranged"]},
+    text:"Shoots on its own. A ranged creature inside shoots too, from safety, and harder.",
+    flavor:"It hums. Politely."}),
+  trunks:C({name:"Tree Trunks", kind:"unit", cost:2, bio:"nice", art:"\u{1F418}", plan:"scamp", col:"#C79BD6",
+    rt:{hp:300, dmg:0, hit:1, spd:48, rng:24, n:1, heal:56, dwell:"any"},
+    text:"Bakes for the troops — a steady heal on everything around her.", flavor:"Oh my goodness."}),
+  pancakes:C({name:"Bacon Pancakes", kind:"spell", cost:2, bio:"nice", art:"\u{1F95E}",
+    rt:{spell:"mend", heal:320, radius:130}, text:"Heals every creature of yours in the area.",
+    flavor:"♪ takin' a bacon and I put it in a pancake ♪"}),
+  blessing:C({name:"Fluffy Blessing", kind:"spell", cost:3, bio:"nice", art:"\u{2728}",
+    rt:{spell:"buff", radius:120, dur:9, mult:1.4}, text:"Your creatures in the area hit 40% harder for 9 seconds.",
+    flavor:"Fluffy people are generous people."}),
+
+  /* ---------------------------------------------------------- SANDYLANDS */
+  archer:C({name:"Summon Archer Dan", kind:"unit", cost:4, bio:"sandy", art:"\u{1F3F9}", plan:"lanky", col:"#D6B173",
+    rt:{hp:340, dmg:96, hit:0.9, spd:44, rng:165, n:2, dwell:"ranged"},
+    text:"A pair of them. Longest reach on the mat.", flavor:"Dan does not miss. Dan also does not blink."}),
+  wyrm:C({name:"Sand Wyrm", kind:"unit", cost:6, bio:"sandy", art:"\u{1F40D}", plan:"crawler", col:"#C9A76B",
+    rt:{hp:1500, dmg:250, hit:1.4, spd:50, rng:28, n:1, splash:60},
+    text:"Every bite catches everything nearby.", flavor:"It was under the mat the whole time."}),
+  baldman:C({name:"Wandering Bald Man", kind:"unit", cost:1, bio:"sandy", art:"\u{1F468}", plan:"scamp", col:"#E0C9A4",
+    rt:{hp:210, dmg:62, hit:1.0, spd:78, rng:24, n:1, ttl:22},
+    text:"Quick, cheap, and wanders off after 22 seconds.", flavor:"He has somewhere to be. He won't say where."}),
+  sandstorm:C({name:"Sandstorm", kind:"spell", cost:3, bio:"sandy", art:"\u{1F32A}",
+    rt:{spell:"blast", dmg:120, radius:175}, text:"A wide, thin sheet of grit. Clears out swarms.",
+    flavor:"Grit in absolutely everything."}),
+  banana:C({name:"Banana Guard", kind:"unit", cost:2, bio:"sandy", art:"\u{1F34C}", plan:"brute", col:"#E8D257",
+    rt:{hp:700, dmg:52, hit:1.3, spd:44, rng:26, n:1, dwell:"any"},
+    text:"A wall with a helmet on.", flavor:"Everything is fine here, sir."}),
+  goose:C({name:"Choose Goose", kind:"unit", cost:3, bio:"sandy", art:"\u{1F9A2}", plan:"lanky", col:"#DCCFA8",
+    rt:{hp:430, dmg:78, hit:1.1, spd:52, rng:26, n:1, onDeath:"juice2", dwell:"any"},
+    text:"When he goes down he leaves you 2 juice. A deal is a deal.",
+    flavor:"“Choose, Goose!” is a thing he says about himself."}),
+
+  /* -------------------------------------------------------- USELESS SWAMP */
+  reaper:C({name:"The Field Reaper", kind:"unit", cost:6, bio:"swamp", art:"\u{1F480}", plan:"lanky", col:"#7E8C6A",
+    rt:{hp:1250, dmg:400, hit:1.8, spd:44, rng:30, n:1},
+    text:"Hits like a falling tree, slowly.", flavor:"He reaps the field. It's right there in the name."}),
+  cave:C({name:"The Cave of Solitude", kind:"structure", cost:4, bio:"swamp", art:"\u{1F573}", plan:"bunker", col:"#6E7A5C",
+    rt:{hp:1500, life:55, houses:["any"], shelter:true},
+    text:"Whatever naps inside is safe from absolutely everything, and heals fast.",
+    flavor:"Finn put the Pig in here and Jake simply could not reach it."}),
+  lurker:C({name:"Swamp Lurker", kind:"unit", cost:3, bio:"swamp", art:"\u{1F438}", plan:"crawler", col:"#6F9464",
+    rt:{hp:450, dmg:90, hit:1.1, spd:46, rng:110, n:1, dwell:"ranged"},
+    text:"Sits back and spits.", flavor:"Mostly eyes."}),
+  nightmares:C({name:"Field of Nightmares", kind:"spell", cost:4, bio:"swamp", art:"\u{1F311}",
+    rt:{spell:"wither", radius:145, dur:8, mult:0.55}, text:"Enemy creatures in the area hit 45% weaker for 8 seconds.",
+    flavor:"Everyone dreams of the same corn."}),
+  bloodstorm:C({name:"Cerebral Blood Storm", kind:"spell", cost:6, bio:"swamp", art:"\u{1F32A}",
+    rt:{spell:"blast", dmg:480, radius:150}, text:"The big one. Deletes most of what it lands on.",
+    flavor:"Sounds worse than it is. It is quite bad."}),
+  mushroom:C({name:"Marauding Mushroom", kind:"unit", cost:2, bio:"swamp", art:"\u{1F344}", plan:"scamp", col:"#C2705E",
+    rt:{hp:260, dmg:60, hit:1.2, spd:54, rng:24, n:2, onDeath:"spores"},
+    text:"Two of them, and they burst when they go.", flavor:"It has been maraudin' all day."}),
+
+  /* -------------------------------------------------------------- RAINBOW */
+  earlings:C({name:"Legion of Earlings", kind:"unit", cost:4, bio:"rain", art:"\u{1F43D}", plan:"scamp", col:"#C79AE0",
+    rt:{hp:130, dmg:44, hit:0.8, spd:70, rng:22, n:6},
+    text:"Six of them. They're small. There are lots.", flavor:"They're small. There are lots."}),
+  owl:C({name:"Cosmic Owl", kind:"unit", cost:7, bio:"rain", art:"\u{1F989}", plan:"hulk", col:"#9B86D8",
+    rt:{hp:1700, dmg:260, hit:1.3, spd:40, rng:140, n:1},
+    text:"Enormous reach, enormous everything.", flavor:"If you dream about him, it's going to happen."}),
+  reclaim:C({name:"Reclaim Landscape", kind:"spell", cost:2, bio:"rain", art:"\u{1F5FA}",
+    rt:{spell:"reclaim"}, text:"Retill one of your patches into any biome you like, free of the usual cost.",
+    flavor:"Should've read the fine print, Finn."}),
+  frenzy:C({name:"Floop Frenzy", kind:"spell", cost:4, bio:"rain", art:"\u{1F3A0}",
+    rt:{spell:"haste", radius:130, dur:8, mult:1.7}, text:"Your creatures in the area attack and move far faster for 8 seconds.",
+    flavor:"Floop. Floop. Floop floop floop."}),
+  volcano:C({name:"Volcano", kind:"spell", cost:5, bio:"rain", art:"\u{1F30B}",
+    rt:{spell:"blast", dmg:700, radius:80, structures:1.5},
+    text:"A tight, enormous hit. Extra hard on walls.", flavor:"Weather report: bad."}),
+  rainrider:C({name:"Rainbow Rider", kind:"unit", cost:4, bio:"rain", art:"\u{1F984}", plan:"crawler", col:"#B98FD8",
+    rt:{hp:620, dmg:98, hit:1.0, spd:62, rng:105, n:1, dwell:"ranged"},
+    text:"Quick and long-legged.", flavor:"Hello there. Nice day for it."}),
+};
+const CARD_KEYS = Object.keys(CARDS);
+/* Rarity is a shelf-appeal thing: it colours the frame and nothing else. */
+const LEGENDS = ["maize","owl","reaper","wyrm","niceking"];
+const EPICS = ["squatch","tower","cave","school","bloodstorm","volcano","frenzy","earlings","rainrider"];
+function rarityOf(id){
+  if(LEGENDS.indexOf(id) >= 0) return "legend";
+  if(EPICS.indexOf(id) >= 0) return "epic";
+  return CARDS[id].cost <= 2 ? "common" : "rare";
+}
+
+const DECKS = {
+  cornlord:{name:"Cornlord", blurb:"Corn, a silo full of corn, and an eight-cost apology.",
+    cards:["husker","maize","silo","sprout","squatch","kernel","scholar","pig","volcano","earlings","teleport","sandstorm"]},
+  blitz:{name:"Blue Plains Blitz", blurb:"Cheap and fast, and gone before the Maize Walker gets out of bed.",
+    cards:["cooldog","baldman","banana","rider","archer","teleport","sandstorm","pancakes","goose","sprout","lurker","mushroom"]},
+  swampdoc:{name:"Swamp Doctor", blurb:"Stall in the swamp, retill the mat, let the Reaper do the talking.",
+    cards:["reaper","cave","lurker","bloodstorm","mushroom","pig","tower","scholar","blizzard","banana","wyrm","squatch"]},
+  studyhall:{name:"Study Hall", blurb:"Everybody goes indoors. The Scholar comes back out enormous.",
+    cards:["scholar","school","tower","archer","rider","lurker","cooldog","husker","squatch","frenzy","pancakes","sprout"]},
+  spare:{name:"Jake's Spare Deck", blurb:"Every expensive weirdo Jake had lying around. Good luck.",
+    cards:["maize","owl","wyrm","reaper","niceking","squatch","volcano","bloodstorm","pig","sprout","banana","pancakes"]},
+};
+const ARENAS = [
+  {t:0,    name:"Treehouse Floor", ico:"\u{1F333}"},
+  {t:150,  name:"The Cornfield",   ico:"\u{1F33D}"},
+  {t:350,  name:"Blue Plains",     ico:"\u{1F4A7}"},
+  {t:600,  name:"SandyLands",      ico:"\u{1F3DC}"},
+  {t:900,  name:"Swamp Bottom",    ico:"\u{1FAB5}"},
+  {t:1300, name:"Rainbow Summit",  ico:"\u{1F308}"},
+];
+const FOES = {
+  finn:{name:"Finn", art:"\u{1F9E2}", deck:"spare", skill:"easy", tier:0,
+    taunts:["Mathematical!","I have no idea what I'm doing!","Jake gave me this deck. I think it's bad."]},
+  jake:{name:"Jake", art:"\u{1F436}", deck:"cornlord", skill:"normal", tier:0,
+    taunts:["Your swamp is looking pretty useless, buddy.","Cornlords never lose.","Husker Knights, attack!"]},
+  bmo:{name:"BMO", art:"\u{1F4DF}", deck:"studyhall", skill:"normal", tier:2,
+    taunts:["BMO calculated this eleven turns ago.","Who wants to play video games? Oh — we are."]},
+  marcy:{name:"Marceline", art:"\u{1F987}", deck:"swampdoc", skill:"hard", tier:3,
+    taunts:["I'm a thousand years old, dude.","Nice swamp. Shame about the creature in it."]},
+  pb:{name:"Bubblegum", art:"\u{1F451}", deck:"blitz", skill:"hard", tier:4,
+    taunts:["I did the math on this deck. Twice.","Science!"]},
+};
+</script>
+
+<script>
+"use strict";
+/* =====================================================================
+   SAVE
+   ===================================================================== */
+const SAVE_KEY = "floopthepig.v2";
+const STARTER = ["husker","sprout","silo","cooldog","scholar","school","pig","banana","archer","baldman",
+                 "lurker","mushroom","cave","pancakes","teleport","sandstorm","earlings","volcano"];
+let SAVE = null;
+
+function freshSave(){
+  const owned = {};
+  STARTER.forEach(id => owned[id] = {copies:0, lvl:1});
+  return {name:"Cornlord", lvl:1, xp:0, gold:400, corn:0, trophies:0, wins:0, losses:0,
+    deck:["cooldog","sprout","banana","archer","scholar","school","pig","teleport","sandstorm","mushroom","cave","husker"],
+    owned, chests:[null,null,null,null]};
+}
+function loadSave(){
+  try{
+    const raw = localStorage.getItem(SAVE_KEY);
+    if(raw){
+      const s = JSON.parse(raw);
+      if(s && s.owned && Array.isArray(s.deck) && s.deck.length === DECK_SIZE){
+        s.deck = s.deck.filter(id => CARDS[id]);
+        while(s.deck.length < DECK_SIZE) s.deck.push(STARTER.find(x => !s.deck.includes(x)) || "sprout");
+        return s;
+      }
+    }
+  }catch(e){ /* private mode, cleared storage - start fresh */ }
+  return freshSave();
+}
+function persist(){
+  try{ localStorage.setItem(SAVE_KEY, JSON.stringify(SAVE)); }catch(e){ /* nothing we can do */ }
+}
+const arenaIndex = (t) => { let i = 0; ARENAS.forEach((a,k) => { if(t >= a.t) i = k; }); return i; };
+function cardLevel(id){ const o = SAVE.owned[id]; return o ? o.lvl : 1; }
+function lvlBonus(id, lvl){
+  const d = CARDS[id];
+  const b = {atk:0, hp:0};
+  if(lvl >= 2) b.hp += 1;
+  if(lvl >= 3){ if(d.kind === "unit" && d.atk > 0) b.atk += 1; else b.hp += 1; }
+  return b;
+}
+const UPGRADE = {2:{copies:3, gold:150}, 3:{copies:8, gold:500}};
+</script>
+<script>
+"use strict";
+/* =====================================================================
+   MATCH STATE
+   ===================================================================== */
+let S = null, uidSeq = 1;
+const $ = (id) => document.getElementById(id);
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; } return a; }
+const clamp = (n,a,b) => n < a ? a : n > b ? b : n;
+const dist = (a,b) => Math.hypot(a.x - b.x, a.y - b.y);
+const other = (s) => s === "you" ? "foe" : "you";
+const laneOf = (x) => x < 200 ? 0 : x < 400 ? 1 : 2;
+
+/* patches: 3 columns x 3 rows per side, indexed row*3+col from the river outward */
+function patchRect(side, i){
+  const col = i % 3, row = (i / 3) | 0;
+  const band = (AH / 2 - RIVER_H) / 3;
+  const y0 = side === "you" ? RIVER_Y + RIVER_H + row * band : RIVER_Y - RIVER_H - (row + 1) * band;
+  return {x:col * (AW / 3), y:y0, w:AW / 3, h:band};
+}
+function patchIndex(side, x, y){
+  const band = (AH / 2 - RIVER_H) / 3;
+  const col = clamp((x / (AW / 3)) | 0, 0, 2);
+  let row;
+  if(side === "you") row = clamp(((y - RIVER_Y - RIVER_H) / band) | 0, 0, 2);
+  else row = clamp(((RIVER_Y - RIVER_H - y) / band) | 0, 0, 2);
+  return row * 3 + col;
+}
+function bioAt(side, x, y){ return S[side].patches[patchIndex(side, x, y)]; }
+function myHalf(side, y){ return side === "you" ? y > RIVER_Y + RIVER_H : y < RIVER_Y - RIVER_H; }
+
+function makeSide(side, who, deckIds, levels){
+  const cycle = shuffle(deckIds.slice());
+  const patches = [];
+  for(let i=0;i<9;i++) patches.push(BIO_KEYS[(Math.random() * BIO_KEYS.length) | 0]);
+  return {
+    side, name:who.name, art:who.art, skill:who.skill || null, deckName:who.deckName || "",
+    taunts:who.taunts || null, levels:levels || {}, juice:5, patches,
+    hand:cycle.slice(0, HAND_SIZE), next:cycle[HAND_SIZE], rest:cycle.slice(HAND_SIZE + 1),
+    wallsDown:0, patchFlooped:0, aiNext:2,
+  };
+}
+
+function structure(side, kind, lane){
+  const isWall = kind === "wall";
+  const m = {
+    uid:uidSeq++, side, id:null, struct:kind, lane,
+    x: isWall ? LANEX[lane] : AW / 2,
+    y: isWall ? WALL_Y[side] : KEEP_Y[side],
+    hp: isWall ? 2700 : 5200, maxHp: isWall ? 2700 : 5200,
+    dmg: isWall ? 98 : 155, hit: isWall ? 1.05 : 1.0, rng: isWall ? 185 : 210,
+    cd:0, spd:0, r: isWall ? 40 : 52, alive:true, locked: !isWall,
+    plan: isWall ? "wall" : "keep",
+  };
+  return m;
+}
+
+function newMatch(foeKey){
+  const foe = FOES[foeKey];
+  const ai = arenaIndex(SAVE.trophies);
+  const aiLvl = Math.min(3, 1 + Math.floor(ai / 2));
+  const foeLevels = {}, myLevels = {};
+  DECKS[foe.deck].cards.forEach(id => foeLevels[id] = aiLvl);
+  SAVE.deck.forEach(id => myLevels[id] = cardLevel(id));
+  S = {
+    t:0, over:null, foeKey, log:[], pending:null, floopMode:false, pendPatch:-1,
+    mobs:[], dead:[], lastTs:0, raf:0, ot:false,
+  };
+  S.you = makeSide("you", {name:SAVE.name, art:"\u{1F0CF}", deckName:"Your deck"}, SAVE.deck, myLevels);
+  S.foe = makeSide("foe", Object.assign({deckName:DECKS[foe.deck].name}, foe), DECKS[foe.deck].cards, foeLevels);
+  for(const side of ["you","foe"]){
+    for(let l=0;l<3;l++) S.mobs.push(structure(side, "wall", l));
+    S.mobs.push(structure(side, "keep", 1));
+  }
+  logLine("bmo", "BMO: Card Wars! Break " + foe.name + "'s wall, then the keep. Go!");
+}
+
+/* =====================================================================
+   SPAWNING
+   ===================================================================== */
+function statsFor(P, id){
+  const d = CARDS[id], rt = d.rt, lv = P.levels[id] || 1, lb = lvlBonus(id, lv);
+  return {hp:Math.round((rt.hp || 0) * (1 + 0.12 * (lv - 1))), dmg:Math.round((rt.dmg || 0) * (1 + 0.12 * (lv - 1)) + lb.atk * 0)};
+}
+function spawnMob(P, id, x, y, opts){
+  opts = opts || {};
+  const d = CARDS[id], rt = d.rt;
+  const st = statsFor(P, id);
+  const bio = myHalf(P.side, y) ? bioAt(P.side, x, y) : null;
+  let hp = st.hp, dmg = st.dmg;
+  if(bio === "blue") hp = Math.round(hp * 1.25);
+  if(bio === "rain"){ hp = Math.round(hp * 1.15); dmg = Math.round(dmg * 1.15); }
+  if(bio && (bio === d.bio || bio === "rain")){ hp = Math.round(hp * 1.1); dmg = Math.round(dmg * 1.1); }
+  const m = {
+    uid:uidSeq++, side:P.side, id, struct:rt.life !== undefined || rt.houses ? "bldg" : null,
+    x:clamp(x, 14, AW - 14), y:clamp(y, 14, AH - 14),
+    hp, maxHp:hp, baseDmg:dmg, dmg, hit:rt.hit || 1.2, cd:0.35,
+    baseSpd:rt.spd || 0, spd:rt.spd || 0, rng:rt.rng || 26, r:(PLAN[d.plan] || PLAN.scamp).sh,
+    lane:laneOf(x), alive:true, plan:d.plan, col:d.col, dwell:rt.dwell || null,
+    ttl:rt.ttl || 0, born:S.t, guest:null, study:0, buffT:0, buffM:1, slowT:0, witherT:0, witherM:1,
+    splash:rt.splash || 0, heal:rt.heal || 0, spellproof:!!rt.spellproof, taunt:!!rt.taunt,
+    onDeath:rt.onDeath || null, houses:rt.houses || null, life:rt.life || 0,
+  };
+  if(m.struct === "bldg"){ m.spd = 0; m.rng = rt.rng || 0; m.dmg = rt.dmg || 0; m.baseDmg = m.dmg; }
+  S.mobs.push(m);
+  return m;
+}
+function deployCost(P, id, x, y){
+  const d = CARDS[id];
+  let c = d.cost;
+  const bio = myHalf(P.side, y) ? bioAt(P.side, x, y) : null;
+  if(bio && (bio === d.bio || bio === "rain")) c -= 1;
+  return Math.max(1, c);
+}
+function canDeployAt(P, x, y){
+  if(x < 12 || x > AW - 12) return false;
+  if(myHalf(P.side, y)) return true;
+  // a broken enemy wall opens its lane for a push
+  const l = laneOf(x);
+  const w = S.mobs.find(m => m.struct === "wall" && m.side === other(P.side) && m.lane === l);
+  if(w && !w.alive){
+    return P.side === "you" ? y > WALL_Y.foe + 40 : y < WALL_Y.you - 40;
+  }
+  return false;
+}
+function cycleOut(P, h){
+  const played = P.hand[h];
+  P.hand[h] = P.next;
+  P.next = P.rest.shift();
+  P.rest.push(played);
+}
+function deploy(P, h, x, y){
+  const id = P.hand[h], d = CARDS[id];
+  const cost = deployCost(P, id, x, y);
+  if(P.juice < cost) return false;
+  P.juice -= cost;
+  if(d.kind === "spell"){ castSpell(P, d, x, y); }
+  else {
+    const n = d.rt.n || 1;
+    for(let i=0;i<n;i++){
+      const a = (i / n) * Math.PI * 2, sp = n > 1 ? 16 + n * 2 : 0;
+      spawnMob(P, id, x + Math.cos(a) * sp, y + Math.sin(a) * sp * .6);
+    }
+  }
+  logLine(P.side === "you" ? "" : "foe",
+    (P.side === "you" ? "You play " : P.name + " plays ") + d.name + ".");
+  cycleOut(P, h);
+  return true;
+}
+
+/* =====================================================================
+   SPELLS
+   ===================================================================== */
+function castSpell(P, d, x, y){
+  const rt = d.rt, E = other(P.side);
+  addFx("ping", x, y, rt.radius || 90);
+  if(rt.spell === "reclaim"){ return; }          // handled by the patch picker
+  for(const m of S.mobs){
+    if(!m.alive || m.inside) continue;
+    const within = Math.hypot(m.x - x, m.y - y) <= (rt.radius || 90) + m.r * 0.6;
+    if(!within) continue;
+    const enemy = m.side !== P.side;
+    if(rt.spell === "blast" && enemy){
+      if(spellImmune(m)) continue;
+      let dm = rt.dmg;
+      if(m.struct && rt.structures) dm *= rt.structures;
+      else if(m.struct) dm *= 0.55;
+      hurt(m, dm, P.side);
+    } else if(rt.spell === "slow" && enemy){
+      if(spellImmune(m)) continue;
+      hurt(m, rt.dmg, P.side);
+      m.slowT = Math.max(m.slowT, rt.dur);
+    } else if(rt.spell === "wither" && enemy){
+      if(spellImmune(m)) continue;
+      m.witherT = Math.max(m.witherT, rt.dur); m.witherM = rt.mult;
+    } else if(rt.spell === "mend" && !enemy && !m.struct){
+      m.hp = Math.min(m.maxHp, m.hp + rt.heal); floatAt(m.x, m.y, "+" + rt.heal, "heal");
+    } else if((rt.spell === "buff" || rt.spell === "haste") && !enemy && !m.struct){
+      m.buffT = Math.max(m.buffT, rt.dur); m.buffM = rt.mult;
+      if(rt.spell === "haste") m.hasteT = rt.dur;
+    } else if(rt.spell === "blink" && !enemy && !m.struct){
+      const dir = P.side === "you" ? -1 : 1;
+      m.y = clamp(m.y + dir * rt.dist, 20, AH - 20);
+      floatAt(m.x, m.y, "blorp", "juice");
+    }
+  }
+  if(rt.spell === "blast" || rt.spell === "slow") addFx("blast", x, y, rt.radius);
+}
+function spellImmune(m){
+  if(m.spellproof) return true;
+  if(m.struct) return false;
+  return myHalf(m.side, m.y) && bioAt(m.side, m.x, m.y) === "swamp";
+}
+
+/* =====================================================================
+   COMBAT
+   ===================================================================== */
+function hurt(m, n, bySide){
+  if(!m.alive || n <= 0) return;
+  m.hp -= n;
+  floatAt(m.x, m.y - 8, "-" + Math.round(n), "dmg");
+  if(m.hp <= 0){ m.hp = 0; die(m, bySide); }
+}
+function die(m, bySide){
+  if(!m.alive) return;
+  m.alive = false;
+  S.dead.push(m);
+  if(m.struct === "wall"){
+    const owner = S[m.side];
+    owner.wallsDown++;
+    S[other(m.side)].wallsDown = S[other(m.side)].wallsDown;
+    logLine("hit", (m.side === "you" ? "Your" : S.foe.name + "'s") + " wall in lane " + (m.lane + 1) + " is down!");
+    for(const k of S.mobs) if(k.struct === "keep" && k.side === m.side) k.locked = false;
+    shake();
+  } else if(m.struct === "keep"){
+    finish(other(m.side));
+  } else {
+    if(m.guest){ const g = m.guest; m.guest = null; g.inside = null; g.x = m.x; g.y = m.y + 22; g.alive = true;
+      logLine("", CARDS[g.id].name + " is turned out of the wreckage."); }
+    if(m.onDeath === "juice2" ) S[m.side].juice = Math.min(JUICE_MAX, S[m.side].juice + 2);
+    if(m.onDeath === "spores"){
+      for(const k of S.mobs) if(k.alive && k.side !== m.side && !k.inside && Math.hypot(k.x-m.x,k.y-m.y) < 70) hurt(k, 90, m.side);
+      addFx("blast", m.x, m.y, 70);
+    }
+  }
+}
+function effDmg(m){ return m.dmg * m.buffM * m.witherM; }
+function effSpd(m){ return m.spd * (m.slowT > 0 ? 0.5 : 1) * (m.hasteT > 0 ? 1.45 : 1); }
+
+function attackable(t, by){
+  if(!t.alive || t.inside) return false;
+  if(t.struct === "keep" && t.locked) return false;
+  return true;
+}
+function pickTarget(m){
+  let best = null, bd = 1e9;
+  const aggro = m.struct ? m.rng + 20 : Math.max(m.rng + 60, 150);
+  for(const t of S.mobs){
+    if(t.side === m.side || !attackable(t, m)) continue;
+    const d = Math.hypot(t.x - m.x, t.y - m.y) - t.r;
+    if(t.struct && d > m.rng + 10 && !m.struct) continue;   // walk to walls, don't aggro across the map
+    if(d < bd && (d < aggro || t.struct)){ bd = d; best = t; }
+  }
+  if(best) return best;
+  if(m.struct) return null;
+  // nothing near: head for the enemy wall in this lane, or the keep once it is open
+  const E = other(m.side);
+  const wall = S.mobs.find(t => t.struct === "wall" && t.side === E && t.lane === m.lane && t.alive);
+  if(wall) return wall;
+  const keep = S.mobs.find(t => t.struct === "keep" && t.side === E && t.alive && !t.locked);
+  if(keep) return keep;
+  return S.mobs.find(t => t.struct === "wall" && t.side === E && t.alive) || null;
+}
+
+function moveToward(m, tx, ty, dt){
+  const crossing = myHalf(m.side, m.y) !== myHalf(m.side, ty) && !myHalf(m.side, ty);
+  let gx = tx, gy = ty;
+  if(crossing && Math.abs(m.y - RIVER_Y) > RIVER_H + 6){
+    gx = LANEX[m.lane]; gy = RIVER_Y;                       // funnel onto the bridge
+  } else if(Math.abs(m.y - RIVER_Y) <= RIVER_H + 6){
+    gx = LANEX[m.lane];                                     // stay on the planks
+  }
+  const dx = gx - m.x, dy = gy - m.y, L = Math.hypot(dx, dy) || 1;
+  const step = effSpd(m) * dt;
+  m.x += dx / L * step; m.y += dy / L * step;
+  m.walking = true;
+}
+
+function separate(dt){
+  for(let i=0;i<S.mobs.length;i++){
+    const a = S.mobs[i];
+    if(!a.alive || a.struct || a.inside) continue;
+    for(let j=i+1;j<S.mobs.length;j++){
+      const b = S.mobs[j];
+      if(!b.alive || b.struct || b.inside) continue;
+      const dx = b.x - a.x, dy = (b.y - a.y) * 1.6, d = Math.hypot(dx, dy);
+      const want = (a.r + b.r) * 0.72;
+      if(d > 0.001 && d < want){
+        const push = (want - d) / d * 0.5 * Math.min(1, dt * 14);
+        a.x -= dx * push; a.y -= dy * push * .6;
+        b.x += dx * push; b.y += dy * push * .6;
+      }
+    }
+  }
+}
+
+/* -------------------------------------------------- structures & lodgers */
+function houseTakes(st, m){
+  if(!st.houses || st.guest || !m.dwell) return false;
+  return st.houses.includes("any") || st.houses.includes(m.dwell);
+}
+function structTick(m, dt){
+  const P = S[m.side];
+  if(m.life){ m.life -= dt; if(m.life <= 0){ die(m, m.side); return; } }
+  if(CARDS[m.id] && CARDS[m.id].rt.juice) P.juice = Math.min(JUICE_MAX, P.juice + dt * (m.guest ? 0.55 : 0.35));
+  if(m.houses && !m.guest){
+    for(const k of S.mobs){
+      if(!k.alive || k.inside || k.side !== m.side || k.struct) continue;
+      if(k.noHouse && k.noHouse > S.t) continue;      // just came out; let it fight
+      if(!houseTakes(m, k)) continue;
+      if(Math.hypot(k.x - m.x, k.y - m.y) < m.r + k.r + 24){
+        m.guest = k; k.inside = m.uid; k.studyT = 0;
+        logLine(m.side === "you" ? "bmo" : "foe", CARDS[k.id].name + " goes inside " + CARDS[m.id].name + ".");
+        floatAt(m.x, m.y, "inside", "heal");
+        break;
+      }
+    }
+  }
+  const g = m.guest;
+  if(g){
+    const rt = CARDS[m.id].rt;
+    if(rt.shelter) g.hp = Math.min(g.maxHp, g.hp + g.maxHp * 0.09 * dt);
+    if(rt.study){
+      g.studyT += dt;
+      g.dmg = g.baseDmg * (1 + Math.min(0.7, g.studyT * 0.07));
+      g.maxHp = Math.round(g.maxHp + g.maxHp * 0.05 * dt);
+      g.hp = Math.min(g.maxHp, g.hp + g.maxHp * 0.06 * dt);
+      if(g.studyT > 11){ evict(m); logLine(m.side === "you" ? "bmo" : "foe", CARDS[g.id].name + " graduates."); }
+    }
+    if(rt.shelter && g.hp >= g.maxHp - 1 && (S.t - (g.inAt || 0)) > 4) evict(m);
+  }
+}
+function evict(st){
+  const g = st.guest;
+  if(!g) return;
+  st.guest = null; g.inside = null; g.noHouse = S.t + 9;
+  g.x = st.x + (Math.random() * 30 - 15); g.y = st.y + (st.side === "you" ? -30 : 30);
+  g.baseDmg = g.dmg;
+  floatAt(g.x, g.y, "out!", "heal");
+}
+
+/* =====================================================================
+   THE TICK
+   ===================================================================== */
+function step(dt){
+  if(!S || S.over) return;
+  S.t += dt;
+  const x2 = S.t >= X2_AT ? 2 : 1;
+  for(const side of ["you","foe"]){
+    const P = S[side];
+    P.juice = Math.min(JUICE_MAX, P.juice + dt / JUICE_RATE * x2);
+  }
+
+  for(const m of S.mobs){
+    if(!m.alive) continue;
+    if(m.buffT > 0){ m.buffT -= dt; if(m.buffT <= 0) m.buffM = 1; }
+    if(m.hasteT > 0) m.hasteT -= dt;
+    if(m.slowT > 0) m.slowT -= dt;
+    if(m.witherT > 0){ m.witherT -= dt; if(m.witherT <= 0) m.witherM = 1; }
+    if(m.inside) continue;
+    if(m.struct){ if(m.struct === "bldg") structTick(m, dt); }
+    if(m.ttl && S.t - m.born > m.ttl){ die(m, m.side); continue; }
+
+    // biome underfoot
+    if(!m.struct || m.struct === "bldg"){
+      const own = myHalf(m.side, m.y);
+      const b = own ? bioAt(m.side, m.x, m.y) : null;
+      m.dmg = m.baseDmg * (b === "corn" ? 1.2 : 1);
+      m.spd = m.baseSpd * (b === "sandy" ? 1.3 : 1);
+      if(b === "nice") m.hp = Math.min(m.maxHp, m.hp + m.maxHp * 0.02 * dt);
+    }
+    if(m.heal){
+      for(const k of S.mobs){
+        if(!k.alive || k.inside || k.side !== m.side || k === m || k.struct) continue;
+        if(Math.hypot(k.x - m.x, k.y - m.y) < 110) k.hp = Math.min(k.maxHp, k.hp + m.heal * dt);
+      }
+    }
+
+    m.walking = false;
+    m.cd -= dt;
+    const t = pickTarget(m);
+    m.tuid = t ? t.uid : 0;
+    if(!t){ continue; }
+    const d = Math.hypot(t.x - m.x, t.y - m.y) - t.r;
+    if(d <= m.rng){
+      if(m.cd <= 0 && effDmg(m) > 0){
+        m.cd = m.hit;
+        m.strike = 0.2;
+        hurt(t, effDmg(m), m.side);
+        if(m.splash){
+          for(const k of S.mobs)
+            if(k.alive && k !== t && k.side !== m.side && !k.inside && Math.hypot(k.x-t.x,k.y-t.y) < m.splash)
+              hurt(k, effDmg(m) * 0.5, m.side);
+        }
+      }
+    } else if(m.spd > 0){
+      moveToward(m, t.x, t.y, dt);
+    }
+    if(m.strike > 0) m.strike -= dt;
+  }
+  separate(dt);
+  S.mobs = S.mobs.filter(m => m.alive || m.struct === "wall" || m.struct === "keep");
+
+  if(!S.over){
+    if(!S.ot && S.t >= MATCH_TIME){
+      const y = S.foe.wallsDown, f = S.you.wallsDown;   // walls *they* lost vs walls *you* lost
+      if(y !== f) finish(y > f ? "you" : "foe");
+      else { S.ot = true; logLine("bmo", "BMO: Time! Nobody is ahead. Sudden death — first wall down wins."); }
+    } else if(S.ot && S.t >= MATCH_TIME + OT_TIME){
+      finish(null);
+    } else if(S.ot){
+      const y = S.foe.wallsDown, f = S.you.wallsDown;
+      if(y !== f) finish(y > f ? "you" : "foe");
+    }
+  }
+}
+function finish(winner){
+  if(S.over) return;
+  S.over = winner === null ? "draw" : winner;
+  cancelAnimationFrame(S.raf);
+  awardMatch();
+  showEnd();
+}
+
+/* =====================================================================
+   THE OPPONENT - reacts on a timer, defends what is coming at it, and
+   pushes a lane when it can afford to.
+   ===================================================================== */
+const REACT = {easy:[2.4, 1.6], normal:[1.5, 1.0], hard:[0.9, 0.7]};
+
+function aiTick(dt){
+  const P = S.foe;
+  if(S.over) return;
+  P.aiNext -= dt;
+  if(P.aiNext > 0) return;
+  const rr = REACT[P.skill] || REACT.normal;
+  P.aiNext = rr[0] + Math.random() * rr[1];
+
+  const E = S.you;
+  const threats = S.mobs.filter(m => m.alive && !m.inside && m.side === "you" && !m.struct && m.y < RIVER_Y + 40);
+  const laneThreat = [0,0,0];
+  for(const m of threats) laneThreat[laneOf(m.x)] += m.hp * 0.01 + m.dmg * 0.1;
+
+  let best = null;
+  for(let h=0; h<HAND_SIZE; h++){
+    const id = P.hand[h], d = CARDS[id], rt = d.rt;
+
+    if(d.kind === "spell"){
+      if(rt.spell === "reclaim"){
+        if(P.juice >= d.cost && Math.random() < 0.3){
+          const i = (Math.random() * 9) | 0;
+          const want = CARDS[P.hand[(h + 1) % HAND_SIZE]].bio;
+          const sc = 3;
+          if(!best || sc > best.score) best = {score:sc, run:() => { P.juice -= d.cost; P.patches[i] = want; cycleOut(P, h); }};
+        }
+        continue;
+      }
+      // find the fattest cluster of my enemies
+      let bx = 0, by = 0, bv = 0;
+      for(const m of threats.concat(S.mobs.filter(k => k.alive && k.side === "you" && !k.struct))){
+        let v = 0;
+        for(const k of S.mobs){
+          if(!k.alive || k.inside || k.side !== "you" || k.struct) continue;
+          if(Math.hypot(k.x - m.x, k.y - m.y) <= (rt.radius || 90)) v += k.hp * 0.02 + 1;
+        }
+        if(v > bv){ bv = v; bx = m.x; by = m.y; }
+      }
+      const offensive = rt.spell === "buff" || rt.spell === "haste" || rt.spell === "mend" || rt.spell === "blink";
+      if(offensive) continue;
+      if(bv >= 3 && P.juice >= d.cost){
+        const sc = bv * 1.4 - d.cost;
+        if(!best || sc > best.score) best = {score:sc, run:() => deploy(P, h, bx, by)};
+      }
+      continue;
+    }
+
+    const cost = d.cost;
+    if(P.juice < cost) continue;
+    const power = (rt.hp || 0) * 0.012 + (rt.dmg || 0) * 0.09 * (rt.n || 1);
+
+    // defend the hottest lane
+    let dl = 0;
+    for(let l=1;l<3;l++) if(laneThreat[l] > laneThreat[dl]) dl = l;
+    if(laneThreat[dl] > 2){
+      const y = clamp(Math.min.apply(null, threats.filter(m => laneOf(m.x) === dl).map(m => m.y)) - 60, 90, RIVER_Y - RIVER_H - 20);
+      const sc = 6 + power + laneThreat[dl] * 0.7 - cost * 1.2;
+      if(!best || sc > best.score) best = {score:sc, run:() => deploy(P, h, LANEX[dl] + (Math.random() * 40 - 20), y)};
+    }
+    // otherwise build a push behind the bridge in the lane where they are thinnest
+    if(P.juice >= Math.min(8, cost + 3)){
+      let pl = 0, pv = 1e9;
+      for(let l=0;l<3;l++){
+        let v = 0;
+        for(const m of S.mobs) if(m.alive && m.side === "you" && !m.struct && laneOf(m.x) === l) v += m.hp * 0.01;
+        const w = S.mobs.find(k => k.struct === "wall" && k.side === "you" && k.lane === l);
+        if(w && !w.alive) v -= 6;
+        if(v < pv){ pv = v; pl = l; }
+      }
+      const sc = 3 + power - cost * 1.1 + (P.juice >= 9 ? 4 : 0);
+      if(!best || sc > best.score)
+        best = {score:sc, run:() => deploy(P, h, LANEX[pl] + (Math.random() * 30 - 15), RIVER_Y - RIVER_H - 40)};
+    }
+  }
+  if(best && best.score > 1){
+    best.run();
+    if(P.taunts && Math.random() < 0.12) logLine("foe", P.name + ": " + P.taunts[(Math.random() * P.taunts.length) | 0]);
+  }
+}
+</script>
+
+<script>
+"use strict";
+
+/* =====================================================================
+   CARD FACES
+   ===================================================================== */
+function cardFace(id, opts){
+  opts = opts || {};
+  const d = CARDS[id], rt = d.rt || {}, lv = opts.lvl || 1;
+  const cls = ["gc", "k-" + d.kind, "r-" + rarityOf(id)];
+  if(opts.cls) cls.push(opts.cls);
+  const cost = opts.cost !== undefined ? opts.cost : d.cost;
+  const bump = 1 + 0.12 * (lv - 1);
+  let stats = "";
+  if(d.kind !== "spell"){
+    stats = '<span class="sts">' +
+      (rt.dmg ? '<span class="pip atk' + (lv > 1 ? " up" : "") + '">' + Math.round(rt.dmg * bump) + "</span>" : "") +
+      (rt.hp ? '<span class="pip hp' + (lv > 1 ? " up" : "") + '">' + Math.round(rt.hp * bump) + "</span>" : "") + "</span>";
+  }
+  let dupes = "";
+  if(opts.dupes){
+    const need = UPGRADE[lv + 1] ? UPGRADE[lv + 1].copies : 0;
+    const have = opts.copies || 0;
+    const pct = need ? Math.min(100, have / need * 100) : 100;
+    dupes = '<span class="dupes"><i style="width:' + pct + '%"></i><span>' + (need ? have + "/" + need : "MAX") + "</span></span>";
+  }
+  return '<div class="' + cls.join(" ") + '"' + (opts.attrs || "") + '>' +
+    '<span class="rar"></span><span class="cost' + (opts.deal ? " deal" : "") + '">' + cost + "</span>" +
+    '<span class="biome" title="' + esc(BIO[d.bio].name) + '">' + BIO[d.bio].icon + "</span>" +
+    '<span class="art">' + d.art + "</span>" +
+    '<span class="nm">' + esc(d.name) + "</span>" + stats +
+    (lv > 1 ? '<span class="lvl2">lv' + lv + "</span>" : "") + dupes + "</div>";
+}
+function cardBlurb(id){
+  const d = CARDS[id], rt = d.rt || {}, k = [];
+  if(rt.n > 1) k.push("x" + rt.n);
+  if(rt.rng >= 90) k.push("ranged");
+  if(rt.splash) k.push("splash");
+  if(rt.spellproof) k.push("spell-proof");
+  if(rt.houses) k.push("takes lodgers");
+  if(rt.dwell) k.push("moves indoors");
+  const kind = d.kind === "unit" ? "Creature" : d.kind === "structure" ? "Structure" : "Spell";
+  return "<b>" + esc(d.name) + "</b> · " + kind + " · home " + BIO[d.bio].icon + " " + esc(BIO[d.bio].name) +
+    (k.length ? " · " + esc(k.join(" · ")) : "") + "<br>" + esc(d.text);
+}
+/* =====================================================================
+   MENU + COLLECTION
+   ===================================================================== */
+const NAV = [
+  {id:"cards", ico:"\u{1F0CF}", lab:"Cards"},
+  {id:"menu",  ico:"\u{2694}",  lab:"Battle"},
+  {id:"rules", ico:"\u{1F4D6}", lab:"Rules"},
+];
+let screen = "menu";
+function renderNav(){
+  const html = NAV.map(n => '<button class="navtab' + (n.id === screen ? " on" : "") +
+    '" data-act="nav" data-to="' + n.id + '" type="button"><span class="nico">' + n.ico +
+    '</span><span class="nlab">' + n.lab + "</span></button>").join("");
+  $("nav").innerHTML = html; $("nav2").innerHTML = html;
+}
+function go(to){
+  if(to === "rules"){ showRules(); return; }
+  screen = to;
+  ["menu","cards","battle"].forEach(s => $(s).classList.toggle("off", s !== to));
+  renderNav();
+  if(to === "menu") renderMenu();
+  if(to === "cards") renderCards();
+  if(to === "battle"){ renderHud(); fitGround(); }
+}
+function xpNeed(){ return 100; }
+function renderMenu(){
+  const ai = arenaIndex(SAVE.trophies), a = ARENAS[ai], nxt = ARENAS[ai + 1];
+  $("m-lvl").textContent = SAVE.lvl; $("c-lvl").textContent = SAVE.lvl;
+  $("m-name").textContent = SAVE.name;
+  const xpPct = (SAVE.xp % xpNeed()) / xpNeed() * 100;
+  $("m-xp").style.width = xpPct + "%"; $("c-xp").style.width = xpPct + "%";
+  $("m-gold").textContent = SAVE.gold; $("c-gold").textContent = SAVE.gold;
+  $("m-corn").textContent = SAVE.corn;
+  $("m-arena").textContent = a.name; $("m-arena-ico").textContent = a.ico;
+  $("m-arena-sub").textContent = "Arena " + (ai + 1) + " · " + SAVE.wins + "W " + SAVE.losses + "L";
+  $("m-trophies").textContent = SAVE.trophies;
+  if(nxt){
+    const span = nxt.t - a.t, into = SAVE.trophies - a.t;
+    $("m-prog").style.width = Math.max(0, Math.min(100, into / span * 100)) + "%";
+    $("m-next").textContent = (nxt.t - SAVE.trophies) + " to " + nxt.name;
+  } else { $("m-prog").style.width = "100%"; $("m-next").textContent = "Top of the mat"; }
+  $("m-chests").innerHTML = SAVE.chests.map((c, i) => c
+    ? '<div class="chest full" data-act="chest" data-i="' + i + '"><span class="cico">\u{1F381}</span>' +
+      '<span class="clab">' + esc(c.name) + "</span><span class=\"clab\">Tap to open</span></div>"
+    : '<div class="chest"><span class="cico" style="opacity:.3">\u{1F381}</span><span class="cempty">Empty</span></div>'
+  ).join("");
+}
+let sortBy = "cost", lastSwap = -1;
+const SORTS = [{k:"cost", lab:"Cost"}, {k:"rarity", lab:"Rarity"}, {k:"name", lab:"A–Z"}];
+const RARORDER = {legend:0, epic:1, rare:2, common:3};
+function sortIds(ids){
+  const a = ids.slice();
+  if(sortBy === "cost") a.sort((x, y) => CARDS[x].cost - CARDS[y].cost || CARDS[x].name.localeCompare(CARDS[y].name));
+  else if(sortBy === "rarity") a.sort((x, y) => RARORDER[rarityOf(x)] - RARORDER[rarityOf(y)] || CARDS[x].cost - CARDS[y].cost);
+  else a.sort((x, y) => CARDS[x].name.localeCompare(CARDS[y].name));
+  return a;
+}
+function renderCards(){
+  const avg = SAVE.deck.reduce((a, id) => a + CARDS[id].cost, 0) / DECK_SIZE;
+  $("deck-stat").innerHTML = '<i>\u{1F4A7}</i><b>' + avg.toFixed(1) + "</b><span>avg</span>";
+  $("deckgrid").innerHTML = SAVE.deck.map((id, i) => cardFace(id, {
+    lvl:cardLevel(id),
+    cls:"tappable" + (deckPick === i ? " picked" : "") + (lastSwap === i ? " swapping" : ""),
+    attrs:' data-act="deckslot" data-i="' + i + '"',
+  })).join("");
+  lastSwap = -1;
+
+  $("sortrow").innerHTML = SORTS.map(o =>
+    '<button class="sortbtn' + (sortBy === o.k ? " on" : "") + '" data-act="sort" data-k="' + o.k +
+    '" type="button">' + o.lab + "</button>").join("");
+
+  const hint = $("collhint");
+  if(deckPick >= 0){
+    hint.textContent = "Swapping slot " + (deckPick + 1) + " — tap a card to put it in, or tap the slot again to cancel.";
+    hint.classList.add("active");
+  } else {
+    hint.textContent = "Tap a deck slot, then a card, to swap it in. Tap a card on its own for details.";
+    hint.classList.remove("active");
+  }
+
+  const owned = sortIds(Object.keys(SAVE.owned));
+  const locked = sortIds(CARD_KEYS.filter(id => !SAVE.owned[id]));
+  $("collgrid").innerHTML =
+    owned.map(id => {
+      const inDeck = SAVE.deck.indexOf(id);
+      const blocked = deckPick >= 0 && inDeck >= 0 && inDeck !== deckPick;
+      return cardFace(id, {lvl:SAVE.owned[id].lvl, copies:SAVE.owned[id].copies, dupes:true,
+        cls:"tappable" + (inDeck >= 0 ? " inuse" : "") + (blocked ? " dimmed" : ""),
+        attrs:' data-act="collcard" data-id="' + id + '"'});
+    }).join("") +
+    locked.map(id => cardFace(id, {cls:"locked"})).join("");
+}
+function swapIntoDeck(id, slot){
+  if(slot < 0 || slot >= DECK_SIZE) return false;
+  const at = SAVE.deck.indexOf(id);
+  if(at === slot) return false;
+  if(at >= 0) SAVE.deck[at] = SAVE.deck[slot];      // already in the deck: trade places
+  SAVE.deck[slot] = id;
+  lastSwap = slot; deckPick = -1;
+  persist(); renderCards();
+  return true;
+}
+
+
+/* =====================================================================
+   FLOATERS + LOG
+   ===================================================================== */
+const fxq = [], pending3d = [];
+function floatAt(wx, wy, text, cls){ fxq.push({wx, wy, text, cls}); }
+function addFx(kind, x, y, r){ pending3d.push({kind, x, y, r, t:0}); }
+function toast(msg){
+  const t = document.createElement("div");
+  t.className = "toast"; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2000);
+}
+function shake(){
+  const w = $("fieldwrap");
+  if(!w) return;
+  w.classList.remove("shake"); void w.offsetWidth; w.classList.add("shake");
+  setTimeout(() => w.classList.remove("shake"), 340);
+}
+function logLine(cls, text){
+  if(!S) return;
+  S.log.push({cls, text});
+  if(S.log.length > 60) S.log.shift();
+}
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function flash(msg){ toast(msg); }
+
+/* =====================================================================
+   PROJECTION - the ground is a plane tilted on X inside a perspective
+   container, so screen <-> world is a closed form once we measure the
+   centre and the scale from two markers sitting on the plane.
+   ===================================================================== */
+const PERSP = 1500, TILT = 52;
+const CAL = {cx:0, cy:0, s:1};
+function calibrate(){
+  const a = $("mk-c"), b = $("mk-r");
+  if(!a || !b) return;
+  const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+  if(!ra.width && !ra.height) return;
+  CAL.cx = ra.left + ra.width / 2; CAL.cy = ra.top + ra.height / 2;
+  const sx = (rb.left + rb.width / 2) - CAL.cx;
+  if(Math.abs(sx) > 1) CAL.s = sx / 100;
+}
+function screenToWorld(sx, sy){
+  const th = TILT * Math.PI / 180, p = PERSP, s = CAL.s || 1;
+  const u = (sy - CAL.cy) / s, v = (sx - CAL.cx) / s;
+  const den = p * Math.cos(th) + u * Math.sin(th);
+  const y = Math.abs(den) < 1e-6 ? 0 : (u * p) / den;
+  const x = v * (p - y * Math.sin(th)) / p;
+  return {x:AW / 2 + x, y:AH / 2 + y};
+}
+function fitGround(){
+  const g = $("ground"), f = $("field"), w = $("fieldwrap");
+  if(!g || !f || !w || !w.clientHeight) return;
+  g.style.setProperty("--gscale", "1");
+  f.style.setProperty("--fdy", "0px");
+  let r = g.getBoundingClientRect();
+  if(!r.width || !r.height) return;
+  const s = Math.max(.25, Math.min(1.3, Math.min((w.clientWidth - 14) / r.width, (w.clientHeight - 86) / r.height)));
+  g.style.setProperty("--gscale", s.toFixed(3));
+  r = g.getBoundingClientRect();
+  const wr = w.getBoundingClientRect();
+  f.style.setProperty("--fdy", (((wr.top + wr.bottom) / 2 - (r.top + r.bottom) / 2) - 14).toFixed(1) + "px");
+  calibrate();
+}
+
+/* =====================================================================
+   THE GROUND
+   ===================================================================== */
+PLAN.wall = {sh:0, torso:[86,30,46], head:null, legs:null};
+PLAN.keep = {sh:0, torso:[112,54,58], head:[70,34,26], legs:null};
+
+function buildGround(){
+  const g = $("ground");
+  g.style.setProperty("--aw", AW + "px");
+  g.style.setProperty("--ah", AH + "px");
+  let h = "";
+  for(const side of ["foe","you"]){
+    for(let i=0;i<9;i++){
+      const r = patchRect(side, i);
+      h += '<div class="patch ' + (side === "you" ? "mine" : "theirs") + '" data-side="' + side + '" data-i="' + i +
+        '" style="left:' + r.x + "px; top:" + r.y + "px; width:" + r.w + "px; height:" + r.h + 'px"></div>';
+    }
+  }
+  h += '<div class="river" style="top:' + (RIVER_Y - RIVER_H) + "px; height:" + (RIVER_H * 2) + 'px"></div>';
+  for(let l=0;l<3;l++)
+    h += '<div class="bridge" style="left:' + (LANEX[l] - BRIDGE_W / 2) + "px; top:" + (RIVER_Y - RIVER_H - 6) +
+      "px; width:" + BRIDGE_W + "px; height:" + (RIVER_H * 2 + 12) + 'px"></div>';
+  h += '<div id="mk-c" style="position:absolute;width:2px;height:2px;left:' + (AW/2-1) + "px;top:" + (AH/2-1) + 'px;opacity:0"></div>';
+  h += '<div id="mk-r" style="position:absolute;width:2px;height:2px;left:' + (AW/2+99) + "px;top:" + (AH/2-1) + 'px;opacity:0"></div>';
+  h += '<div id="mobs" style="position:absolute;inset:0;transform-style:preserve-3d"></div>';
+  g.innerHTML = h;
+  paintPatches();
+}
+function paintPatches(){
+  for(const el of document.querySelectorAll(".patch")){
+    const side = el.dataset.side, i = +el.dataset.i, b = BIO[S[side].patches[i]];
+    el.style.setProperty("--bio", b.color);
+    el.innerHTML = '<span class="pico">' + b.icon + '</span><span class="pnm">' + esc(b.name) + "</span>";
+  }
+}
+
+/* =====================================================================
+   CREATURES - every model is an original blocky puppet assembled from
+   boxes: three faces each, so they have real volume on the plane.
+   ===================================================================== */
+function boxHTML(cls, w, d, hgt, z, col, inner){
+  return '<div class="bx ' + cls + '" style="--w:' + w + "px;--d:" + d + "px;--h:" + hgt + "px;--z:" + z +
+    "px;--c:" + col + '"><b class="tp"></b><b class="fr">' + (inner || "") + '</b><b class="sd"></b></div>';
+}
+function mobHTML(m){
+  const plan = PLAN[m.plan] || PLAN.scamp;
+  const col = m.col || (m.struct === "wall" ? (m.side === "you" ? "#93A3B8" : "#D08FA2")
+                                            : (m.side === "you" ? "#6E8CA8" : "#A8697E"));
+  const t = plan.torso, hd = plan.head, lg = plan.legs;
+  let h = "";
+  if(plan.sh) h += '<div class="sh" style="--r:' + plan.sh + 'px"></div>';
+  h += '<div class="rig">';
+  let z = 0;
+  if(lg){
+    const [lw, ld, lh, cnt] = lg;
+    for(let i=0;i<cnt;i++){
+      const off = cnt === 2 ? (i ? 1 : -1) * (t[0] * 0.26) : (i % 2 ? 1 : -1) * (t[0] * 0.3);
+      const dep = cnt === 4 ? (i < 2 ? -t[1] * 0.28 : t[1] * 0.28) : 0;
+      h += '<div class="bx" style="--w:' + lw + "px;--d:" + ld + "px;--h:" + lh + "px;--z:0px;--c:" + col +
+        ';transform:translate3d(' + off + "px," + dep + "px,0)\"><b class=\"tp\"></b><b class=\"fr\"></b><b class=\"sd\"></b></div>";
+    }
+    z = lh;
+  }
+  h += boxHTML("torso", t[0], t[1], t[2], z, col);
+  if(hd){
+    const face = '<i class="ey l"></i><i class="ey r"></i>' + (m.id ? '<span class="mk">' + CARDS[m.id].art + "</span>" : "");
+    h += boxHTML("head", hd[0], hd[1], hd[2], z + t[2], col, face);
+  }
+  h += "</div>";
+  const top = z + t[2] + (hd ? hd[2] : 0) + 9;
+  h += '<div class="hpb" style="--top:' + top + 'px"><i style="width:100%"></i></div>';
+  return h;
+}
+function syncMobs(){
+  const host = $("mobs");
+  if(!host) return;
+  for(const m of S.mobs){
+    if(!m.alive) continue;
+    if(!m.el){
+      const el = document.createElement("div");
+      el.className = "mob" + (m.side === "foe" ? " foe" : "");
+      el.innerHTML = mobHTML(m);
+      host.appendChild(el);
+      m.el = el;
+      m.bar = el.querySelector(".hpb > i");
+      m.barWrap = el.querySelector(".hpb");
+    }
+    m.el.style.transform = "translate3d(" + m.x.toFixed(1) + "px," + m.y.toFixed(1) + "px,0)";
+    const f = Math.max(0, m.hp / m.maxHp);
+    if(m.bar) m.bar.style.width = (f * 100).toFixed(0) + "%";
+    if(m.barWrap) m.barWrap.classList.toggle("full", f > 0.995);
+    m.el.classList.toggle("walking", !!m.walking);
+    m.el.classList.toggle("striking", m.strike > 0);
+    m.el.style.opacity = m.inside ? "0" : "";
+  }
+  for(let i=S.dead.length - 1; i>=0; i--){
+    const m = S.dead[i];
+    if(m.el && !m.fading){
+      m.fading = true;
+      m.el.classList.add("dying");
+      m.el.style.setProperty("--dx", m.x.toFixed(0) + "px");
+      m.el.style.setProperty("--dy", m.y.toFixed(0) + "px");
+      setTimeout(() => { if(m.el) m.el.remove(); }, 380);
+    }
+    S.dead.splice(i, 1);
+  }
+}
+function syncFx(){
+  const host = $("mobs");
+  if(!host) return;
+  while(pending3d.length){
+    const f = pending3d.shift();
+    const el = document.createElement("div");
+    el.className = f.kind === "ping" ? "ping" : "blast";
+    const r = f.r || 80;
+    el.style.cssText = "left:" + (f.x - r) + "px;top:" + (f.y - r * 0.62) + "px;width:" + (r * 2) +
+      "px;height:" + (r * 1.24) + "px";
+    host.appendChild(el);
+    setTimeout(() => el.remove(), 620);
+  }
+  while(fxq.length){
+    const f = fxq.shift();
+    const th = TILT * Math.PI / 180, p = PERSP, s = CAL.s || 1;
+    const wy = f.wy - AH / 2, wx = f.wx - AW / 2;
+    const factor = p / (p - wy * Math.sin(th));
+    const sx = CAL.cx + s * wx * factor, sy = CAL.cy + s * wy * Math.cos(th) * factor;
+    const d = document.createElement("div");
+    d.className = "float " + f.cls;
+    d.textContent = f.text;
+    d.style.left = sx + "px"; d.style.top = sy + "px";
+    $("fx").appendChild(d);
+    setTimeout(() => d.remove(), 1050);
+  }
+}
+
+/* =====================================================================
+   HUD
+   ===================================================================== */
+function fmtTime(sec){
+  const s = Math.max(0, Math.ceil(sec));
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+}
+function wallPips(side){
+  const w = S.mobs.filter(m => m.struct === "wall" && m.side === side).sort((a,b) => a.lane - b.lane);
+  return w.map(m => '<i class="' + (m.alive ? "" : "gone") + '"></i>').join("");
+}
+const HUD = {hand:"", next:"", walls:"", clock:"", hint:"", log:"", plates:""};
+function renderJuice(){                    /* cheap, runs every frame */
+  const P = S.you;
+  const n = $("juicenum");
+  const whole = Math.floor(P.juice);
+  if(n.__v !== whole){ n.__v = whole; n.textContent = whole; }
+  const jb = $("juicebar");
+  if(jb.childElementCount !== JUICE_MAX){
+    let h = "";
+    for(let i=0;i<JUICE_MAX;i++) h += "<span><i></i></span>";
+    jb.innerHTML = h;
+  }
+  jb.classList.toggle("x2", S.t >= X2_AT);
+  const cells = jb.children;
+  for(let i=0;i<JUICE_MAX;i++){
+    const fill = clamp(P.juice - i, 0, 1);
+    const cell = cells[i];
+    cell.firstChild.style.transform = "scaleX(" + fill.toFixed(3) + ")";
+    const done = fill >= 1;
+    if(done !== cell.__done){ cell.__done = done; cell.classList.toggle("done", done); }
+  }
+}
+function renderHud(){
+  const P = S.you;
+  const plates = S.foe.name + "|" + P.name;
+  if(HUD.plates !== plates){
+    HUD.plates = plates;
+    $("foe-plate").innerHTML = '<span class="face">' + S.foe.art + '</span><span><span class="fn">' +
+      esc(S.foe.name) + '</span><span class="fd">' + esc(S.foe.deckName) + "</span></span>";
+    $("you-plate").innerHTML = '<span class="face">' + P.art + '</span><span><span class="fn">' +
+      esc(P.name) + '</span><span class="fd">' + esc(P.deckName) + "</span></span>";
+  }
+  const walls = wallPips("foe") + "//" + wallPips("you");
+  if(HUD.walls !== walls){
+    HUD.walls = walls;
+    $("foe-walls").innerHTML = wallPips("foe");
+    $("you-walls").innerHTML = wallPips("you");
+  }
+  const left = S.ot ? MATCH_TIME + OT_TIME - S.t : MATCH_TIME - S.t;
+  const ck = (S.ot ? "SUDDEN DEATH " : S.t >= X2_AT ? "\u00d72 " : "") + fmtTime(left);
+  if(HUD.clock !== ck){
+    HUD.clock = ck;
+    const c = $("clock");
+    c.className = "clock" + (S.ot ? " ot" : S.t >= X2_AT ? " x2" : "");
+    c.textContent = ck;
+  }
+  let hand = "";
+  for(let h=0; h<HAND_SIZE; h++){
+    const id = P.hand[h], d = CARDS[id];
+    const broke = d.cost > P.juice || !!S.over;
+    const dragging = S.drag && S.drag.active && S.drag.h === h;
+    hand += cardFace(id, {lvl:P.levels[id] || 1, cost:d.cost,
+      cls:(broke ? "broke" : "playable") + (S.pending && S.pending.h === h ? " sel" : "") + (dragging ? " ghosted" : ""),
+      attrs:' data-act="hand" data-h="' + h + '"'});
+  }
+  if(HUD.hand !== hand){ HUD.hand = hand; $("handcards").innerHTML = hand; }
+  const nx = cardFace(P.next, {lvl:P.levels[P.next] || 1});
+  if(HUD.next !== nx){ HUD.next = nx; $("nextcard").innerHTML = nx; }
+
+  let hint = "";
+  if(S.floopMode) hint = "<b>Pick one of your patches</b> to retill. Costs 2 juice.";
+  else if(S.pending) hint = cardBlurb(P.hand[S.pending.h]) + "<br><b>Drag onto your half of the mat, or tap it.</b>";
+  if(HUD.hint !== hint){
+    HUD.hint = hint;
+    const el = $("hint");
+    el.innerHTML = hint;
+    el.classList.toggle("off", !hint);
+  }
+  showZone(!!S.pending || !!(S.drag && S.drag.active), S.floopMode);
+  const log = S.log.map(l => '<p class="' + l.cls + '">' + esc(l.text) + "</p>").join("");
+  if(HUD.log !== log){
+    HUD.log = log;
+    const f = $("logfeed");
+    f.innerHTML = log;
+    f.scrollTop = f.scrollHeight;
+  }
+  const fb = $("btn-floop"), dis = S.you.juice < 2 || !!S.over;
+  if(fb.disabled !== dis) fb.disabled = dis;
+  renderJuice();
+}
+
+/* ------------------------------------------------- the deploy zone overlay */
+function showZone(on, floop){
+  const g = $("ground");
+  if(!g) return;
+  let z = $("zone");
+  if(!z){
+    z = document.createElement("div");
+    z.id = "zone"; z.className = "zone";
+    g.appendChild(z);
+  }
+  z.classList.toggle("on", !!on && !floop);
+  if(!on || floop) return;
+  const top = RIVER_Y + RIVER_H;
+  z.style.cssText = "left:0;top:" + top + "px;width:" + AW + "px;height:" + (AH - top) + "px";
+  for(let l=0;l<3;l++){
+    let ex = document.getElementById("zx" + l);
+    const w = S.mobs.find(m => m.struct === "wall" && m.side === "foe" && m.lane === l);
+    const open = w && !w.alive;
+    if(open && !ex){
+      ex = document.createElement("div");
+      ex.id = "zx" + l; ex.className = "zone on";
+      ex.style.cssText = "left:" + (LANEX[l] - AW / 6) + "px;top:" + (WALL_Y.foe + 40) +
+        "px;width:" + (AW / 3) + "px;height:" + (RIVER_Y - RIVER_H - WALL_Y.foe - 40) + "px";
+      g.appendChild(ex);
+    }
+    if(ex) ex.classList.toggle("on", !!open);
+  }
+}
+
+/* =====================================================================
+   THE LOOP
+   ===================================================================== */
+let hudAcc = 0;
+function frame(ts){
+  if(!S || S.over) return;
+  const dt = Math.min(0.05, (ts - (S.lastTs || ts)) / 1000);
+  S.lastTs = ts;
+  step(dt);
+  aiTick(dt);
+  syncMobs(); syncFx();
+  renderJuice();
+  hudAcc += dt;
+  if(hudAcc > 0.12){ hudAcc = 0; renderHud(); }
+  if(S.drag && S.drag.active) updateDragMark();
+  if(!S.over) S.raf = requestAnimationFrame(frame);
+}
+function startLoop(){
+  HUD.hand = HUD.next = HUD.walls = HUD.clock = HUD.hint = HUD.log = HUD.plates = "";
+  buildGround();
+  syncMobs();
+  fitGround();
+  renderHud();
+  S.lastTs = 0;
+  S.raf = requestAnimationFrame(frame);
+}
+</script>
+
+<script>
+"use strict";
+/* =====================================================================
+   INPUT
+   ===================================================================== */
+let deckPick = -1;
+const live = () => S && !S.over && screen === "battle";
+
+function onHandClick(h){
+  if(!live()) return;
+  const P = S.you, d = CARDS[P.hand[h]];
+  S.floopMode = false;
+  if(S.pending && S.pending.h === h){ S.pending = null; renderHud(); return; }
+  if(d.cost > P.juice){ flash("Not enough juice"); return; }
+  S.pending = {h};
+  renderHud();
+}
+function onFieldPoint(sx, sy){
+  if(!live()) return;
+  const P = S.you;
+  const w = screenToWorld(sx, sy);
+  if(S.floopMode){
+    if(!myHalf("you", w.y)){ flash("Your side only"); return; }
+    S.pendPatch = patchIndex("you", w.x, w.y);
+    showBiomePicker();
+    return;
+  }
+  if(!S.pending) return;
+  const id = P.hand[S.pending.h], d = CARDS[id];
+  if(d.kind === "spell" && d.rt.spell === "reclaim"){
+    if(!myHalf("you", w.y)){ flash("Your side only"); return; }
+    S.pendPatch = patchIndex("you", w.x, w.y);
+    showBiomePicker(true);
+    return;
+  }
+  const spellAnywhere = d.kind === "spell";
+  if(!spellAnywhere && !canDeployAt(P, w.x, w.y)){ flash("Your half of the mat"); return; }
+  if(deploy(P, S.pending.h, w.x, w.y)){ S.pending = null; renderHud(); }
+}
+
+document.addEventListener("click", (e) => {
+  const act = e.target.closest("[data-act]");
+  if(act){
+    if(act.dataset.act === "hand" && S && S.suppressTap > Date.now()) return;
+    handleAct(act.dataset.act, act.dataset); return;
+  }
+  if(screen === "battle" && $("scrim").hidden){
+    if(S && S.suppressTap > Date.now()) return;
+    const fw = e.target.closest("#fieldwrap");
+    if(fw){ onFieldPoint(e.clientX, e.clientY); return; }
+  }
+});
+
+/* ---------------------------------------------------------------------
+   Drag a card onto the mat. A short press still works as tap-then-tap,
+   so this stays usable one-handed and with a keyboard.
+   --------------------------------------------------------------------- */
+function dropMark(){
+  let el = document.getElementById("dropmark");
+  if(!el){
+    el = document.createElement("div");
+    el.id = "dropmark"; el.className = "dropmark";
+    const host = $("mobs");
+    if(!host) return null;
+    host.appendChild(el);
+  }
+  return el;
+}
+function updateDragMark(){
+  const d = S.drag;
+  if(!d || !d.active) return;
+  const w = screenToWorld(d.x, d.y);
+  const P = S.you, def = CARDS[P.hand[d.h]];
+  const ok = def.kind === "spell" ? true : canDeployAt(P, w.x, w.y);
+  d.ok = ok; d.world = w;
+  const el = dropMark();
+  if(!el) return;
+  const r = def.kind === "spell" ? (def.rt.radius || 90) : Math.max(26, (PLAN[def.plan] || PLAN.scamp).sh * 1.8);
+  el.style.cssText = "left:" + (w.x - r) + "px;top:" + (w.y - r * 0.62) + "px;width:" + (r * 2) +
+    "px;height:" + (r * 1.24) + "px";
+  el.classList.toggle("bad", !ok);
+  el.style.display = "";
+}
+function onDragMove(e){
+  const d = S.drag;
+  if(!d) return;
+  d.x = e.clientX; d.y = e.clientY;
+  if(!d.active && Math.hypot(d.x - d.x0, d.y - d.y0) > 7){
+    d.active = true;
+    S.pending = {h:d.h};
+    const g = document.createElement("div");
+    g.className = "dragghost";
+    g.innerHTML = cardFace(S.you.hand[d.h], {lvl:S.you.levels[S.you.hand[d.h]] || 1, cost:CARDS[S.you.hand[d.h]].cost});
+    document.body.appendChild(g);
+    d.ghost = g;
+    renderHud();
+  }
+  if(d.active){
+    // ride above the pointer so the drop ring underneath stays readable
+    d.ghost.style.left = d.x + "px";
+    d.ghost.style.top = (d.y - 86) + "px";
+    d.ghost.style.transform = "translate(-50%,-50%) scale(1.05) rotate(-3deg)";
+    updateDragMark();
+    e.preventDefault();
+  }
+}
+function onDragEnd(){
+  const d = S.drag;
+  document.removeEventListener("pointermove", onDragMove);
+  document.removeEventListener("pointerup", onDragEnd);
+  document.removeEventListener("pointercancel", onDragEnd);
+  if(!d) return;
+  S.drag = null;
+  if(d.ghost) d.ghost.remove();
+  const mk = document.getElementById("dropmark");
+  if(mk) mk.style.display = "none";
+  if(d.active){
+    S.suppressTap = Date.now() + 320;
+    if(d.ok && d.world) onFieldPoint(d.x, d.y);
+    else { S.pending = null; flash("Your half of the mat"); }
+    renderHud();
+  }
+}
+document.addEventListener("pointerdown", (e) => {
+  if(screen !== "battle" || !$("scrim").hidden || !live()) return;
+  const card = e.target.closest(".handcards .gc");
+  if(!card || card.classList.contains("broke")) return;
+  S.drag = {h:+card.dataset.h, x:e.clientX, y:e.clientY, x0:e.clientX, y0:e.clientY, active:false};
+  document.addEventListener("pointermove", onDragMove);
+  document.addEventListener("pointerup", onDragEnd);
+  document.addEventListener("pointercancel", onDragEnd);
+});
+document.addEventListener("keydown", (e) => {
+  if(e.key === "Escape"){
+    if(!$("scrim").hidden){ hideSheet(); return; }
+    if(S){ S.pending = null; S.floopMode = false; renderHud(); }
+    return;
+  }
+  if(!$("scrim").hidden || !live()) return;
+  if(e.key >= "1" && e.key <= "4") onHandClick(+e.key - 1);
+  else if(e.key === "f" || e.key === "F") toggleFloop();
+});
+window.addEventListener("resize", () => { if(screen === "battle") fitGround(); });
+$("btn-floop").addEventListener("click", toggleFloop);
+$("btn-log").addEventListener("click", () => $("logpop").classList.toggle("hidden"));
+$("btn-rules2").addEventListener("click", showRules);
+$("btn-howto").addEventListener("click", showRules);
+$("btn-battle").addEventListener("click", startBattle);
+$("btn-quit").addEventListener("click", () => {
+  if(S && !S.over){ const k = S.mobs.find(m => m.struct === "keep" && m.side === "you"); if(k) k.hp = 0, die(k, "foe"); }
+  else go("menu");
+});
+$("btn-reset").addEventListener("click", () => showSheet(
+  "<h2>Start over?</h2><p>This wipes your trophies, gold, collection and deck. There is no undo.</p>" +
+  '<div class="foot"><button class="cbtn blue" data-act="close" type="button">Keep my stuff</button>' +
+  '<button class="cbtn red" data-act="reallyreset" type="button">Wipe it</button></div>'));
+
+function toggleFloop(){
+  if(!live()) return;
+  if(S.you.juice < 2){ flash("Need 2 juice"); return; }
+  S.floopMode = !S.floopMode;
+  S.pending = null;
+  renderHud();
+}
+function startBattle(){
+  const ai = arenaIndex(SAVE.trophies);
+  const pool = Object.keys(FOES).filter(k => FOES[k].tier <= ai);
+  newMatch(pool[(Math.random() * pool.length) | 0] || "jake");
+  go("battle");
+  startLoop();
+}
+
+/* =====================================================================
+   SHEETS
+   ===================================================================== */
+function showSheet(html){ $("sheet").innerHTML = html; $("scrim").hidden = false; }
+function hideSheet(){ $("scrim").hidden = true; }
+
+function handleAct(act, data){
+  if(act === "close"){ hideSheet(); }
+  else if(act === "nav") go(data.to);
+  else if(act === "hand") onHandClick(+data.h);
+  else if(act === "closelog") $("logpop").classList.add("hidden");
+  else if(act === "bio"){
+    hideSheet();
+    const P = S.you;
+    if(S.pendPatch >= 0){
+      if(S.spellReclaim){ deploy(P, S.pending.h, LANEX[1], RIVER_Y + RIVER_H + 20); S.pending = null; S.spellReclaim = false; }
+      else P.juice -= 2;
+      P.patches[S.pendPatch] = data.key;
+      paintPatches();
+      logLine("bmo", "You retill a patch into " + BIO[data.key].name + ".");
+    }
+    S.pendPatch = -1; S.floopMode = false; renderHud();
+  }
+  else if(act === "deckslot"){ deckPick = deckPick === +data.i ? -1 : +data.i; renderCards(); }
+  else if(act === "sort"){ sortBy = data.k; renderCards(); }
+  else if(act === "collcard"){
+    const id = data.id;
+    if(deckPick >= 0){
+      if(!swapIntoDeck(id, deckPick)){ deckPick = -1; renderCards(); }
+    } else showCardDetail(id);
+  }
+  else if(act === "usecard"){
+    // no slot picked: take the priciest card's place, which is what you usually mean
+    let slot = deckPick;
+    if(slot < 0){
+      slot = 0;
+      for(let i=1;i<DECK_SIZE;i++) if(CARDS[SAVE.deck[i]].cost > CARDS[SAVE.deck[slot]].cost) slot = i;
+    }
+    hideSheet();
+    if(swapIntoDeck(data.id, slot)) toast(CARDS[data.id].name + " is in the deck");
+    else toast("Already in the deck");
+  }
+  else if(act === "upgrade"){
+    const id = data.id, o = SAVE.owned[id], need = UPGRADE[o.lvl + 1];
+    if(!need){ toast("Already maxed"); return; }
+    if(o.copies < need.copies || SAVE.gold < need.gold){ toast("Not enough yet"); return; }
+    o.copies -= need.copies; SAVE.gold -= need.gold; o.lvl++;
+    persist(); hideSheet(); renderCards(); renderMenu();
+    toast(CARDS[id].name + " is level " + o.lvl + "!");
+  }
+  else if(act === "chest"){ openChest(+data.i); }
+  else if(act === "reallyreset"){ SAVE = freshSave(); persist(); hideSheet(); renderMenu(); renderCards(); toast("Fresh mat"); }
+  else if(act === "rematch"){ hideSheet(); startBattle(); }
+  else if(act === "tomenu"){ hideSheet(); go("menu"); }
+  else if(act === "rules"){ showRules(); }
+}
+
+function showBiomePicker(fromSpell){
+  S.spellReclaim = !!fromSpell;
+  showSheet("<h2>Retill the patch</h2><p>Whatever is standing there takes the new blessing straight away, " +
+    "and anything you deploy onto it from now on comes in on its home ground.</p>" +
+    '<div class="biokey">' + BIO_KEYS.map(k =>
+      '<div class="tappable" data-act="bio" data-key="' + k + '" style="--bio:' + BIO[k].color + '"><b>' +
+      BIO[k].icon + " " + esc(BIO[k].name) + "</b>" + esc(BIO[k].note) + "</div>").join("") + "</div>" +
+    '<div class="foot"><button class="cbtn blue" data-act="close" type="button">Cancel</button></div>');
+}
+function showCardDetail(id){
+  const d = CARDS[id], o = SAVE.owned[id], lv = o ? o.lvl : 1, need = UPGRADE[lv + 1];
+  const rt = d.rt, tags = [];
+  if(rt.n > 1) tags.push('<span class="tag kw">x' + rt.n + "</span>");
+  if(rt.rng >= 90) tags.push('<span class="tag kw">ranged</span>');
+  if(rt.splash) tags.push('<span class="tag kw">splash</span>');
+  if(rt.spellproof) tags.push('<span class="tag kw">spell-proof</span>');
+  if(rt.houses) tags.push('<span class="tag kw">houses ' + esc(rt.houses.join("/")) + "</span>");
+  if(rt.dwell) tags.push('<span class="tag kw">moves indoors</span>');
+  showSheet("<h2>" + esc(d.name) + "</h2>" +
+    '<div class="detail"><div class="big">' + cardFace(id, {lvl:lv}) + "</div>" +
+    '<div class="info"><div class="tags">' +
+      '<span class="tag cost">' + d.cost + " juice</span>" +
+      (rt.hp ? '<span class="tag hp">' + rt.hp + " HP</span>" : "") +
+      (rt.dmg ? '<span class="tag atk">' + rt.dmg + " dmg</span>" : "") +
+      '<span class="tag bio" style="--bio:' + BIO[d.bio].color + '">' + BIO[d.bio].icon + " " + esc(BIO[d.bio].name) + "</span>" +
+      tags.join("") + "</div>" +
+    "<p>" + esc(d.text) + "</p><p style=\"font-style:italic;color:#9FBCE4\">" + esc(d.flavor || "") + "</p>" +
+    (o && need ? "<p><b>" + o.copies + " / " + need.copies + "</b> copies · <b>" + need.gold + "</b> gold for level " + (lv + 1) + "</p>" : "") +
+    "</div></div>" +
+    '<div class="foot">' +
+      (o && SAVE.deck.indexOf(id) < 0 ? '<button class="cbtn blue" data-act="usecard" data-id="' + id + '" type="button">Use card</button>' : "") +
+      (o && need ? '<button class="cbtn" data-act="upgrade" data-id="' + id + '" type="button">Upgrade</button>' : "") +
+      '<button class="cbtn blue" data-act="close" type="button">Close</button></div>');
+}
+function showRules(){
+  showSheet("<h2>How to play</h2>" +
+    "<p>No turns. Juice fills on its own, creatures fight the moment they land, and the clock runs. " +
+    "Break all the way through to their <b>keep</b> — or be ahead on walls when time is called.</p>" +
+    "<h3>Winning</h3><ol>" +
+    "<li>Each side has <b>three walls</b>, one per bridge, and a <b>keep</b> behind them.</li>" +
+    "<li>The keep is sealed until one of its walls falls. Knock a wall down and the keep opens up — and that lane opens for you to deploy past the river.</li>" +
+    "<li>Destroy the keep and you win outright. At " + Math.round(MATCH_TIME/60) + " minutes, whoever has broken more walls wins; level and it goes to sudden death.</li>" +
+    "</ol><h3>Playing</h3><ol>" +
+    "<li>Tap a card, then tap your half of the mat to send it in. Creatures walk to the nearest bridge and fight whatever they meet.</li>" +
+    "<li><b>Juice</b> refills by itself, up to " + JUICE_MAX + ". It comes in twice as fast for the last minute.</li>" +
+    "<li>You hold four cards; play one and the next slides in. Twelve in the deck, so you always know roughly what is coming back around.</li>" +
+    "</ol><h3>The ground matters</h3>" +
+    "<p>Your half is nine patches of biome, rolled at random. Creatures take the blessing of whatever they are standing on, " +
+    "and a card deployed onto <b>its own biome</b> costs 1 less and arrives stronger. " +
+    "<b>Floop a patch</b> for 2 juice to retill it into anything you like.</p>" +
+    '<div class="biokey">' + BIO_KEYS.map(k =>
+      '<div style="--bio:' + BIO[k].color + '"><b>' + BIO[k].icon + " " + esc(BIO[k].name) + "</b>" + esc(BIO[k].note) + "</div>").join("") + "</div>" +
+    "<h3>Going indoors</h3>" +
+    "<p>Structures take lodgers, and creatures walk in by themselves if one is near:</p><ul>" +
+    "<li><b>The Cave of Solitude</b> — whatever naps inside is safe from everything and heals fast, then walks back out.</li>" +
+    "<li><b>The Schoolhouse</b> — a scholar studies, growing steadily stronger, then graduates onto the field.</li>" +
+    "<li><b>Spirit Tower</b> — a ranged creature shoots from inside, harder, and cannot be touched.</li>" +
+    "<li><b>Silo of Truth</b> — pays juice while it stands, more with a corn creature inside.</li>" +
+    "</ul><h3>Shortcuts</h3><p><b>1–4</b> pick a card · <b>F</b> floop a patch · <b>Esc</b> cancel.</p>" +
+    '<div class="foot"><button class="cbtn" data-act="close" type="button">Got it</button></div>');
+}
+
+/* =====================================================================
+   PROGRESSION
+   ===================================================================== */
+const CHEST_TIERS = [
+  {name:"Wooden", gold:[60,110], cards:[3,5]},
+  {name:"Corn", gold:[110,180], cards:[5,8]},
+  {name:"Golden", gold:[180,280], cards:[8,13]},
+];
+const rnd = (a, b) => a + ((Math.random() * (b - a + 1)) | 0);
+function awardMatch(){
+  const won = S.over === "you", draw = S.over === "draw";
+  if(won){
+    SAVE.trophies += 30; SAVE.gold += 90; SAVE.xp += 20; SAVE.wins++;
+    const slot = SAVE.chests.indexOf(null);
+    if(slot >= 0){
+      const tier = Math.min(2, Math.floor(arenaIndex(SAVE.trophies) / 2));
+      SAVE.chests[slot] = {tier, name:CHEST_TIERS[tier].name};
+    }
+  } else if(draw){ SAVE.gold += 40; SAVE.xp += 10; }
+  else { SAVE.trophies = Math.max(0, SAVE.trophies - 22); SAVE.gold += 25; SAVE.xp += 8; SAVE.losses++; }
+  SAVE.lvl = 1 + Math.floor(SAVE.xp / xpNeed());
+  persist();
+}
+function openChest(i){
+  const c = SAVE.chests[i];
+  if(!c) return;
+  const t = CHEST_TIERS[c.tier];
+  const gold = rnd(t.gold[0], t.gold[1]);
+  let left = rnd(t.cards[0], t.cards[1]);
+  SAVE.gold += gold;
+  const got = {};
+  const locked = CARD_KEYS.filter(id => !SAVE.owned[id]);
+  if(locked.length && Math.random() < 0.55){
+    const nid = locked[(Math.random() * locked.length) | 0];
+    SAVE.owned[nid] = {copies:0, lvl:1};
+    got[nid] = 1; left = Math.max(0, left - 1);
+  }
+  const pool = Object.keys(SAVE.owned);
+  while(left > 0){
+    const id = pool[(Math.random() * pool.length) | 0];
+    const n = Math.min(left, rnd(1, 3));
+    SAVE.owned[id].copies += n; got[id] = (got[id] || 0) + n; left -= n;
+  }
+  SAVE.chests[i] = null;
+  persist();
+  showSheet("<h2>" + esc(t.name) + " chest</h2><p>🪙 <b>" + gold + " gold</b></p>" +
+    '<div class="collgrid">' + Object.keys(got).map(id =>
+      cardFace(id, {lvl:SAVE.owned[id].lvl, copies:SAVE.owned[id].copies, dupes:true})).join("") + "</div>" +
+    "<p>" + Object.keys(got).map(id => "+" + got[id] + " " + CARDS[id].name).join(" · ") + "</p>" +
+    '<div class="foot"><button class="cbtn" data-act="close" type="button">Nice</button></div>');
+  renderMenu();
+}
+function showEnd(){
+  const won = S.over === "you", draw = S.over === "draw";
+  const head = draw ? "A dead heat" : won ? "You win!" : S.foe.name + " wins";
+  const yourWalls = 3 - S.you.wallsDown, theirWalls = 3 - S.foe.wallsDown;
+  const verdict = draw
+    ? "BMO: Sudden death ran out and both keeps are still standing. BMO is going to bed."
+    : won ? "BMO: Their keep is rubble. You are the Cornlord now."
+          : "BMO: Your keep is rubble. Rough one.";
+  showSheet("<h2>" + esc(head) + "</h2><p>" + esc(verdict) + "</p>" +
+    '<div class="picker">' +
+      '<div class="pick"><span class="pt">🏆 ' + (won ? "+30" : draw ? "0" : "−22") + "</span>" +
+      '<span class="pd">now ' + SAVE.trophies + "</span></div>" +
+      '<div class="pick"><span class="pt">🪙 ' + (won ? "+90" : draw ? "+40" : "+25") + "</span>" +
+      '<span class="pd">now ' + SAVE.gold + "</span></div>" +
+      '<div class="pick"><span class="pt">' + theirWalls + " vs " + yourWalls + "</span>" +
+      '<span class="pd">walls left standing</span></div></div>' +
+    (won && SAVE.chests.some(c => c) ? "<p>A chest is waiting on the menu.</p>" : "") +
+    '<div class="foot"><button class="cbtn blue" data-act="tomenu" type="button">Menu</button>' +
+    '<button class="cbtn" data-act="rematch" type="button">Again</button></div>');
+}
+
+/* =====================================================================
+   GO
+   ===================================================================== */
+SAVE = loadSave();
+renderNav();
+go("menu");
+</script>
+</body>
+</html>
