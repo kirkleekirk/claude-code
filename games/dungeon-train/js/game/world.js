@@ -8,12 +8,14 @@
   const W = 9, L = 26, GAP = 2, DOOR = 1.4, WALL = 0.3, H = 4.2, DOORH = 3.0;
   const WD = { W, L, GAP, DOOR, WALL, H, DOORH };
 
-  function pickTypes(n, offer) {
+  function pickTypes(n, offer, line) {
     const types = ['caboose'];
-    const pool = Object.keys(D.CAR_TYPES).filter((k) => D.CAR_TYPES[k].weight);
+    /* each line can favor its own rooms (mine cars on the classic line, labs in Wizard City...) */
+    const weights = Object.assign({}, ...Object.keys(D.CAR_TYPES).filter((k) => D.CAR_TYPES[k].weight).map((k) => ({ [k]: D.CAR_TYPES[k].weight * (line.rooms ? 0.25 : 1) })), line.rooms || {});
+    const pool = Object.keys(weights).filter((k) => weights[k] > 0);
     let last = null;
     for (let i = 1; i < n - 2; i++) {
-      let t = R.weighted(pool.map((k) => [k === last ? D.CAR_TYPES[k].weight * 0.3 : D.CAR_TYPES[k].weight, k]));
+      const t = R.weighted(pool.map((k) => [k === last ? weights[k] * 0.3 : weights[k], k]));
       types.push(t); last = t;
     }
     types.push('boss', 'engine');
@@ -25,7 +27,7 @@
   function generate(G, offer) {
     const line = D.LINES.find((l) => l.id === offer.line);
     const n = Math.max(5, offer.cars);
-    const types = pickTypes(n, offer);
+    const types = pickTypes(n, offer, line);
     const train = { line, offer, tier: line.tier, mod: offer.mod, cars: [], obstacles: [], breakables: [], chests: [], inter: [], minX: 0, maxX: 0, W, L, GAP, DOOR, H };
     let x = 0;
     for (let i = 0; i < n; i++) {
@@ -63,7 +65,7 @@
 
   function layoutCar(train, car) {
     const x0 = car.x0, x1 = car.x1, cx = (x0 + x1) / 2;
-    const TALL = { mushroom: 1, bookshelf: 1, cage: 1, rack: 1, boiler: 1, throne: 1, crate: 1 };
+    const TALL = { mushroom: 1, bookshelf: 1, cage: 1, rack: 1, boiler: 1, throne: 1, crate: 1, crystals: 1, shelf: 1, pillar: 1, minecart: 1 };
     const prop = (type, x, z, w, d, o) => {
       const p = Object.assign({ type, x, z, w, d, rot: 0, tall: !!TALL[type] }, o || {});
       car.props.push(p);
@@ -115,6 +117,21 @@
         break;
       case 'garden':
         for (let i = 0; i < 6; i++) { const x = R.float(x0 + 3, x1 - 3), z = R.pick([-1, 1]) * R.float(1.6, 3.2); if (!avoidDoor(x, z)) prop('mushroom', x, z, 0.5, 0.5, { size: R.float(0.8, 1.5), color: R.pick(['#e0423a', '#b76bff', '#ffae34']) }); }
+        break;
+      case 'mine':
+        prop('rails', (x0 + x1) / 2, -2.2, L - 4, 1.6, { walk: true });
+        prop('minecart', x0 + R.float(7, 12), -2.2, 1.7, 1.2, { gold: R.chance(0.5) });
+        along(6.5, (x) => { const z = wallZ - 0.2; if (!avoidDoor(x, z) && R.chance(0.75)) prop('crystals', x + R.float(-1, 1), z, 1.1, 1.1, { color: R.pick(['#ffd84a', '#6ab7ff', '#ff6b8a', '#b77bff']) }); });
+        for (let i = 0; i < 2; i++) prop('rocks', R.float(x0 + 4, x1 - 4), R.pick([-1, 1]) * R.float(2, 3), 0.9, 0.9, { walk: true });
+        break;
+      case 'lab':
+        along(6, (x) => { for (const z of [-W / 2 + 0.6, W / 2 - 0.6]) if (!avoidDoor(x, z)) prop('shelf', x, z, 2.2, 0.6, { rot: z > 0 ? Math.PI : 0 }); });
+        prop('cauldron', (x0 + x1) / 2 - 2, R.pick([-1.6, 1.6]), 1.3, 1.3, { color: R.pick(['#7dff5a', '#b061ff', '#ff5fb4', '#5ec8ff']) });
+        break;
+      case 'ballroom':
+        along(6.5, (x) => { for (const z of [-W / 2 + 0.9, W / 2 - 0.9]) if (!avoidDoor(x, z)) prop('pillar', x, z, 0.8, 0.8); });
+        for (let x = x0 + 6; x < x1 - 4; x += 8) prop('chandelier', x, 0, 0.5, 0.5, { walk: true });
+        prop('coffin', x1 - 5, -wallZ + 0.4, 2.1, 0.9, { rot: Math.PI / 2, open: true });
         break;
       case 'vault':
         for (let i = 0; i < 5; i++) prop('gold_pile', R.float(x0 + 3, x1 - 3), R.float(-3, 3), 0.8, 0.8, { walk: true });
@@ -363,7 +380,7 @@
       car.group = buildCar(train, car, mats);
       root.add(car.group);
       for (const p of car.props) {
-        const m = MD.prop(p.type, { color: p.color, size: p.size, open: p.open, skull: p.skull, accent: line.accent });
+        const m = MD.prop(p.type, { color: p.color, size: p.size, open: p.open, skull: p.skull, gold: p.gold, accent: line.accent });
         m.position.set(p.x, 0, p.z);
         m.rotation.y = p.rot || 0;
         car.group.add(m);
@@ -404,7 +421,7 @@
   function setTunnel(train, on) {
     if (!train.skies) return;
     train.skies.forEach((s, i) => { s.material.map = on ? train.tunnelTex : train.skyTex[i]; s.material.needsUpdate = true; });
-    train.ground.material.color.set(on ? '#111118' : '#ffffff');
+    train.ground.material.color.copy(GF.lin(on ? '#111118' : '#ffffff'));
   }
   function disposeTrain(train) {
     if (!train || !train.root) return;

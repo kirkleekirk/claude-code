@@ -54,7 +54,7 @@
     const sel = st.line === o.id;
     return `<button class="linecard${lock ? ' locked' : ''}${sel ? ' sel' : ''}" data-act="line" data-offer="${o.id}" style="--c:${line.accent};--sky:${line.sky[0]}">
       <span class="lc-tier">${line.final ? icon('crown') : 'T' + line.tier}</span>
-      <span class="lc-main"><b>${esc(line.name)}</b><small>${lock ? `${icon('lock')} ${esc(lock)}` : `Level ${line.rec}+ · ${o.cars} cars${o.vault ? ' · vault' : ''}`}</small></span>
+      <span class="lc-main"><b>${esc(line.name)}${line.branch ? ' <i class="lc-tag">branch</i>' : line.post ? ' <i class="lc-tag post">post-game</i>' : ''}</b><small>${lock ? `${icon('lock')} ${esc(lock)}` : `Level ${line.rec}+ · ${o.cars} cars${o.vault ? ' · vault' : ''}`}</small></span>
       <span class="lc-side">${o.mod !== 'none' ? `<em class="mod">${esc(D.MODS[o.mod].name)}</em>` : ''}<span class="lc-boss${got ? ' got' : ''}" title="${got ? 'Trophy claimed' : 'Boss: ' + esc(boss.name)}">${icon(got ? 'trophy' : 'skull')}</span></span></button>`;
   }
   function checklist(G, h, line) {
@@ -83,7 +83,7 @@
     const fams = [...new Set(line.fams.flatMap((f) => (D.FAMILIES[f] || []).map((id) => D.ENEMIES[id].name)))];
     let x = `<div class="board"><div class="board-stage"><div class="stage-cap"><b>${esc(D.HEROES[h].name)}</b> is getting ready. <span>Pick a train line, then board.</span></div></div>`;
     x += `<section class="panel board-list"><header class="p-head"><h3>${icon('train')} The Dungeon Train</h3><button class="btn small ghost" data-act="reroll-board" title="New trips (different cars, vaults and modifiers)">${icon('dice')} New trips · ${icon('coin')}20</button></header><div class="lines" data-keep-scroll="lines">${G.board.map((b) => lineCard(G, h, b)).join('')}</div></section>`;
-    x += `<section class="panel board-detail" style="--c:${line.accent}"><div class="bd-banner" style="background:linear-gradient(135deg, ${line.sky[0]}, ${line.sky[1]})"><span class="bd-tier">${line.final ? 'FINAL' : 'TIER ' + line.tier}</span><h2>${esc(line.name)}</h2></div>`;
+    x += `<section class="panel board-detail" style="--c:${line.accent}"><div class="bd-banner" style="background:linear-gradient(135deg, ${line.sky[0]}, ${line.sky[1]})"><span class="bd-tier">${line.final ? 'FINAL' : line.post ? 'AFTER THE LOOP · TIER ' + line.tier : line.branch ? 'BRANCH LINE · TIER ' + line.tier : 'TIER ' + line.tier}</span><h2>${esc(line.name)}</h2></div>`;
     x += `<p class="bd-blurb">${esc(line.blurb)}</p><div class="bd-facts"><div>${icon('train')}<b>${o.cars}</b><small>cars</small></div><div>${icon('clock')}<b>${Math.floor(line.loop / 60)}:${String(line.loop % 60).padStart(2, '0')}</b><small>until the Loop</small></div><div>${icon('skull')}<b>${esc(boss.name)}</b><small>boss</small></div><div>${icon(o.vault ? 'gem' : 'chest')}<b>${o.vault ? 'Yes' : 'No'}</b><small>treasure vault</small></div></div>`;
     if (o.mod !== 'none') x += `<div class="bd-mod">${icon('sparkle')}<b>${esc(D.MODS[o.mod].name)}:</b> ${esc(D.MODS[o.mod].desc)}</div>`;
     x += `<p class="bd-enemies"><b>Monsters:</b> ${esc(fams.join(', '))}</p>`;
@@ -141,17 +141,34 @@
   /* ---------- journal ---------- */
   HV.journal = function (G) {
     const sec = st.journal;
-    const secs = [['trophies', 'Trophies', 'trophy'], ['legends', 'Legendary loot', 'star'], ['stats', 'Stats', 'grid'], ['help', 'How to play', 'question'], ['glossary', 'Words', 'book'], ['save', 'Save', 'save']];
+    const secs = [['trophies', 'Trophies', 'trophy'], ['bestiary', 'Bestiary', 'skull'], ['legends', 'Legendary loot', 'star'], ['stats', 'Stats', 'grid'], ['help', 'How to play', 'question'], ['glossary', 'Words', 'book'], ['save', 'Save', 'save']];
     let x = `<div class="journal"><nav class="panel j-nav">${secs.map(([k, l, ic]) => `<button class="${sec === k ? 'on' : ''}" data-act="journal" data-sec="${k}">${icon(ic)}${l}</button>`).join('')}${G.conductorBeaten ? `<button class="${sec === 'journey' ? 'on' : ''} gold" data-act="journal" data-sec="journey">${icon('loop')}New Journey</button>` : ''}</nav><section class="panel j-body" data-keep-scroll="journal">`;
     if (sec === 'trophies') {
-      x += `<h3>${icon('trophy')} Boss trophies</h3><p class="muted">Beat a line’s boss, pick up its trophy and get off the train with it. Each trophy powers up both heroes and opens the next line.</p><div class="trophies">`;
+      x += `<h3>${icon('trophy')} Boss trophies</h3><p class="muted">Beat a line’s boss, pick up its trophy and get off the train with it. Every trophy powers up both heroes. Main-line trophies open the next tier; branch-line trophies are extra power.</p><div class="trophies">`;
       for (const line of D.LINES) {
-        if (line.final) { x += `<div class="trophy${G.conductorBeaten ? ' got' : ''}">${icon('crown')}<b>Break the Loop</b><small>${G.conductorBeaten ? 'You stopped the Conductor!' : 'Beat the Conductor and pull the brake.'}</small></div>`; continue; }
+        if (line.final) { x += `<div class="trophy${G.conductorBeaten ? ' got' : ''}">${icon('crown')}<b>Break the Loop</b><small>${G.conductorBeaten ? 'You beat Future Finn and stopped the train!' : 'Beat Future Finn in the Engine and pull the brake.'}</small></div>`; continue; }
         const t = D.TROPHIES[line.id];
         const got = G.trophies[line.id];
-        x += `<div class="trophy${got ? ' got' : ''}">${UI.art.art({ kind: 'trophy', base: line.id, rarity: 4 })}<b>${esc(t.name)}</b><small>${esc(D.ENEMIES[t.boss].name)} · ${esc(line.name)}</small><p>${esc(t.perk)}</p></div>`;
+        x += `<div class="trophy${got ? ' got' : ''}${line.branch || line.post ? ' side' : ''}">${UI.art.art({ kind: 'trophy', base: line.id, rarity: 4 })}<b>${esc(t.name)}</b><small>${esc(D.ENEMIES[t.boss].name)} · ${esc(line.name)}${line.branch ? ' · branch line' : line.post ? ' · after the Loop' : ''}</small><p>${esc(t.perk)}</p></div>`;
       }
       x += '</div>';
+    } else if (sec === 'bestiary') {
+      const seen = (id) => (G.codex.enemies[id] || 0) > 0;
+      const ids = Object.keys(D.ENEMIES);
+      const where = (id) => {
+        const e = D.ENEMIES[id];
+        const ls = D.LINES.filter((l) => l.boss === id || l.fams.includes(e.fam) || (e.elite && (l.elites ? l.elites.includes(id) : l.tier >= 2 && (id === 'lemongrab' || id === 'magic_man'))));
+        return ls.length ? ls.map((l) => l.name).join(', ') : 'Called in by bosses';
+      };
+      x += `<h3>${icon('skull')} Bestiary <small>${ids.filter(seen).length}/${ids.length} defeated</small></h3><p class="muted">Every monster you beat gets a page here, with a tip for fighting it.</p>`;
+      for (const [label, list] of [['Monsters', ids.filter((id) => !D.ENEMIES[id].elite && !D.ENEMIES[id].boss)], ['Elites', ids.filter((id) => D.ENEMIES[id].elite)], ['Bosses', ids.filter((id) => D.ENEMIES[id].boss)]]) {
+        x += `<h4 class="b-group">${label} <small>${list.filter(seen).length}/${list.length}</small></h4><div class="bestiary">`;
+        for (const id of list) {
+          const e = D.ENEMIES[id], got = seen(id);
+          x += `<div class="beast${got ? ' got' : ''}${e.boss ? ' boss' : e.elite ? ' elite' : ''}"><img class="bp" data-enemy="${id}" alt="${got ? esc(e.name) : 'Unknown monster'}"><div class="bt"><b>${got ? esc(e.name) : '???'}</b><small>${esc(where(id))}</small>${got ? `<p>${esc(D.BESTIARY[id] || '')}</p><em>${U.fmt(G.codex.enemies[id])} defeated</em>` : '<p class="muted">Defeat one to learn about it.</p>'}</div></div>`;
+        }
+        x += '</div>';
+      }
     } else if (sec === 'legends') {
       const ids = Object.keys(D.UNIQUES);
       const found = ids.filter((id) => G.codex.uniques[id]).length;
@@ -210,7 +227,7 @@
     return x;
   };
   HV.ending = function () {
-    return `<div class="ending"><h2>You broke the Loop!</h2><p>The Conductor is beaten, the brake is pulled, and the Dungeon Train finally stops. Finn and Jake step off onto the grass of Ooo. Algebraic!</p><p>You can keep playing, or open the Journal to start a <b>New Journey</b> with a permanent perk.</p><div class="m-actions"><button class="btn primary big" data-act="modal-close">${icon('check')} Mathematical!</button></div></div>`;
+    return `<div class="ending"><h2>You broke the Loop!</h2><p>Future Finn — the you who never got off the train — is beaten, the brake is pulled, and the Dungeon Train finally stops. Finn and Jake step off onto the grass of Ooo. Algebraic!</p><p>But something woke up at the bottom of the tracks: <b>The Lich’s Well</b> is now on the Train Board. You can also open the Journal to start a <b>New Journey</b> with a permanent perk.</p><div class="m-actions"><button class="btn primary big" data-act="modal-close">${icon('check')} Mathematical!</button></div></div>`;
   };
   HV.settings = function () {
     return `<h2>${icon('gear')} Settings</h2>${UI.hud.settingsHtml()}<h3>${icon('keyboard')} Controls</h3>${UI.hud.controlsHtml()}<div class="m-actions"><button class="btn primary" data-act="modal-close">Done</button></div>`;

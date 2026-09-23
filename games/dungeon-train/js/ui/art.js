@@ -26,6 +26,9 @@
       wood: 'M32 7L36 12V41H28V12Z',
       root: 'M31 4C36 10 33 14 37 20C40 26 34 30 36 41H28C29 33 25 28 28 22C31 16 26 11 31 4Z',
       wavy: 'M32 3C37 9 33 13 37 19C39 25 34 30 36 41H28C30 30 25 25 27 19C31 13 27 9 32 3Z',
+      zig: 'M32 3L38 12L33 18L38 26L33 33L37 41H27L31 33L26 26L31 18L26 12Z',
+      curve: 'M28 4Q44 16 38 41H27Q32 20 28 4Z',
+      stake: 'M32 2L36 20V41H28V20Z',
     };
     let s = f(blades[o.shape || 'short'], o.blade);
     if (o.edge) s += hi(o.shape === 'great' ? 'M36 12V38' : 'M34 12V38');
@@ -52,6 +55,13 @@
     sword_magma: { shape: 'great', blade: '#ff8a2e', guard: '#3a2a2a', grip: '#2a1a1a', edge: 1, stripe: '#ffe27a' },
     sword_guardian: { shape: 'crystal', blade: '#ff9fd0', guard: '#6fd0ff', grip: '#3a4a7a', gem: '#6fd0ff', edge: 1 },
     sword_night: { shape: 'short', blade: '#3d2d6b', guard: '#1a1330', grip: '#0e0a1c', gem: '#e0283a', speck: 1 },
+    sword_storm: { shape: 'zig', blade: '#bfefff', guard: '#2f6fd6', grip: '#1d2340', gem: '#ffe14a' },
+    sword_claymore: { shape: 'great', blade: '#d6dde6', guard: '#6b4a2e', grip: '#3a2618', edge: 1 },
+    sword_cutlass: { shape: 'curve', blade: '#e6ecf2', guard: '#ffcf3d', grip: '#6b4226' },
+    sword_candycane: { shape: 'rapier', blade: '#ffffff', guard: '#e0283a', grip: '#e0283a', stripe: '#e0283a' },
+    sword_geode: { shape: 'crystal', blade: '#b77bff', guard: '#8c8177', grip: '#5a5048', speck: 1 },
+    sword_stake: { shape: 'stake', blade: '#c9965a', guard: '#8a1f2b', grip: '#5c3b22' },
+    sword_citadel: { shape: 'great', blade: '#ffd6ec', guard: '#ff9fcf', grip: '#6a3a5a', gem: '#ffffff', edge: 1 },
   };
 
   /* ---------- Finn: armor ---------- */
@@ -59,6 +69,8 @@
     return f('M14 46Q12 18 32 15Q52 18 50 46L46 54H18Z', main) + ci(18, 18, 6, main) + ci(46, 18, 6, main) +
       el(32, 40, 12, 10, '#ffd9b3') + dot(27, 39, 1.6, INK) + dot(37, 39, 1.6, INK) + ln('M28 44Q32 47 36 44', INK, 1.8) + (glow ? spark(52, 10, 4, glow) + spark(10, 30, 3, glow) : '');
   }
+  const GLOVE = 'M20 58V36Q18 26 22 18Q24 14 27 18L28 28V12Q30 8 33 12V28V10Q35 6 38 10V28V14Q41 10 43 14V34L46 28Q50 26 49 32L44 46V58Z';
+  const BOOT = 'M16 10H36V38L52 42Q58 46 56 52H14L16 38Z';
   const ARMOR = {
     hat: () => finnHat('#ffffff'),
     hat_og: () => finnHat('#fffbe8', '#ffcf3d') + hi('M20 24Q32 18 44 24'),
@@ -85,6 +97,15 @@
     pack_big: () => f('M14 22Q14 12 32 12Q50 12 50 22V56Q50 60 46 60H18Q14 60 14 56Z', '#4a8a5c') + el(32, 12, 18, 5, '#c98d4e') + re(18, 34, 28, 18, '#3a6e48', 3, 2) + re(22, 24, 8, 8, '#3a6e48', 2, 1.6) + re(34, 24, 8, 8, '#3a6e48', 2, 1.6),
     pack_snack: () => f('M16 20Q16 10 32 10Q48 10 48 20V54Q48 58 44 58H20Q16 58 16 54Z', '#ff9a3c') + re(20, 34, 24, 16, '#e07a20', 3, 2) + el(32, 42, 7, 4, '#f6d7a0', 1.6) + ln('M24 10Q24 4 32 4Q40 4 40 10', INK, 2.4),
     pack_finn: () => f('M16 20Q16 10 32 10Q48 10 48 20V54Q48 58 44 58H20Q16 58 16 54Z', '#6cc24a') + re(20, 34, 24, 16, '#4fa83a', 3, 2) + ln('M24 10Q24 4 32 4Q40 4 40 10', INK, 2.4) + star(32, 24, 4, '#ffcf3d') + spark(52, 10, 3, '#ffcf3d'),
+    helm_bucket: () => f('M16 16H48L52 50H12Z', '#b8c2cc') + ln('M13 50H51', '#6f7684', 3) + re(20, 30, 24, 5, '#2a2e38', 1, 1.4) + ln('M18 16Q32 2 46 16', '#6f7684', 2) + hi('M20 22V44'),
+    hood: () => f('M12 50Q10 14 32 10Q54 14 52 50Q44 44 32 44Q20 44 12 50Z', '#3a2a33') + el(32, 34, 12, 10, '#ffd9b3') + dot(27, 33, 1.6, INK) + dot(37, 33, 1.6, INK) + f('M40 10Q52 4 56 12Q50 12 46 16Z', '#3a2a33', 2),
+    hat_mitre: () => f('M18 56L20 20Q32 2 44 20L46 56Z', '#ffffff') + ln('M19 44H45M20 32H44', '#ffcf3d', 3) + ln('M32 8V56', '#ffcf3d', 2) + star(32, 26, 3.5, '#e0283a'),
+    coat_hunter: () => f('M20 8L28 6Q32 12 36 6L44 8L52 22L46 26V58H36L32 30L28 58H18V26L12 22Z', '#5a2a33') + ln('M24 20L30 30M40 20L34 30', '#8a1f2b', 2.4) + re(22, 36, 4, 12, '#c9965a', 1, 1.4) + re(38, 36, 4, 12, '#c9965a', 1, 1.4),
+    armor_bark: () => f('M16 12L26 8H38L48 12L54 26L46 30V54L32 58L18 54V30L10 26Z', '#8a6a44') + ln('M24 14V52M32 12V56M40 14V52', '#5c4028', 2) + f('M44 20Q50 16 52 20Q48 22 46 26Z', '#7ed957', 1.4),
+    gauntlets_geode: () => f(GLOVE, '#8c8177') + f('M25 28L28 21L31 28L28 32Z M34 26L37 19L40 26L37 30Z', '#b77bff', 1.2) + re(18, 46, 28, 12, '#6e645b', 2, 2),
+    boots_slime: () => f(BOOT, '#7ed957') + el(22, 56, 6, 3, '#7ed957', 1.4) + el(40, 57, 4, 2, '#7ed957', 1.2) + hi('M20 14V34') + dot(28, 24, 2, '#c8f5b0'),
+    boots_fool: () => f('M18 12H36V38L52 42Q58 46 56 52H16L18 38Z', '#4a2a5a') + f('M36 20Q48 6 58 10Q52 16 56 20Q48 20 44 26Q42 22 36 24Z', '#7a3a6a', 2) + re(16, 50, 40, 5, '#2a1a33', 2, 2),
+    pack_treasure: () => f('M14 24Q10 56 32 58Q54 56 50 24Q42 18 32 18Q22 18 14 24Z', '#c9a060') + ln('M20 18Q32 26 44 18', '#8a6a3a', 3) + ci(26, 40, 5, '#ffcf3d', 1.6) + ci(38, 46, 4, '#ffcf3d', 1.6) + f('M30 10L34 18L26 18Z', '#8a6a3a', 1.6),
   };
 
   /* ---------- Jake: instruments ---------- */
@@ -113,6 +134,12 @@
     banjo_trunks: () => rot(35, ci(32, 46, 14, '#fdf3dc') + `<circle cx="32" cy="46" r="14" fill="none" stroke="#6cc24a" stroke-width="3"/>` + ci(32, 46, 5, '#e0283a', 1.6) + re(29.5, 2, 5, 32, '#7a4f25', 1, 2) + re(28, 1, 8, 5, '#4a3326', 2, 1.6)),
     keytar: () => rot(-20, f('M6 28H50L58 20L62 24L54 36H6Z', '#e0283a') + re(10, 30, 36, 6, '#ffffff', 0, 1.6) + [14, 19, 24, 29, 34, 39].map((x) => re(x, 30, 3, 3.5, INK, 0, 0)).join('')),
     keytar_cosmic: () => rot(-20, f('M6 28H50L58 20L62 24L54 36H6Z', '#3d2d6b') + re(10, 30, 36, 6, '#e3d8ff', 0, 1.6) + [14, 19, 24, 29, 34, 39].map((x) => re(x, 30, 3, 3.5, INK, 0, 0)).join('') + dot(20, 24, 1.3, '#fff') + dot(40, 22, 1, '#fff') + star(54, 14, 4, '#ffcf3d')),
+    harmonica: () => rot(-15, re(8, 24, 48, 16, '#c9d1dc', 3) + re(8, 29, 48, 6, '#8a8f9a', 0, 1.4) + [14, 21, 28, 35, 42, 49].map((x) => re(x, 30, 4, 4, INK, 0, 0)).join('') + hi('M12 27H52')),
+    harmonica_blues: () => rot(-15, re(8, 24, 48, 16, '#4d9bff', 3) + re(8, 29, 48, 6, '#2f6fd6', 0, 1.4) + [14, 21, 28, 35, 42, 49].map((x) => re(x, 30, 4, 4, INK, 0, 0)).join('')) + f('M48 6Q53 13 48 18Q43 13 48 6Z', '#9fe3ff', 1.4) + spark(12, 52, 3, '#9fe3ff'),
+    tuba: () => `<circle cx="28" cy="38" r="16" fill="none" stroke="${INK}" stroke-width="10"/><circle cx="28" cy="38" r="16" fill="none" stroke="#ffcf3d" stroke-width="6"/>` + f('M36 24L50 6H60L58 30L44 30Z', '#ffcf3d') + re(22, 8, 5, 14, '#e0a82e', 1, 1.6) + hi('M50 10L56 10'),
+    tuba_big: () => `<circle cx="28" cy="38" r="16" fill="none" stroke="${INK}" stroke-width="10"/><circle cx="28" cy="38" r="16" fill="none" stroke="#e0a82e" stroke-width="6"/>` + f('M36 22L48 2H62L60 32L42 32Z', '#e0a82e') + re(22, 8, 5, 14, '#b07a1e', 1, 1.6) + star(28, 38, 5, '#ffcf3d'),
+    theremin: () => re(10, 30, 36, 20, '#6b4a8a', 3) + ln('M40 30V6', '#dfe6ee', 2.4) + `<circle cx="8" cy="28" r="6" fill="none" stroke="${INK}" stroke-width="4"/><circle cx="8" cy="28" r="6" fill="none" stroke="#dfe6ee" stroke-width="2"/>` + ln('M50 14Q54 18 50 22M54 10Q60 18 54 26', '#b9a2ff', 1.8) + re(14, 50, 4, 8, '#4a3326', 0, 1.4) + re(38, 50, 4, 8, '#4a3326', 0, 1.4),
+    theremin_ghost: () => re(10, 30, 36, 20, '#bfe8ff', 3) + ln('M40 30V6', '#ffffff', 2.4) + dot(22, 38, 2, INK) + dot(32, 38, 2, INK) + el(27, 44, 2.5, 3, INK, 0) + ln('M50 14Q54 18 50 22M54 10Q60 18 54 26', '#e8f4ff', 1.8) + re(14, 50, 4, 8, '#8a8f9a', 0, 1.4) + re(38, 50, 4, 8, '#8a8f9a', 0, 1.4),
   };
 
   /* ---------- Jake: collars ---------- */
@@ -124,6 +151,9 @@
     collar_holding: () => collarBand('#7b5cd6') + re(24, 44, 16, 14, '#5b3fb0', 3, 2) + ln('M24 49H40', '#e3d8ff', 1.6) + spark(50, 50, 3, '#e3d8ff'),
     bow_tie: () => f('M32 32L10 20V44Z', '#e0283a') + f('M32 32L54 20V44Z', '#e0283a') + re(28, 27, 8, 10, '#a01c2a', 2, 2) + hi('M14 26L24 30'),
     scarf_rainbow: () => f('M8 22Q32 34 56 22V30Q32 42 8 30Z', '#ff5f7a') + f('M8 30Q32 42 56 30V36Q32 48 8 36Z', '#ffcf3d') + f('M40 38L48 60H40L36 42Z', '#7ed957') + f('M36 42L40 60H34L32 44Z', '#4d9bff'),
+    bandana: () => f('M8 26Q32 38 56 26L52 34Q32 44 12 34Z', '#e0423a') + f('M20 36L32 58L44 36Q32 42 20 36Z', '#e0423a') + dot(28, 42, 1.6, '#fff') + dot(36, 42, 1.6, '#fff') + dot(32, 48, 1.6, '#fff'),
+    collar_crystal: () => collarBand('#6a58a8') + [16, 24, 32, 40, 48].map((x, i) => f(`M${x} ${38 + (i % 2) * 3}L${x + 3} ${44 + (i % 2) * 3}L${x} ${50 + (i % 2) * 3}L${x - 3} ${44 + (i % 2) * 3}Z`, '#d9ccff', 1.2)).join(''),
+    cloak_wizard: () => f('M14 14Q32 22 50 14L56 58H8Z', '#6a3bb8') + f('M26 16L32 30L38 16', '#ffcf3d', 1.6) + star(22, 42, 3.5, '#ffe27a') + star(42, 48, 3, '#ffe27a'),
   };
 
   /* ---------- relics ---------- */
@@ -148,6 +178,16 @@
     relic_pie: () => f('M6 38Q32 20 58 38V44Q32 52 6 44Z', '#e0a060') + f('M10 38Q32 26 54 38', '#b0612b', 1.8) + ln('M18 34L26 40M30 30L36 38M42 32L46 38', '#7a3e1c', 1.8) + f('M10 44Q32 56 54 44V48Q32 58 10 48Z', '#c98d4e', 1.8),
     relic_receipt: () => f('M16 6H48V58L44 54L40 58L36 54L32 58L28 54L24 58L20 54L16 58Z', '#fdfdf6') + ln('M22 14H42M22 20H38M22 26H42M22 32H34', '#8a8f9a', 1.6) + ln('M22 44H42', INK, 2) + star(40, 38, 3, '#ffcf3d'),
     relic_snail: () => f('M8 48Q10 42 20 42H44Q54 42 56 48Z', '#b8e08a') + ci(38, 32, 12, '#e0a060') + ln('M38 32m-6 0a6 6 0 1 0 6-6', '#8a4a20', 1.8) + ln('M14 42L10 30M18 42L18 30', INK, 2) + dot(10, 29, 2, INK) + dot(18, 29, 2, INK) + f('M4 22L10 28L6 30Z', '#ffe27a', 1.2),
+    garlic: () => f('M32 10Q42 22 46 34Q48 50 32 54Q16 50 18 34Q22 22 32 10Z', '#f7f2e4') + ln('M32 14V50M26 22Q24 36 28 50M38 22Q40 36 36 50', '#d8d0b8', 1.6) + ln('M32 10Q30 4 34 2', '#7ed957', 2),
+    eye_wizard: () => ci(32, 32, 20, '#ffffff') + ci(32, 32, 10, '#b061ff') + ci(32, 32, 4, INK, 0) + dot(35, 29, 2, '#fff') + star(52, 12, 5, '#ffe27a'),
+    geode: () => f('M10 40L16 16L40 8L56 24L52 48L28 56Z', '#8c8177') + f('M20 36L24 22L38 18L46 28L42 42L28 46Z', '#3a2a4a', 1.6) + f('M28 30L32 22L36 30L32 38Z', '#b77bff', 1.2) + f('M36 36L39 30L42 36L39 40Z', '#b77bff', 1.2),
+    coin_lucky: () => ci(32, 32, 20, '#ffcf3d') + ci(32, 32, 14, '#ffe27a', 1.8) + f('M32 22Q36 28 42 28Q38 32 40 40Q34 36 32 38Q30 36 24 40Q26 32 22 28Q28 28 32 22Z', '#7ed957', 1.4),
+    fang: () => f('M22 8H42Q44 28 36 50Q32 58 28 50Q20 28 22 8Z', '#fffdf0') + f('M28 44Q32 52 36 44', '#e0283a', 1.4) + dot(32, 54, 2.5, '#e0283a') + hi('M28 14Q27 26 30 36'),
+    ruby_eye: () => re(6, 26, 52, 12, '#2a1a33', 4) + f('M32 18L42 32L32 46L22 32Z', '#e0283a') + hi('M28 28L32 24'),
+    pearl: () => ci(32, 36, 16, '#fffdf0') + hi('M24 30Q26 24 32 22') + dot(38, 42, 2, '#e8e2cf') + ln('M32 20Q28 10 20 8M32 20Q36 10 44 8', '#ffcf3d', 1.6),
+    orb_future: () => ci(32, 30, 20, '#bfe8ff') + f('M20 52H44L40 58H24Z', '#8a5a2b', 2) + ci(32, 30, 8, '#ffffff', 1.4) + ln('M26 26Q32 20 38 26', '#6fd0ff', 1.6) + spark(18, 18, 3, '#ffffff') + spark(44, 40, 2.5, '#ffffff'),
+    hair_tuft: () => f('M20 54Q10 40 16 24Q18 36 24 38Q20 22 30 10Q30 28 36 32Q36 16 46 12Q42 30 48 38Q54 30 52 20Q60 38 48 54Z', '#b0703a') + ln('M26 46L30 40L34 46L38 40', '#7fdcff', 2),
+    bubble: () => ci(32, 32, 22, '#bfe6ff', 2.4) + hi('M18 24Q20 16 28 13') + dot(40, 22, 3, '#ffffff') + ci(50, 50, 5, '#bfe6ff', 1.6),
   };
 
   /* ---------- snacks ---------- */
@@ -161,6 +201,9 @@
     pocket_watch: () => ci(32, 36, 20, '#ffcf3d') + ci(32, 36, 15, '#fdfdf6', 2) + ln('M32 36V26M32 36L39 40', INK, 2.2) + re(28, 10, 8, 6, '#e0a82e', 2, 1.8) + ln('M32 6V10', INK, 2),
     rainbow_flare: () => rot(-30, re(26, 22, 12, 36, '#e0283a', 2) + ln('M26 30H38M26 38H38M26 46H38', '#fff', 2) + f('M32 22C24 12 30 6 32 2C34 6 40 12 32 22Z', '#ffcf3d', 1.6)) + ln('M40 10Q50 4 58 12', '#ff5f7a', 2.5) + ln('M42 14Q50 9 56 16', '#7ed957', 2.5) + ln('M44 18Q50 14 54 20', '#4d9bff', 2.5),
     skeleton_key: () => ci(18, 32, 11, '#efe6cf') + ci(18, 32, 4, '#1d2340', 0) + f('M28 29H58V35H54V42H50V35H46V40H42V35H28Z', '#efe6cf'),
+    perfect_sandwich: () => el(32, 46, 24, 6, '#e0a060') + f('M10 42Q32 34 54 42L52 38Q32 30 12 38Z', '#7ed957', 1.6) + re(12, 32, 40, 5, '#ff5f6d', 2, 1.4) + re(14, 28, 36, 4, '#ffcf3d', 2, 1.4) + el(32, 22, 24, 7, '#f2c27a') + ln('M32 4V18', '#8a5a2b', 2) + star(32, 5, 3, '#e0283a'),
+    garlic_bread: () => f('M8 36Q8 24 20 24H44Q56 24 56 36V40Q56 48 44 48H20Q8 48 8 40Z', '#f2c27a') + ln('M14 30Q32 26 50 30', '#fff3c8', 2) + dot(22, 36, 2, '#7ed957') + dot(34, 38, 2, '#7ed957') + dot(44, 35, 2, '#7ed957'),
+    hot_sauce: () => f('M26 20H38V26Q44 30 44 38V56Q44 60 40 60H24Q20 60 20 56V38Q20 30 26 26Z', '#e0283a') + re(27, 8, 10, 12, '#fdfdf6', 2, 1.8) + f('M32 36C36 40 37 44 35 48Q34 50 32 50Q30 50 29 48C27 44 29 41 32 36Z', '#ffcf3d', 1.4),
   };
 
   /* ---------- treasure ---------- */
@@ -180,17 +223,25 @@
     owl_dust: () => f('M18 26Q16 56 32 56Q48 56 46 26Z', '#3d2d6b') + re(22, 18, 20, 8, '#8a5a2b', 2) + spark(26, 40, 3, '#e3d8ff') + spark(38, 46, 2.5, '#e3d8ff') + dot(34, 36, 1.4, '#fff') + spark(50, 12, 4, '#b9a2ff'),
     crystal_heart: () => f('M32 58L8 32Q2 20 12 12Q22 6 32 18Q42 6 52 12Q62 20 56 32Z', '#ff9fd0') + f('M32 18L24 32L32 58L40 32Z', 'none', 1.4) + ln('M8 32H56', INK, 1.4) + hi('M14 20Q16 15 22 15'),
     golden_ticket: () => f('M6 18H58V28Q52 32 58 36V46H6V36Q12 32 6 28Z', '#ffcf3d') + ln('M16 18V46', INK, 1.4) + star(36, 32, 7, '#e0283a') + ln('M24 24H30M24 40H30', '#b07a1e', 2),
+    ant_crystal: () => f('M32 6L44 22L38 56H26L20 22Z', '#ffd84a') + f('M32 6L32 56M20 22H44', 'none', 1.4) + hi('M28 16L32 10'),
+    wizard_bubble: () => ci(32, 28, 20, '#bfe6ff') + f('M16 44H48L52 56H12Z', '#6a3bb8') + f('M32 14L38 34H26Z', '#6a3bb8', 1.6) + dot(26, 22, 2, '#fff') + dot(40, 30, 1.5, '#fff'),
+    vampire_goblet: () => f('M16 8H48Q48 30 32 34Q16 30 16 8Z', '#2a1a33') + f('M19 12H45Q43 26 32 28Q21 26 19 12Z', '#e0283a', 1.4) + re(29, 34, 6, 12, '#5a2a33', 0, 2) + f('M18 58Q18 48 32 46Q46 48 46 58Z', '#2a1a33'),
+    citadel_key: () => ci(18, 32, 11, '#ff9fcf') + ci(18, 32, 4, '#ffffff', 0) + f('M28 29H58V35H54V42H50V35H46V40H42V35H28Z', '#ff9fcf') + spark(52, 16, 4, '#ffffff'),
   };
 
   /* ---------- boss trophies ---------- */
   const TROPHIES = {
     grass: () => f('M8 50Q8 30 32 28Q56 30 56 50Z', '#7ed957') + f('M16 30L20 12L28 24L32 8L36 24L44 12L48 30Z', '#ffcf3d') + dot(26, 42, 2, INK) + dot(38, 42, 2, INK),
     candy: () => el(32, 36, 20, 16, '#ffe27a') + f('M48 26Q56 20 58 26', 'none') + el(52, 30, 5, 3, '#ffe27a', 1.8) + ln('M24 36Q32 32 40 36', '#e0a82e', 2) + f('M28 18Q32 10 38 14Q34 16 32 20Z', '#7ed957', 1.6),
-    crypt: () => f('M8 20Q10 50 32 52Q54 50 56 20L48 26Q32 36 16 26Z', '#efe6cf') + [20, 26, 32, 38, 44].map((x) => re(x - 2, 28, 4, 6, '#ffffff', 1, 1.2)).join(''),
+    crypt: () => ln('M10 50Q24 20 54 10', '#1d2340', 6) + ln('M10 50Q24 20 54 10', '#e8f4f0', 3) + ci(10, 50, 6, '#3fb7a8') + spark(46, 30, 4, '#c8e05a'),
+    classic: () => f('M20 10Q32 4 44 10Q48 30 40 54Q36 58 34 50L32 40L30 50Q28 58 24 54Q16 30 20 10Z', '#fff6e0') + hi('M24 14Q30 10 38 12') + ci(32, 22, 3, '#e9899a', 1.4),
+    wizard: () => f('M14 26H40V50Q40 56 34 56H20Q14 56 14 50Z', '#e0423a') + f('M40 32L56 18L58 22L42 38Z', '#e0423a', 2) + ln('M18 26Q26 12 36 26', '#c0302a', 3) + dot(56, 14, 2, '#5ec8ff') + dot(58, 8, 1.6, '#5ec8ff') + dot(52, 10, 1.4, '#5ec8ff'),
+    vampire: () => f('M12 44L16 22L24 34L32 16L40 34L48 22L52 44Z', '#ffcf3d') + re(12, 42, 40, 8, '#ffcf3d', 2) + f('M26 50L28 58L30 50Z', '#ffffff', 1.6) + f('M34 50L36 58L38 50Z', '#ffffff', 1.6) + ci(32, 30, 3, '#e0283a', 1.4),
+    lich: () => f('M20 56Q8 40 16 22Q24 6 42 8Q54 10 56 22Q46 14 36 18Q26 24 30 40Q32 50 28 58Z', '#d8d0b8') + ln('M22 44Q18 34 22 26M34 16Q42 12 50 16', '#a89f88', 2) + dot(44, 40, 3, '#7dff5a'),
     lava: () => RELICS.relic_ember(),
     ice: () => f('M22 6Q30 22 24 36Q20 48 30 58Q18 54 16 40Q14 24 22 6Z', '#e6f7ff') + f('M36 8Q44 26 38 40Q34 50 44 58Q30 54 30 40Q30 26 36 8Z', '#ffffff') + spark(50, 14, 4, '#9fe3ff'),
     night: () => ci(32, 32, 16, '#2a2e38') + ci(32, 32, 10, '#e0283a', 2) + f('M28 28L36 36M36 28L28 36', 'none', 2) + re(4, 30, 12, 4, '#8a8f9a', 1, 1.6) + re(48, 30, 12, 4, '#8a8f9a', 1, 1.6),
-    crystal: () => f('M32 4L50 20L44 52L32 60L20 52L14 20Z', '#c7a6ff') + f('M32 4L32 60M14 20L50 20M20 52L44 52', 'none', 1.4) + ci(32, 32, 6, '#ff9fd0', 1.6),
+    crystal: () => f('M32 4L50 20L44 52L32 60L20 52L14 20Z', '#ff9fcf') + f('M32 4L32 60M14 20L50 20M20 52L44 52', 'none', 1.4) + ci(32, 32, 6, '#ffffff', 1.6) + ln('M32 26V38M26 32H38', '#ff5fb4', 1.6),
   };
 
   const ALL = Object.assign({}, ARMOR, INSTR, COLLARS, RELICS);

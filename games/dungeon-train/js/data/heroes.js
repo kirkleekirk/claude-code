@@ -106,6 +106,18 @@
       name: 'Keytar', spd: 0.95, mult: 0.85, reach: 3.2, chain: 2, chainMult: 0.5,
       desc: 'Punches crackle with electricity that jumps to 2 more enemies nearby.',
     },
+    harmonica: {
+      name: 'Harmonica', spd: 1.35, mult: 0.7, reach: 3.0, rhythm: 3,
+      desc: 'Quick little punches. Every 3rd punch blows a bluesy note that also hits everything in a wide cone.',
+    },
+    tuba: {
+      name: 'Tuba', spd: 0.66, mult: 1.45, reach: 4.8, cone: 90, kb: 12,
+      desc: 'OOM-PAH! A slow, huge blast that hits everything in a wide cone and blows enemies way back.',
+    },
+    theremin: {
+      name: 'Theremin', spd: 0.95, mult: 0.8, reach: 3.6, linger: 0.5, tick: 0.2, tickMult: 0.3, chain: 1, chainMult: 0.45,
+      desc: 'Spooky wobbly music. Hold attack and your fist floats in the air, hitting everything it passes, and every hit zaps 1 more enemy nearby.',
+    },
   };
 
   /* Each hero's MATHEMATICAL! super (the meter fills as you fight). */

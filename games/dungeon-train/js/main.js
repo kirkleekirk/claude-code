@@ -85,12 +85,12 @@
       if (!B3.fort || (G && B3.fortSig !== sigOf('finn') + '|' + sigOf('jake'))) buildFort();
       GF.scene.add(B3.fort);
       GF.scene.background = new THREE.Color('#9fdcff');
-      GF.setMood({ light: 1, fog: ['#bfe8ff', 40, 120] });
+      GF.setMood({ light: 1, fog: ['#bfe8ff', 40, 120], sun: [-6, 14, 10] });
     } else if (mode === 'show') {
       if (!B3.show || B3.showHero !== hero() || B3.showSig !== sigOf(hero())) buildShow(hero());
       GF.scene.add(B3.show);
       GF.scene.background = new THREE.Color('#10172a');
-      GF.setMood({ light: 1.1, fog: null });
+      GF.setMood({ light: 1.05, fog: null, sun: [-5, 12, 10] });
     }
     B3.mode = mode;
     measure();
@@ -181,7 +181,24 @@
     appEl.querySelectorAll('[data-keep-scroll]').forEach((el) => { const v = keep[el.dataset.keepScroll]; if (v) el.scrollTop = v; });
     if (focus) { const el = $(focus.id); if (el) { el.focus(); try { el.setSelectionRange(focus.s, focus.e); } catch (e) { /* not a text field */ } } }
     if (screen === 'hub' && tab === 'skills') TV.mount(G, hero(), onTreeNode);
+    fillPortraits(appEl);
     setup3d();
+  }
+  /* Bestiary portraits are drawn on demand (a few per frame) and cached. */
+  function fillPortraits(root) {
+    const imgs = [...root.querySelectorAll('img.bp[data-enemy]:not([src])')];
+    if (!imgs.length || !glOk) return;
+    let i = 0;
+    const step = () => {
+      for (let n = 0; n < 4 && i < imgs.length; n++, i++) {
+        const img = imgs[i], id = img.dataset.enemy, def = D.ENEMIES[id];
+        if (!def || !img.isConnected) continue;
+        const url = GF.portrait('enemy:' + id, () => MD.enemy(def), { yaw: def.boss ? 0.35 : 0.5 });
+        if (url) img.src = url;
+      }
+      if (i < imgs.length) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
   }
 
   /* ---------- trips ---------- */

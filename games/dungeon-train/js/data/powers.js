@@ -58,6 +58,19 @@
     extra_pouch:   { name: 'Extra Pouch', kinds: ['pack'], icon: 'pancake', stats: () => ({ belt: 1 }), desc: () => '+1 snack belt slot.' },
     lunchbox:      { name: 'Lunchbox', kinds: ['pack', 'collar'], icon: 'pancake', stats: (p) => ({ healPower: 0.5 * p }), desc: (p) => `Snacks heal ${pc(0.5 * p)} more.` },
     bigger_inside: { name: 'Bigger on the Inside', kinds: ['pack'], icon: 'bag', stats: () => ({ backpack: 3 }), desc: () => '+3 backpack slots.' },
+    /* ---------- new Powers from the new lines ---------- */
+    hot_head:      { name: 'Hot Head', kinds: ['helmet', 'collar'], icon: 'flame', mods: (p) => ({ killBurst: 0.6 * p }), desc: (p) => `Enemies you defeat explode in fire for ${pc(0.6 * p)} damage, setting everything nearby on fire (Burn).` },
+    snow_globe:    { name: 'Snow Globe', kinds: ['relic', 'collar'], icon: 'snow', mods: () => ({ frostBurst: 1 }), stats: (p) => ({ chillChance: 0.1 * p }), desc: (p) => `${pc(0.1 * p)} chance on hit to Chill. Enemies defeated while Chilled or Frozen Chill everything around them.` },
+    wizard_wisdom: { name: 'Wizard Wisdom', kinds: ['helmet', 'relic', 'collar'], icon: 'star', mods: (p) => ({ cdOnKill: 0.3 * p }), stats: (p) => ({ abilityPower: 0.1 * p }), desc: (p) => `Abilities deal ${pc(0.1 * p)} more damage, and each enemy you defeat knocks ${s1(0.3 * p)}s off your ability cooldowns.` },
+    vampire_ward:  { name: 'Vampire Ward', kinds: ['armor', 'collar', 'relic'], icon: 'drop', stats: (p) => ({ lifesteal: 0.03 * p, regen: 0.003 * p }), desc: (p) => `Heal for ${pc(0.03 * p)} of the damage your attacks deal, and regenerate ${(0.3 * p).toFixed(1)}% health per second.` },
+    bucket_charge: { name: 'Bucket Charge', kinds: ['boots', 'armor', 'collar'], icon: 'dash', mods: (p) => ({ dashStun: Math.min(1.2, 0.6 * p) }), desc: (p) => `Your dodge roll Stuns every enemy you roll through for ${s1(Math.min(1.2, 0.6 * p))}s.` },
+    crystal_skin:  { name: 'Crystal Skin', kinds: ['armor', 'collar'], icon: 'crystal', stats: (p) => ({ thorns: 0.25 * p, armorPct: 0.1 * p }), desc: (p) => `+${pc(0.1 * p)} armor, and enemies that hit you take ${pc(0.25 * p)} of the damage back.` },
+    approx_knowledge: { name: 'Approximate Knowledge', kinds: ['relic', 'helmet'], icon: 'eye', stats: (p) => ({ crit: 0.06 * p, luck: 0.1 * p }), desc: (p) => `You know approximately many things: +${pc(0.06 * p)} crit chance and +${pc(0.1 * p)} luck.` },
+    lich_whisper:  { name: 'Lich Whisper', kinds: ['relic', 'sword', 'instrument'], icon: 'skull', mods: (p) => ({ lowHpDmg: 0.5 * p, lowHpLifesteal: 0.08 * p }), desc: (p) => `While below 35% health you deal ${pc(0.5 * p)} more damage and heal for ${pc(0.08 * p)} of your attack damage.` },
+    geode_guard:   { name: 'Geode Guard', kinds: ['gauntlets', 'helmet'], icon: 'shield', mods: (p) => ({ blockEvery: Math.max(5, Math.round(10 / p)) }), desc: (p) => `A crystal plate pops up to completely block one hit every ${Math.max(5, Math.round(10 / p))} seconds.` },
+    future_sight:  { name: 'Future Sight', kinds: ['helmet', 'relic'], icon: 'eye', stats: (p) => ({ dodge: 0.08 * p }), desc: (p) => `You see attacks coming: +${pc(0.08 * p)} chance to dodge hits.` },
+    tadpole_swarm: { name: 'Tadpole Swarm', kinds: ['instrument'], icon: 'fan', mods: () => ({ split: 1 }), stats: (p) => ({ primaryDmg: 0.08 * p }), desc: (p) => `Every punch throws 1 extra fist, like a little wizard tadpole. +${pc(0.08 * p)} attack damage.` },
+    hair_trigger:  { name: 'Hair Trigger', kinds: ['sword', 'instrument', 'gauntlets'], icon: 'bolt', mods: () => ({ dashShock: 1 }), stats: (p) => ({ shockChance: 0.12 * p }), desc: (p) => `Staticky like a Hair Ape: ${pc(0.12 * p)} chance on hit to Shock, and dodging through enemies Shocks them.` },
     lucky:         { name: 'Lucky', kinds: ['relic', 'pack', 'helmet'], icon: 'star', stats: (p) => ({ luck: 0.2 * p }), desc: (p) => `+${pc(0.2 * p)} luck: better loot, more often.` },
     /* ---------- collars (Jake) ---------- */
     magic_tag:     { name: 'Magic Tag', kinds: ['collar', 'relic'], icon: 'sparkle', stats: (p) => ({ abilityPower: 0.22 * p }), desc: (p) => `Abilities deal ${pc(0.22 * p)} more damage.` },
@@ -78,7 +91,7 @@
   /* How behaviour switches combine when several items have them. Default: add. */
   D.MOD_RULES = {
     beamEvery: 'min', igniteEvery: 'min', rhythmEvery: 'min', blockEvery: 'min', iceBolts: 'min', pieHeal: 'min',
-    executeBelow: 'max', secondWind: 'max', magnet: 'max', castStun: 'max',
+    executeBelow: 'max', secondWind: 'max', magnet: 'max', castStun: 'max', dashStun: 'max',
     returnHit: 'or', pull: 'or', wideArc: 'or', revealMap: 'or', hurtChill: 'or', fireTrail: 'or', rainbowTrail: 'or', dashShock: 'or',
     kbImmune: 'or', frostBurst: 'or', burnSpread: 'or', abilityChill: 'or', wildMagic: 'or', snackDamage: 'or', freeSnack: 'or', explodeChill: 'or',
   };

@@ -177,7 +177,7 @@
     if (!pool.length) pool = Object.keys(D.VALUABLES).filter((id) => D.VALUABLES[id].rarity <= Math.min(r, 3));
     return makeValuable(R.pick(pool), tier);
   }
-  const CONS_W = [[6, 'bacon_pancakes'], [4, 'candy'], [1.6, 'burrito'], [2.5, 'ice_cream'], [2.5, 'science_potion'], [3, 'gunter_bomb'], [2, 'pocket_watch'], [1, 'rainbow_flare'], [1.5, 'skeleton_key']];
+  const CONS_W = [[6, 'bacon_pancakes'], [4, 'candy'], [1.6, 'burrito'], [2.5, 'ice_cream'], [2.5, 'science_potion'], [3, 'gunter_bomb'], [2, 'pocket_watch'], [1, 'rainbow_flare'], [1.5, 'skeleton_key'], [0.8, 'perfect_sandwich'], [2, 'garlic_bread'], [2, 'hot_sauce']];
   const rollConsumable = () => makeConsumable(R.weighted(CONS_W), 1);
   function rollAny(tier, o) {
     const pick = R.weighted([[46, 'gear'], [32, 'valuable'], [22, 'consumable']]);

@@ -90,12 +90,15 @@
     h.lastHurt = run.time;
     if (!o.dot) {
       DT.game.actors.flash(h);
+      h.sqV = (h.sqV || 0) - 3.5; h.hurtT = 0.22;
       say(run, h.x, h.z, '-' + Math.round(d), 'hurt');
       DT.sfx.play('hurt');
       if (h === run.local) { run.shake(0.18); run.hurtFlash(); }
       if (src && src.kind === 'enemy' && !src.dead) {
         if (S.thorns) C.damage(run, src, dmg * S.thorns, { hero: h, src: 'proc', noCrit: true, noProc: true, meter: 0 });
         if (M.hurtChill) C.addStatus(run, src, 'chill', 2.5, { hero: h });
+        /* vampires drink: they heal for part of the damage they deal */
+        if (src.def.drain && !src.dead) { src.hp = Math.min(src.maxHp, src.hp + d * src.def.drain); if (Math.random() < 0.35) say(run, src.x, src.z, 'Slurp!', 'status', popY(src)); }
       }
     }
     if (h.hp <= 0) knockOut(run, h);
@@ -161,6 +164,7 @@
     let dmg = base;
     if (h.buffs.cry > 0) dmg *= 1.35;
     if (h.buffs.potion > 0) dmg *= 1.4;
+    if (h.buffs.sandwich > 0) dmg *= 1.25;
     if (h.buffs.snack > 0) dmg *= 1.3;
     if (h.buffs.giant > 0) dmg *= 1.6;
     if (h.buffs.pancake > 0) dmg *= 1 + h.buffs.pancakeBuff;
@@ -185,6 +189,7 @@
     run.addMeter(h, o.meter != null ? o.meter : o.src === 'primary' ? 2 : 1);
     if (DT.settings.numbers !== false || crit) say(run, e.x, e.z, String(dmg), crit ? 'crit' : o.src === 'primary' ? 'hit' : 'hit2', popY(e));
     DT.game.actors.flash(e);
+    if (o.src !== 'dot') { e.sqV = Math.max(-9, (e.sqV || 0) - (e.boss ? 2.2 : crit ? 7 : 4.5)); e.hurtT = e.boss ? 0.08 : 0.14; }
     if (o.kb && !e.boss) {
       const fx = o.from ? o.from.x : h.x, fz = o.from ? o.from.z : h.z;
       const dx = e.x - fx, dz = e.z - fz, d = Math.hypot(dx, dz) || 1;
@@ -207,7 +212,7 @@
   function procs(run, h, e, dealt, crit, o) {
     const S = h.S, M = S.mods;
     const p = h.S.power;
-    if (S.burnChance && Math.random() < S.burnChance) C.addStatus(run, e, 'burn', 3, { hero: h, dps: p * 0.35 });
+    if ((S.burnChance && Math.random() < S.burnChance) || h.buffs.hotsauce > 0) C.addStatus(run, e, 'burn', 3, { hero: h, dps: p * 0.35 });
     if (S.chillChance && Math.random() < S.chillChance) C.addStatus(run, e, 'chill', 2.5, { hero: h });
     if (S.bleedChance && Math.random() < S.bleedChance) C.addStatus(run, e, 'bleed', 4, { hero: h, dps: p * 0.25 });
     if (S.stunChance && Math.random() < S.stunChance) C.addStatus(run, e, 'stun', 1, { hero: h });
@@ -240,9 +245,10 @@
     h = h || run.local;
     if (e.tele) { e.tele.alive = false; e.tele = null; }
     const col = e.def.tint || e.def.color || (e.def.model === 'penguin' ? '#26283a' : '#ffffff');
-    GF.burst(e.x, 0.7, e.z, col, 12, 5);
-    GF.burst(e.x, 0.7, e.z, '#ffcf3d', 5, 3, { size: 0.08 });
-    GF.scene.remove(e.mesh);
+    const size = Math.max(0.7, e.r * (e.boss ? 1.6 : 1.5));
+    GF.burst(e.x, 0.7, e.z, col, e.boss ? 16 : 7, 5);
+    GF.poof(e.x, 0.45 + size * 0.35, e.z, size, e.def.fam === 'lich' || e.def.model === 'lich' ? '#c8ffb8' : null);
+    GF.pop(e.mesh, e.boss ? 0.3 : 0.16);
     const t = run.train.tier;
     run.xp += e.def.xp * (1 + 0.35 * (t - 1)) * (e.elite && !e.def.elite ? 5 : 1);
     run.stats.kills += 1;
@@ -342,7 +348,7 @@
     h.facing = dir;
     const size = (h.buffs.giant > 0 ? 1.4 : 1) * (h.buffs.mega > 0 ? 1.6 : 1) * S.scale;
     const reach = form.reach * S.reachMult * size;
-    const sfx = { viola: 'note', guitar: 'strum', drums: 'drum', keytar: 'zap', trumpet: 'heavy', bass: 'heavy' }[S.weapon.form] || 'punch';
+    const sfx = { viola: 'note', guitar: 'strum', drums: 'drum', keytar: 'zap', trumpet: 'heavy', bass: 'heavy', harmonica: 'note', tuba: 'heavy', theremin: 'zap' }[S.weapon.form] || 'punch';
     DT.sfx.play(sfx);
     const rhythmEvery = M.rhythmEvery || form.rhythm;
     if (rhythmEvery && h.punches % rhythmEvery === 0) cone(run, h, dir, reach, 110, form.mult * (1 + 0.6 * (form.rhythm ? b : 1) + (M.rhythmMult || 0)), '#ff8fc7', 5);
@@ -512,6 +518,7 @@
         h.dashHit.add(e);
         if (h.id === 'jake') C.damage(run, e, h.S.power * 0.4, { hero: h, src: 'proc', kb: 7, meter: 1 });
         if (M.dashShock) C.shock(run, h, e, h.S.power * 0.5, 2);
+        if (M.dashStun) C.addStatus(run, e, 'stun', M.dashStun, { hero: h });
       }
       if ((M.fireTrail || M.rainbowTrail) && (h.trailT = (h.trailT || 0) - dt) <= 0) { h.trailT = 0.05; C.zone(run, { kind: M.rainbowTrail ? 'rainbow' : 'fire', x: h.x, z: h.z, r: 0.9, dur: 2.5, hero: h }); }
       if (h.stateT >= h.dashDur) { h.state = 'idle'; h.vx = h.vz = 0; }
@@ -526,8 +533,11 @@
     if (el === 'fire') { h.st.burn = 2.5; h.burnDps = dmg * 0.15; }
     else if (el === 'ice') { h.st.chill = 2; if (Math.random() < 0.35) h.st.freeze = 0.7; }
     else if (el === 'slow') h.st.chill = 2;
-    else if (el === 'shock') h.st.stun = 0.35;
+    else if (el === 'shock') h.st.stun = Math.max(h.st.stun || 0, 0.35);
+    else if (el === 'stun') h.st.stun = Math.max(h.st.stun || 0, 0.8);
+    else if (el === 'root') h.st.root = Math.max(h.st.root || 0, 1.1);
   }
+  C.applyEl = applyEl;
   /* Shove a hero (unless a Juggernaut / Thick Fur node makes them immune). */
   C.pushHero = function (run, h, fromX, fromZ, dist) {
     if (h.S.mods.kbImmune) return;
@@ -542,13 +552,16 @@
       if (d > 0) { applyEl(run, h, el, dmg); if (extra) extra(h); }
     }
   };
-  C.enemyAttack = function (run, e, tgt) {
-    const arch = e.def.arch;
+  C.enemyAttack = function (run, e, tgt, A) {
+    const arch = A || e.def.arch;
     const el = e.def.burn ? 'fire' : e.def.chill ? 'ice' : null;
+    if (e.def.arch === 'moon') { for (const off of [-0.28, 0, 0.28]) C.enemyShot(run, e, tgt, off); return; }
+    if (arch === 'zapper') { C.zap(run, e); return; }
     if (arch === 'melee' || arch === 'lemongrab') {
-      const reach = e.r + 0.9;
+      const reach = e.r + 0.9 + (e.reach || 0);
       C.hurtHeroesIn(run, e.x + Math.sin(e.facing) * reach * 0.6, e.z + Math.cos(e.facing) * reach * 0.6, reach * 0.7, e.dmg, e, el);
-      GF.swoosh(e.x, e.z, e.facing, reach + 0.3, 1.8, '#ff6b6b', 0.8);
+      GF.swoosh(e.x, e.z, e.facing, reach + 0.3, 1.8, e.transformed ? '#7ed957' : '#ff6b6b', 0.8);
+      if (e.def.swordBeam && (e.hits = (e.hits || 0) + 1) % 3 === 0) C.enemyShot(run, e, tgt, 0, { shape: 'beam', speed: 14 });
     } else if (arch === 'tank') {
       C.hurtHeroesIn(run, e.slamAt.x, e.slamAt.z, 2.4, e.dmg, e, el, (h) => C.pushHero(run, h, e.slamAt.x, e.slamAt.z, 1.5));
       GF.ring(e.slamAt.x, e.slamAt.z, 2.6, e.def.chill ? '#9fe3ff' : '#ff9d2e', 0.35);
@@ -569,16 +582,92 @@
     o = o || {};
     const sh = e.def.shot || { speed: 10, color: '#ff4d4d' };
     const dir = (o.dir != null ? o.dir : Math.atan2(tgt.x - e.x, tgt.z - e.z)) + (off || 0);
-    C.fire(run, { owner: 'enemy', src: e, x: e.x, z: e.z, y: e.boss ? 1.4 : 0.9, dir, speed: o.speed || sh.speed, dmg: e.dmg * (o.mult || 1), r: 0.35, life: 2.6, color: o.color || sh.color, size: 0.3, el: o.el || sh.el || (sh.burn ? 'fire' : null) });
+    C.fire(run, { owner: 'enemy', src: e, x: e.x, z: e.z, y: e.boss ? 1.4 : 0.9, dir, speed: o.speed || sh.speed, dmg: e.dmg * (o.mult || 1), r: 0.35, life: 2.6, color: o.color || sh.color, size: sh.size || 0.3, shape: o.shape, el: o.el || sh.el || (sh.burn ? 'fire' : null) });
     DT.sfx.play('enemyShot');
   };
-  C.lemongrabScream = function (run, e, r, mult, stun) {
-    GF.ring(e.x, e.z, r, '#ffd400', 0.45);
-    say(run, e.x, e.z, 'UNACCEPTABLE!', 'crit', popY(e));
+  /* A shout that hurts, stuns and (usually) shoves everyone nearby: Lemongrab's UNACCEPTABLE, the Lich's STOP,
+     the Empress's hypnotic stare. */
+  C.lemongrabScream = function (run, e, r, mult, stun, text, color, push) {
+    GF.ring(e.x, e.z, r, color || '#ffd400', 0.45);
+    say(run, e.x, e.z, text || 'UNACCEPTABLE!', 'crit', popY(e));
     run.shake(0.3);
     e.screaming = 0.5;
-    C.hurtHeroesIn(run, e.x, e.z, r, e.dmg * mult, e, null, (h) => { h.st.stun = stun; C.pushHero(run, h, e.x, e.z, 2.2); });
+    C.hurtHeroesIn(run, e.x, e.z, r, e.dmg * mult, e, null, (h) => { h.st.stun = stun; if (push !== false) C.pushHero(run, h, e.x, e.z, 2.2); });
   };
+  /* Hair Apes and Laser Wizards: after a wind-up along a marked line, zap everything on it. */
+  C.zap = function (run, e) {
+    const z = e.def.zap || {};
+    const dir = e.zapDir != null ? e.zapDir : e.facing;
+    const fx = Math.sin(dir), fz = Math.cos(dir);
+    const end = WG.clampPath(run.train, e, { x: e.x + fx * (z.len || 11), z: e.z + fz * (z.len || 11) }, 0.1);
+    const L = Math.hypot(end.x - e.x, end.z - e.z);
+    for (const h of run.heroes) {
+      if (h.ko) continue;
+      const rx = h.x - e.x, rz = h.z - e.z, along = rx * fx + rz * fz, side = Math.abs(rx * fz - rz * fx);
+      if (along > 0 && along < L + h.r && side < 0.45 + h.r && C.hurtHero(run, h, e.dmg, e) > 0) applyEl(run, h, z.el, e.dmg);
+    }
+    let a = { x: e.x + fx * 0.4, y: 1.1, z: e.z + fz * 0.4 };
+    for (let i = 1; i <= 6; i++) {
+      const t = i / 6, j = i < 6 ? (Math.random() - 0.5) * 0.6 : 0;
+      const b = { x: e.x + fx * L * t + fz * j, y: 1.1, z: e.z + fz * L * t - fx * j };
+      GF.line(a, b, z.color || '#7fdcff', 0.22, 0.13);
+      a = b;
+    }
+    GF.burst(end.x, 1, end.z, z.color || '#7fdcff', 6, 3, { dur: 0.3 });
+    if (z.text && Math.random() < 0.5) say(run, e.x, e.z, z.text, 'status', popY(e));
+    DT.sfx.play('zap');
+  };
+  /* The Guardian Angel keeps its friends topped up — until you find out what it really is. */
+  C.angelHeal = function (run, e) {
+    GF.ring(e.x, e.z, 6, '#ffe066', 0.5);
+    let n = 0;
+    for (const o of run.enemies) if (!o.dead && o !== e && !o.boss && U.dist2(o.x, o.z, e.x, e.z) < 36 && o.hp < o.maxHp) { o.hp = Math.min(o.maxHp, o.hp + o.maxHp * 0.15); n++; GF.burst(o.x, 1.2, o.z, '#ffe066', 5, 2, { dur: 0.4 }); }
+    if (n) say(run, e.x, e.z, 'Bless you, my children!', 'good', popY(e));
+  };
+  C.reveal = function (run, e) {
+    e.revealed = true;
+    const p = e.parts;
+    if (p.faces) { p.faces[0].visible = false; p.faces[1].visible = true; }
+    if (p.halo) p.halo.visible = false;
+    e.speed *= 1.5; e.dmg *= 1.3; e.attackCd = 0.3;
+    if (e.tele) { e.tele.alive = false; e.tele = null; }
+    e.state = 'chase'; e.stateT = 0; e.lungeTo = null;
+    e.name = 'Not-So-Guardian Angel';
+    say(run, e.x, e.z, 'SURPRISE!!', 'crit', popY(e) + 0.4);
+    run.shake(0.25);
+    DT.sfx.play('scream');
+    e.sqV = -8;
+  };
+  /* The Hierophant changes shape at half health: bigger, meaner, and his arm is a snake now. */
+  C.transform = function (run, e) {
+    e.transformed = true;
+    const p = e.parts;
+    if (p.snake) { p.snake.visible = true; if (p.arms && p.arms[1]) p.arms[1].visible = false; }
+    e.scale *= 1.25; e.mesh.scale.setScalar(e.scale);
+    e.dmg *= 1.35; e.speed *= 1.2; e.r *= 1.15; e.reach = 1.3;
+    if (e.tele) { e.tele.alive = false; e.tele = null; }
+    e.state = 'chase'; e.stateT = 0;
+    say(run, e.x, e.z, 'Behold my TRUE shape!', 'crit', popY(e) + 0.4);
+    GF.poof(e.x, 1, e.z, 1.4, '#e8d8ff');
+    run.shake(0.3);
+    DT.sfx.play('boss');
+  };
+  /* A big straight laser (Citadel Guardian's head, Future Finn's sword wave, the Lich's green fire). */
+  function beamHit(run, e, b) {
+    const fx = Math.sin(b.dir), fz = Math.cos(b.dir);
+    const end = WG.clampPath(run.train, e, { x: e.x + fx * b.len, z: e.z + fz * b.len }, 0.1);
+    const L = Math.hypot(end.x - e.x, end.z - e.z);
+    for (const h of run.heroes) {
+      if (h.ko) continue;
+      const rx = h.x - e.x, rz = h.z - e.z, along = rx * fx + rz * fz, side = Math.abs(rx * fz - rz * fx);
+      if (along > -0.5 && along < L + h.r && side < b.w / 2 + h.r * 0.6 && C.hurtHero(run, h, e.dmg * b.mult, e) > 0) applyEl(run, h, b.el, e.dmg);
+    }
+    GF.line({ x: e.x, y: 1.5, z: e.z }, end, b.color, 0.4, b.w * 0.5);
+    GF.line({ x: e.x, y: 1.5, z: e.z }, end, '#ffffff', 0.25, b.w * 0.2);
+    GF.burst(end.x, 1.2, end.z, b.color, 10, 5, { dur: 0.4 });
+    run.shake(0.3);
+    DT.sfx.play('zap');
+  }
   C.blinkEnemy = function (run, e, tgt) {
     GF.burst(e.x, 1, e.z, '#43e0c5', 12, 4, { dur: 0.4 });
     const a = Math.random() * Math.PI * 2, d = R.float(5, 7);
@@ -600,6 +689,11 @@
       if (phase !== e.phase && phase > 0) { run.banner(phase === 1 ? `${e.name} is getting mad!` : `${e.name} is FURIOUS!`, 'bad'); DT.sfx.play('boss'); }
       e.phase = phase;
       say(run, e.x, e.z, brain.taunts[phase], 'crit', popY(e) + 0.6);
+      /* the Demon Cat knows approximately many things, and one of them is: dogs are TERRIFYING */
+      if (brain.fearsDogs && phase > 0 && run.heroes.some((h) => h.id === 'jake' && !h.ko)) {
+        e.st.fear = 2; e.busy = null; if (e.tele) { e.tele.alive = false; e.tele = null; } e.telegraphing = false;
+        run.later(0.8, () => { if (!e.dead) say(run, e.x, e.z, 'DOG! I smell DOG!', 'status', popY(e) + 0.3); });
+      }
     }
     const P = brain.phases[phase];
     const T = e.timers;
@@ -607,30 +701,32 @@
     const spd = e.speed * slow * (P.speed || 1);
     if (e.busy) { busyStep(run, e, tgt, dt); return; }
     e.facing = Math.atan2(dx, dz);
-    if (!brain.keep) {
+    const keep = P.keep != null ? P.keep : brain.keep;
+    if (!keep) {
       if (dist > e.r + 1.3) { e.vx = (dx / dist) * spd; e.vz = (dz / dist) * spd; } else { e.vx = e.vz = 0; }
     } else {
       const orbit = e.walkT * 0.3;
-      const px = tgt.x - (dx / dist) * brain.keep + Math.cos(orbit) * 1.5, pz = tgt.z - (dz / dist) * brain.keep + Math.sin(orbit) * 1.5;
+      const px = tgt.x - (dx / dist) * keep + Math.cos(orbit) * 1.5, pz = tgt.z - (dz / dist) * keep + Math.sin(orbit) * 1.5;
       const mdx = px - e.x, mdz = pz - e.z, md = Math.hypot(mdx, mdz) || 1;
       if (md > 0.5) { e.vx = (mdx / md) * spd; e.vz = (mdz / md) * spd; } else { e.vx = e.vz = 0; }
     }
     const car = run.train.cars[e.car];
     for (const key of Object.keys(P)) {
-      if (key === 'speed') continue;
+      if (key === 'speed' || key === 'keep') continue;
       const pat = P[key];
       T[key] = (T[key] || R.float(0, pat.every * 0.5)) + dt;
       if (T[key] < pat.every) continue;
       T[key] = 0;
       switch (key) {
         case 'spread': for (let i = 0; i < pat.n; i++) C.enemyShot(run, e, tgt, (i - (pat.n - 1) / 2) * (pat.arc / Math.max(1, pat.n - 1)) * 2, { mult: pat.mult, el: pat.el }); break;
-        case 'ring': for (let i = 0; i < pat.n; i++) C.enemyShot(run, e, tgt, 0, { dir: (i / pat.n) * Math.PI * 2 + e.walkT, mult: pat.mult, el: pat.el, speed: 9 }); break;
+        case 'ring': for (let i = 0; i < pat.n; i++) C.enemyShot(run, e, tgt, 0, { dir: (i / pat.n) * Math.PI * 2 + e.walkT, mult: pat.mult, el: pat.el, speed: 9, color: pat.color }); break;
+        case 'beam': { const dir = Math.atan2(dx, dz); e.busy = { kind: 'beam', t: 0, wind: pat.wind || 1, dir, len: pat.len || 15, w: pat.w || 1.3, mult: pat.mult, el: pat.el, color: pat.color || (e.def.shot && e.def.shot.color) || '#ffffff' }; e.tele = GF.telegraphRect(e.x, e.z, dir, pat.len || 15, pat.w || 1.3, pat.wind || 1, pat.color || '#ff3b3b'); e.vx = e.vz = 0; e.telegraphing = true; break; }
         case 'slam': e.busy = { kind: 'slam', t: 0, dur: 0.9, r: pat.r, mult: pat.mult }; e.vx = e.vz = 0; e.tele = GF.telegraph(e.x, e.z, pat.r, 0.9, '#ff3b3b'); e.telegraphing = true; break;
         case 'circles': for (let i = 0; i < pat.n; i++) { const a = Math.random() * Math.PI * 2, d = i === 0 ? 0.4 : R.float(1.5, 3.5); C.zone(run, { kind: 'bossAoE', x: tgt.x + Math.cos(a) * d, z: tgt.z + Math.sin(a) * d, r: pat.r, delay: 1.1, dmg: e.dmg * pat.mult, el: pat.el, src: e }); } break;
         case 'line': for (let i = 1; i <= pat.n; i++) C.zone(run, { kind: 'bossAoE', x: e.x + (dx / dist) * i * pat.gap, z: e.z + (dz / dist) * i * pat.gap, r: pat.r, delay: 0.7 + i * 0.07, dmg: e.dmg * pat.mult, el: pat.el, src: e }); break;
         case 'charge': { const len = Math.min(14, dist + 3); e.busy = { kind: 'charge', t: 0, wind: 0.8, dir: Math.atan2(dx, dz), len, mult: pat.mult, hit: new Set() }; e.tele = GF.telegraphRect(e.x, e.z, Math.atan2(dx, dz), len, e.r * 2 + 0.6, 0.8, '#ff3b3b'); e.vx = e.vz = 0; e.telegraphing = true; break; }
         case 'summon': { const n = run.enemies.filter((x) => !x.dead && !x.boss && x.car === e.car).length; if (n < pat.max) { C.summon(run, e, pat.ids, pat.n); say(run, e.x, e.z, 'Get them!', 'status', popY(e)); } break; }
-        case 'scream': e.busy = { kind: 'scream', t: 0, dur: 0.9, r: pat.r, mult: pat.mult, stun: pat.stun }; e.vx = e.vz = 0; e.tele = GF.telegraph(e.x, e.z, pat.r, 0.9, '#ffd400'); DT.sfx.play('scream'); break;
+        case 'scream': e.busy = { kind: 'scream', t: 0, dur: 0.9, r: pat.r, mult: pat.mult, stun: pat.stun, text: pat.text, color: pat.color }; e.vx = e.vz = 0; e.tele = GF.telegraph(e.x, e.z, pat.r, 0.9, pat.color || '#ffd400'); DT.sfx.play('scream'); break;
         case 'pull': e.busy = { kind: 'pull', t: 0, dur: pat.dur, str: pat.str }; e.vx = e.vz = 0; say(run, e.x, e.z, 'Come here…', 'crit', popY(e)); break;
         case 'blink': if (car) C.blinkEnemy(run, e, tgt); break;
         default: break;
@@ -651,8 +747,12 @@
       e.busy = null; e.telegraphing = false;
     } else if (b.kind === 'scream' && b.t >= b.dur) {
       if (e.tele) { e.tele.alive = false; e.tele = null; }
-      C.lemongrabScream(run, e, b.r, b.mult, b.stun);
+      C.lemongrabScream(run, e, b.r, b.mult, b.stun, b.text, b.color);
       e.busy = null; e.telegraphing = false;
+    } else if (b.kind === 'beam') {
+      e.facing = b.dir;
+      if (b.t >= b.wind && !b.fired) { b.fired = true; if (e.tele) { e.tele.alive = false; e.tele = null; } e.telegraphing = false; beamHit(run, e, b); }
+      if (b.t >= b.wind + 0.35) e.busy = null;
     } else if (b.kind === 'charge') {
       if (b.t < b.wind) { e.facing = b.dir; return; }
       if (e.tele) { e.tele.alive = false; e.tele = null; e.telegraphing = false; }

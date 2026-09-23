@@ -241,11 +241,17 @@
   HB.imbue = function (G, uid) { const f = workable(G, uid); if (!f) return 'none'; const r = pay(G, HB.imbueCost(f.item)); if (r !== 'ok') return r; f.item.rarity = 3; f.item.power = M.loot.rollPower(f.item.kind); f.item.name = M.loot.nameOf(f.item); if (f.where === 'equip') HB.fixChar(G, f.hero); return 'ok'; };
 
   /* ---------- the train board ---------- */
-  HB.genBoard = function (G) {
-    G.board = D.LINES.map((line) => ({
-      id: U.uid('m'), line: line.id, tier: line.tier, cars: R.int(line.cars[0], line.cars[1]),
-      vault: line.tier >= 2 && R.chance(0.5), mod: line.final ? 'none' : R.weighted([[5, 'none'], [1.5, 'crowded'], [1.5, 'express'], [1.5, 'treasure'], [1, 'elites']]),
-    }));
+  const offerFor = (line) => ({
+    id: U.uid('m'), line: line.id, tier: line.tier, cars: R.int(line.cars[0], line.cars[1]),
+    vault: line.tier >= 2 && R.chance(0.5), mod: line.final ? 'none' : R.weighted([[5, 'none'], [1.5, 'crowded'], [1.5, 'express'], [1.5, 'treasure'], [1, 'elites']]),
+  });
+  HB.genBoard = function (G) { G.board = D.LINES.map(offerFor); };
+  /* Saves from before new lines existed: add the missing trips, drop trips for lines that are gone. */
+  HB.fixBoard = function (G) {
+    if (!Array.isArray(G.board)) { HB.genBoard(G); return; }
+    G.board = G.board.filter((o) => D.LINES.some((l) => l.id === o.line));
+    for (const line of D.LINES) if (!G.board.some((o) => o.line === line.id)) G.board.push(offerFor(line));
+    G.board.sort((a, b) => D.LINES.findIndex((l) => l.id === a.line) - D.LINES.findIndex((l) => l.id === b.line));
   };
   HB.rerollBoard = function (G) { if (G.gold < 20) return 'poor'; G.gold -= 20; HB.genBoard(G); return 'ok'; };
   HB.afterRaid = function (G) { HB.genBoard(G); HB.genMarket(G); for (const h of D.HERO_IDS) HB.fixChar(G, h); };

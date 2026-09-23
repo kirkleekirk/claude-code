@@ -20,7 +20,7 @@
   const BUFFS = {
     cry: ['volume', 'Battle Cry'], candy: ['star', 'Sugar rush'], copter: ['wind', 'Helicopter Arms'], mega: ['fist', 'Mega Jake'], giant: ['arrowUp', 'Giant'],
     potion: ['potion', 'Science!'], pancakeBuff: ['pancake', 'Pancake Party'], snack: ['heart', 'Snack power'], parry: ['shield', 'Parry'], storm: ['sparkle', 'Sword Storm'],
-    invuln: ['crystal', 'Invincible'], ball: ['ball', 'Bouncy Ball'],
+    invuln: ['crystal', 'Invincible'], ball: ['ball', 'Bouncy Ball'], sandwich: ['heart', 'Perfect Sandwich'], hotsauce: ['flame', 'Hot sauce'],
   };
 
   function build(r) {
@@ -173,7 +173,7 @@
     if (r.tunnel != null) return { t: 'GET OFF THE TRAIN! Find a green jump-off door or use a Rainicorn flare.', cls: 'bad' };
     if (r.trophy) return { t: 'You have the trophy! Escape: a green jump-off door, the engine brake, or a Rainicorn flare.', cls: 'good' };
     if (r.boss && !r.boss.dead) return { t: `Defeat ${r.boss.name}!`, cls: 'bad' };
-    if (car && car.type === 'engine') return r.train.line.final && !r.bossDown ? { t: 'The Conductor waits in the boss car.' } : { t: 'Pull the emergency brake (hold E) for bonus loot and XP!', cls: 'good' };
+    if (car && car.type === 'engine') return r.train.line.final && !r.bossDown ? { t: `${D.ENEMIES[r.train.line.boss].name} waits in the boss car.` } : { t: 'Pull the emergency brake (hold E) for bonus loot and XP!', cls: 'good' };
     if (car && car.lock && !car.lock.open) return { t: 'Locked vault: smash the gate or use a Skeleton Key.' };
     const left = r.enemies.filter((e) => !e.dead && e.car === r.carIdx).length;
     if (left) return { t: `Defeat ${U.plural(left, 'monster')} in this car to unlock its chest.` };
@@ -203,6 +203,7 @@
     if (h.st.chill > 0) bf += `<span class="bad" title="Chilled">${icon('snow')}</span>`;
     if (h.st.burn > 0) bf += `<span class="bad" title="Burning">${icon('flame')}</span>`;
     if (h.st.stun > 0 || h.st.freeze > 0) bf += `<span class="bad" title="Stunned">${icon('star')}</span>`;
+    if (h.st.root > 0) bf += `<span class="bad" title="Rooted">${icon('vine')}</span>`;
     if (E.buffs.dataset.v !== bf) { E.buffs.innerHTML = bf; E.buffs.dataset.v = bf; }
     /* abilities */
     for (const el of E.slots) {

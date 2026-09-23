@@ -282,6 +282,43 @@
       GF.burst(h.x, 0.6, h.z, '#e8fbff', 18, 7);
       DT.sfx.play('freeze');
     },
+    bubble_ward(run, h, ab) {
+      h.buffs.shield = { hp: h.maxHp * 0.35 * (1 + h.S.abilityPower * 0.5), t: ab.dur };
+      const bub = new THREE.Mesh(GF.geo('sphere', 1.25, 24, 16), GF.basic('#9fdcff', { opacity: 0.3 }));
+      bub.position.y = 0.95;
+      h.mesh.add(bub);
+      say(run, h.x, h.z, 'Bubble!', 'heal');
+      run.later(ab.dur, () => {
+        h.mesh.remove(bub);
+        if (h.ko) return;
+        for (const e of C.enemiesNear(run, h.x, h.z, 3.5)) C.damage(run, e, h.S.power * 0.5, { hero: h, src: 'ability', kb: 9, meter: 0.5 });
+        GF.ring(h.x, h.z, 3.5, '#bfe6ff', 0.35);
+        GF.poof(h.x, 1, h.z, 0.9, '#dff4ff');
+        DT.sfx.play('pickup');
+      });
+    },
+    magic_missiles(run, h, ab) {
+      const dir = h.aimDir;
+      for (let i = 0; i < ab.count; i++) {
+        const off = (i - (ab.count - 1) / 2) * 0.16;
+        run.later(i * 0.05, () => { if (!h.ko) C.fire(run, { owner: 'hero', hero: h, x: h.x, z: h.z, y: 1.1, dir: dir + off, speed: 17, dmg: h.S.power * ab.dmg, r: 0.5, life: ab.range / 17, color: ['#b061ff', '#ff5fb4', '#43e0c5'][i % 3], size: 0.24, src: 'ability' }); });
+      }
+      say(run, h.x, h.z, 'Wizards only!', 'status');
+      DT.sfx.play('zap');
+    },
+    citadel_laser(run, h, ab) {
+      const dir = h.aimDir;
+      const fx = Math.sin(dir), fz = Math.cos(dir);
+      GF.telegraphRect(h.x, h.z, dir, ab.range, ab.width, 0.25, '#ffffff');
+      act(h, 0.3, () => {}, () => {
+        for (const { e } of inLine(run, h, dir, ab.range, ab.width)) C.damage(run, e, h.S.power * ab.dmg, { hero: h, src: 'ability', kb: 4 });
+        const end = WG.clampPath(run.train, h, { x: h.x + fx * ab.range, z: h.z + fz * ab.range }, 0.1);
+        GF.line({ x: h.x, y: 1.3, z: h.z }, end, '#ff9fcf', 0.4, ab.width * 0.5);
+        GF.line({ x: h.x, y: 1.3, z: h.z }, end, '#ffffff', 0.3, ab.width * 0.22);
+        run.smashAt(h.x + fx * ab.range / 2, h.z + fz * ab.range / 2, ab.range / 2, 2);
+        run.shake(0.3); DT.sfx.play('zap');
+      });
+    },
   };
 
   /* ---------- casting ---------- */
@@ -401,6 +438,9 @@
       case 'pocket_watch': run.windBack(0.15); say(run, h.x, h.z, 'Tick… tock… rewind!', 'status'); DT.sfx.play('tick'); break;
       case 'rainbow_flare': if (run.zones.some((z) => z.kind === 'flare')) { used = false; break; } C.zone(run, { kind: 'flare', x: h.x, z: h.z, r: 2.5, dur: 6 }); run.banner('Lady Rainicorn is coming! Stay close to the flare.', 'good'); break;
       case 'skeleton_key': run.hudNote('Keys open locked chests and vaults on their own. Just walk up and hold E.'); used = false; break;
+      case 'perfect_sandwich': C.healHero(run, h, h.maxHp * heal); h.buffs.sandwich = 12; say(run, h.x, h.z, 'The PERFECT sandwich!', 'heal'); break;
+      case 'garlic_bread': for (const e of C.enemiesNear(run, h.x, h.z, 7)) C.addStatus(run, e, 'fear', 3, { hero: h }); GF.ring(h.x, h.z, 7, '#f2e2a0', 0.5); say(run, h.x, h.z, 'Garlic!', 'status'); break;
+      case 'hot_sauce': h.buffs.hotsauce = 10; say(run, h.x, h.z, 'SPICY!', 'crit'); GF.burst(h.x, 1.4, h.z, '#ff7a2e', 10, 3); break;
       default: used = false;
     }
     if (used) {

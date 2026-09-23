@@ -71,5 +71,11 @@
       desc: 'Open a tiny Nightosphere portal: enemies around you get pulled in and drained for 60% damage four times a second, and you heal for 20% of it.' },
     frost_nova:   { hero: 'any', src: 'item', name: 'Frost Nova', icon: 'snow', cd: 14, dmg: 1.2, radius: 6, freeze: 2.5, target: 'self',
       desc: 'Blast a ring of ice: 120% damage, and every enemy nearby is Frozen for 2.5 seconds.' },
+    bubble_ward:  { hero: 'any', src: 'item', name: 'Bubble Ward', icon: 'ball', cd: 15, dur: 4, target: 'self',
+      desc: 'Blow a giant bubble around yourself. It soaks up damage equal to 35% of your max health for 4 seconds, then pops and knocks enemies back.' },
+    magic_missiles:{ hero: 'any', src: 'item', name: 'Magic Missiles', icon: 'sparkle', cd: 8, dmg: 0.8, count: 5, range: 14, target: 'dir',
+      desc: 'Wizards only, fools! Fire 5 magic missiles in a fan where you aim, each hitting for 80% damage.' },
+    citadel_laser:{ hero: 'finn', src: 'item', name: 'Citadel Laser', icon: 'bolt', cd: 10, dmg: 3.0, range: 16, width: 1.5, target: 'dir',
+      desc: 'Hold the blade up and fire a white Citadel laser: 300% damage to every enemy in a long line.' },
   };
 })();

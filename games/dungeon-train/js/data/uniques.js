@@ -245,5 +245,91 @@
       effects: [{ name: 'Chaos Everywhere', text: '+15% damage. Defeated enemies erupt in hellfire for 80% damage and set everything nearby on fire.' }],
       lore: 'Hunson Abadeer wants it back. He can wait.',
     },
+
+    /* ---------- from the new lines ---------- */
+    stake_sword: {
+      name: 'Hunter’s Stake Sword', kind: 'sword', base: 'rapier', rarity: 4, minTier: 6, art: 'sword_stake',
+      stats: { critDmg: 0.5 }, mods: { vsBig: 0.25, executeBelow: 0.1 },
+      effects: [{ name: 'Stake Through the Heart', text: '+50% crit damage and +25% damage to elites and bosses. Regular enemies below 10% health are finished off instantly.' }],
+      lore: 'Sharpened for the Vampire King’s court. Pointy end goes in the vampire.',
+    },
+    citadel_blade: {
+      name: 'Citadel Guardian’s Blade', kind: 'sword', base: 'claymore', rarity: 5, minTier: 7, art: 'sword_citadel', grants: 'citadel_laser',
+      stats: { dmg: 0.25, crit: 0.08 }, mods: { finisherQuake: 0.8 },
+      effects: [{ name: 'Cosmic Warden', text: '+25% damage and +8% crit chance. The last hit of every combo sends out a crystal shockwave for 80% damage.' }],
+      lore: 'Carved out of a Citadel Guardian. It still wants to arrest somebody.',
+    },
+    hierophant_mitre: {
+      name: 'The Hierophant’s Mitre', kind: 'helmet', base: 'wizard_hat', rarity: 4, minTier: 6, art: 'hat_mitre',
+      stats: { hp: 20, cdr: 0.08 }, mods: { lowHpDmg: 0.4, lowHpSpeed: 0.2 },
+      effects: [{ name: 'Change of Shape', text: '+20 health and abilities recharge 8% faster. Below 35% health you change shape: +40% damage and +20% move speed.' }],
+      lore: 'Very traditional. Very tall.',
+    },
+    fool_wings: {
+      name: 'The Fool’s Wings', kind: 'boots', base: 'winged_boots', rarity: 4, minTier: 6, art: 'boots_fool',
+      stats: { speed: 0.12, dashCd: 0.25 }, mods: { dashCharges: 1 },
+      effects: [{ name: 'Flight of Fancy', text: '+12% move speed. Store 2 dodges at once, and they recharge 25% faster.' }],
+      lore: 'Marceline got her flying from the Fool. Now you can sort of fly too.',
+    },
+    wizard_cloak: {
+      name: 'Wizard City Cloak', kind: 'collar', base: 'bow_tie', rarity: 4, minTier: 4, art: 'cloak_wizard', grants: 'magic_missiles',
+      stats: { abilityPower: 0.2, cdr: 0.08 },
+      effects: [{ name: 'Wizards Only', text: 'Abilities deal 20% more damage and recharge 8% faster. Comes with Magic Missiles.' }],
+      lore: 'A Wizard City cloak, cut down to dog size.',
+    },
+    blues_harp: {
+      name: 'Jake’s Blues Harp', kind: 'instrument', base: 'harmonica', rarity: 4, minTier: 3, art: 'harmonica_blues',
+      stats: { chillChance: 0.15 }, mods: { rhythmEvery: 2, rhythmMult: 0.5 },
+      effects: [{ name: 'Singin’ the Blues', text: 'Every 2nd punch plays a note that hits everything in a wide cone for extra damage. Hits have a 15% chance to Chill.' }],
+      lore: 'For when you’re feeling blue. Or when enemies are.',
+    },
+    big_tuba: {
+      name: 'The Big Band Tuba', kind: 'instrument', base: 'tuba', rarity: 4, minTier: 5, art: 'tuba_big',
+      stats: { stunChance: 0.15, knockback: 0.5 }, mods: { vsBig: 0.2 },
+      effects: [{ name: 'OOM-PAH-PAH', text: 'Blasts knock enemies 50% further and have a 15% chance to Stun. +20% damage to elites and bosses.' }],
+      lore: 'Heard from three cars away.',
+    },
+    ghost_theremin: {
+      name: 'Ghost Princess’s Theremin', kind: 'instrument', base: 'theremin', rarity: 4, minTier: 5, art: 'theremin_ghost',
+      stats: { dmg: 0.12 }, mods: { chain: 2, chainMult: 0.3, linger: 0.8 },
+      effects: [{ name: 'Ghostly Wail', text: '+12% damage. Your fist floats 0.8s longer, and every hit zaps 2 more enemies nearby.' }],
+      lore: 'It plays itself at midnight. Wooo-ooo.',
+    },
+    vampire_fang: {
+      name: 'Vampire King’s Fang', kind: 'relic', base: 'bone_charm', rarity: 4, minTier: 6, art: 'fang',
+      stats: { lifesteal: 0.07 }, mods: { critHeal: 0.03 },
+      effects: [{ name: 'Fang of the King', text: '7% Lifesteal. Critical hits heal you for 3% of your max health.' }],
+      lore: 'He has plenty more where that came from.',
+    },
+    empress_ruby: {
+      name: 'The Empress’s Ruby', kind: 'relic', base: 'gem_ring', rarity: 4, minTier: 6, art: 'ruby_eye',
+      stats: { stunChance: 0.12 }, mods: { vsDisabled: 0.3 },
+      effects: [{ name: 'Hypnotic Gaze', text: 'Hits have a 12% chance to Stun. +30% damage to Stunned, Frozen or Rooted enemies.' }],
+      lore: 'The ruby from the Empress’s blindfold. Don’t stare at it.',
+    },
+    moon_pearl: {
+      name: 'The Moon’s Pearl', kind: 'relic', base: 'bone_charm', rarity: 4, minTier: 6, art: 'pearl',
+      stats: { hp: 30, regen: 0.006 },
+      effects: [{ name: 'Pale Light', text: '+30 health and regenerate 0.6% of your health every second.' }],
+      lore: 'One of the Moon’s pearls. It glows in the dark.',
+    },
+    hair_tuft: {
+      name: 'Hair Ape Tuft', kind: 'relic', base: 'cloud_puff', rarity: 4, minTier: 2, art: 'hair_tuft',
+      stats: { shockChance: 0.15 }, mods: { dashShock: 1 },
+      effects: [{ name: 'Static Cling', text: '15% chance on hit to Shock. Dodging through enemies Shocks them.' }],
+      lore: 'Pulled off a Hair Ape. It still crackles.',
+    },
+    gmw_bubble: {
+      name: 'Grand Master’s Spare Bubble', kind: 'relic', base: 'cloud_puff', rarity: 4, minTier: 4, art: 'bubble', grants: 'bubble_ward',
+      stats: { hp: 15, abilityPower: 0.1 },
+      effects: [{ name: 'Floaty', text: '+15 health and +10% ability damage. Comes with Bubble Ward.' }],
+      lore: 'The Grand Master Wizard keeps a few spares. Don’t sit on it.',
+    },
+    future_orb: {
+      name: 'The Future Orb', kind: 'relic', base: 'gem_ring', rarity: 5, minTier: 7, art: 'orb_future',
+      stats: { dodge: 0.1, xp: 0.1 }, mods: { blockEvery: 8 },
+      effects: [{ name: 'See It Coming', text: '+10% dodge and +10% experience. Every 8 seconds you see the next hit coming and block it completely.' }],
+      lore: 'A crystal ball that shows the future. On the Dungeon Train it showed Finn an old warrior who never got off.',
+    },
   };
 })();

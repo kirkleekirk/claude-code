@@ -77,6 +77,7 @@
     }
     if (!Array.isArray(G.overflow)) G.overflow = [];
     if (!D.HEROES[G.active]) G.active = 'finn';
+    M.hub.fixBoard(G);
     return G;
   }
 
@@ -99,15 +100,23 @@
 
   /* ---------- lines (tiers) ---------- */
   const lineById = (id) => D.LINES.find((l) => l.id === id);
-  const lineByTier = (t) => D.LINES.find((l) => l.tier === t);
-  function trophyCount(G) { return Object.keys(D.TROPHIES).filter((k) => G.trophies[k]).length; }
-  function finalOpen(G, heroId) { return trophyCount(G) >= Object.keys(D.TROPHIES).length && G.chars[heroId].level >= 24; }
+  /* the main line of a tier (branch lines share tiers with it) */
+  const lineByTier = (t) => D.LINES.find((l) => l.tier === t && !l.branch && !l.post);
+  const MAIN_TROPHIES = () => Object.keys(D.TROPHIES).filter((k) => !D.TROPHIES[k].branch);
+  function trophyCount(G) { return MAIN_TROPHIES().filter((k) => G.trophies[k]).length; }
+  function finalOpen(G, heroId) { return trophyCount(G) >= MAIN_TROPHIES().length && G.chars[heroId].level >= 24; }
   /* Why a line is closed (or null when it's open) for this hero. */
   function lineLock(G, line, heroId) {
     const lvl = G.chars[heroId].level;
+    const need = MAIN_TROPHIES().length;
     if (line.final) {
-      if (trophyCount(G) < Object.keys(D.TROPHIES).length) return `Bring home all ${Object.keys(D.TROPHIES).length} boss trophies`;
+      if (trophyCount(G) < need) return `Bring home all ${need} main-line boss trophies`;
       if (lvl < 24) return 'Reach level 24';
+      return null;
+    }
+    if (line.post) {
+      if (!G.conductorBeaten) return 'Break the Loop first (beat the Engine)';
+      if (line.rec > lvl + 3) return `Reach level ${line.rec - 3}`;
       return null;
     }
     if (line.tier === 1) return null;

@@ -43,7 +43,7 @@
     run.S = S;
     if (S.mods.freeSnack) { const belt = G.chars[heroId].belt; const i = belt.findIndex((b, k) => !b && k < S.belt); if (i >= 0) belt[i] = M.loot.rollConsumable(); }
     bindRunApi(run);
-    GF.setMood({ light: 1, bg: line.sky[1], fog: [darker(line.trim), 30, 95] });
+    GF.setMood({ light: 1, bg: line.sky[1], fog: [darker(line.trim), 30, 95], sun: [-10, 14, 1.5] });
     IN.reset();
     IN.enabled = true;
     IN.onLockChange = (s) => onLock(run, s);
@@ -107,7 +107,7 @@
         const it = M.loot.makeTrophy(line.id);
         dropItem(r, e.x, e.z, it, false);
         r.banner(`${e.name} is beaten! Grab the trophy and get it home!`, 'super');
-      } else if (line.final) r.banner('The Conductor is beaten! Pull the brake to break the Loop!', 'super');
+      } else if (line.final) r.banner(`${e.name} is beaten! Pull the brake to break the Loop!`, 'super');
       else r.banner(`${e.name} is beaten! The engine is open.`, 'super');
       DT.sfx.play('levelup');
       r.boss = null;
@@ -320,14 +320,23 @@
     let n = t.enemies ? R.int(t.enemies[0], t.enemies[1]) : 0;
     if (r.offer.mod === 'crowded') n = Math.round(n * 1.4);
     if (tier >= 4 && n) n += 1;
-    const pool = [].concat(...r.train.line.fams.map((f) => D.FAMILIES[f] || []));
+    const line = r.train.line;
+    const pool = [].concat(...line.fams.map((f) => D.FAMILIES[f] || []));
     for (let i = 0; i < n; i++) {
       const p = WG.freeSpot(r.train, car, 0.7, { x: h.x, z: h.z, r: 6 });
-      if (p) AC.spawnEnemy(r, R.pick(pool), p.x, p.z, { car: car.i });
+      if (!p) continue;
+      const id = R.pick(pool);
+      AC.spawnEnemy(r, id, p.x, p.z, { car: car.i });
+      /* pack monsters (Crystal Ants) bring friends */
+      for (let k = 1; k < (D.ENEMIES[id].group || 1); k++) {
+        const q = { x: p.x + R.float(-1.2, 1.2), z: p.z + R.float(-1.2, 1.2) };
+        WG.resolve(r.train, q, 0.4);
+        AC.spawnEnemy(r, id, q.x, q.z, { car: car.i });
+      }
     }
     if (car.elite) {
       const p = WG.freeSpot(r.train, car, 1, { x: h.x, z: h.z, r: 8 }) || { x: (car.x0 + car.x1) / 2 + 4, z: 0 };
-      if (tier >= 2) { const e = AC.spawnEnemy(r, R.pick(['lemongrab', 'magic_man']), p.x, p.z, { car: car.i }); r.banner(e.name + ' blocks the way!', 'bad'); }
+      if (tier >= 2) { const e = AC.spawnEnemy(r, R.pick(line.elites || ['lemongrab', 'magic_man']), p.x, p.z, { car: car.i }); r.banner(e.name + ' blocks the way!', 'bad'); }
       else { AC.spawnEnemy(r, R.pick(pool), p.x, p.z, { car: car.i, promote: true }); r.banner('A king-sized monster!', 'bad'); }
     }
     if (car.boss) {
@@ -464,8 +473,21 @@
     const rx = -Math.cos(yaw), rz = Math.sin(yaw);
     const pivot = { x: h.x + rx * 0.6 * sc, y: (h.liftY || 0) + 1.6 * sc, z: h.z + rz * 0.6 * sc };
     const want = { x: pivot.x - lx * dist, y: pivot.y - ly * dist, z: pivot.z - lz * dist };
-    const safe = WG.cameraSafe(r.train, pivot, want);
-    const k = dt ? Math.min(1, dt * 18) : 1;
+    let safe = WG.cameraSafe(r.train, pivot, want);
+    /* big monsters (bosses, elites) that get between the camera and the hero push the camera in and up,
+       so you never lose sight of your hero behind a boss */
+    const segx = safe.x - pivot.x, segz = safe.z - pivot.z, segL = Math.hypot(segx, segz) || 1;
+    let pull = 1;
+    for (const e of r.enemies) {
+      if (e.dead || e.state === 'spawn' || !(e.boss || e.elite || e.r > 0.85)) continue;
+      const er = e.r * 1.15 + 0.35;
+      const t = ((e.x - pivot.x) * segx + (e.z - pivot.z) * segz) / (segL * segL);
+      if (t <= 0 || t >= 1.25) continue;
+      if (Math.hypot(e.x - (pivot.x + segx * t), e.z - (pivot.z + segz * t)) > er) continue;
+      pull = Math.min(pull, Math.max(0.22, (t * segL - er) / segL));
+    }
+    if (pull < 1) safe = { x: pivot.x + segx * pull, y: Math.min(WG.WD.H - 0.5, safe.y + (1 - pull) * 1.5), z: pivot.z + segz * pull };
+    const k = dt ? Math.min(1, dt * (pull < 1 ? 8 : 18)) : 1;
     cam.x = U.lerp(cam.x || safe.x, safe.x, k); cam.y = U.lerp(cam.y || safe.y, safe.y, k); cam.z = U.lerp(cam.z || safe.z, safe.z, k);
     let sx = 0, sy = 0;
     if (r.shakeT > 0 && dt) { r.shakeT = Math.max(0, r.shakeT - dt); const s = r.shakeT * 0.9; sx = R.float(-s, s); sy = R.float(-s, s); }
