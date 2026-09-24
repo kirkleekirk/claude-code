@@ -45,7 +45,7 @@
     for (let i = 0; i < 6; i++) {
       const c = new THREE.Group();
       for (let k = 0; k < 4; k++) c.add(GF.part(GF.geo('sphere', 1 + (k % 2) * 0.5, 14, 10), '#ffffff', [k * 1.3, (k % 2) * 0.4, 0], { ink: false }));
-      c.position.set(-36 + i * 13, 13 + (i % 3) * 3, -20 - (i % 2) * 8);
+      c.position.set(-40 + i * 15, 17 + (i % 3) * 3, -34 - (i % 2) * 8);
       g.add(c);
       g.userData.clouds.push(c);
     }
@@ -112,8 +112,8 @@
   const INTRO = [
     { t: 0, pos: [96, 34, 18], look: [70, 22, -96] },
     { t: 3.2, pos: [18, 30, 30], look: [-64, 14, -84] },
-    { t: 6.0, pos: [-30, 16, 22], look: [-22, 8, -48] },
-    { t: 8.6, pos: [0, 7.8, 22], look: [0, 5.4, 0] },
+    { t: 6.0, pos: [-52, 11, 22], look: [-90, 6, 0] },
+    { t: 8.6, pos: [0, 7, 27], look: [0, 9.5, 0] },
   ];
   /* skip the opening sweep (a click, or anything after the first time) */
   function skipIntro() { B3.intro = 99; document.body.classList.add('intro-skip'); }
@@ -148,14 +148,24 @@
           const L = (p, q) => p.map((v, j) => v + (q[j] - v) * e);
           const [px, py, pz] = L(a.pos, b.pos), [lx, ly, lz] = L(a.look, b.look);
           cam.position.set(px, py, pz); cam.lookAt(lx, ly, lz);
-        } else { cam.position.set(sway, 7.8, 22); cam.lookAt(0, 5.4, 0); }
+        } else { cam.position.set(sway, 7, 27); cam.lookAt(0, 9.5, 0); }
         GF.camera.clearViewOffset();
       }
-      else { cam.position.set(-1.5 + sway * 0.6, 3.6, 13.5); cam.lookAt(0, 2.6, 3); aimView(); }
-      u.finn.position.y = Math.abs(Math.sin(t * 2.2)) * 0.1;
-      u.jake.position.y = Math.abs(Math.sin(t * 2.2 + 1.2)) * 0.08;
-      const fp = u.finn.userData.parts;
-      fp.swingR.rotation.x = -0.6 + Math.sin(t * 3) * 0.2;
+      else { cam.position.set(-1.5 + sway * 0.6, 3.4, 15); cam.lookAt(0, 4.6, 2); aimView(); }
+      /* hanging out by the front door: breathing, Finn looking around with his sword ready, Jake's tail
+         wagging and his ears flopping, and every few seconds a happy little hop from Jake */
+      const fp = u.finn.userData.parts, jp = u.jake.userData.parts;
+      u.finn.scale.y = 1 + Math.sin(t * 2.4) * 0.012;
+      fp.head.rotation.y = Math.sin(t * 0.55) * 0.35;
+      fp.head.rotation.z = Math.sin(t * 0.9) * 0.04;
+      fp.swingR.rotation.x = -0.45 + Math.sin(t * 1.4) * 0.08;
+      fp.swingL.rotation.x = Math.sin(t * 1.4 + 1) * 0.08;
+      const hop = (t % 5.5) < 0.5 ? Math.sin(((t % 5.5) / 0.5) * Math.PI) : 0;
+      u.jake.position.y = hop * 0.35;
+      jp.body.scale.set(1 + Math.sin(t * 2.4 + 1) * 0.015 - hop * 0.06, 1 - Math.sin(t * 2.4 + 1) * 0.015 + hop * 0.08, 1);
+      jp.tail.rotation.y = Math.sin(t * (hop ? 16 : 7)) * 0.5;
+      jp.earL.rotation.z = -0.38 - hop * 0.5 + Math.sin(t * 1.7) * 0.06;
+      jp.earR.rotation.z = 0.38 + hop * 0.5 - Math.sin(t * 1.7 + 0.5) * 0.06;
       const act = G ? G.active : null;
       const who = act === 'jake' ? u.jake : u.finn;
       u.ring.visible = !!act;

@@ -97,13 +97,16 @@
       return null;
     },
     skull_helm: (g, c) => {
+      /* a big monster skull worn like a helmet: its face sits over his forehead, its teeth along the brim */
       const col = c || '#f5f0e1';
-      g.add(P(G('cap', 0.478, 1.1), col, [0, 0, 0]));
+      g.add(P(G('cap', 0.49, 1.2), col, [0, 0, 0]));
+      const zAt = (x, y) => Math.sqrt(Math.max(0, 0.49 * 0.49 - x * x - y * y));
       for (const s of [-1, 1]) {
-        g.add(P(G('sphere', 0.075, 10, 8), INK, [0.14 * s, 0.26, 0.39], { ink: false, scale: [1, 1.2, 0.5] }));
-        g.add(P(G('cone', 0.06, 0.24, 8), col, [0.36 * s, 0.4, 0], { rot: [0, 0, -0.7 * s] }));
+        g.add(P(G('sphere', 0.1, 12, 10), '#2a2430', [0.15 * s, 0.25, zAt(0.15, 0.25) - 0.02], { ink: false, scale: [1, 0.85, 0.45], rot: [-0.5, 0, 0.3 * s] }));
+        g.add(P(G('cone', 0.075, 0.34, 10), '#e8dcc0', [0.42 * s, 0.34, -0.02], { rot: [0, 0, -1.0 * s] }));
       }
-      for (let i = -2; i <= 2; i++) g.add(P(G('box', 0.045, 0.06, 0.03), col, [i * 0.06, 0.2, 0.43], { ink: false }));
+      g.add(P(G('cone', 0.05, 0.08, 3), '#2a2430', [0, 0.14, zAt(0, 0.14) + 0.01], { ink: false, rot: [Math.PI - 0.3, 0, 0] }));
+      for (let i = -3; i <= 3; i++) { const x = i * 0.065, y = 0.49 * Math.cos(1.2) - 0.03; g.add(P(G('cone', 0.028, 0.07, 4), col, [x, y, zAt(x, y) + 0.005], { rot: [Math.PI, 0, 0], inkT: 0.15 })); }
       return null;
     },
     hat_og: () => WHITE,
@@ -111,14 +114,18 @@
       const col = c || '#9aa3b0';
       g.add(P(G('cyl', 0.4, 0.49, 0.62, 22), col, [0, 0.2, 0]));
       g.add(P(G('torus', 0.49, 0.03, 24), '#6f7684', [0, -0.1, 0], { rot: [Math.PI / 2, 0, 0], ink: false }));
-      g.add(P(G('torus', 0.42, 0.015, 6, 20, Math.PI), '#6f7684', [0, 0.48, 0], { ink: false }));
+      g.add(P(G('torus', 0.42, 0.015, 20, Math.PI), '#6f7684', [0, 0.48, 0], { ink: false }));
       g.add(P(G('box', 0.44, 0.07, 0.02), INK, [0, 0.12, 0.46], { ink: false }));
       return null;
     },
     hood: (g, c) => {
+      /* the hood takes the place of the bear hat: it wraps his whole head, his face peeks out of a
+         rolled edge, and a point hangs off the back */
       const col = c || '#3a2a33';
-      g.add(P(G('cap', 0.49, 1.35), col, [0, 0.02, -0.03], { rot: [-0.3, 0, 0] }));
-      g.add(P(G('cone', 0.12, 0.3, 8), col, [0, 0.2, -0.52], { rot: [-2.2, 0, 0] }));
+      g.children[0].material = GF.mat(col);
+      const fz = Math.sqrt(HR * HR - 0.3 * 0.3);
+      g.add(P(G('torus', 0.3, 0.04, 28), '#2a1d25', [0, -0.045, fz - 0.02], { scale: [1.04, 0.9, 1] }));
+      g.add(P(G('cone', 0.2, 0.42, 12), col, [0, 0.12, -0.44], { rot: [-2.05, 0, 0] }));
       return null;
     },
     hat_mitre: (g) => {
@@ -241,29 +248,316 @@
     harmonica: ['#c9d1dc', 'harp'], harmonica_blues: ['#4d9bff', 'harp'], tuba: ['#ffcf3d', 'tuba'], tuba_big: ['#e0a82e', 'tuba'],
     theremin: ['#6b4a8a', 'antenna'], theremin_ghost: ['#bfe8ff', 'antenna'],
   };
+  /* An instrument, built facing +z with its neck up (+y). userData.depth is how far it sticks out from
+     its back, userData.small says it rides on the strap in front instead of on Jake's back. */
   function instrumentMesh(it) {
     const art = DT.meta.loot.artOf(it);
     const [col, shape] = INSTRUMENT_LOOK[art] || ['#a0522d', 'strings'];
     const glow = it.unique ? '#ffd24a' : rarityGlow(it);
     const o = glow ? { emissive: glow, ei: 0.2 } : {};
+    const O = (extra) => Object.assign({}, o, extra);
     const g = new THREE.Group();
+    const DARK = '#2a1a0a', BOARD = '#1d1a26', GOLD = '#f0c419', SILVER = '#dfe6ee';
+    let depth = 0.08;
+    /* a violin-family body: a big lower bout and a smaller upper one with a waist between, f-holes, a
+       bridge, a black fingerboard up a neck, and a curled scroll on top */
+    const fiddle = (lo, up, neck, flat) => {
+      const f = flat * lo;
+      g.add(P(G('sphere', lo, 18, 12), col, [0, -lo * 0.6, 0], O({ scale: [1, 1, flat] })));
+      g.add(P(G('sphere', up, 18, 12), col, [0, up * 0.75, 0], O({ scale: [1, 1, flat * lo / up] })));
+      for (const sx of [-1, 1]) g.add(P(G('box', 0.018, lo * 0.55, 0.01), DARK, [sx * lo * 0.42, -lo * 0.2, f + 0.004], { ink: false, rot: [0, 0, -0.15 * sx] }));
+      g.add(P(G('box', lo * 0.55, 0.03, 0.03), '#e8d5a8', [0, -lo * 0.55, f + 0.01], { ink: false }));
+      g.add(P(G('box', 0.06, up * 1.4 + neck, 0.025), BOARD, [0, (up * 1.4 + neck) / 2 - lo * 0.3, f + 0.01], { ink: false }));
+      g.add(P(G('box', 0.055, neck, 0.05), DARK, [0, up * 1.5 + neck / 2, 0]));
+      g.add(P(G('torus', 0.04, 0.018, 14), DARK, [0, up * 1.5 + neck + 0.04, 0], { rot: [0, Math.PI / 2, 0] }));
+      for (const sx of [-0.012, 0.012]) g.add(P(G('box', 0.004, up * 1.4 + neck + lo * 0.4, 0.004), '#fff4d6', [sx, (up * 1.4 + neck) / 2 - lo * 0.45, f + 0.026], { ink: false }));
+      depth = f + 0.03;
+    };
     switch (shape) {
-      case 'guitar': g.add(P(G('sphere', 0.26, 14, 10), col, [0, -0.1, 0], Object.assign({ scale: [1, 1.2, 0.35] }, o))); g.add(P(G('box', 0.06, 0.6, 0.05), '#3b2a1a', [0, 0.4, 0])); break;
-      case 'drum': g.add(P(G('cyl', 0.3, 0.3, 0.32, 16), col, [0, 0, 0], o)); g.add(P(G('cyl', 0.31, 0.31, 0.04, 16), WHITE, [0, 0.17, 0], { ink: false })); break;
-      case 'bass': g.add(P(G('sphere', 0.32, 14, 10), col, [0, -0.15, 0], Object.assign({ scale: [0.9, 1.4, 0.35] }, o))); g.add(P(G('box', 0.07, 0.8, 0.06), '#2a1a0a', [0, 0.55, 0])); break;
-      case 'axe': g.add(P(G('box', 0.08, 1.0, 0.06), '#2a1a0a', [0, 0.2, 0])); g.add(P(G('box', 0.55, 0.45, 0.06), col, [0.12, -0.2, 0], o)); break;
-      case 'horn': g.add(P(G('cone', 0.2, 0.5, 14), col, [0, 0.1, 0], Object.assign({ rot: [Math.PI, 0, 0] }, o))); g.add(P(G('cyl', 0.05, 0.05, 0.4, 8), col, [0, -0.28, 0])); break;
-      case 'box': g.add(P(G('box', 0.5, 0.36, 0.26), col, [0, 0, 0], o)); g.add(P(G('box', 0.52, 0.06, 0.28), WHITE, [0, 0, 0], { ink: false })); break;
-      case 'banjo': g.add(P(G('cyl', 0.24, 0.24, 0.08, 16), col, [0, -0.1, 0], Object.assign({ rot: [Math.PI / 2, 0, 0] }, o))); g.add(P(G('box', 0.05, 0.6, 0.04), '#6b4226', [0, 0.38, 0])); break;
-      case 'keys': g.add(P(G('box', 0.62, 0.2, 0.06), col, [0, 0, 0], o)); g.add(P(G('box', 0.5, 0.06, 0.02), INK, [0, -0.02, 0.04], { ink: false })); break;
-      case 'harp': g.add(P(G('box', 0.44, 0.12, 0.1), col, [0, 0, 0], o)); for (let i = 0; i < 6; i++) g.add(P(G('box', 0.04, 0.05, 0.02), INK, [-0.17 + i * 0.068, 0, 0.055], { ink: false })); break;
-      case 'tuba': g.add(P(G('torus', 0.2, 0.06, 14), col, [0, -0.05, 0], Object.assign({ rot: [0, Math.PI / 2, 0] }, o))); g.add(P(G('cone', 0.22, 0.3, 16), col, [0, 0.26, 0], Object.assign({ rot: [Math.PI, 0, 0] }, o))); g.add(P(G('circle', 0.21, 16), '#3a2a10', [0, 0.415, 0], { rot: [-Math.PI / 2, 0, 0], ink: false })); break;
-      case 'antenna': g.add(P(G('box', 0.44, 0.24, 0.24), col, [0, 0, 0], o)); g.add(P(G('cyl', 0.012, 0.012, 0.5, 5), '#dfe6ee', [0.16, 0.37, 0], { ink: false })); g.add(P(G('torus', 0.1, 0.012, 6, 14), '#dfe6ee', [-0.24, 0.05, 0], { rot: [0, Math.PI / 2, 0], ink: false })); break;
-      default: g.add(P(G('sphere', 0.22, 14, 10), col, [0, -0.08, 0], Object.assign({ scale: [0.9, 1.3, 0.35] }, o))); g.add(P(G('box', 0.05, 0.5, 0.04), '#3b2a1a', [0, 0.35, 0]));
+      case 'strings': fiddle(0.2, 0.16, 0.2, 0.32); break;
+      case 'bass': fiddle(0.28, 0.21, 0.32, 0.3); break;
+      case 'guitar': {
+        g.add(P(G('sphere', 0.25, 18, 12), col, [0, -0.15, 0], O({ scale: [1, 0.95, 0.3] })));
+        g.add(P(G('sphere', 0.19, 18, 12), col, [0, 0.14, 0], O({ scale: [1, 0.95, 0.39] })));
+        g.add(P(G('circle', 0.065, 20), DARK, [0, 0.02, 0.078], { basic: true }));
+        g.add(P(G('torus', 0.07, 0.008, 20), '#fff4d6', [0, 0.02, 0.077], { ink: false }));
+        g.add(P(G('box', 0.14, 0.03, 0.02), DARK, [0, -0.23, 0.074], { ink: false }));
+        g.add(P(G('box', 0.065, 0.55, 0.04), '#3b2a1a', [0, 0.55, 0.02]));
+        g.add(P(G('box', 0.11, 0.15, 0.04), col, [0, 0.9, 0.02], o));
+        for (const sx of [-0.015, 0.015]) g.add(P(G('box', 0.004, 1.0, 0.004), '#fff4d6', [sx, 0.35, 0.082], { ink: false }));
+        depth = 0.09;
+        break;
+      }
+      case 'drum': {
+        /* bongos: two drums joined side by side, heads facing out */
+        for (const [x, r, h] of [[-0.13, 0.17, 0.15], [0.18, 0.13, 0.13]]) {
+          g.add(P(G('cyl', r, r * 0.85, h, 18), col, [x, 0, 0], O({ rot: [Math.PI / 2, 0, 0] })));
+          g.add(P(G('circle', r * 0.95, 20), '#fff8e8', [x, 0, h / 2 + 0.003], { basic: true }));
+          g.add(P(G('torus', r, 0.018, 20), '#6b4226', [x, 0, h / 2], { ink: false }));
+        }
+        g.add(P(G('box', 0.14, 0.1, 0.1), '#6b4226', [0.02, 0, 0]));
+        depth = 0.08;
+        break;
+      }
+      case 'axe': {
+        /* Marceline's axe bass: an axe head for a body */
+        g.add(P(G('box', 0.08, 1.0, 0.06), DARK, [0, 0.2, 0]));
+        g.add(P(G('box', 0.48, 0.42, 0.06), col, [0.1, -0.22, 0], o));
+        g.add(P(G('cone', 0.21, 0.2, 3), col, [0.4, -0.22, 0], O({ rot: [0, 0, -Math.PI / 2], scale: [1, 1, 0.28] })));
+        for (let i = 0; i < 4; i++) g.add(P(G('box', 0.004, 0.9, 0.004), SILVER, [-0.012 + i * 0.008, 0.2, 0.035], { ink: false }));
+        depth = 0.05;
+        break;
+      }
+      case 'horn': {
+        /* a trumpet, bell up */
+        g.add(P(G('cone', 0.13, 0.26, 16), col, [0, 0.3, 0], O({ rot: [Math.PI, 0, 0] })));
+        g.add(P(G('circle', 0.12, 16), '#3a2a10', [0, 0.425, 0], { basic: true, rot: [-Math.PI / 2, 0, 0] }));
+        g.add(P(G('cyl', 0.03, 0.03, 0.5, 8), col, [0, -0.08, 0], o));
+        g.add(P(G('torus', 0.09, 0.022, 16), col, [0.09, -0.12, 0], O({ rot: [0, Math.PI / 2, 0] })));
+        for (let i = 0; i < 3; i++) g.add(P(G('cyl', 0.022, 0.022, 0.1, 8), SILVER, [0.05, -0.05 + i * 0.07, 0.04], { rot: [Math.PI / 2, 0, 0] }));
+        g.add(P(G('cyl', 0.02, 0.035, 0.06, 8), SILVER, [0, -0.36, 0]));
+        depth = 0.13;
+        break;
+      }
+      case 'box': {
+        /* an accordion: two painted ends and pleated bellows */
+        for (const x of [-0.2, 0.2]) g.add(P(G('box', 0.12, 0.38, 0.26), col, [x, 0, 0], o));
+        g.add(P(G('box', 0.28, 0.34, 0.24), '#fff4d6', [0, 0, 0]));
+        for (let i = 0; i < 5; i++) g.add(P(G('box', 0.012, 0.35, 0.25), '#3a2a2a', [-0.11 + i * 0.055, 0, 0], { ink: false }));
+        for (let i = 0; i < 6; i++) g.add(P(G('box', 0.05, 0.035, 0.02), i % 2 ? BOARD : '#ffffff', [-0.2, -0.13 + i * 0.052, 0.135], { ink: false }));
+        depth = 0.13;
+        break;
+      }
+      case 'banjo': {
+        g.add(P(G('cyl', 0.2, 0.2, 0.07, 22), col, [0, -0.1, 0], O({ rot: [Math.PI / 2, 0, 0] })));
+        g.add(P(G('circle', 0.18, 22), '#fff8e8', [0, -0.1, 0.037], { basic: true }));
+        g.add(P(G('torus', 0.19, 0.014, 22), SILVER, [0, -0.1, 0.036], { ink: false }));
+        g.add(P(G('box', 0.05, 0.62, 0.035), '#6b4226', [0, 0.4, 0.01]));
+        g.add(P(G('box', 0.09, 0.13, 0.035), '#6b4226', [0, 0.76, 0.01]));
+        for (const sx of [-0.012, 0.012]) g.add(P(G('box', 0.004, 0.9, 0.004), SILVER, [sx, 0.3, 0.042], { ink: false }));
+        depth = 0.05;
+        break;
+      }
+      case 'keys': {
+        /* a keytar: a slanted body with a keyboard along it and a neck with a grip */
+        g.add(P(G('box', 0.62, 0.2, 0.07), col, [0, 0, 0], o));
+        g.add(P(G('box', 0.5, 0.08, 0.02), '#ffffff', [-0.03, -0.04, 0.042], { ink: false }));
+        for (let i = 0; i < 7; i++) if (i % 7 !== 2 && i % 7 !== 6) g.add(P(G('box', 0.03, 0.045, 0.02), BOARD, [-0.24 + i * 0.07, -0.02, 0.05], { ink: false }));
+        g.add(P(G('box', 0.32, 0.07, 0.05), col, [0.44, 0.08, 0], O({ rot: [0, 0, 0.25] })));
+        g.add(P(G('box', 0.1, 0.08, 0.06), BOARD, [0.6, 0.12, 0], { rot: [0, 0, 0.25] }));
+        depth = 0.05;
+        break;
+      }
+      case 'harp': {
+        /* a harmonica: small enough to clip onto his strap */
+        g.add(P(G('box', 0.26, 0.07, 0.07), col, [0, 0, 0], o));
+        g.add(P(G('box', 0.2, 0.05, 0.075), '#6f7684', [0, 0, 0], { ink: false }));
+        for (let i = 0; i < 7; i++) g.add(P(G('box', 0.016, 0.022, 0.02), BOARD, [-0.09 + i * 0.03, 0, 0.036], { ink: false }));
+        depth = 0.04;
+        g.userData.small = true;
+        break;
+      }
+      case 'tuba': {
+        g.add(P(G('torus', 0.2, 0.06, 18), col, [0, -0.1, 0], O({ rot: [0, 0, 0] })));
+        g.add(P(G('cone', 0.24, 0.36, 18), col, [0.12, 0.3, 0], O({ rot: [Math.PI, 0, -0.2] })));
+        g.add(P(G('circle', 0.23, 18), '#3a2a10', [0.16, 0.48, 0], { basic: true, rot: [-Math.PI / 2 + 0.2, 0, 0] }));
+        for (let i = 0; i < 3; i++) g.add(P(G('cyl', 0.026, 0.026, 0.12, 8), SILVER, [-0.06 + i * 0.06, -0.1, 0.07], { rot: [Math.PI / 2, 0, 0] }));
+        depth = 0.12;
+        break;
+      }
+      case 'antenna': {
+        /* a theremin: a wooden cabinet with a tall antenna and a loop */
+        g.add(P(G('box', 0.44, 0.24, 0.22), col, [0, 0, 0], o));
+        g.add(P(G('box', 0.38, 0.05, 0.225), '#3a2a2a', [0, 0.06, 0], { ink: false }));
+        for (const x of [-0.1, 0.1]) g.add(P(G('cyl', 0.03, 0.03, 0.03, 10), SILVER, [x, -0.05, 0.115], { rot: [Math.PI / 2, 0, 0], ink: false }));
+        g.add(P(G('cyl', 0.012, 0.012, 0.55, 6), SILVER, [0.16, 0.39, 0], { ink: false }));
+        g.add(P(G('torus', 0.09, 0.012, 14), SILVER, [-0.3, 0.02, 0], { rot: [0, Math.PI / 2, 0], ink: false }));
+        depth = 0.11;
+        break;
+      }
+      default: fiddle(0.2, 0.16, 0.2, 0.32);
     }
+    g.userData.depth = depth;
     return g;
   }
   const COLLAR_LOOK = { collar: '#e0423a', collar_spiked: '#2a2e38', collar_bell: '#3d8bfd', bow_tie: '#e0423a', collar_holding: '#ffcf3d', scarf_rainbow: '#ff8fc7', bandana: '#e0423a', collar_crystal: '#b77bff', cloak_wizard: '#6a3bb8' };
+
+  /* ---------- things that hug Jake ---------- */
+  /* Jake is built from these blobs (center, radii): his body, his head and his jowls. Collars, straps and
+     capes are shaped from them so they sit on him instead of sinking in or floating off. */
+  const JAKE_BLOBS = [
+    { c: [0, 0.72, 0], r: [0.62, 0.558, 0.533] },
+    { c: [0, 1.24, 0.05], r: [0.52, 0.52, 0.52] },
+    { c: [0.17, 1.07, 0.42], r: [0.2, 0.2, 0.2], jowl: true },
+    { c: [-0.17, 1.07, 0.42], r: [0.2, 0.2, 0.2], jowl: true },
+  ];
+  /* How far out from his middle Jake's surface is at height y, looking in direction a (0 = straight
+     ahead, PI = straight back). Jowls hang over collars, so they're left out unless asked for. */
+  function jakeR(a, y, jowls) {
+    const dx = Math.sin(a), dz = Math.cos(a);
+    let best = 0;
+    for (const { c, r, jowl } of JAKE_BLOBS) {
+      if (jowl && !jowls) continue;
+      const A = (dx / r[0]) ** 2 + (dz / r[2]) ** 2;
+      const B = -2 * ((dx * c[0]) / (r[0] * r[0]) + (dz * c[2]) / (r[2] * r[2]));
+      const C = (c[0] / r[0]) ** 2 + ((y - c[1]) / r[1]) ** 2 + (c[2] / r[2]) ** 2 - 1;
+      const disc = B * B - 4 * A * C;
+      if (disc >= 0) best = Math.max(best, (-B + Math.sqrt(disc)) / (2 * A));
+    }
+    return best;
+  }
+  const jakeAt = (a, y, out) => { const r = jakeR(a, y) + (out || 0); return [Math.sin(a) * r, y, Math.cos(a) * r]; };
+  /* A strap around Jake on a tilted ring, y = y0 - tz*cos(a) - tx*sin(a) (tz > 0: lower in front than at
+     the back). It is h tall and sits t proud of his surface; o.from/o.to make it an open arc, o.rows
+     lets a tall strip follow his curves, and o.flare pushes its lower edge out (a cape). Built around
+     y0, so place the mesh at y0. */
+  function jakeBand(y0, tz, tx, h, t, o) {
+    o = o || {};
+    const open = o.from != null, a0 = open ? o.from : 0, a1 = open ? o.to : Math.PI * 2;
+    const N = o.n || 56, M = open ? N + 1 : N, rows = Math.max(2, o.rows || 2), flare = o.flare || 0;
+    const sec = [[h / 2, 0, 0]];
+    for (let k = 0; k < rows; k++) sec.push([h / 2 - (h * k) / (rows - 1), 1, k / (rows - 1)]);
+    sec.push([-h / 2, 0, 1]);
+    const S = sec.length, pos = [], idx = [];
+    for (let i = 0; i < M; i++) {
+      const a = a0 + ((a1 - a0) * i) / N, s = Math.sin(a), c = Math.cos(a);
+      const yc = y0 - tz * c - tx * s;
+      for (const [dy, out, f] of sec) {
+        const y = yc + dy, r = jakeR(a, y) + (out ? t + flare * f * f : -0.02);
+        pos.push(s * r, y - y0, c * r);
+      }
+    }
+    for (let i = 0; i < N; i++) {
+      const j = open ? i + 1 : (i + 1) % N;
+      for (let k = 0; k < S; k++) { const k2 = (k + 1) % S; idx.push(i * S + k, i * S + k2, j * S + k2, i * S + k, j * S + k2, j * S + k); }
+    }
+    if (open) { const e = (M - 1) * S; for (let k = 1; k < S - 1; k++) idx.push(0, k + 1, k, e, e + k, e + k + 1); }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    return g;
+  }
+  /* A piece of cloth lying on Jake (a bandana's point, a cape): u runs 0 (top) to 1 (bottom); at each
+     u it spans ac +- half(u) around him at height y(u, a), t thick, off above his skin. */
+  function jakePatch(ac, half, yOf, off, t, o) {
+    o = o || {};
+    const U = o.rows || 8, K = o.cols || 14, flare = o.flare || 0, pos = [], idx = [];
+    for (const layer of [0, 1]) for (let i = 0; i <= U; i++) for (let j = 0; j <= K; j++) {
+      const u = i / U, hw = half(u), a = ac - hw + (2 * hw * j) / K, y = yOf(u, a);
+      const r = jakeR(a, y, o.jowls) + off + flare * u * u + (layer ? 0 : t);
+      pos.push(Math.sin(a) * r, y, Math.cos(a) * r);
+    }
+    const L = (U + 1) * (K + 1), v = (l, i, j) => l * L + i * (K + 1) + j;
+    for (let i = 0; i < U; i++) for (let j = 0; j < K; j++) {
+      idx.push(v(0, i, j), v(0, i + 1, j), v(0, i + 1, j + 1), v(0, i, j), v(0, i + 1, j + 1), v(0, i, j + 1));
+      idx.push(v(1, i, j), v(1, i + 1, j + 1), v(1, i + 1, j), v(1, i, j), v(1, i, j + 1), v(1, i + 1, j + 1));
+    }
+    for (let j = 0; j < K; j++) {
+      idx.push(v(0, 0, j), v(0, 0, j + 1), v(1, 0, j + 1), v(0, 0, j), v(1, 0, j + 1), v(1, 0, j));
+      idx.push(v(0, U, j), v(1, U, j), v(1, U, j + 1), v(0, U, j), v(1, U, j + 1), v(0, U, j + 1));
+    }
+    for (let i = 0; i < U; i++) {
+      idx.push(v(0, i, 0), v(1, i, 0), v(1, i + 1, 0), v(0, i, 0), v(1, i + 1, 0), v(0, i + 1, 0));
+      idx.push(v(0, i, K), v(0, i + 1, K), v(1, i + 1, K), v(0, i, K), v(1, i + 1, K), v(1, i, K));
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    return g;
+  }
+  /* Jake's collars sit where his head meets his body: low at the throat, tucked under his jowls, and
+     higher at the back of his neck. */
+  const NECK = { y: 0.97, tz: 0.12 };
+  const neckY = (a) => NECK.y - NECK.tz * Math.cos(a);
+  function jakeCollar(body, it) {
+    const art = DT.meta.loot.artOf(it);
+    const col = COLLAR_LOOK[art] || '#e0423a';
+    const glow = it.unique ? { emissive: col, ei: 0.25 } : {};
+    const band = (color, h, t, o) => { const m = P(jakeBand(NECK.y, NECK.tz, 0, h, t, o), color, [0, NECK.y, 0], Object.assign({ inkW: 0.016 }, o && o.mat)); body.add(m); return m; };
+    /* something hanging from the front of the collar (a tag, a bell), dy below the band's middle */
+    const front = (dy, out) => jakeAt(0, neckY(0) - dy, out);
+    if (art === 'bow_tie') {
+      band(col, 0.05, 0.03);
+      const [x, y, z] = jakeAt(0, neckY(0), 0.06);
+      const bow = new THREE.Group();
+      bow.position.set(x, y, z);
+      for (const s of [-1, 1]) bow.add(P(G('cone', 0.075, 0.17, 4), col, [0.085 * s, 0, 0], { rot: [0, 0, (-Math.PI / 2) * s], scale: [1, 1, 0.55] }));
+      bow.add(P(G('sphere', 0.045, 10, 8), '#b8322b', [0, 0, 0.01]));
+      body.add(bow);
+    } else if (art === 'scarf_rainbow') {
+      /* Lady Rainicorn's colors, wrapped round his neck in stripes, with two tails hanging down the back */
+      const RB = ['#ff5f6d', '#ffa94d', '#ffe066', '#6bd66b', '#5fb3ff', '#b77bff'];
+      const n = RB.length;
+      for (let i = 0; i < n; i++) band(RB[i], 0.15, 0.06, { from: (i / n) * Math.PI * 2 - 0.01, to: ((i + 1) / n) * Math.PI * 2 + 0.01, n: 10, mat: { emissive: RB[i], ei: 0.15 } });
+      for (const [a, len] of [[Math.PI - 0.35, 0.34], [Math.PI - 0.12, 0.26]]) {
+        const yTop = neckY(a) - 0.05;
+        for (let k = 0; k < 3; k++) body.add(P(jakePatch(a, () => 0.075, (u) => yTop - (u * len) / 3 - (k * len) / 3, 0.035, 0.03, { rows: 2, cols: 4 }), RB[(k * 2 + (a > 2.9 ? 1 : 0)) % n], [0, 0, 0], { inkW: 0.012 }));
+      }
+    } else if (art === 'bandana') {
+      band(col, 0.09, 0.04);
+      /* the point of the bandana hangs down his chest */
+      const yTop = neckY(0) - 0.035;
+      body.add(P(jakePatch(0, (u) => 0.55 * (1 - u) + 0.02, (u) => yTop - u * 0.26, 0.012, 0.025, { rows: 8, cols: 14 }), col, [0, 0, 0], { inkW: 0.012 }));
+      for (const [a, dy] of [[-0.22, 0.07], [0.2, 0.08], [0, 0.15], [-0.08, 0.04], [0.1, 0.2]]) {
+        const [x, y, z] = jakeAt(a, yTop - dy, 0.043);
+        body.add(P(G('sphere', 0.022, 8, 6), WHITE, [x, y, z], { ink: false, scale: [1, 1, 0.4], rot: [0, a, 0] }));
+      }
+      const [kx, ky, kz] = jakeAt(Math.PI, neckY(Math.PI), 0.05);
+      body.add(P(G('sphere', 0.05, 10, 8), col, [kx, ky, kz]));
+      for (const s of [-1, 1]) body.add(P(G('cone', 0.035, 0.14, 5), col, [kx + 0.04 * s, ky - 0.08, kz - 0.02], { rot: [0.3, 0, 0.4 * s] }));
+    } else if (art === 'cloak_wizard') {
+      /* a little wizard capelet: a purple cape with a gold lining hanging off the collar, a star clasp */
+      band(col, 0.08, 0.035);
+      const cape = (off, t, color) => P(jakePatch(Math.PI, (u) => 1.2 + u * 0.15, (u, a) => neckY(a) - 0.03 - u * 0.52, off, t, { rows: 10, cols: 22, flare: 0.07 }), color, [0, 0, 0], { inkW: 0.014 });
+      body.add(cape(0.02, 0.03, col));
+      const [cx, cy, cz] = jakeAt(0, neckY(0), 0.06);
+      body.add(P(G('star4', 0.075), '#ffe14a', [cx, cy, cz], { basic: true }));
+      body.add(P(G('sphere', 0.035, 8, 6), '#ffcf3d', [cx, cy, cz - 0.01]));
+      const [sx, sy, sz] = jakeAt(Math.PI, neckY(Math.PI) - 0.3, 0.1);
+      body.add(P(G('star4', 0.09), '#ffe14a', [sx, sy, sz], { basic: true, rot: [0, Math.PI, 0] }));
+    } else {
+      band(col, 0.11, 0.045, { mat: glow });
+      if (art === 'collar' || art === 'collar_holding') {
+        /* a round name tag on a little ring */
+        const gold = art === 'collar_holding';
+        const [rx, ry, rz] = front(0.07, 0.05);
+        body.add(P(G('torus', 0.025, 0.008, 10), '#c9a03a', [rx, ry, rz], { ink: false }));
+        const [tx, ty, tz] = front(0.13, 0.055);
+        body.add(P(G('cyl', 0.06, 0.06, 0.02, 16), gold ? '#b77bff' : '#ffcf3d', [tx, ty, tz], { rot: [Math.PI / 2 - 0.25, 0, 0], emissive: gold ? '#8f5bff' : null, ei: gold ? 0.4 : 0 }));
+        if (gold) for (const s of [-1, 1]) { const [bx, by, bz] = jakeAt(0.45 * s, neckY(0.45 * s), 0.05); body.add(P(G('octa', 0.035), '#fff4c2', [bx, by, bz], { ink: false, emissive: '#ffe066', ei: 0.4 })); }
+      }
+      if (art === 'collar_bell') {
+        const [x, y, z] = front(0.12, 0.07);
+        const bell = new THREE.Group();
+        bell.position.set(x, y, z);
+        bell.add(P(G('sphere', 0.075, 14, 10), '#ffcf3d', [0, 0, 0], { emissive: '#ffb000', ei: 0.15 }));
+        bell.add(P(G('box', 0.1, 0.012, 0.02), '#8a6a10', [0, -0.018, 0.07], { ink: false }));
+        bell.add(P(G('sphere', 0.018, 8, 6), '#8a6a10', [0, -0.05, 0.05], { ink: false }));
+        bell.add(P(G('torus', 0.022, 0.008, 10), '#c9a03a', [0, 0.08, 0], { ink: false }));
+        body.add(bell);
+      }
+      if (art === 'collar_spiked') {
+        for (let i = 0; i < 12; i++) {
+          const a = (i / 12) * Math.PI * 2;
+          const spike = new THREE.Group();
+          spike.rotation.y = a;
+          spike.position.y = neckY(a);
+          spike.add(P(G('cone', 0.035, 0.11, 6), '#e8edf2', [0, 0, jakeR(a, neckY(a)) + 0.08], { rot: [Math.PI / 2, 0, 0], inkT: 0.12 }));
+          body.add(spike);
+        }
+      }
+      if (art === 'collar_crystal') {
+        const gems = ['#d9ccff', '#9fe3ff', '#ffc2e8'];
+        for (let i = 0; i < 9; i++) {
+          const a = (i / 9) * Math.PI * 2;
+          const [x, y, z] = jakeAt(a, neckY(a), 0.065);
+          body.add(P(G('octa', 0.05), gems[i % 3], [x, y, z], { rot: [0, a, 0.3], scale: [0.8, 1.3, 0.8], emissive: '#8f6bff', ei: 0.35, inkT: 0.1 }));
+        }
+      }
+    }
+  }
   MD.jake = function (eq) {
     eq = eq || {};
     const g = new THREE.Group();
@@ -297,30 +591,29 @@
       body.add(P(G('cyl', 0.1, 0.1, 0.24, 10), OR, [0.26 * s, 0.14, 0]));
       body.add(P(G('sphere', 0.13, 12, 10), OR, [0.26 * s, 0.06, 0.08], { scale: [1, 0.6, 1.3] }));
     }
-    if (eq.collar) {
-      const art = DT.meta.loot.artOf(eq.collar);
-      const col = COLLAR_LOOK[art] || '#e0423a';
-      if (art === 'bow_tie') { for (const s of [-1, 1]) body.add(P(G('cone', 0.1, 0.16, 4), col, [0.09 * s, 0.9, 0.5], { rot: [0, 0, (Math.PI / 2) * s] })); }
-      else if (art === 'scarf_rainbow') { body.add(P(G('torus', 0.46, 0.07, 18), col, [0, 0.92, 0.02], { rot: [Math.PI / 2, 0, 0], emissive: '#ff5fb4', ei: 0.3 })); }
-      else if (art === 'bandana') { body.add(P(G('torus', 0.46, 0.06, 18), col, [0, 0.92, 0.02], { rot: [Math.PI / 2, 0, 0] })); body.add(P(G('cone', 0.2, 0.3, 3), col, [0, 0.8, 0.5], { rot: [Math.PI + 0.3, 0, 0] })); for (let i = 0; i < 3; i++) body.add(P(G('sphere', 0.025, 6, 4), WHITE, [-0.07 + i * 0.07, 0.8, 0.56], { ink: false })); }
-      else if (art === 'cloak_wizard') {
-        /* a little wizard capelet over Jake's shoulders */
-        body.add(P(G('torus', 0.46, 0.05, 18), col, [0, 0.95, 0.02], { rot: [Math.PI / 2, 0, 0] }));
-        body.add(P(G('tube', 0.5, 0.64, 0.28, 18, Math.PI), col, [0, 0.95, -0.02], { rot: [0, Math.PI / 2, 0] }));
-        body.add(P(G('tubein', 0.5, 0.64, 0.28, 18, Math.PI), '#ffcf3d', [0, 0.95, -0.02], { rot: [0, Math.PI / 2, 0], ink: false }));
-        body.add(P(G('star4', 0.08), '#ffe14a', [0.22, 0.95, -0.6], { basic: true, rot: [0, Math.PI, 0] }));
-      }
-      else body.add(P(G('torus', 0.46, 0.05, 18), col, [0, 0.92, 0.02], { rot: [Math.PI / 2, 0, 0] }));
-      if (art === 'collar_bell' || art === 'collar_holding') body.add(P(G('sphere', 0.07, 10, 8), '#ffcf3d', [0, 0.84, 0.46]));
-      if (art === 'collar_crystal') for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI - Math.PI / 2; body.add(P(G('octa', 0.06), '#d9ccff', [Math.sin(a) * 0.46, 0.9, Math.cos(a) * 0.46], { emissive: '#8f6bff', ei: 0.4, ink: false })); }
-      if (art === 'collar_spiked') for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; body.add(P(G('cone', 0.03, 0.1, 5), '#dfe6ee', [Math.sin(a) * 0.5, 0.92, Math.cos(a) * 0.5], { rot: [Math.PI / 2, 0, -a], ink: false })); }
-    }
+    if (eq.collar) jakeCollar(body, eq.collar);
     if (eq.instrument) {
+      /* slung on a leather strap across his body: most instruments ride on his back, the harmonica is
+         clipped to the strap in front */
+      const STRAP = { y: 0.72, tx: 0.19 };
+      const strapY = (a) => STRAP.y - STRAP.tx * Math.sin(a);
+      body.add(P(jakeBand(STRAP.y, 0, STRAP.tx, 0.065, 0.028), '#7a4a24', [0, STRAP.y, 0], { inkW: 0.014 }));
+      const [bx, by, bz] = jakeAt(0, strapY(0), 0.035);
+      body.add(P(G('box', 0.085, 0.085, 0.02), '#c9a03a', [bx, by, bz], { rot: [0, 0, 0.3] }));
       const inst = instrumentMesh(eq.instrument);
-      inst.position.set(0, 0.9, -0.6);
-      inst.rotation.z = 0.5;
-      body.add(inst);
-      p.instrument = inst;
+      const holder = new THREE.Group();
+      if (inst.userData.small) {
+        const a = 0.6, y = strapY(a);
+        holder.position.set(...jakeAt(a, y, inst.userData.depth + 0.02));
+        holder.rotation.set(0, a, -0.25);
+      } else {
+        const a = Math.PI, y = strapY(a) + 0.12;
+        holder.position.set(...jakeAt(a, y, inst.userData.depth + 0.05));
+        holder.rotation.set(0, Math.PI, -0.55);
+      }
+      holder.add(inst);
+      body.add(holder);
+      p.instrument = holder;
     }
     const fistCol = eq.instrument && eq.instrument.rarity >= 3 ? D.RARITIES[eq.instrument.rarity].color : null;
     for (const s of [-1, 1]) {
@@ -570,8 +863,8 @@
     }
     return g;
   };
-  /* Landmarks of Ooo far behind the Tree Fort, for the title screen's opening sweep (like the show's
-     intro): the Ice Kingdom's mountain, the Candy Kingdom and a broken old highway from before the war. */
+  /* Landmarks of Ooo around the Tree Fort, for the title screen's opening sweep (like the show's intro):
+     the Ice Kingdom's mountain, the Candy Kingdom and a broken old highway from before the war. */
   MD.oooLandmarks = function () {
     const g = new THREE.Group();
     /* the Ice Kingdom */
@@ -598,8 +891,8 @@
     g.add(cc);
     /* a broken highway from before the Mushroom War, grown over */
     const hw = new THREE.Group();
-    hw.position.set(-22, 0, -48);
-    hw.rotation.y = 0.35;
+    hw.position.set(-90, 0, 0);
+    hw.rotation.y = 1.05;
     for (const x of [-14, 0, 13]) hw.add(P(G('box', 2.2, 9, 2.2), '#a9a9ae', [x, 4.5, 0]));
     hw.add(P(G('box', 16, 1.4, 6), '#9a9aa0', [-7, 9.6, 0]));
     const broken = P(G('box', 10, 1.4, 6), '#9a9aa0', [10, 8.2, 0]);
@@ -607,11 +900,14 @@
     hw.add(broken);
     hw.add(P(G('box', 16.2, 0.3, 0.3), '#ffe066', [-7, 10.35, 0], { ink: false }));
     for (const [x, y] of [[-12, 10.6], [-3, 10.7], [6, 9.6]]) hw.add(P(G('sphere', 1.6, 12, 10), '#5fbf4a', [x, y, 2.4], { scale: [1.3, 0.8, 1] }));
+    /* an old car, half sunk into the grass under the broken end */
     const car = new THREE.Group();
-    car.position.set(4, 1.1, 6);
-    car.rotation.set(0.1, 0.8, 0.35);
-    car.add(P(G('box', 4.4, 1.6, 2.2), '#c2413a', [0, 0, 0]));
-    car.add(P(G('box', 2.4, 1.1, 2.0), '#9a2a24', [-0.3, 1.2, 0]));
+    car.position.set(9, 0.5, 4.5);
+    car.rotation.set(0.12, 0.7, 0.18);
+    car.add(P(G('box', 4.4, 1.5, 2.2), '#c2413a', [0, 0, 0]));
+    car.add(P(G('box', 2.4, 1.0, 2.0), '#9a2a24', [-0.3, 1.2, 0]));
+    for (const x of [-1.4, 1.4]) car.add(P(G('cyl', 0.5, 0.5, 2.3, 12), '#2e2e36', [x, -0.6, 0], { rot: [Math.PI / 2, 0, 0] }));
+    car.add(P(G('sphere', 1.1, 12, 8), '#5fbf4a', [-1.6, 1.4, 0.4], { scale: [1.2, 0.5, 1] }));
     hw.add(car);
     g.add(hw);
     /* a far ring of green hills */
@@ -677,7 +973,7 @@
     g.add(lid);
     const lock = new THREE.Group();
     lock.add(P(G('box', 0.22, 0.2, 0.06), '#8a8f9a', [0, 0.36, 0.36]));
-    lock.add(P(G('torus', 0.07, 0.025, 8, 12, Math.PI), '#8a8f9a', [0, 0.48, 0.36], { ink: false }));
+    lock.add(P(G('torus', 0.07, 0.025, 12, Math.PI), '#8a8f9a', [0, 0.48, 0.36], { ink: false }));
     g.add(lock);
     g.userData.lid = lid;
     g.userData.lock = lock;
@@ -722,23 +1018,149 @@
   };
 
   /* The hub diorama: Finn and Jake's tree house. */
+  /* Finn and Jake's Tree Fort, like the show's: a huge old tree with rooms built into it. A fat trunk with
+     an arched front door and windows cut into it, a plank cabin with a red roof up in the branches, a deck
+     with a railing and a ladder up to it, a tire swing, a big puffy crown of leaves, and their boat (with
+     its beach umbrella) wedged in the very top as a lookout. The front faces +z. */
   MD.treeFort = function () {
     const g = new THREE.Group();
-    g.add(P(G('cyl', 60, 60, 1, 40), '#4f9e37', [0, -0.5, 0], { ink: false }));
-    for (const [x, z, r] of [[-26, -30, 16], [10, -38, 20], [34, -26, 14]]) g.add(P(G('sphere', r, 24, 14), '#3f8a30', [x, -r * 0.55, z], { ink: false }));
-    g.add(P(G('cyl', 1.3, 1.9, 9, 16), '#8b5a2b', [0, 4.5, 0]));
-    for (const [x, y, z, r] of [[0, 9.2, 0, 3.6], [2.6, 8.2, 1, 2.6], [-2.8, 8.4, 0.6, 2.8], [0.5, 11, -0.5, 2.6], [-1.2, 7.4, 2.4, 2.2], [2, 10.4, -1.6, 2.2]]) g.add(P(G('sphere', r, 20, 16), '#4fb84a', [x, y, z], { inkT: 0.03 }));
-    const house = new THREE.Group();
-    house.position.set(0, 4.8, 1.2);
-    house.add(P(G('box', 2.8, 2.0, 1.6), '#e7c08a', [0, 0, 0]));
-    house.add(P(G('cone', 2.2, 1.3, 4), '#c2413a', [0, 1.6, 0], { rot: [0, Math.PI / 4, 0] }));
-    for (const x of [-0.75, 0.75]) house.add(P(G('box', 0.6, 0.6, 0.06), '#7fd3f7', [x, 0.2, 0.82], { emissive: '#bfefff', ei: 0.3 }));
-    house.add(P(G('box', 0.6, 1.0, 0.06), '#6b4226', [0, -0.5, 0.82]));
-    g.add(house);
-    g.add(P(G('cyl', 2.6, 2.6, 0.18, 20), '#a8733f', [0, 3.4, 0.6]));
-    for (let i = 0; i < 7; i++) g.add(P(G('box', 0.7, 0.06, 0.1), '#8b5a2b', [2.3, 0.3 + i * 0.44, 1.7], { ink: false }));
-    g.add(P(G('box', 0.08, 3.2, 0.08), '#8b5a2b', [2.0, 1.7, 1.7], { ink: false }));
-    g.add(P(G('box', 0.08, 3.2, 0.08), '#8b5a2b', [2.6, 1.7, 1.7], { ink: false }));
+    const barkTex = GF.barkTexture();
+    barkTex.repeat.set(5, 2);
+    const bark = GF.texMat(barkTex);
+    const limbTex = GF.barkTexture();
+    limbTex.repeat.set(2, 1);
+    const limbMat = GF.texMat(limbTex);
+    const plank = GF.texMat(GF.plankTexture('#d3a46a'));
+    const deckWood = GF.texMat(GF.plankTexture('#b98a55'));
+    const WOOD = '#8a5a2b', DARKWOOD = '#5a3a1e', ROOF = '#c2413a', LEAF = '#4fb84a', LEAF2 = '#43a63f', LEAF3 = '#7ad35a';
+    /* the ground, a few far hills */
+    g.add(P(G('cyl', 170, 170, 1, 48), '#4f9e37', [0, -0.5, 0], { ink: false }));
+    for (const [x, z, r] of [[-30, -34, 16], [12, -44, 20], [38, -30, 14]]) g.add(P(G('sphere', r, 24, 14), '#3f8a30', [x, -r * 0.55, z], { ink: false }));
+    /* the trunk: flared at the roots, thick all the way up, swelling where it splits into branches */
+    const prof = [[3.3, 0], [2.8, 0.35], [2.45, 1.2], [2.2, 3], [2.05, 5.5], [2.1, 7.5], [2.35, 8.8], [2.7, 9.6], [2.2, 10.3], [0.05, 10.6]];
+    const trunkR = (y) => { for (let i = 1; i < prof.length; i++) if (y <= prof[i][1]) { const [r0, y0] = prof[i - 1], [r1, y1] = prof[i]; return r0 + ((r1 - r0) * (y - y0)) / (y1 - y0); } return 0.05; };
+    g.add(P(new THREE.LatheGeometry(prof.map(([r, y]) => new THREE.Vector2(r, y)), 28), null, [0, 0, 0], { mat: bark, inkW: 0.07 }));
+    /* roots spreading into the grass */
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2 + 0.35;
+      if (Math.abs(Math.sin(a / 2)) < 0.16) continue;
+      g.add(P(G('sphere', 1, 14, 10), null, [Math.sin(a) * 2.9, 0.05, Math.cos(a) * 2.9], { mat: limbMat, scale: [0.55, 0.42, 1.5], rot: [0, a, 0], inkT: 0.05 }));
+    }
+    /* a thick branch from a to b */
+    const limb = (a, b, r0, r1) => {
+      const dir = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      const m = P(G('cyl', r1, r0, dir.length(), 14), null, [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2], { mat: limbMat, inkW: 0.05 });
+      m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+      g.add(m);
+      g.add(P(G('sphere', r1, 12, 10), null, b, { mat: limbMat, inkT: 0.05 }));
+    };
+    limb([-0.9, 9.4, 0.3], [-5.0, 11.4, 1.0], 1.0, 0.6);
+    limb([1.0, 9.6, 0.0], [4.6, 13.0, -0.8], 0.95, 0.55);
+    limb([0.0, 10.0, -0.5], [0.3, 15.5, -1.4], 1.0, 0.55);
+    limb([1.4, 8.6, 0.9], [4.8, 9.2, 2.6], 0.55, 0.32);
+    limb([0.2, 15.0, -1.3], [0.5, 20.9, -0.9], 0.45, 0.28);
+    /* something set into the trunk's surface at angle a (0 = the front), height y */
+    const onTrunk = (a, y, out) => { const r = trunkR(y) + (out || 0); const grp = new THREE.Group(); grp.position.set(Math.sin(a) * r, y, Math.cos(a) * r); grp.rotation.y = a; g.add(grp); return grp; };
+    /* the front door: an arched wooden door in a dark frame, with a step and a lamp */
+    const door = onTrunk(0, 0, 0);
+    door.position.set(0, 0, 2.3);
+    door.add(P(G('box', 1.62, 2.1, 0.34), DARKWOOD, [0, 1.05, 0]));
+    door.add(P(G('wedge', 0.81, 0, Math.PI), DARKWOOD, [0, 2.1, 0.171], { ink: false }));
+    door.add(P(G('box', 1.3, 2.1, 0.34), WOOD, [0, 1.05, 0.03]));
+    door.add(P(G('wedge', 0.65, 0, Math.PI), WOOD, [0, 2.1, 0.202], { ink: false }));
+    for (const x of [-0.33, 0, 0.33]) door.add(P(G('box', 0.03, 2.5, 0.01), DARKWOOD, [x, 1.3, 0.205], { ink: false }));
+    door.add(P(G('sphere', 0.07, 10, 8), '#ffcf3d', [0.45, 1.05, 0.24], { ink: false }));
+    door.add(P(G('box', 2.0, 0.16, 0.9), '#9aa0a8', [0, 0.08, 0.75]));
+    /* a lantern hanging from an iron arm beside the door */
+    const lamp = onTrunk(-0.62, 2.6, 0);
+    lamp.add(P(G('box', 0.07, 0.07, 0.62), '#3a3f4b', [0, 0.1, 0.3]));
+    lamp.add(P(G('box', 0.025, 0.2, 0.025), '#3a3f4b', [0, 0, 0.58], { ink: false }));
+    lamp.add(P(G('cone', 0.16, 0.14, 6), '#3a3f4b', [0, -0.13, 0.58]));
+    lamp.add(P(G('cyl', 0.1, 0.12, 0.26, 6), '#ffe9a8', [0, -0.33, 0.58], { emissive: '#ffd36b', ei: 0.9 }));
+    lamp.add(P(G('cyl', 0.13, 0.13, 0.04, 6), '#3a3f4b', [0, -0.47, 0.58], { ink: false }));
+    /* windows cut into the trunk */
+    const round = onTrunk(-0.5, 4.4, 0.02);
+    round.add(P(G('torus', 0.48, 0.1, 22), DARKWOOD, [0, 0, 0]));
+    round.add(P(G('circle', 0.44, 22), '#9fe0ff', [0, 0, -0.02], { emissive: '#dff7ff', ei: 0.35 }));
+    round.add(P(G('box', 0.05, 0.86, 0.04), DARKWOOD, [0, 0, 0], { ink: false }));
+    round.add(P(G('box', 0.86, 0.05, 0.04), DARKWOOD, [0, 0, 0], { ink: false }));
+    for (const [a, y] of [[0.55, 7.2], [-1.35, 7.6]]) {
+      const w = onTrunk(a, y, 0.03);
+      w.add(P(G('box', 1.15, 1.25, 0.2), DARKWOOD, [0, 0, 0]));
+      w.add(P(G('box', 0.9, 1.0, 0.2), '#ffe9a8', [0, 0, 0.03], { emissive: '#ffd36b', ei: 0.55 }));
+      w.add(P(G('box', 0.06, 1.0, 0.22), DARKWOOD, [0, 0, 0.04], { ink: false }));
+      w.add(P(G('box', 0.9, 0.06, 0.22), DARKWOOD, [0, 0.02, 0.04], { ink: false }));
+      w.add(P(G('box', 1.35, 0.12, 0.3), WOOD, [0, -0.66, 0.08]));
+    }
+    /* a deck around the front of the trunk, with a railing and a ladder up to it */
+    const DY = 5.4, DR = 3.7;
+    const deck = P(G('cyl', DR, DR, 0.24, 30, Math.PI * 1.15), null, [0, DY, 0], { mat: deckWood, rot: [0, -Math.PI * 0.6, 0], inkT: 0.02 });
+    g.add(deck);
+    for (let i = 0; i <= 8; i++) {
+      const a = -Math.PI * 0.6 + (i / 8) * Math.PI * 1.15;
+      if (i === 6) continue;
+      g.add(P(G('box', 0.14, 0.95, 0.14), WOOD, [Math.sin(a) * (DR - 0.12), DY + 0.55, Math.cos(a) * (DR - 0.12)]));
+    }
+    const rail = P(G('torus', DR - 0.12, 0.07, 30, Math.PI * 1.15), WOOD, [0, DY + 1.0, 0], { rot: [Math.PI / 2, 0, -Math.PI * 0.05], inkT: 0.02 });
+    g.add(rail);
+    for (let i = 0; i < 12; i++) { const a = -Math.PI * 0.6 + (i / 11) * Math.PI * 1.15; g.add(P(G('box', 0.08, 0.2, 0.3), DARKWOOD, [Math.sin(a) * (DR - 0.5), DY - 0.2, Math.cos(a) * (DR - 0.5)], { rot: [0, a, 0], ink: false })); }
+    const la = -Math.PI * 0.6 + (6 / 8) * Math.PI * 1.15;
+    const ladder = new THREE.Group();
+    ladder.position.set(Math.sin(la) * (DR + 0.25), 0, Math.cos(la) * (DR + 0.25));
+    ladder.rotation.y = la;
+    for (const s of [-1, 1]) ladder.add(P(G('box', 0.12, DY + 1.1, 0.12), WOOD, [0.38 * s, (DY + 1.1) / 2, 0]));
+    for (let i = 0; i < 12; i++) ladder.add(P(G('box', 0.8, 0.08, 0.1), WOOD, [0, 0.35 + i * 0.47, 0], { ink: false }));
+    ladder.rotation.x = -0.12;
+    g.add(ladder);
+    /* the cabin up in the branches: plank walls, a red roof, a glowing window, a little porch */
+    const cab = new THREE.Group();
+    cab.position.set(-5.2, 10.2, 1.4);
+    cab.rotation.y = 0.45;
+    cab.add(P(G('box', 3.8, 0.28, 3.4), null, [0, -1.25, 0], { mat: deckWood }));
+    cab.add(P(G('box', 3.0, 2.3, 2.6), null, [0, 0, 0], { mat: plank }));
+    const roof = P(G('cone', 2.75, 1.7, 4), ROOF, [0, 2.0, 0], { rot: [0, Math.PI / 4, 0], scale: [1.05, 1, 0.93] });
+    cab.add(roof);
+    cab.add(P(G('box', 0.5, 0.9, 0.5), '#9aa0a8', [0.8, 2.4, -0.4]));
+    cab.add(P(G('box', 1.0, 0.9, 0.12), DARKWOOD, [-0.55, 0.2, 1.32]));
+    cab.add(P(G('box', 0.8, 0.7, 0.12), '#ffe9a8', [-0.55, 0.2, 1.36], { emissive: '#ffd36b', ei: 0.55 }));
+    cab.add(P(G('box', 0.05, 0.7, 0.14), DARKWOOD, [-0.55, 0.2, 1.4], { ink: false }));
+    cab.add(P(G('box', 0.7, 1.5, 0.12), DARKWOOD, [0.75, -0.35, 1.32]));
+    for (const x of [-1.7, 1.7]) cab.add(P(G('box', 0.14, 2.2, 0.14), DARKWOOD, [x, -2.3, 0.9], { rot: [0.35, 0, x > 0 ? 0.35 : -0.35] }));
+    g.add(cab);
+    /* a tire swing on the low branch */
+    g.add(P(G('cyl', 0.035, 0.035, 5.0, 6), '#d9c9a0', [4.7, 6.7, 2.6], { ink: false }));
+    g.add(P(G('torus', 0.5, 0.2, 18), '#2e2e36', [4.7, 4.0, 2.6], { rot: [0, 0.35, 0] }));
+    /* the crown: big puffy clumps of leaves, lighter bumps on top */
+    const crown = [[0, 15.6, -0.8, 4.3], [-3.8, 14.4, 0.2, 3.3], [3.8, 14.6, -0.6, 3.4], [-1.6, 17.8, -1.6, 3.0], [2.2, 17.4, -2.0, 2.9],
+      [-5.9, 13.2, -1.8, 2.5], [6.0, 12.9, -1.6, 2.4], [0.8, 13.0, 2.2, 2.7], [-2.2, 12.6, 3.0, 2.0], [3.4, 12.3, 2.6, 2.0], [-4.6, 16.4, -2.6, 2.3], [4.6, 16.2, -2.8, 2.3]];
+    crown.forEach(([x, y, z, r], i) => g.add(P(G('sphere', r, 22, 16), i % 2 ? LEAF2 : LEAF, [x, y, z], { inkT: 0.03 })));
+    for (const [x, y, z, r] of [[0.8, 18.6, 1.2, 1.5], [-3.2, 16.4, 1.8, 1.2], [3.6, 16.8, 1.2, 1.3], [-0.6, 15.8, 3.4, 1.4], [4.2, 13.6, 2.2, 1.1]]) g.add(P(G('sphere', r, 16, 12), LEAF3, [x, y, z], { inkT: 0.04 }));
+    /* the boat lookout at the very top, with a beach umbrella */
+    const boat = new THREE.Group();
+    boat.position.set(0.5, 21.3, -0.8);
+    boat.rotation.set(0.05, 0.5, -0.06);
+    boat.scale.setScalar(1.25);
+    boat.add(P(G('cap', 1, Math.PI / 2), '#b5533c', [0, 0, 0], { rot: [Math.PI, 0, 0], scale: [1.8, 0.62, 0.8] }));
+    boat.add(P(G('torus', 1, 0.07, 32), '#f4e3c0', [0, 0.02, 0], { rot: [Math.PI / 2, 0, 0], scale: [1.8, 0.8, 1] }));
+    boat.add(P(G('circle', 0.95, 24), '#8a5a2b', [0, -0.14, 0], { rot: [-Math.PI / 2, 0, 0], scale: [1.75, 0.75, 1], ink: false }));
+    boat.add(P(G('box', 0.08, 0.5, 1.2), '#f4e3c0', [0.5, -0.1, 0], { ink: false }));
+    boat.add(P(G('cyl', 0.04, 0.04, 2.2, 6), '#f4f4f4', [-0.3, 1.0, 0], { ink: false, rot: [0, 0, 0.12] }));
+    boat.add(P(G('cone', 1.25, 0.55, 10), '#e0423a', [-0.44, 2.2, 0], { rot: [0, 0, 0.12] }));
+    boat.add(P(G('cone', 0.45, 0.2, 10), '#ffffff', [-0.47, 2.44, 0], { rot: [0, 0, 0.12], ink: false }));
+    boat.add(P(G('torus', 1.22, 0.05, 20), '#ffffff', [-0.41, 1.95, 0], { rot: [Math.PI / 2, 0.12, 0], ink: false }));
+    boat.add(P(G('cyl', 0.07, 0.1, 0.8, 8), '#ffcf3d', [0.9, 0.5, 0.2], { rot: [0, 0, -0.9] }));
+    g.add(boat);
+    /* a path of flat stepping stones from the front door out across the grass */
+    for (let i = 0; i < 9; i++) {
+      const z = 3.9 + i * 1.25, x = Math.sin(i * 0.7) * 0.5 + i * 0.12;
+      g.add(P(G('cyl', 0.5 - (i % 2) * 0.08, 0.5 - (i % 2) * 0.08, 0.06, 12), '#d9c9a0', [x, 0.02, z], { scale: [1.2, 1, 0.8], rot: [0, i * 0.9, 0], ink: false }));
+    }
+    /* flowers and rocks around the roots */
+    for (const [x, z, c] of [[-3.6, 3.2, '#ff8fc7'], [3.9, 3.0, '#ffe066'], [-4.8, 1.2, '#ffffff'], [5.2, 1.6, '#ff8fc7'], [-2.2, 4.6, '#ffe066'], [2.6, 4.9, '#ffffff']]) {
+      g.add(P(G('cyl', 0.02, 0.02, 0.3, 4), '#3f8a30', [x, 0.15, z], { ink: false }));
+      g.add(P(G('sphere', 0.12, 8, 6), c, [x, 0.34, z], { inkT: 0.2 }));
+    }
+    for (const [x, z, r] of [[-5.4, 3.4, 0.5], [5.8, 3.8, 0.4], [-6.2, -1, 0.7]]) g.add(P(G('dodeca', r), '#a3a8b0', [x, r * 0.4, z], { scale: [1, 0.7, 1] }));
     const bmo = new THREE.Group();
     bmo.add(P(G('box', 0.5, 0.65, 0.3), '#5ec7b5', [0, 0.45, 0]));
     bmo.add(P(G('box', 0.38, 0.28, 0.02), '#cff5e9', [0, 0.55, 0.16], { ink: false }));

@@ -333,7 +333,7 @@
       /* the bow arm is held out in front, so the bow stands upright */
       p.arms[0].rotation.x = -1.35;
       const bow = grp(p.arms[0], 0, -0.48, 0);
-      const arc = P(G('torus', 0.3, 0.025, 6, 16, Math.PI), '#8a5a2b', [0, 0, 0]);
+      const arc = P(G('torus', 0.3, 0.025, 16, Math.PI), '#8a5a2b', [0, 0, 0]);
       arc.rotation.order = 'YXZ'; arc.rotation.set(Math.PI, Math.PI / 2, 0);
       bow.add(arc);
       bow.add(P(G('cyl', 0.006, 0.006, 0.6, 4), '#e8e2cf', [0, 0, 0], { ink: false, rot: [Math.PI / 2, 0, 0] }));
@@ -578,7 +578,7 @@
     hd.add(P(G('cyl', 0.25, 0.3, 0.5, 20), MET, [0, 0, 0]));
     hd.add(P(G('torus', 0.3, 0.025, 20), '#6f7684', [0, -0.24, 0], { rot: [Math.PI / 2, 0, 0] }));
     hd.add(P(G('torus', 0.25, 0.018, 20), '#6f7684', [0, 0.24, 0], { rot: [Math.PI / 2, 0, 0] }));
-    hd.add(P(G('torus', 0.27, 0.014, 6, 20, Math.PI), '#6f7684', [0, 0.22, 0], { ink: false }));
+    hd.add(P(G('torus', 0.27, 0.014, 20, Math.PI), '#6f7684', [0, 0.22, 0], { ink: false }));
     hd.add(P(G('box', 0.34, 0.05, 0.02), INK, [0, 0.02, 0.285], { ink: false }));
     for (const s of [-1, 1]) hd.add(P(G('sphere', 0.024, 6, 4), '#ffe14a', [0.08 * s, 0.02, 0.295], { basic: true }));
     p.arms = [];
@@ -601,7 +601,7 @@
     const nice = grp(hd);
     nice.add(P(G('sphere', 0.24, 16, 12), '#ffe0cc', [0, 0, 0]));
     nice.add(P(G('cap', 0.255, 1.25), '#ffd95a', [0, 0.02, -0.02], { rot: [-0.25, 0, 0] }));
-    for (const s of [-1, 1]) nice.add(P(G('torus', 0.035, 0.01, 8, 10, Math.PI), INK, [0.08 * s, 0.02, 0.23], { ink: false }));
+    for (const s of [-1, 1]) nice.add(P(G('torus', 0.035, 0.01, 10, Math.PI), INK, [0.08 * s, 0.02, 0.23], { ink: false }));
     smile(nice, -0.08, 0.225, 0.04);
     const ugly = grp(hd);
     ugly.visible = false;
@@ -769,7 +769,7 @@
     const can = grp(p.arms[0], 0, -0.5, 0.12);
     can.add(P(G('cyl', 0.13, 0.15, 0.24, 14), '#e0423a', [0, -0.06, 0]));
     can.add(P(G('cyl', 0.025, 0.02, 0.34, 6), '#e0423a', [0, 0.02, 0.2], { rot: [1.1, 0, 0] }));
-    can.add(P(G('torus', 0.09, 0.02, 6, 12, Math.PI), '#c0302a', [0, 0.08, -0.12], { rot: [0, Math.PI / 2, 0], ink: false }));
+    can.add(P(G('torus', 0.09, 0.02, 12, Math.PI), '#c0302a', [0, 0.08, -0.12], { rot: [0, Math.PI / 2, 0], ink: false }));
     const staff = grp(p.arms[1], 0, -0.5, 0.05);
     staff.add(P(G('cyl', 0.03, 0.03, 1.5, 6), '#6b4226', [0, 0.35, 0]));
     const flies = grp(staff, 0, 1.15, 0);
@@ -874,7 +874,7 @@
     p.head = hd;
     hd.add(P(G('sphere', 0.5, 20, 16), FACE, [0, 0, 0], { emissive: '#fff6c8', ei: 0.15 }));
     for (const [x, y, r] of [[-0.22, 0.24, 0.08], [0.26, 0.18, 0.06], [0.14, -0.28, 0.07], [-0.3, -0.12, 0.05]]) hd.add(P(G('sphere', r, 10, 8), '#d8cfa8', [x, y, Math.sqrt(0.25 - x * x - y * y) - 0.02], { ink: false, scale: [1, 1, 0.3] }));
-    for (const s of [-1, 1]) hd.add(P(G('torus', 0.07, 0.014, 8, 12, Math.PI), INK, [0.16 * s, 0.05, 0.47], { rot: [0, 0, Math.PI], ink: false }));
+    for (const s of [-1, 1]) hd.add(P(G('torus', 0.07, 0.014, 12, Math.PI), INK, [0.16 * s, 0.05, 0.47], { rot: [0, 0, Math.PI], ink: false }));
     smile(hd, -0.14, 0.47, 0.08, true);
     fangs(hd, -0.13, 0.48, 0.12, 2, 0.07);
     const orbit = grp(b, 0, 1.1, 0);
@@ -977,7 +977,7 @@
     const GREEN = '#7dff5a';
     b.add(P(G('cyl', 0.07, 0.09, 0.4, 8), '#b8a88a', [0, 0.08, 0.06], { rot: [Math.PI / 2, 0, 0] }));
     b.add(P(G('sphere', 0.2, 14, 12), '#c98d4e', [0, 0.24, -0.06]));
-    b.add(P(G('torus', 0.1, 0.02, 6, 20, Math.PI * 1.6), '#8a5a2b', [0.2, 0.26, -0.06], { rot: [0, Math.PI / 2, 0], ink: false }));
+    b.add(P(G('torus', 0.1, 0.02, 20, Math.PI * 1.6), '#8a5a2b', [0.2, 0.26, -0.06], { rot: [0, Math.PI / 2, 0], ink: false }));
     for (const s of [-1, 1]) {
       b.add(P(G('cyl', 0.015, 0.015, 0.2, 5), '#b8a88a', [0.035 * s, 0.24, 0.24], { ink: false }));
       const e = new THREE.Mesh(G('sphere', 0.03, 8, 6), GF.basic(GREEN));

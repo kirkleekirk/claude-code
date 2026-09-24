@@ -95,13 +95,31 @@
     mesh.add(o);
     return mesh;
   };
+  /* The outline for a shape that isn't centered on its own origin (a collar or strap hugging a body):
+     the shell is the shape pushed out along its normals by w, not scaled up. */
+  GF.inkHull = function (mesh, w) {
+    const geo = mesh.geometry, key = 'hull' + w;
+    let hull = geo.userData[key];
+    if (!hull) {
+      hull = geo.clone();
+      const p = hull.attributes.position, n = hull.attributes.normal;
+      for (let i = 0; i < p.count; i++) p.setXYZ(i, p.getX(i) + n.getX(i) * w, p.getY(i) + n.getY(i) * w, p.getZ(i) + n.getZ(i) * w);
+      p.needsUpdate = true;
+      hull.computeBoundingSphere();
+      geo.userData[key] = hull;
+    }
+    const o = new THREE.Mesh(hull, outlineMat);
+    o.userData.outline = true;
+    mesh.add(o);
+    return mesh;
+  };
   GF.part = function (geo, color, pos, o) {
     o = o || {};
     const mesh = new THREE.Mesh(geo, o.mat || (o.basic ? GF.basic(color, o) : GF.mat(color, o)));
     if (pos) mesh.position.set(pos[0], pos[1], pos[2]);
     if (o.scale) mesh.scale.set(o.scale[0], o.scale[1], o.scale[2]);
     if (o.rot) mesh.rotation.set(o.rot[0], o.rot[1], o.rot[2]);
-    if (o.ink !== false && !o.basic) GF.ink(mesh, o.inkT);
+    if (o.ink !== false && !o.basic) { if (o.inkW) GF.inkHull(mesh, o.inkW); else GF.ink(mesh, o.inkT); }
     return mesh;
   };
   const geoCache = new Map();
@@ -182,6 +200,42 @@
     const c = new THREE.Color(hex);
     c.multiplyScalar(f);
     return '#' + c.getHexString();
+  };
+  /* The Tree Fort's bark: warm brown with dark wavy grooves running up the trunk, and a few knots. */
+  GF.barkTexture = function () {
+    return canvasTex(256, 512, (ctx, w, h) => {
+      ctx.fillStyle = '#a8763f'; ctx.fillRect(0, 0, w, h);
+      for (let i = 0; i < 9; i++) {
+        const x0 = (i / 9) * w + 8;
+        ctx.strokeStyle = i % 3 ? '#7d5230' : '#6a4426'; ctx.lineWidth = i % 3 ? 5 : 8; ctx.lineCap = 'round';
+        ctx.beginPath();
+        for (let y = -10; y <= h + 10; y += 16) { const x = x0 + Math.sin(y * 0.03 + i * 1.7) * 7; if (y < 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
+        ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(255, 220, 160, 0.18)';
+      for (let i = 0; i < 9; i++) ctx.fillRect((i / 9) * w + 20, 0, 6, h);
+      for (const [x, y] of [[60, 140], [190, 330], [120, 430]]) {
+        ctx.fillStyle = '#6a4426'; ctx.beginPath(); ctx.ellipse(x, y, 13, 20, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#4e321c'; ctx.beginPath(); ctx.ellipse(x, y, 5, 9, 0, 0, Math.PI * 2); ctx.fill();
+      }
+    });
+  };
+  /* Boards for the rooms and decks built onto the Tree Fort: planks with dark seams, grain and nails. */
+  GF.plankTexture = function (base) {
+    return canvasTex(256, 256, (ctx, w, h) => {
+      ctx.fillStyle = base || '#d3a46a'; ctx.fillRect(0, 0, w, h);
+      const ph = 32;
+      for (let r = 0; r < h / ph; r++) {
+        ctx.fillStyle = shade(base || '#d3a46a', 0.9 + ((r * 5) % 3) * 0.06); ctx.fillRect(0, r * ph + 2, w, ph - 4);
+        ctx.strokeStyle = 'rgba(90, 55, 25, 0.35)'; ctx.lineWidth = 2;
+        for (let k = 0; k < 2; k++) { ctx.beginPath(); ctx.moveTo(0, r * ph + 10 + k * 10); for (let x = 0; x <= w; x += 32) ctx.lineTo(x, r * ph + 10 + k * 10 + Math.sin(x * 0.05 + r) * 2); ctx.stroke(); }
+        ctx.fillStyle = '#6b4424'; ctx.fillRect(0, r * ph, w, 3);
+        const seam = ((r * 97) % 200) + 30;
+        ctx.fillRect(seam, r * ph, 3, ph);
+        ctx.fillStyle = '#4a3020';
+        for (const x of [seam - 8, seam + 10]) { ctx.beginPath(); ctx.arc(x, r * ph + ph / 2, 2.2, 0, Math.PI * 2); ctx.fill(); }
+      }
+    });
   };
   GF.brickTexture = function (line) {
     return canvasTex(256, 256, (ctx, w, h) => {
