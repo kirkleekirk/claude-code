@@ -33,6 +33,7 @@
     if (B3.fort) GF.scene.remove(B3.fort);
     const g = new THREE.Group();
     g.add(MD.treeFort());
+    g.add(MD.oooLandmarks());
     const finn = MD.finn(G ? G.chars.finn.equip : {});
     const jake = MD.jake(G ? G.chars.jake.equip : {});
     finn.position.set(-1.35, 0, 5.3); finn.rotation.y = 0.3;
@@ -55,7 +56,7 @@
     if (B3.show) GF.scene.remove(B3.show);
     const H = D.HEROES[h];
     const g = new THREE.Group();
-    const base = GF.part(GF.geo('cyl', 1.25, 1.35, 0.22, 48), '#1b2438', [0, -0.11, 0], { ink: false });
+    const base = GF.part(GF.geo('cyl', 1.25, 1.35, 0.22, 48), '#e9c98a', [0, -0.11, 0], { inkT: 0.02 });
     const rim = new THREE.Mesh(GF.geo('torus', 1.28, 0.035, 64), GF.basic(H.color, { add: true }));
     rim.rotation.x = Math.PI / 2; rim.position.y = 0.01;
     const glow = new THREE.Mesh(GF.geo('circle', 1.2, 48), GF.basic(H.color, { opacity: 0.12, add: true }));
@@ -85,11 +86,11 @@
       if (!B3.fort || (G && B3.fortSig !== sigOf('finn') + '|' + sigOf('jake'))) buildFort();
       GF.scene.add(B3.fort);
       GF.scene.background = new THREE.Color('#9fdcff');
-      GF.setMood({ light: 1, fog: ['#bfe8ff', 40, 120], sun: [-6, 14, 10] });
+      GF.setMood({ light: 1, fog: ['#cdeeff', 90, 330], sun: [-6, 14, 10] });
     } else if (mode === 'show') {
       if (!B3.show || B3.showHero !== hero() || B3.showSig !== sigOf(hero())) buildShow(hero());
       GF.scene.add(B3.show);
-      GF.scene.background = new THREE.Color('#10172a');
+      GF.scene.background = new THREE.Color('#bfe6ff');
       GF.setMood({ light: 1.05, fog: null, sun: [-5, 12, 10] });
     }
     B3.mode = mode;
@@ -108,6 +109,15 @@
     const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
     GF.camera.setViewOffset(W, H, W / 2 - cx, H / 2 - cy, W, H);
   }
+  const INTRO = [
+    { t: 0, pos: [96, 34, 18], look: [70, 22, -96] },
+    { t: 3.2, pos: [18, 30, 30], look: [-64, 14, -84] },
+    { t: 6.0, pos: [-30, 16, 22], look: [-22, 8, -48] },
+    { t: 8.6, pos: [0, 7.8, 22], look: [0, 5.4, 0] },
+  ];
+  /* skip the opening sweep (a click, or anything after the first time) */
+  function skipIntro() { B3.intro = 99; document.body.classList.add('intro-skip'); }
+  DT.skipIntro = skipIntro;
   function update3d(dt) {
     B3.t += dt;
     const t = B3.t, cam = GF.camera;
@@ -127,7 +137,20 @@
     } else if ((B3.mode === 'fort' || B3.mode === 'title') && B3.fort) {
       const u = B3.fort.userData;
       const sway = Math.sin(t * 0.15) * 2.2;
-      if (B3.mode === 'title') { cam.position.set(sway, 7.8, 22); cam.lookAt(0, 5.4, 0); GF.camera.clearViewOffset(); }
+      if (B3.mode === 'title') {
+        /* the opening sweep, like the show's intro: across the Ice Kingdom, the Candy Kingdom and an old
+           highway, then down to the Tree Fort */
+        B3.intro = Math.min(INTRO[INTRO.length - 1].t, (B3.intro || 0) + dt);
+        if (B3.intro < INTRO[INTRO.length - 1].t) {
+          let i = 0;
+          while (i < INTRO.length - 2 && B3.intro > INTRO[i + 1].t) i++;
+          const a = INTRO[i], b = INTRO[i + 1], k = (B3.intro - a.t) / (b.t - a.t), e = k * k * (3 - 2 * k);
+          const L = (p, q) => p.map((v, j) => v + (q[j] - v) * e);
+          const [px, py, pz] = L(a.pos, b.pos), [lx, ly, lz] = L(a.look, b.look);
+          cam.position.set(px, py, pz); cam.lookAt(lx, ly, lz);
+        } else { cam.position.set(sway, 7.8, 22); cam.lookAt(0, 5.4, 0); }
+        GF.camera.clearViewOffset();
+      }
       else { cam.position.set(-1.5 + sway * 0.6, 3.6, 13.5); cam.lookAt(0, 2.6, 3); aimView(); }
       u.finn.position.y = Math.abs(Math.sin(t * 2.2)) * 0.1;
       u.jake.position.y = Math.abs(Math.sin(t * 2.2 + 1.2)) * 0.08;
@@ -221,7 +244,7 @@
     const r = DT.game.raid.start(G, offerId, hero(), { onEnd: onTripEnd });
     if (!r) { screen = 'hub'; render(); toast('The train wouldn’t start. Try again.', 'bad'); return; }
     IN.requestLock();
-    if (first) setTimeout(() => HUD.note('WASD move · mouse aims · hold left click to attack · Space dodges · 1–4 abilities · hold E to open chests and doors', 9), 2600);
+    if (first) setTimeout(() => HUD.note(`${['up', 'left', 'down', 'right'].map((a) => IN.label(a)).join('')} to move · the mouse looks around, and you face where you look · hold ${IN.label('attack')} to attack · ${IN.label('dash')} to roll · ${[0, 1, 2, 3].map((i) => IN.label('ab' + i)).join(' ')} for abilities · hold ${IN.label('interact')} to open chests and doors`, 10), 3800);
   }
   function onTripEnd(result) {
     screen = 'hub';
@@ -299,6 +322,7 @@
 
   const ACT = {
     /* title & save */
+    'skip-intro'() { skipIntro(); return 'keep'; },
     continue() { const s = store.load(); const g = s ? M.migrate(s) : null; if (!g) { toast('That save is from an older version and can’t be loaded. Start a new game!', 'bad'); return; } G = g; screen = 'hub'; tab = 'board'; DT.sfx.unlock(); },
     'new-game'() {
       const go = () => { G = M.newGame(); screen = 'hub'; tab = 'board'; save(); DT.sfx.unlock(); UI.closeModal(); render(); toast('Adventure time! Check your Loadout, then pick a train.', 'good'); };
@@ -359,9 +383,9 @@
     'pull-overflow'() { let n = 0; while (G.overflow.length && G.stash.length < G.stashCap) { G.stash.push(G.overflow.shift()); n++; } toast(n ? `Moved ${n} into the stash.` : 'The stash is still full.', n ? 'good' : 'bad'); },
     'spin-model'() { return 'keep'; },
     /* skills */
-    'tree-buy'(el) { const h = hero(), id = el.dataset.node; const r = M.tree.allocate(G, h, id); if (r === 'ok') { const n = D.TREES[h].nodes[id]; DT.sfx.play('levelup'); toast(n.type === 'ability' ? `Learned ${n.name}! It’s on your ability keys.` : `Unlocked ${n.name}.`, 'good'); } else toast(r, 'bad'); },
+    'tree-buy'(el) { const h = hero(), id = el.dataset.node; const r = M.tree.allocate(G, h, id); if (r === 'ok') { const n = D.TREES[h].nodes[id], rk = M.tree.rank(G, h, id); DT.sfx.play('levelup'); toast(n.type === 'ability' ? `Learned ${n.name}! It’s on your ability keys.` : rk > 1 ? `${n.name} is now rank ${rk}/${n.maxRank}.` : `Unlocked ${n.name}.`, 'good'); } else toast(r, 'bad'); },
     'tree-path'(el) { const h = hero(); const r = M.tree.allocatePath(G, h, el.dataset.node); if (r === 'ok') { DT.sfx.play('levelup'); toast('Path unlocked!', 'good'); } else toast(r, 'bad'); },
-    'tree-refund'(el) { const h = hero(), id = el.dataset.node; UI.confirm('Refund this node?', `Get 1 skill point back for ${U.fmt(M.tree.refundCost(G, h))} gold.`, 'Refund', () => { const r = M.tree.refund(G, h, id); if (r === 'ok') toast('Refunded.', 'good'); else toast(r, 'bad'); save(); render(); }); return 'keep'; },
+    'tree-refund'(el) { const h = hero(), id = el.dataset.node; UI.confirm(M.tree.rank(G, h, id) > 1 ? 'Refund one rank?' : 'Refund this node?', `Get 1 skill point back for ${U.fmt(M.tree.refundCost(G, h))} gold.`, 'Refund', () => { const r = M.tree.refund(G, h, id); if (r === 'ok') toast('Refunded.', 'good'); else toast(r, 'bad'); save(); render(); }); return 'keep'; },
     'tree-respec'() { const h = hero(); UI.confirm('Reset the whole tree?', `Every point ${U.esc(D.HEROES[h].name)} spent comes back, for ${U.fmt(M.tree.respecCost(G, h))} gold.`, 'Reset tree', () => { const r = M.tree.respec(G, h); if (r === 'ok') toast('Tree reset. Spend your points again!', 'good'); else toast(r === 'poor' ? 'Not enough gold.' : 'Nothing to reset.', 'bad'); save(); render(); }, { danger: true }); return 'keep'; },
     'tree-desel'() { TV.state.sel[hero()] = null; },
     'tree-zoom'(el) { TV.zoom(hero(), +el.dataset.z); return 'norender'; },
@@ -377,6 +401,9 @@
     'ws-reroll'(el) { result(M.hub.reroll(G, el.dataset.uid), 'New bonuses!', { sfx: 'rare' }); },
     'ws-imbue'(el) { result(M.hub.imbue(G, el.dataset.uid), 'It’s Mathematical now!', { sfx: 'rare' }); },
     'ws-power'(el) { result(M.hub.rerollPower(G, el.dataset.uid), 'A new Power!', { sfx: 'rare' }); },
+    /* key bindings (Settings and the pause menu) */
+    bind(el) { HUD.startBind(el.dataset.action, +el.dataset.slot); return 'keep'; },
+    'bind-reset'() { HUD.resetBinds(); toast('Keys reset to the defaults.', 'good'); return 'keep'; },
     /* journal */
     journal(el) { HV.state.journal = el.dataset.sec; },
     'new-journey'() {
@@ -402,6 +429,9 @@
 
   /* ---------- input: clicks, menus, keys ---------- */
   document.addEventListener('click', (ev) => {
+    if (screen === 'title' && (B3.intro || 0) < INTRO[INTRO.length - 1].t) skipIntro();
+    /* the click that follows binding a mouse button isn't a real click */
+    if (performance.now() < (IN.swallowUntil || 0)) { ev.preventDefault(); ev.stopPropagation(); return; }
     if (UI.menuIsOpen() && !ev.target.closest('.ctx')) UI.menuClose();
     const el = ev.target.closest('[data-act]');
     const tile = ev.target.closest('.tile[data-uid]');
@@ -429,6 +459,9 @@
     else if (M.loot.isGear(it)) run('equip', { dataset: { uid: it.uid } });
   });
   document.addEventListener('contextmenu', (ev) => {
+    if (performance.now() < (IN.swallowUntil || 0)) { ev.preventDefault(); return; }
+    const bk = ev.target.closest('.bind-key[data-action]');
+    if (bk) { ev.preventDefault(); HUD.clearBind(bk.dataset.action, +bk.dataset.slot); return; }
     if (screen === 'raid' && !ev.target.closest('#hud .h-over')) return;
     const tile = ev.target.closest('.tile[data-uid]');
     const node = ev.target.closest('#sk-svg .node');
@@ -454,7 +487,10 @@
       const h = hero(), id = node.dataset.node;
       const s = M.tree.state(G, h, id);
       const items = [];
-      if (s.owned) { const why = M.tree.canRefund(G, h, id); items.push({ act: 'tree-refund', label: `Refund · ${M.tree.refundCost(G, h)}g`, icon: 'refresh', data: { node: id }, disabled: !!why, note: why || '' }); }
+      if (s.owned) {
+        if (s.rankUp) items.push({ act: 'tree-buy', label: `Rank ${s.rank + 1}/${s.max} · 1 point`, icon: 'arrowUp', data: { node: id } });
+        const why = M.tree.canRefund(G, h, id); items.push({ act: 'tree-refund', label: `${s.rank > 1 ? 'Refund a rank' : 'Refund'} · ${M.tree.refundCost(G, h)}g`, icon: 'refresh', data: { node: id }, disabled: !!why, note: why || '' });
+      }
       else if (s.ok) items.push({ act: 'tree-buy', label: 'Unlock · 1 point', icon: 'unlock', data: { node: id } });
       else { const ps = M.tree.pathState(G, h, id); items.push({ act: 'tree-path', label: `Unlock path · ${ps.path ? ps.path.length : '?'} points`, icon: 'unlock', data: { node: id }, disabled: !ps.ok, note: ps.reason || '' }); }
       UI.menuOpen(ev.clientX, ev.clientY, items);
@@ -478,7 +514,7 @@
     const t = ev.target;
     if (t.id === 'stash-search') { LO.state.search = t.value; render(); return; }
     if (t.id === 'tree-search') { TV.search(t.value); return; }
-    if (t.dataset && t.dataset.set && t.type === 'range') { const out = t.parentNode.querySelector('output'); const k = t.dataset.set; if (out) out.textContent = k === 'fov' ? t.value + '°' : k === 'volume' || k === 'zoom' ? Math.round(t.value * 100) + '%' : (+t.value).toFixed(2); applySetting(k, +t.value); }
+    if (t.dataset && t.dataset.set && t.type === 'range') { const out = t.parentNode.querySelector('output'); const k = t.dataset.set; if (out) out.textContent = k === 'fov' ? t.value + '°' : k === 'volume' ? Math.round(t.value * 100) + '%' : k === 'camDist' ? (+t.value).toFixed(1) + ' m' : (+t.value).toFixed(2); applySetting(k, +t.value); }
   });
   document.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && ev.target.id === 'tree-search') { const id = TV.search(ev.target.value); if (id) { TV.state.sel[hero()] = id; TV.centerOn(hero(), id, 1); const box = $('sk-detail'); if (box) box.innerHTML = TV.detail(G, hero()); } } });
   document.addEventListener('change', (ev) => {
@@ -491,17 +527,11 @@
     if (k === 'volume') { DT.sfx.setVolume(v); return; }
     if (k === 'muted') { if (!!s.muted !== v) DT.sfx.toggleMute(); return; }
     s[k] = v;
-    if (k === 'fov' && !(DT.game.raid.current() && IN.fixed)) GF.setFov(v);
     DT.saveSettings();
-    if (k === 'freeCam' || k === 'cursorAim') {
-      DT.game.raid.setCameraMode(!s.freeCam);
-      document.body.classList.toggle('cursor-aim', IN.mode === 'cursor');
-      /* the settings list changes with the camera, so redraw whichever panel is showing it */
-      if (DT.game.raid.current()) HUD.render(DT.game.raid.current());
-      else {
-        document.querySelectorAll('.settings').forEach((el) => { el.outerHTML = HUD.settingsHtml(); });
-        document.querySelectorAll('.controls').forEach((el) => { el.outerHTML = HUD.controlsHtml(); });
-      }
+    if (k === 'fov' || k === 'camDist') DT.game.raid.applySettings();
+    if (k === 'dragLook') {
+      IN.setDragLook(v);
+      document.querySelectorAll('.controls').forEach((el) => { el.outerHTML = HUD.controlsHtml(); });
     }
   }
 

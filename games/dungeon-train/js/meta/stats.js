@@ -29,15 +29,16 @@
     const L = o.level || C.level;
     const st = {}, mods = {}, abMods = {};
     const powers = [], abilities = [];
-    const addStats = (obj) => { for (const k in obj) st[k] = (st[k] || 0) + obj[k]; };
+    const addStats = (obj, mult) => { for (const k in obj) st[k] = (st[k] || 0) + obj[k] * (mult || 1); };
     const addMods = (obj) => { for (const k in obj) addMod(mods, k, obj[k]); };
 
     /* skill tree first (it can boost gear Powers) */
     const T = D.TREES[heroId];
     for (const id in tree) {
       const n = T.nodes[id];
-      if (!n || !tree[id]) continue;
-      if (n.stats) addStats(n.stats);
+      const rank = tree[id] === true ? 1 : +tree[id] || 0;
+      if (!n || !rank) continue;
+      if (n.stats) addStats(n.stats, rank);
       if (n.mods) addMods(n.mods);
       if (n.abMods) for (const ab in n.abMods) { abMods[ab] = abMods[ab] || {}; for (const k in n.abMods[ab]) abMods[ab][k] = (abMods[ab][k] || 0) + n.abMods[ab][k]; }
       if (n.type === 'ability') abilities.push({ id: n.ability, src: 'tree', node: id });

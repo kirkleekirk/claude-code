@@ -111,7 +111,12 @@
     if (!e || e.dead) return;
     const cc = id === 'stun' || id === 'freeze' || id === 'root' || id === 'fear';
     if (cc) dur *= e.boss ? 0.35 : e.elite ? 0.6 : 1;
-    if (id === 'chill' && e.st.chill > 0 && !e.boss) {
+    /* bosses and elites shrug off crowd control for a while after each one, so they can't be stun-locked */
+    if (cc && (e.boss || e.elite)) {
+      if (e.ccImmune > 0) { if (!o.quiet && run.time - (e.immuneSaid || -9) > 1.5) { e.immuneSaid = run.time; say(run, e.x, e.z, 'Immune!', 'status', popY(e)); } return; }
+      e.ccImmune = dur + (e.boss ? 6 : 3);
+    }
+    if (id === 'chill' && e.st.chill > 0 && !e.boss && !(e.elite && e.ccImmune > 0)) {
       const M = o.hero ? o.hero.S.mods : {};
       id = 'freeze'; dur = (1.2 + (M.freezeDur || 0)) * (e.elite ? 0.6 : 1);
     }
@@ -459,7 +464,6 @@
           if (md > 0.01) { f.x += (mx / md) * step; f.z += (mz / md) * step; }
           const p = { x: f.x, z: f.z }; WG.resolve(run.train, p, 0.2); f.x = p.x; f.z = p.z;
           f.dir = Math.atan2(f.x - h.x, f.z - h.z); f.dist = Math.hypot(f.x - h.x, f.z - h.z);
-          h.facing = f.dir;
         }
         if ((f.tick -= dt) <= 0) {
           f.tick = 0.25;
@@ -673,14 +677,15 @@
     GF.burst(e.x, 1, e.z, '#43e0c5', 12, 4, { dur: 0.4 });
     const a = Math.random() * Math.PI * 2, d = R.float(5, 7);
     const p = { x: tgt.x + Math.cos(a) * d, z: tgt.z + Math.sin(a) * d };
-    const car = run.train.cars[e.car];
-    p.x = U.clamp(p.x, car.x0 + 1.5, car.x1 - 1.5);
+    const room = run.train.cars[e.car];
+    if (room) { p.x = U.clamp(p.x, room.x0 + 1.5, room.x1 - 1.5); p.z = U.clamp(p.z, room.z0 + 1.5, room.z1 - 1.5); }
     WG.resolve(run.train, p, e.r);
     e.x = p.x; e.z = p.z;
     GF.burst(e.x, 1, e.z, '#43e0c5', 12, 4, { dur: 0.4 });
   };
 
   /* ---------- bosses: one brain, many personalities (data/world.js) ---------- */
+  const ENRAGE = window.THREE ? new THREE.MeshBasicMaterial({ color: GF.lin('#ff3b3b') }) : null;
   C.bossThink = function (run, e, tgt, dt, slow) {
     const brain = D.BOSS_BRAINS[e.def.brain];
     const hpF = e.hp / e.maxHp;
@@ -696,10 +701,20 @@
         run.later(0.8, () => { if (!e.dead) say(run, e.x, e.z, 'DOG! I smell DOG!', 'status', popY(e) + 0.3); });
       }
     }
+    /* take too long and the boss gets angry: faster, and everything comes quicker */
+    e.fightT = (e.fightT || 0) + dt;
+    if (!e.enraged && e.fightT > (brain.enrage || 150)) {
+      e.enraged = true;
+      run.banner(`${e.name} is ENRAGED!`, 'bad');
+      say(run, e.x, e.z, 'ENOUGH!', 'crit', popY(e) + 0.6);
+      DT.sfx.play('boss'); run.shake(0.4);
+    }
+    if (e.enraged && (e.rageT = (e.rageT || 0) - dt) <= 0) { e.rageT = 0.9; GF.ring(e.x, e.z, e.r + 1.2, '#ff3b3b', 0.5); if (!e.flashT) DT.game.actors.flash(e, ENRAGE); }
     const P = brain.phases[phase];
     const T = e.timers;
     const dx = tgt.x - e.x, dz = tgt.z - e.z, dist = Math.hypot(dx, dz) || 1;
-    const spd = e.speed * slow * (P.speed || 1);
+    const rage = e.enraged ? 1.35 : 1;
+    const spd = e.speed * slow * (P.speed || 1) * (e.enraged ? 1.25 : 1);
     if (e.busy) { busyStep(run, e, tgt, dt); return; }
     e.facing = Math.atan2(dx, dz);
     const keep = P.keep != null ? P.keep : brain.keep;
@@ -711,11 +726,11 @@
       const mdx = px - e.x, mdz = pz - e.z, md = Math.hypot(mdx, mdz) || 1;
       if (md > 0.5) { e.vx = (mdx / md) * spd; e.vz = (mdz / md) * spd; } else { e.vx = e.vz = 0; }
     }
-    const car = run.train.cars[e.car];
+    const room = run.train.cars[e.car];
     for (const key of Object.keys(P)) {
       if (key === 'speed' || key === 'keep') continue;
       const pat = P[key];
-      T[key] = (T[key] || R.float(0, pat.every * 0.5)) + dt;
+      T[key] = (T[key] || R.float(0, pat.every * 0.5)) + dt * rage;
       if (T[key] < pat.every) continue;
       T[key] = 0;
       switch (key) {
@@ -725,11 +740,55 @@
         case 'slam': e.busy = { kind: 'slam', t: 0, dur: 0.9, r: pat.r, mult: pat.mult }; e.vx = e.vz = 0; e.tele = GF.telegraph(e.x, e.z, pat.r, 0.9, '#ff3b3b'); e.telegraphing = true; break;
         case 'circles': for (let i = 0; i < pat.n; i++) { const a = Math.random() * Math.PI * 2, d = i === 0 ? 0.4 : R.float(1.5, 3.5); C.zone(run, { kind: 'bossAoE', x: tgt.x + Math.cos(a) * d, z: tgt.z + Math.sin(a) * d, r: pat.r, delay: 1.1, dmg: e.dmg * pat.mult, el: pat.el, src: e }); } break;
         case 'line': for (let i = 1; i <= pat.n; i++) C.zone(run, { kind: 'bossAoE', x: e.x + (dx / dist) * i * pat.gap, z: e.z + (dz / dist) * i * pat.gap, r: pat.r, delay: 0.7 + i * 0.07, dmg: e.dmg * pat.mult, el: pat.el, src: e }); break;
-        case 'charge': { const len = Math.min(14, dist + 3); e.busy = { kind: 'charge', t: 0, wind: 0.8, dir: Math.atan2(dx, dz), len, mult: pat.mult, hit: new Set() }; e.tele = GF.telegraphRect(e.x, e.z, Math.atan2(dx, dz), len, e.r * 2 + 0.6, 0.8, '#ff3b3b'); e.vx = e.vz = 0; e.telegraphing = true; break; }
+        case 'charge': { const len = Math.min(16, dist + 3); e.busy = { kind: 'charge', t: 0, wind: 0.8, dir: Math.atan2(dx, dz), len, mult: pat.mult, hit: new Set() }; e.tele = GF.telegraphRect(e.x, e.z, Math.atan2(dx, dz), len, e.r * 2 + 0.6, 0.8, '#ff3b3b'); e.vx = e.vz = 0; e.telegraphing = true; break; }
         case 'summon': { const n = run.enemies.filter((x) => !x.dead && !x.boss && x.car === e.car).length; if (n < pat.max) { C.summon(run, e, pat.ids, pat.n); say(run, e.x, e.z, 'Get them!', 'status', popY(e)); } break; }
         case 'scream': e.busy = { kind: 'scream', t: 0, dur: 0.9, r: pat.r, mult: pat.mult, stun: pat.stun, text: pat.text, color: pat.color }; e.vx = e.vz = 0; e.tele = GF.telegraph(e.x, e.z, pat.r, 0.9, pat.color || '#ffd400'); DT.sfx.play('scream'); break;
         case 'pull': e.busy = { kind: 'pull', t: 0, dur: pat.dur, str: pat.str }; e.vx = e.vz = 0; say(run, e.x, e.z, 'Come here…', 'crit', popY(e)); break;
-        case 'blink': if (car) C.blinkEnemy(run, e, tgt); break;
+        case 'blink': if (room) C.blinkEnemy(run, e, tgt); break;
+        /* shockwave rings that sweep out across the whole room: roll through them */
+        case 'nova': e.busy = { kind: 'nova', t: 0, wind: pat.wind || 0.8, n: pat.n || 1, gap: pat.gap || 0.6, fired: 0, pat }; e.vx = e.vz = 0; e.tele = GF.telegraph(e.x, e.z, e.r + 1.2, pat.wind || 0.8, pat.color || '#ff3b3b'); e.telegraphing = true; if (pat.text) say(run, e.x, e.z, pat.text, 'crit', popY(e)); break;
+        /* a long beam that swings across the room */
+        case 'sweep': {
+          const arc = (pat.arc || 2.6) * (R.chance(0.5) ? 1 : -1), a0 = Math.atan2(dx, dz) - arc / 2;
+          const z = C.zone(run, { kind: 'sweep', src: e, x: e.x, z: e.z, wind: pat.wind || 1.0, dur: pat.dur || 1.8, a0, arc, len: pat.len || 18, w: pat.w || 1.2, dmg: e.dmg * pat.mult, el: pat.el, color: pat.color || '#ff5a4a' });
+          e.busy = { kind: 'wait', t: 0, dur: z.dur, zone: z }; e.vx = e.vz = 0;
+          if (pat.text) say(run, e.x, e.z, pat.text, 'crit', popY(e));
+          break;
+        }
+        /* marked circles rain down all over the room (and one right where you're standing) */
+        case 'rain': {
+          if (!room) break;
+          for (let i = 0; i < pat.n; i++) { const p = i === 0 ? { x: tgt.x, z: tgt.z } : WG.roomPoint(room, 1.2); C.zone(run, { kind: 'bossAoE', x: p.x, z: p.z, r: pat.r, delay: (pat.delay || 1.3) + i * 0.03, dmg: e.dmg * pat.mult, el: pat.el, src: e }); }
+          if (pat.text) say(run, e.x, e.z, pat.text, 'crit', popY(e));
+          break;
+        }
+        /* rows of blasts march out from the boss, with one safe lane through them */
+        case 'waves': {
+          if (!room) break;
+          const dir = Math.atan2(dx, dz), fx = Math.sin(dir), fz = Math.cos(dir), px = -fz, pz = fx;
+          const span = Math.max(room.x1 - room.x0, room.z1 - room.z0) / 2;
+          const lane = R.float(-4, 4), step = pat.r * 1.85;
+          for (let k = 0; k < (pat.n || 3); k++) {
+            const d = 3 + k * (pat.gap || 2.8);
+            for (let sft = -span; sft <= span; sft += step) {
+              if (Math.abs(sft - lane) < pat.r * 1.4) continue;
+              const x = e.x + fx * d + px * sft, z = e.z + fz * d + pz * sft;
+              if (!WG.inRoom(run.train, room, x, z, 0.3)) continue;
+              C.zone(run, { kind: 'bossAoE', x, z, r: pat.r, delay: 1.0 + k * 0.35, dmg: e.dmg * pat.mult, el: pat.el, src: e, quiet: sft !== -span });
+            }
+          }
+          if (pat.text) say(run, e.x, e.z, pat.text, 'crit', popY(e));
+          break;
+        }
+        /* a leap onto you */
+        case 'leap': {
+          const to = WG.clampPath(run.train, e, { x: tgt.x, z: tgt.z }, e.r);
+          e.busy = { kind: 'leap', t: 0, wind: 0.4, air: pat.air || 0.85, from: { x: e.x, z: e.z }, to, r: pat.r || 3.2, mult: pat.mult };
+          e.tele = GF.telegraph(to.x, to.z, pat.r || 3.2, 0.4 + (pat.air || 0.85), '#ff3b3b');
+          e.telegraphing = true; e.vx = e.vz = 0;
+          say(run, e.x, e.z, pat.text || 'HUP!', 'crit', popY(e));
+          break;
+        }
         default: break;
       }
       break;
@@ -767,10 +826,41 @@
       for (const h of run.heroes) {
         if (h.ko || h.state === 'dash') continue;
         const dx = e.x - h.x, dz = e.z - h.z, d = Math.hypot(dx, dz) || 1;
-        if (d > 1.6) { h.x += (dx / d) * b.str * dt; h.z += (dz / d) * b.str * dt; }
+        if (d > 1.6) { const to = WG.clampPath(run.train, h, { x: h.x + (dx / d) * b.str * dt, z: h.z + (dz / d) * b.str * dt }, h.r); h.x = to.x; h.z = to.z; }
         if ((b.tick = (b.tick || 0) - dt) <= 0) { b.tick = 0.3; GF.line({ x: e.x, y: 2, z: e.z }, { x: h.x, y: 1, z: h.z }, '#ff4d6d', 0.3, 0.12); C.hurtHero(run, h, e.dmg * 0.12, e, { dot: true }); }
       }
       if (b.t >= b.dur) e.busy = null;
+    } else if (b.kind === 'nova') {
+      if (b.t < b.wind) return;
+      if (e.tele) { e.tele.alive = false; e.tele = null; e.telegraphing = false; }
+      const due = Math.min(b.n, 1 + Math.floor((b.t - b.wind) / b.gap));
+      while (b.fired < due) {
+        b.fired += 1;
+        const p = b.pat;
+        C.zone(run, { kind: 'nova', src: e, x: e.x, z: e.z, r: e.r * 0.8, speed: p.speed || 7, maxR: p.len || 24, w: p.w || 0.9, dmg: e.dmg * p.mult, el: p.el, color: p.color || '#ff5a4a' });
+        GF.burst(e.x, 0.6, e.z, p.color || '#ff5a4a', 10, 6, { dur: 0.4 });
+        DT.sfx.play('explode'); run.shake(0.25);
+      }
+      if (b.fired >= b.n) e.busy = null;
+    } else if (b.kind === 'wait') {
+      if (b.zone && b.zone.ang != null) e.facing = b.zone.ang;
+      if (b.t >= b.dur) e.busy = null;
+    } else if (b.kind === 'leap') {
+      if (b.t < b.wind) { e.facing = Math.atan2(b.to.x - e.x, b.to.z - e.z); e.sqV = Math.min(e.sqV || 0, -2); return; }
+      const k = Math.min(1, (b.t - b.wind) / b.air);
+      e.x = U.lerp(b.from.x, b.to.x, k); e.z = U.lerp(b.from.z, b.to.z, k);
+      e.liftY = Math.sin(k * Math.PI) * 3.2;
+      if (k >= 1) {
+        e.liftY = 0;
+        if (e.tele) { e.tele.alive = false; e.tele = null; e.telegraphing = false; }
+        C.hurtHeroesIn(run, e.x, e.z, b.r, e.dmg * b.mult, e, null, (h) => C.pushHero(run, h, e.x, e.z, 2.5));
+        GF.ring(e.x, e.z, b.r + 0.3, '#ff9d2e', 0.4);
+        GF.burst(e.x, 0.3, e.z, '#d9cbb8', 18, 7, { dur: 0.6 });
+        run.smashAt(e.x, e.z, b.r, 2);
+        DT.sfx.play('explode'); run.shake(0.45);
+        e.sqV = -7;
+        e.busy = null;
+      }
     }
   }
 
@@ -841,6 +931,29 @@
     } else if (z.kind === 'rainbow' || z.kind === 'fire') {
       z.mesh = new THREE.Mesh(GF.geo('circle', z.r, 16), GF.basic(z.kind === 'fire' ? R.pick(['#ff7a2e', '#ffae00', '#ff5a1f']) : R.pick(['#ff5f6d', '#ffc93c', '#6bd66b', '#6ab7ff', '#c77dff']), { opacity: 0.55 }));
       z.mesh.rotation.x = -Math.PI / 2; z.mesh.position.set(z.x, 0.04, z.z); GF.scene.add(z.mesh);
+    } else if (z.kind === 'nova') {
+      /* a wall of force that grows outward from the boss */
+      z.mesh = new THREE.Mesh(GF.geo('tube', 1, 1, 0.9, 48), GF.basic(z.color, { opacity: 0.6, add: true }).clone());
+      z.mesh.material.side = THREE.DoubleSide;
+      z.mesh.position.set(z.x, 0.45, z.z);
+      z.mesh.scale.set(z.r, 1, z.r);
+      GF.scene.add(z.mesh);
+      z.own = true;
+      z.hit = new Set();
+      z.dur = (z.maxR - z.r) / z.speed;
+    } else if (z.kind === 'sweep') {
+      z.tele = GF.telegraphRect(z.x, z.z, z.a0, z.len, z.w, z.wind, z.color);
+      const g = new THREE.Group();
+      const core = new THREE.Mesh(GF.geo('box', 1, 1, 1), GF.basic(z.color, { opacity: 0.8, add: true }).clone());
+      core.scale.set(z.w, 0.5, 1); core.position.z = 0.5;
+      const hot = new THREE.Mesh(GF.geo('box', 1, 1, 1), GF.basic('#ffffff', { opacity: 0.9, add: true }).clone());
+      hot.scale.set(z.w * 0.35, 0.25, 1); hot.position.z = 0.5;
+      g.add(core, hot);
+      g.position.set(z.x, 1.2, z.z);
+      g.visible = false;
+      GF.scene.add(g);
+      z.mesh = g; z.own = true; z.hit = new Set(); z.ang = z.a0;
+      z.dur = z.wind + z.dur; z.sweepDur = z.dur - z.wind;
     } else if (z.kind === 'bossAoE') {
       z.tele = GF.telegraph(z.x, z.z, z.r, z.delay, z.el === 'fire' ? '#ff7a2e' : z.el === 'ice' ? '#5ec8ff' : z.el === 'shock' ? '#b8f1ff' : z.el === 'slow' ? '#7ed957' : '#ff3b3b');
       z.dur = z.delay + 0.05;
@@ -888,9 +1001,37 @@
         if (done) {
           const col = z.el === 'fire' ? '#ff7a2e' : z.el === 'ice' ? '#9fe3ff' : z.el === 'shock' ? '#e8fbff' : '#ff9d2e';
           GF.ring(z.x, z.z, z.r + 0.3, col, 0.35);
-          GF.burst(z.x, 0.4, z.z, col, 8, 3, { dur: 0.4 });
+          if (!z.quiet) GF.burst(z.x, 0.4, z.z, col, 8, 3, { dur: 0.4 });
           C.hurtHeroesIn(run, z.x, z.z, z.r, z.dmg, z.src, z.el);
-          if (z.el === 'shock') DT.sfx.play('zap'); else if (z.el === 'ice') DT.sfx.play('freeze'); else DT.sfx.play('hit');
+          if (!z.quiet) { if (z.el === 'shock') DT.sfx.play('zap'); else if (z.el === 'ice') DT.sfx.play('freeze'); else DT.sfx.play('hit'); }
+        }
+      } else if (z.kind === 'nova') {
+        z.r += z.speed * dt;
+        z.mesh.scale.set(z.r, 1, z.r);
+        z.mesh.material.opacity = 0.6 * (1 - 0.6 * Math.min(1, z.t / z.dur));
+        for (const h of run.heroes) {
+          if (h.ko || z.hit.has(h)) continue;
+          const d = Math.hypot(h.x - z.x, h.z - z.z);
+          if (Math.abs(d - z.r) < z.w / 2 + h.r * 0.7) { z.hit.add(h); if (C.hurtHero(run, h, z.dmg, z.src) > 0) { applyEl(run, h, z.el, z.dmg); C.pushHero(run, h, z.x, z.z, 1.2); } }
+        }
+      } else if (z.kind === 'sweep') {
+        if (z.src && z.src.dead) done = true;
+        else if (z.t >= z.wind) {
+          const k = Math.min(1, (z.t - z.wind) / z.sweepDur);
+          z.ang = z.a0 + z.arc * k;
+          if (z.tele) { z.tele.alive = false; z.tele = null; }
+          const fx = Math.sin(z.ang), fz = Math.cos(z.ang);
+          const end = WG.clampPath(run.train, { x: z.x, z: z.z }, { x: z.x + fx * z.len, z: z.z + fz * z.len }, 0.1);
+          const L = Math.max(0.5, Math.hypot(end.x - z.x, end.z - z.z));
+          z.mesh.visible = true;
+          z.mesh.rotation.y = z.ang;
+          z.mesh.scale.z = L;
+          for (const h of run.heroes) {
+            if (h.ko || z.hit.has(h)) continue;
+            const rx = h.x - z.x, rz = h.z - z.z, along = rx * fx + rz * fz, side = Math.abs(rx * fz - rz * fx);
+            if (along > 0 && along < L + h.r && side < z.w / 2 + h.r * 0.6) { z.hit.add(h); if (C.hurtHero(run, h, z.dmg, z.src) > 0) applyEl(run, h, z.el, z.dmg); }
+          }
+          if ((z.fxT = (z.fxT || 0) - dt) <= 0) { z.fxT = 0.07; GF.burst(end.x, 1.1, end.z, z.color, 2, 3, { dur: 0.25, size: 0.1 }); }
         }
       } else if (z.kind === 'flare') {
         const h = run.local;
@@ -898,7 +1039,7 @@
         if (z.t >= z.dur) { run.extract('flare'); return; }
       }
       if (done) {
-        if (z.mesh) GF.scene.remove(z.mesh);
+        if (z.mesh) { GF.scene.remove(z.mesh); if (z.own) z.mesh.traverse((o) => { if (o.material) o.material.dispose(); }); }
         if (z.tele) z.tele.alive = false;
         if (z.ring) z.ring.alive = false;
         list.splice(i, 1);

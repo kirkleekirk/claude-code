@@ -55,40 +55,46 @@
   };
   AC.faceTo = function (a, x, z) { a.facing = Math.atan2(x - a.x, z - a.z); };
 
-  /* Where the hero is aiming on the floor, from the command. With the cursor, a monster under the cursor
-     wins over the floor point (on screen, the floor under a monster's body is a little behind it). */
+  /* Where the hero is aiming, from the command: the monster under the crosshair; failing that, a monster
+     just beside the crosshair (a light aim assist); failing that, the floor under the crosshair; and
+     failing that (looking up at the sky), straight ahead. */
   AC.aimFor = function (run, h, cmd) {
-    const fx = Math.sin(cmd.yaw), fz = Math.cos(cmd.yaw);
-    const cursor = DT.game.input.mode === 'cursor';
-    if (cursor && cmd.ray) {
-      const ry = cmd.ray;
-      let best = null, bt = Infinity;
+    const yaw = cmd.yaw, fx = Math.sin(yaw), fz = Math.cos(yaw);
+    const ry = cmd.ray;
+    if (ry) {
+      let best = null, bt = Infinity, assist = null, ba = Infinity;
       for (const e of run.enemies) {
         if (e.dead || e.state === 'spawn') continue;
-        const cy = e.def.flying ? 1.45 : Math.max(0.45, e.r * 1.05);
+        const cy = (e.def.flying ? 1.45 : Math.max(0.45, e.r * 1.05)) + (e.liftY || 0);
         const vx = e.x - ry.ox, vy = cy - ry.oy, vz = e.z - ry.oz;
         const t = vx * ry.dx + vy * ry.dy + vz * ry.dz;
-        if (t <= 0) continue;
+        if (t <= 0 || t > 40) continue;
         const qx = vx - ry.dx * t, qy = vy - ry.dy * t, qz = vz - ry.dz * t;
-        const rr = e.r + 0.3;
-        if (qx * qx + qy * qy + qz * qz < rr * rr && t < bt) { bt = t; best = e; }
+        const miss = Math.sqrt(qx * qx + qy * qy + qz * qz);
+        if (miss < e.r + 0.3) { if (t < bt) { bt = t; best = e; } }
+        else if (miss < e.r + 0.3 + t * 0.07 && t < ba) {
+          /* a few degrees off the crosshair still counts, if it's in front of the hero */
+          const dx = e.x - h.x, dz = e.z - h.z;
+          if (dx * fx + dz * fz > 0.5) { ba = t; assist = e; }
+        }
       }
-      if (best) {
-        const dx = best.x - h.x, dz = best.z - h.z;
-        return { x: best.x, z: best.z, dir: Math.atan2(dx, dz), dist: Math.hypot(dx, dz), target: best };
+      const tgt = best || assist;
+      if (tgt) {
+        const dx = tgt.x - h.x, dz = tgt.z - h.z;
+        return { x: tgt.x, z: tgt.z, dir: Math.atan2(dx, dz), dist: Math.hypot(dx, dz), target: tgt };
       }
     }
     const g = cmd.ground;
     if (g) {
       const dx = g.x - h.x, dz = g.z - h.z, d = Math.hypot(dx, dz);
-      if (cursor && d > 0.35) return { x: g.x, z: g.z, dir: Math.atan2(dx, dz), dist: d };
       if (d > 1.0 && dx * fx + dz * fz > 0.6) return { x: g.x, z: g.z, dir: Math.atan2(dx, dz), dist: d };
     }
-    if (cursor) return { x: h.x + Math.sin(h.facing) * 4, z: h.z + Math.cos(h.facing) * 4, dir: h.facing, dist: 4 };
-    return { x: h.x + fx * 8, z: h.z + fz * 8, dir: cmd.yaw, dist: 8 };
+    return { x: h.x + fx * 8, z: h.z + fz * 8, dir: yaw, dist: 8 };
   };
 
-  /* Drive a hero from a command. Works for the local player now and remote players later. */
+  /* Drive a hero from a command. Works for the local player now and remote players later.
+     The hero always faces where the camera looks (cmd.yaw), except mid-roll, so attacks and abilities
+     go where you're looking and the hero never snaps around to swing. */
   AC.updateHero = function (run, h, cmd, dt) {
     const C = DT.game.combat;
     tickHero(run, h, dt, cmd);
@@ -97,12 +103,12 @@
     h.aim = aim; h.aimDir = aim.dir;
     const stunned = h.st.stun > 0 || h.st.freeze > 0;
     const free = h.state !== 'dash' && h.state !== 'ability' && h.state !== 'super';
+    if (h.state !== 'dash' && !stunned) h.facing = cmd.yaw;
     if (!stunned && free) {
       const sp = AC.heroSpeed(run, h) * (h.st.root > 0 ? 0 : 1);
-      h.vx = cmd.mx * sp; h.vz = cmd.mz * sp;
-      const fighting = cmd.attack || h.state === 'attack' || h.fists.some((f) => f.main);
-      const want = fighting ? aim.dir : cmd.moving ? Math.atan2(cmd.mx, cmd.mz) : h.facing;
-      h.facing += U.angleDiff(h.facing, want) * Math.min(1, dt * (fighting ? 22 : 14));
+      /* walking backwards is a bit slower than walking forwards */
+      const back = cmd.moving ? Math.max(0, -(cmd.mx * Math.sin(cmd.yaw) + cmd.mz * Math.cos(cmd.yaw))) : 0;
+      h.vx = cmd.mx * sp * (1 - back * 0.2); h.vz = cmd.mz * sp * (1 - back * 0.2);
     }
     if (stunned) { h.vx = h.vz = 0; return; }
     if (cmd.dash) C.tryDash(run, h, cmd);
@@ -175,6 +181,7 @@
     if (e.flashT > 0 && (e.flashT -= dt) <= 0 && !e.iceLook) unflash(e);
     for (const k in e.st) e.st[k] = Math.max(0, e.st[k] - dt);
     e.freezeImmune = Math.max(0, e.freezeImmune - dt);
+    if (e.ccImmune > 0) e.ccImmune -= dt;
     C.tickDots(run, e, dt);
     if (e.dead) return;
     const frozen = e.st.freeze > 0;
@@ -197,7 +204,15 @@
     const dx = tgt.x - e.x, dz = tgt.z - e.z;
     const dist = Math.hypot(dx, dz) || 0.001;
     const slow = (e.st.chill > 0 ? 0.55 : 1) * (e.st.root > 0 ? 0 : 1);
-    const moveTo = (tx, tz, spd) => { const ddx = tx - e.x, ddz = tz - e.z; const d = Math.hypot(ddx, ddz) || 1; e.vx = (ddx / d) * spd; e.vz = (ddz / d) * spd; e.facing = Math.atan2(ddx, ddz); };
+    /* head for a point, going through doorways when it's in another room */
+    const moveTo = (tx, tz, spd) => {
+      const way = DT.game.world.steer(run.train, e, tx, tz);
+      if (way) { tx = way.x; tz = way.z; }
+      const ddx = tx - e.x, ddz = tz - e.z; const d = Math.hypot(ddx, ddz) || 1; e.vx = (ddx / d) * spd; e.vz = (ddz / d) * spd; e.facing = Math.atan2(ddx, ddz);
+    };
+    /* can it see the hero? (checked a few times a second) */
+    if ((e.losT = (e.losT || 0) - dt) <= 0) { e.losT = 0.25; e.seen = DT.game.world.los(run.train, e.x, e.z, tgt.x, tgt.z); }
+    const seen = e.seen !== false;
     const stop = () => { e.vx = e.vz = 0; };
     if (e.st.fear > 0) { moveTo(e.x - dx, e.z - dz, e.speed * 0.9 * (e.st.chill > 0 ? 0.55 : 1)); e.state = 'chase'; e.walkT += dt * 8; return; }
     const arch = e.def.arch;
@@ -216,11 +231,12 @@
         if (arch === 'bufo' && !e.modeSet && e.attackCd <= 0) { e.mode = R.chance(0.5) ? 'lunger' : 'magicman'; e.modeSet = true; }
         if (A === 'ranged' || A === 'magicman' || A === 'zapper') {
           e.facing = Math.atan2(dx, dz);
-          if (dist < 4.5) moveTo(e.x - dx, e.z - dz, e.speed * slow);
-          else if (dist > 8) moveTo(tgt.x, tgt.z, e.speed * slow);
+          if (!seen || dist > 8) moveTo(tgt.x, tgt.z, e.speed * slow);
+          else if (dist < 4.5) moveTo(e.x - dx, e.z - dz, e.speed * slow);
           else { e.vx = Math.cos(e.walkT * 0.7) * e.speed * 0.4 * slow; e.vz = Math.sin(e.walkT * 0.9) * e.speed * 0.4 * slow; }
+          if (seen && dist <= 8) e.facing = Math.atan2(dx, dz);
           const range = A === 'zapper' ? (e.def.zap.len || 11) - 1 : 12;
-          if (e.attackCd <= 0 && dist < range) {
+          if (e.attackCd <= 0 && dist < range && seen) {
             e.state = 'windup'; e.stateT = 0; stop();
             if (A === 'zapper') { const z = e.def.zap; e.zapDir = Math.atan2(dx, dz); e.tele = GF.telegraphRect(e.x, e.z, e.zapDir, z.len || 11, 0.9, z.wind || 0.75, z.color || '#7fdcff'); }
           }
@@ -232,7 +248,7 @@
           }
         } else {
           const spd = e.speed * slow * (arch === 'bomber' ? 1.1 : 1);
-          if (A === 'lunger' && dist < 5.5 && e.attackCd <= 0) { e.state = 'windup'; e.stateT = 0; stop(); e.lungeTo = { x: tgt.x, z: tgt.z }; e.tele = GF.telegraph(tgt.x, tgt.z, 1.2, 0.6); break; }
+          if (A === 'lunger' && dist < 5.5 && e.attackCd <= 0 && seen) { e.state = 'windup'; e.stateT = 0; stop(); e.lungeTo = { x: tgt.x, z: tgt.z }; e.tele = GF.telegraph(tgt.x, tgt.z, 1.2, 0.6); break; }
           if ((A === 'melee' || arch === 'lemongrab') && dist < reach && e.attackCd <= 0) { e.state = 'windup'; e.stateT = 0; stop(); break; }
           if (arch === 'tank' && dist < reach + 1.3 && e.attackCd <= 0) { e.state = 'windup'; e.stateT = 0; stop(); const fx = e.x + (dx / dist) * 1.4, fz = e.z + (dz / dist) * 1.4; e.slamAt = { x: fx, z: fz }; e.tele = GF.telegraph(fx, fz, 2.4, 1.0); break; }
           if (arch === 'bomber' && dist < 1.4) { e.state = 'windup'; e.stateT = 0; stop(); e.tele = GF.telegraph(e.x, e.z, 2.3, 0.8); break; }
@@ -428,7 +444,7 @@
   const lerpA = (a, b, k) => a + (b - a) * k;
   AC.animateEnemy = function (e, dt) {
     const m = e.mesh, p = e.parts, def = e.def;
-    m.position.set(e.x, 0, e.z);
+    m.position.set(e.x, e.liftY || 0, e.z);
     const d = U.angleDiff(m.rotation.y, e.facing);
     m.rotation.y += d * Math.min(1, dt * 10);
     if (e.state === 'spawn' || e.dead) return;

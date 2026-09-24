@@ -1,5 +1,7 @@
 /* Skill trees: one big node web per hero. Every node costs 1 point and must connect to a node you
-   already own (the start node is free). Node types:
+   already own (the start node is free). The farther a node is from the start, the higher the level it
+   needs, and small stat nodes get stronger the deeper they are. Small nodes near the start can be
+   bought more than once (ranks), so spending early points close to home pays off. Node types:
      minor    small stat bump            notable  a named, bigger effect
      ability  unlocks an active ability  mod      upgrades an ability (needs that ability)
      keystone build-defining, with a catch  slot  unlocks a gear slot
@@ -9,8 +11,16 @@
   'use strict';
   const D = DT.data;
   const RING = 1.3, LAT = 1.05;
+  /* by ring (distance from the start): the level a node needs, how much stronger a small node is, and
+     how many times a small node can be bought */
+  const REQ = [0, 1, 2, 5, 9, 13, 17, 22];
+  const REQ_TYPE = { minor: 0, notable: 1, ability: -1, mod: 1, slot: 2, keystone: 0 };
+  const SCALE = [1, 1, 1, 1.2, 1.45, 1.75, 2.1, 2.5];
+  const RANKS = [1, 3, 3, 2, 2, 1, 1, 1];
+  const round2 = (v) => (Math.abs(v) >= 1 ? Math.round(v) : +v.toPrecision(2));
 
-  function build(hero, def) {
+  function build(hero, def, opts) {
+    opts = opts || {};
     const nodes = {};
     const link = (a, b) => {
       if (!nodes[a] || !nodes[b]) throw new Error(`Tree ${hero}: bad link ${a} - ${b}`);
@@ -41,6 +51,15 @@
       const n = nodes[id];
       if (n.type === 'ability') n.name = n.name || D.ABILITIES[n.ability].name;
       if (!n.name) n.name = autoName(n);
+      if (n.type === 'start') continue;
+      const ring = Math.max(1, Math.min(7, Math.round(n.r || 4)));
+      n.ring = ring;
+      if (n.req == null) n.req = Math.max(1, REQ[ring] + (REQ_TYPE[n.type] || 0));
+      if (n.type === 'minor') {
+        n.maxRank = n.maxRank || RANKS[ring];
+        const k = 1 + (SCALE[ring] - 1) * (opts.scale != null ? opts.scale : 1);
+        if (k !== 1 && n.stats) { const st = {}; for (const s in n.stats) st[s] = round2(n.stats[s] * k); n.stats = st; }
+      }
     }
     return { hero, start: def.start.id, nodes, list: Object.values(nodes), branches: def.branches.map((b) => ({ id: b.id, name: b.name, color: b.color, icon: b.icon, angle: b.angle, blurb: b.blurb })) };
   }
@@ -152,6 +171,7 @@
   });
 
   /* ---------------------------------------------------------------- Jake */
+  /* Jake's small nodes are already big, so they grow a bit less with depth */
   D.TREES.jake = build('jake', {
     start: { id: 'j_start', name: 'Jake the Dog', desc: 'Every hero starts here. Each point you spend must connect to a node you already own. Jake earns a bonus point every 4 levels.' },
     branches: [
@@ -246,5 +266,5 @@
       { id: 'j_x5', angle: 180, from: ['j_g4b', 'j_t4a'], stats: { cdr: 0.05, dmg: 0.04 } },
       { id: 'j_x6', angle: 240, from: ['j_t4b', 'j_s4a'], stats: { atkSpd: 0.06, dmg: 0.04 } },
     ],
-  });
+  }, { scale: 0.6 });
 })();

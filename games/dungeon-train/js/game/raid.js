@@ -1,6 +1,7 @@
-/* A trip on the Dungeon Train: setup, the main loop, loot, interactions, the Loop, extraction and wipes,
-   and the cameras (locked by default, or a free third-person camera). The trip holds a list of players; each drives one hero with commands.
-   Right now there's one local player — the structure is ready for more. */
+/* A trip: setup, the main loop, loot, interactions, the Loop (or a place's threat meter), extraction and
+   wipes, and the camera, which sits behind the hero and turns with the mouse. The trip holds a list of
+   players; each drives one hero with commands. Right now there's one local player; the structure is
+   ready for more. */
 (function () {
   'use strict';
   const D = DT.data;
@@ -24,7 +25,7 @@
     const train = WG.generate(G, offer);
     WG.buildMeshes(train);
     GF.scene.add(train.root);
-    const line = train.line;
+    const line = train.line, site = train.site;
     const loopMax = line.loop * (1 + S.loopSlow) / (offer.mod === 'express' ? 1.25 : 1) / (1 + (S.mods.loopFast || 0));
     run = {
       G, heroId, train, offer, hooks: hooks || {}, time: 0, heroes: [], players: [], local: null,
@@ -33,32 +34,32 @@
       stats: { dmg: 0, kills: 0, elites: 0, chests: 0, supers: 0, bosses: 0 },
       luckBonus: offer.mod === 'crowded' ? 0.25 : offer.mod === 'elites' ? 0.4 : 0, over: null, pendingOver: null, paused: false,
       inCombat: false, hitstopT: 0, shakeT: 0, interact: { target: null, p: 0 }, fullNoteT: 0, carIdx: 0, boss: null, bossDown: false, trophy: null,
-      cam: { yaw: IN.fixed ? Math.PI : Math.PI / 2, pitch: 0.3, dist: 5.8, x: 0, y: 3, z: 0 },
+      cam: { yaw: train.start.yaw, pitch: 0.26, dist: U.clamp(DT.settings.camDist || 5.8, CAM.min, CAM.max), d: null },
     };
-    WG.setCameraMode(train, IN.fixed);
-    GF.setFov(IN.fixed ? LOCK.fov : DT.settings.fov);
-    run.reticle = makeReticle();
-    const c0 = train.cars[0];
-    const hero = AC.makeHero(run, heroId, c0.x0 + 4, 0, S, G.chars[heroId].equip, 'p1');
+    GF.setFov(DT.settings.fov);
+    const hero = AC.makeHero(run, heroId, train.start.x, train.start.z, S, G.chars[heroId].equip, 'p1');
+    hero.facing = train.start.yaw;
+    hero.mesh.rotation.y = train.start.yaw;
     run.heroes.push(hero);
     run.players.push({ id: 'p1', local: true, hero, cmd: null });
     run.local = hero;
     run.S = S;
     if (S.mods.freeSnack) { const belt = G.chars[heroId].belt; const i = belt.findIndex((b, k) => !b && k < S.belt); if (i >= 0) belt[i] = M.loot.rollConsumable(); }
     bindRunApi(run);
-    GF.setMood({ light: 1, bg: line.sky[1], fog: [darker(line.trim), 30, 95], sun: [-10, 14, 1.5] });
+    run.fog = site ? (site.ceiling ? [darker(line.trim), 18, 70] : [line.sky[1], 45, 150]) : [darker(line.trim), 30, 95];
+    GF.setMood({ light: site && site.ceiling ? 0.92 : 1, bg: site && site.ceiling ? darker(line.trim) : line.sky[1], fog: run.fog, sun: [-10, 14, 1.5] });
     IN.reset();
     IN.enabled = true;
     IN.onLockChange = (s) => onLock(run, s);
     DT.ui.hud.show(run);
-    run.banner(line.name, 'route');
+    DT.ui.hud.titleCard(run);
     return run;
   };
   const darker = (hex) => { const c = new THREE.Color(hex); c.multiplyScalar(0.45); return '#' + c.getHexString(); };
   function onLock(r, state) {
     if (r !== run || r.over) return;
     if (state === 'unlocked' && !r.paused && !r.pendingOver && !DT.ui.hud.isMenuOpen()) DT.ui.hud.togglePause(r, true);
-    if (state === 'failed') DT.ui.hud.note('Mouse lock isn’t available here, so aim with the cursor. Hold right-click (or use ← →) to turn the camera — or switch back to the locked camera in Settings.', 8);
+    if (state === 'failed') DT.ui.hud.note('Mouse lock isn’t available here, so hold the right mouse button to look around (or turn with ← →).', 8);
     DT.ui.hud.refresh(r);
   }
 
@@ -82,7 +83,8 @@
       if (r.over || r.pendingOver) return;
       r.pendingOver = 'escaped'; r.how = how; r.overT = 0.8;
       DT.sfx.play('extract');
-      r.banner(how === 'brake' ? 'SCREEEECH! The train stops!' : how === 'flare' ? 'Lady Rainicorn swoops in!' : 'You jump off the train!', 'good');
+      const site = r.train.site;
+      r.banner(how === 'brake' ? 'SCREEEECH! The train stops!' : how === 'flare' ? 'Lady Rainicorn swoops in!' : how === 'portal' ? 'Through the portal, home to the Tree Fort!' : site ? 'You made it out!' : 'You jump off the train!', 'good');
     };
     r.spawnLoot = (x, z, loot) => spawnLoot(r, x, z, loot);
     r.smashNear = (h, reach, arcR, power) => smash(r, h.x, h.z, reach, power, h.facing, arcR);
@@ -104,14 +106,25 @@
       r.bossDown = true;
       r.stats.bosses += 1;
       const car = r.train.cars[e.car];
-      if (car.gate) { car.gate.open = true; car.gate.ob.active = false; if (car.gate.mesh) car.group.remove(car.gate.mesh); DT.sfx.play('door'); }
-      const line = r.train.line;
+      WG.setArena(r.train, car, false);
+      DT.sfx.play('door');
+      const line = r.train.line, site = r.train.site;
+      /* off the train, a way home opens in the middle of the boss room */
+      if (site) {
+        const px = car.cx, pz = car.cz;
+        r.train.inter.push({ kind: 'portal', x: px, z: pz, r: 2.2, car: car.i, time: 1.2 });
+        const m = MD.portal(line.accent);
+        m.position.set(px, 0, pz);
+        car.group.add(m);
+        r.portal = m;
+      }
+      const next = site ? 'A way home just opened!' : line.final ? '' : 'The engine is open.';
       if (D.TROPHIES[line.id] && !r.G.trophies[line.id]) {
         const it = M.loot.makeTrophy(line.id);
         dropItem(r, e.x, e.z, it, false);
         r.banner(`${e.name} is beaten! Grab the trophy and get it home!`, 'super');
-      } else if (line.final) r.banner(`${e.name} is beaten! Pull the brake to break the Loop!`, 'super');
-      else r.banner(`${e.name} is beaten! The engine is open.`, 'super');
+      } else if (line.final && !site) r.banner(`${e.name} is beaten! Pull the brake to break the Loop!`, 'super');
+      else r.banner(`${e.name} is beaten! ${next}`, 'super');
       DT.sfx.play('levelup');
       r.boss = null;
     };
@@ -220,13 +233,14 @@
       if (facing == null || d < 1) return true;
       return Math.abs(U.angleDiff(facing, Math.atan2(dx, dz))) <= arcR / 2 + 0.3;
     };
-    for (const b of r.train.breakables) if (b.alive && Math.abs(b.x - x) < reach + 1 && inArc(b.x, b.z, b.s / 2)) damageBreakable(r, b, power);
+    for (const b of r.train.breakables) if (b.alive && Math.abs(b.x - x) < reach + 1 && Math.abs(b.z - z) < reach + 1 && inArc(b.x, b.z, b.s / 2)) damageBreakable(r, b, power);
     for (const car of r.train.cars) {
-      if (car.lock && !car.lock.open && Math.abs(car.lock.x - x) < reach + 1 && inArc(car.lock.x, 0, 1.2)) {
-        car.lock.hp -= power;
+      const L = car.lock;
+      if (L && !L.open && U.dist2(L.x, L.z, x, z) < (reach + 1.4) * (reach + 1.4) && inArc(L.x, L.z, 1.2)) {
+        L.hp -= power;
         DT.sfx.play('hit');
-        r.popup(car.lock.x, 1.8, 0, car.lock.hp > 0 ? 'Clang!' : 'Smashed!', 'status');
-        if (car.lock.hp <= 0) openLock(r, car);
+        r.popup(L.x, 1.8, L.z, L.hp > 0 ? 'Clang!' : 'Smashed!', 'status');
+        if (L.hp <= 0) openLock(r, car);
       }
     }
   }
@@ -234,8 +248,8 @@
     car.lock.open = true;
     car.lock.ob.active = false;
     car.locked = false;
-    car.group.remove(car.lock.mesh);
-    GF.burst(car.lock.x, 1.2, 0, '#8a8f9a', 14, 5);
+    if (car.lock.mesh) car.lock.mesh.visible = false;
+    GF.burst(car.lock.x, 1.2, car.lock.z, '#8a8f9a', 14, 5);
     r.banner('The vault is open!', 'good');
     DT.sfx.play('open');
   }
@@ -253,8 +267,9 @@
     switch (it.kind) {
       case 'chest': return it.ref.locked ? 'Locked — defeat every monster in this car' : it.ref.keyLocked ? (hasKey(r, h) ? 'Unlock the chest (Skeleton Key)' : 'This chest needs a Skeleton Key') : 'Open the treasure chest';
       case 'lock': return hasKey(r, h) ? 'Unlock the vault (Skeleton Key)' : 'Locked vault — smash the gate or bring a Skeleton Key';
-      case 'bailout': return r.trophy ? 'Jump off with the trophy!' : 'Jump off the train';
+      case 'bailout': return r.train.site ? (r.trophy ? 'Get out with the trophy!' : 'Leave through here') : r.trophy ? 'Jump off with the trophy!' : 'Jump off the train';
       case 'brake': return 'Pull the emergency brake';
+      case 'portal': return r.trophy ? 'Take the trophy home!' : 'Take the way home';
       case 'snail': return 'Wave at the snail';
       default: return '';
     }
@@ -281,6 +296,7 @@
       }
       case 'lock': { const k = hasKey(r, h); if (k) { useKey(r, k); openLock(r, r.train.cars[it.car]); } break; }
       case 'bailout': r.extract('bailout'); break;
+      case 'portal': r.extract('portal'); break;
       case 'brake': { const car = r.train.cars[it.car]; if (car.leverMesh) car.leverMesh.userData.arm.rotation.x = 0.7; r.extract('brake'); break; }
       case 'snail': {
         r.once = r.once || {};
@@ -321,6 +337,8 @@
     const t = car.def;
     const tier = r.train.tier;
     let n = t.enemies ? R.int(t.enemies[0], t.enemies[1]) : 0;
+    /* off the train, bigger rooms hold a few more monsters */
+    if (r.train.site && n) n = Math.round(n * U.clamp(((car.x1 - car.x0) * (car.z1 - car.z0)) / 320, 0.8, 1.4));
     if (r.offer.mod === 'crowded') n = Math.round(n * 1.4);
     if (tier >= 4 && n) n += 1;
     const line = r.train.line;
@@ -343,11 +361,16 @@
       else { AC.spawnEnemy(r, R.pick(pool), p.x, p.z, { car: car.i, promote: true }); r.banner('A king-sized monster!', 'bad'); }
     }
     if (car.boss) {
-      const e = AC.spawnEnemy(r, car.boss, car.x1 - 9, 0, { car: car.i });
-      e.facing = -Math.PI / 2;
+      const sp = car.spawn || { x: car.cx, z: car.cz };
+      const e = AC.spawnEnemy(r, car.boss, sp.x, sp.z, { car: car.i });
+      e.facing = Math.atan2(h.x - sp.x, h.z - sp.z);
       r.boss = e;
+      /* the way in shuts behind you: no fighting the boss from the doorway */
+      WG.setArena(r.train, car, true);
       r.banner(D.BOSS_BRAINS[e.def.brain].intro, 'bad');
+      r.later(1.2, () => r.hudNote(r.train.site && r.train.site.gate === 'magic' ? 'A magic barrier seals the courtyard. No way out but through him!' : 'The doors slam shut behind you. No way out but through!', 4));
       DT.sfx.play('boss');
+      DT.sfx.play('door');
       r.shake(0.4);
     }
     car.spawned = n > 0 || !!car.elite || !!car.boss;
@@ -358,16 +381,17 @@
   /* ---------- the Loop ---------- */
   function enterTunnel(r) {
     r.tunnel = 25;
-    r.banner('THE LOOP TUNNEL! Get off the train NOW!', 'bad');
+    const site = r.train.site;
+    r.banner(site ? `${site.threat.end}! Get out NOW!` : 'THE LOOP TUNNEL! Get off the train NOW!', 'bad');
     DT.sfx.play('boss');
     WG.setTunnel(r.train, true);
-    GF.setMood({ light: 0.35, fog: ['#050508', 6, 38] });
+    GF.setMood({ light: 0.35, fog: site ? ['#1a0508', 6, 40] : ['#050508', 6, 38] });
   }
   function exitTunnel(r) {
     r.tunnel = null;
     WG.setTunnel(r.train, false);
-    GF.setMood({ light: 1, fog: [darker(r.train.line.trim), 30, 95] });
-    r.banner('Out of the tunnel… for now.', 'good');
+    GF.setMood({ light: 1, fog: r.fog });
+    r.banner(r.train.site ? 'Things calm down… for now.' : 'Out of the tunnel… for now.', 'good');
   }
 
   /* ---------- the loop ---------- */
@@ -383,14 +407,9 @@
     r.time += dt;
     const look = IN.lookDelta(dtRaw);
     const cam = r.cam;
-    if (IN.fixed) {
-      cam.yaw = Math.PI;
-      if (look.zoom) { DT.settings.zoom = U.clamp((DT.settings.zoom || 1) + look.zoom * 0.08, LOCK.zoomMin, LOCK.zoomMax); DT.saveSettings(); }
-    } else {
-      cam.yaw += look.yaw;
-      cam.pitch = U.clamp(cam.pitch + look.pitch, -0.3, 1.05);
-      cam.dist = U.clamp(cam.dist + look.zoom * 0.6, 3.5, 9);
-    }
+    cam.yaw += look.yaw;
+    cam.pitch = U.clamp(cam.pitch + look.pitch, CAM.pitchMin, CAM.pitchMax);
+    if (look.zoom) { cam.dist = U.clamp(cam.dist + look.zoom * 0.45, CAM.min, CAM.max); DT.settings.camDist = cam.dist; DT.saveSettings(); }
     for (const p of r.players) {
       p.cmd = p.local && !r.pendingOver ? IN.command(GF.camera, cam.yaw) : IN.idle(cam.yaw);
       AC.updateHero(r, p.hero, p.cmd, dt);
@@ -436,8 +455,8 @@
     GF.updateFx(dt);
     updateLoot(r, dt);
     const h = r.local;
-    const car = WG.carAt(r.train, h.x);
-    if (car) { r.carIdx = car.i; if (!car.entered && h.x > car.x0 + 1.2) spawnCar(r, car, h); }
+    const car = WG.carAt(r.train, h.x, h.z);
+    if (car) { r.carIdx = car.i; if (!car.entered && WG.inRoom(r.train, car, h.x, h.z, car.boss ? 2.6 : 0.9)) spawnCar(r, car, h); }
     r.inCombat = r.enemies.some((e) => e.car === r.carIdx);
     updateInteract(r, h, r.players[0].cmd, dt);
     if (!r.pendingOver) {
@@ -462,86 +481,48 @@
       if (c2.bailoutMesh) c2.bailoutMesh.material.opacity = 0.2 + Math.sin(r.time * 4) * 0.1;
       if (c2.snailMesh && !(r.once && r.once.snail)) c2.snailMesh.userData.stalk.rotation.z = Math.sin(r.time * 6) * 0.6;
     }
-    for (const t of r.train.skyTex) t.offset.x += dt * 0.012;
-    r.train.groundTex.offset.x += dt * 1.6;
-    for (const w of r.train.wheels) w.rotation.z -= dt * 9;
-    updateReticle(r, dt);
-    for (const s of r.train.skies) s.position.x = GF.camera.position.x;
+    if (r.portal) { r.portal.userData.spin.rotation.z += dt * 2.2; r.portal.userData.spin.scale.setScalar(1 + Math.sin(r.time * 3) * 0.04); }
+    if (r.train.kind === 'train') {
+      for (const t of r.train.skyTex) t.offset.x += dt * 0.012;
+      r.train.groundTex.offset.x += dt * 1.6;
+      for (const w of r.train.wheels) w.rotation.z -= dt * 9;
+      for (const s of r.train.skies) s.position.x = GF.camera.position.x;
+    }
     updateCamera(r, dt);
     DT.ui.hud.update(r, dt);
     IN.endFrame();
   };
 
-  /* ---------- cameras ---------- */
-  /* The locked camera looks into the car from the aisle side, at a fixed angle, and slides along the
-     train with the hero. It never turns, so W is always up the screen and D is always toward the engine.
-     The near wall and the roof are cut away (see WG.setCameraMode). */
-  const LOCK = { pitch: 0.7, fov: 40, dist: 14, zoomMin: 0.75, zoomMax: 1.3, lookZ: 0 };
-  RA.LOCK = LOCK;
+  /* ---------- the camera ---------- */
+  /* Third person, locked behind the hero: the mouse turns the camera and the hero turns with it, so the
+     hero always faces where you look. It sits a little over the right shoulder, and it pulls in (at once)
+     when a wall or the ceiling gets in the way, then eases back out. */
+  const CAM = { shoulder: 0.8, height: 2.1, pitchMin: -0.45, pitchMax: 1.0, min: 2.6, max: 8 };
+  RA.CAM = CAM;
   function updateCamera(r, dt) {
-    if (IN.fixed) lockedCamera(r, dt); else freeCamera(r, dt);
+    const h = r.local, cam = r.cam;
+    const sc = Math.sqrt(h.scale);
+    const yaw = cam.yaw, pitch = cam.pitch, cp = Math.cos(pitch);
+    const big = (h.buffs.mega > 0 || h.buffs.giant > 0 ? 1.3 : 1) * (r.superAct ? 1.12 : 1);
+    const lx = Math.sin(yaw) * cp, ly = -Math.sin(pitch), lz = Math.cos(yaw) * cp;
+    const rx = -Math.cos(yaw), rz = Math.sin(yaw);
+    const base = { x: h.x, y: (h.liftY || 0) + CAM.height * sc, z: h.z };
+    const pivot = WG.cameraSafe(r.train, base, { x: base.x + rx * CAM.shoulder * sc, y: base.y, z: base.z + rz * CAM.shoulder * sc });
+    const dist = cam.dist * big * sc;
+    const safe = WG.cameraSafe(r.train, pivot, { x: pivot.x - lx * dist, y: pivot.y - ly * dist, z: pivot.z - lz * dist });
+    const d = Math.hypot(safe.x - pivot.x, safe.y - pivot.y, safe.z - pivot.z);
+    if (cam.d == null || d < cam.d || !dt) cam.d = d;
+    else cam.d += (d - cam.d) * Math.min(1, dt * 4);
+    let sx = 0, sy = 0;
+    if (r.shakeT > 0 && dt) { r.shakeT = Math.max(0, r.shakeT - dt); const k = r.shakeT * 0.9; sx = R.float(-k, k); sy = R.float(-k, k); }
+    GF.camera.position.set(pivot.x - lx * cam.d + sx, pivot.y - ly * cam.d + sy, pivot.z - lz * cam.d);
+    GF.camera.lookAt(pivot.x + lx * 12 + sx, pivot.y + ly * 12 + sy, pivot.z + lz * 12);
     fadeProps(r, dt);
   }
-  function lockedCamera(r, dt) {
-    const h = r.local, cam = r.cam;
-    const big = h.buffs.mega > 0 || h.buffs.giant > 0 ? 1.2 : 1;
-    const dist = LOCK.dist * (DT.settings.zoom || 1) * big * (r.superAct ? 1.06 : 1);
-    /* follow along the train only: the whole width of the car always fits on screen */
-    if (cam.fx == null) cam.fx = h.x;
-    const k = dt ? 1 - Math.exp(-dt * 8) : 0;
-    cam.fx += (h.x - cam.fx) * k;
-    cam.fd = cam.fd == null ? dist : cam.fd + (dist - cam.fd) * (dt ? 1 - Math.exp(-dt * 6) : 0);
-    const ty = 0.8, tz = LOCK.lookZ;
-    cam.x = cam.fx; cam.y = ty + Math.sin(LOCK.pitch) * cam.fd; cam.z = tz + Math.cos(LOCK.pitch) * cam.fd;
-    let sx = 0, sy = 0;
-    if (r.shakeT > 0 && dt) { r.shakeT = Math.max(0, r.shakeT - dt); const s = r.shakeT * 0.9; sx = R.float(-s, s); sy = R.float(-s, s); }
-    GF.camera.position.set(cam.x + sx, cam.y + sy, cam.z);
-    GF.camera.lookAt(cam.fx + sx, ty + sy, tz);
-  }
-  /* Free camera: third person over the right shoulder, pulled in so walls never block the view. */
-  function freeCamera(r, dt) {
-    const h = r.local;
-    const cam = r.cam;
-    const sc = Math.sqrt(h.scale);
-    const yaw = cam.yaw, pitch = cam.pitch;
-    const dist = cam.dist * (h.buffs.mega > 0 || h.buffs.giant > 0 ? 1.35 : 1) * (r.superAct ? 1.2 : 1);
-    const lx = Math.sin(yaw) * Math.cos(pitch), ly = -Math.sin(pitch), lz = Math.cos(yaw) * Math.cos(pitch);
-    const rx = -Math.cos(yaw), rz = Math.sin(yaw);
-    const pivot = { x: h.x + rx * 0.6 * sc, y: (h.liftY || 0) + 1.6 * sc, z: h.z + rz * 0.6 * sc };
-    const want = { x: pivot.x - lx * dist, y: pivot.y - ly * dist, z: pivot.z - lz * dist };
-    let safe = WG.cameraSafe(r.train, pivot, want);
-    /* big monsters (bosses, elites) that get between the camera and the hero push the camera in and up,
-       so you never lose sight of your hero behind a boss */
-    const segx = safe.x - pivot.x, segz = safe.z - pivot.z, segL = Math.hypot(segx, segz) || 1;
-    let pull = 1;
-    for (const e of r.enemies) {
-      if (e.dead || e.state === 'spawn' || !(e.boss || e.elite || e.r > 0.85)) continue;
-      const er = e.r * 1.15 + 0.35;
-      const t = ((e.x - pivot.x) * segx + (e.z - pivot.z) * segz) / (segL * segL);
-      if (t <= 0 || t >= 1.25) continue;
-      if (Math.hypot(e.x - (pivot.x + segx * t), e.z - (pivot.z + segz * t)) > er) continue;
-      pull = Math.min(pull, Math.max(0.22, (t * segL - er) / segL));
-    }
-    if (pull < 1) safe = { x: pivot.x + segx * pull, y: Math.min(WG.WD.H - 0.5, safe.y + (1 - pull) * 1.5), z: pivot.z + segz * pull };
-    const k = dt ? Math.min(1, dt * (pull < 1 ? 8 : 18)) : 1;
-    if (cam.free !== true) { cam.x = safe.x; cam.y = safe.y; cam.z = safe.z; cam.free = true; }
-    cam.x = U.lerp(cam.x, safe.x, k); cam.y = U.lerp(cam.y, safe.y, k); cam.z = U.lerp(cam.z, safe.z, k);
-    let sx = 0, sy = 0;
-    if (r.shakeT > 0 && dt) { r.shakeT = Math.max(0, r.shakeT - dt); const s = r.shakeT * 0.9; sx = R.float(-s, s); sy = R.float(-s, s); }
-    GF.camera.position.set(cam.x + sx, cam.y + sy, cam.z);
-    GF.camera.lookAt(pivot.x + lx * 12, pivot.y + ly * 12, pivot.z + lz * 12);
-  }
-  /* Switch cameras (from Settings), even in the middle of a trip. */
-  RA.setCameraMode = function (fixed) {
-    const r = run;
-    IN.setCamera(fixed, DT.settings.cursorAim);
-    if (!r) return;
-    WG.setCameraMode(r.train, IN.fixed);
-    GF.setFov(IN.fixed ? LOCK.fov : DT.settings.fov);
-    r.cam.yaw = IN.fixed ? Math.PI : Math.PI / 2;
-    r.cam.pitch = 0.3;
-    r.cam.fx = null; r.cam.fd = null; r.cam.free = false;
-    updateCamera(r, 0);
+  /* Settings changed mid-trip (field of view, camera distance). */
+  RA.applySettings = function () {
+    GF.setFov(DT.settings.fov);
+    if (run) { run.cam.dist = U.clamp(DT.settings.camDist || run.cam.dist, CAM.min, CAM.max); updateCamera(run, 0); }
   };
 
   /* Tall props (mushrooms, shelves, cages…) that stand between the camera and the hero fade out,
@@ -561,9 +542,9 @@
   }
   function fadeProps(r, dt) {
     const c = GF.camera.position, h = r.local;
-    const cars = r.train.cars;
-    for (let ci = Math.max(0, r.carIdx - 1); ci <= Math.min(cars.length - 1, r.carIdx + 1); ci++) {
-      for (const p of cars[ci].props) {
+    for (const car of r.train.cars) {
+      if (h.x < car.x0 - 12 || h.x > car.x1 + 12 || h.z < car.z0 - 12 || h.z > car.z1 + 12) continue;
+      for (const p of car.props) {
         if (!p.tall || !p.mesh) continue;
         const s = p.size || 1, hw = (p.w * s) / 2 + 0.2, hd = (p.d * s) / 2 + 0.2, top = p.h * s;
         let hide = false;
@@ -599,34 +580,6 @@
     for (const o of p.fadeInk) o.visible = solid;
   }
 
-  /* The aim marker on the floor under the cursor (it hugs the monster you're pointing at). */
-  function makeReticle() {
-    const g = new THREE.Group();
-    const ring = new THREE.Mesh(GF.geo('ring', 0.8, 1, 40), GF.basic('#ffffff', { opacity: 0.7 }));
-    ring.rotation.x = -Math.PI / 2;
-    const dot = new THREE.Mesh(GF.geo('circle', 0.12, 16), GF.basic('#ffffff', { opacity: 0.8 }));
-    dot.rotation.x = -Math.PI / 2;
-    g.add(ring, dot);
-    g.userData = { ring, dot };
-    g.visible = false;
-    GF.scene.add(g);
-    return g;
-  }
-  const RET_IDLE = window.THREE ? GF.lin('#ffffff') : null, RET_HOT = window.THREE ? GF.lin('#ff5a4a') : null;
-  function updateReticle(r, dt) {
-    const g = r.reticle, h = r.local;
-    if (!g) return;
-    g.visible = IN.mode === 'cursor' && !h.ko && !r.paused && !!h.aim;
-    if (!g.visible) return;
-    const tgt = h.aim.target && !h.aim.target.dead ? h.aim.target : null;
-    const rad = tgt ? tgt.r + 0.25 : 0.34;
-    g.userData.rad = U.lerp(g.userData.rad || rad, rad, Math.min(1, dt * 16));
-    g.position.set(tgt ? tgt.x : h.aim.x, 0.04, tgt ? tgt.z : h.aim.z);
-    g.scale.setScalar(g.userData.rad * (tgt ? 1 + Math.sin(r.time * 10) * 0.06 : 1));
-    g.userData.ring.material.color.copy(tgt ? RET_HOT : RET_IDLE);
-    g.userData.dot.visible = !tgt;
-  }
-
   /* ---------- the end of a trip ---------- */
   function finish(r, outcome) {
     r.over = outcome;
@@ -638,7 +591,7 @@
     G.stats.trips += 1; Ch.trips += 1;
     G.stats.kills += r.stats.kills; G.stats.elites += r.stats.elites; G.stats.chests += r.stats.chests; G.stats.supers += r.stats.supers; G.stats.bosses += r.stats.bosses;
     if (outcome === 'escaped') {
-      const bonus = r.how === 'brake' ? 1.25 : 1;
+      const bonus = r.how === 'brake' || r.how === 'portal' ? 1.25 : 1;
       let xp = (r.xp + 30 * tier) * bonus * (1 + S.xp) * (r.offer.mod === 'express' ? 1.3 : 1);
       const gold = Math.round(r.gold * bonus);
       G.gold += gold;
@@ -679,7 +632,6 @@
     for (const z of r.zones) { if (z.mesh) GF.scene.remove(z.mesh); if (z.tele) z.tele.alive = false; if (z.ring) z.ring.alive = false; }
     for (const d of r.drops) GF.scene.remove(d.mesh);
     for (const c of r.coins) GF.scene.remove(c.mesh);
-    if (r.reticle) GF.scene.remove(r.reticle);
     GF.clearFx();
     WG.disposeTrain(r.train);
     GF.setMood({ light: 1, fog: null });

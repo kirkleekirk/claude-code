@@ -695,6 +695,31 @@
     p.armWind = -2.3; p.armHit = -1.4; p.bob = 0.03; p.headTilt = 0.1;
   };
 
+  /* The Wizard Police: a tall, muscular wizard in a blue robe with a bandana over one eye (the eye under
+     it fires the arresting beam) and a badge on the hat. */
+  B.police = function (def, b, p, g) {
+    const robe = '#2f4fa8', skin = R.pick(['#ffd9c2', '#e8b996', '#c98d6a']);
+    const A = 0.5, H = 1.35;
+    b.add(P(G('drop', A, H, 0.9), robe, [0, H / 2, 0]));
+    b.add(P(G('sphere', 0.34, 14, 10), robe, [0, 1.22, 0], { scale: [1.5, 0.75, 1.0] }));
+    b.add(P(G('torus', dropR(A, H, 0.9, 0.12) + 0.01, 0.035, 20), '#ffcf3d', [0, 0.12, 0], { rot: [Math.PI / 2, 0, 0], ink: false }));
+    b.add(P(G('box', 0.5, 0.08, 0.05), '#ffcf3d', [0, 0.95, dropR(A, H, 0.9, 0.95) + 0.01], { ink: false }));
+    const hd = grp(b, 0, 1.55, 0.03);
+    p.head = hd;
+    hd.add(P(G('sphere', 0.24, 14, 12), skin, [0, 0, 0]));
+    hd.add(P(G('sphere', 0.035, 8, 6), INK, [0.085, 0.04, 0.215], { ink: false }));
+    hd.add(P(G('box', 0.5, 0.09, 0.08), '#1d2340', [0, 0.06, 0.19], { rot: [0, 0, -0.15], ink: false }));
+    hd.add(P(G('box', 0.14, 0.16, 0.05), '#1d2340', [-0.09, 0.03, 0.23], { ink: false }));
+    hd.add(P(G('drop', 0.17, 0.45, 1.2), '#4a3a2a', [0, -0.28, 0.12], { rot: [Math.PI, 0, 0] }));
+    hd.add(P(G('cyl', 0.36, 0.36, 0.03, 20), robe, [0, 0.15, 0]));
+    hd.add(P(G('cone', 0.24, 0.66, 14), robe, [0, 0.46, -0.04], { rot: [-0.2, 0, 0] }));
+    hd.add(P(G('star4', 0.09), '#ffe14a', [0, 0.36, 0.15], { basic: true, rot: [-0.2, 0, 0] }));
+    p.arms = [];
+    for (const s of [-1, 1]) p.arms.push(limb(b, 0.46 * s, 1.26, 0.02, 0.44, 0.09, robe, ['hand', 0.09, skin]));
+    p.armWind = -2.0; p.armHit = -1.2; p.bob = 0.03; p.headTilt = 0.06;
+    g.scale.setScalar(1.12);
+  };
+
   B.bufo = function (def, b, p) {
     const SK = '#6fbf4a', SK2 = '#58a43a', ROBE = '#7a3bc4';
     b.add(P(G('sphere', 0.55, 20, 16), SK, [0, 0.62, 0], { scale: [1.2, 0.85, 1.05] }));

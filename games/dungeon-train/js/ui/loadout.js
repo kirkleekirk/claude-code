@@ -73,7 +73,7 @@
     for (let i = 0; i < 4; i++) {
       const id = C.bars[i];
       const locked = i >= S.abilitySlots;
-      const key = DT.game.input.KEY_LABEL.ab[i];
+      const key = esc(DT.game.input.label('ab' + i));
       if (locked) { out += `<div class="abslot locked" data-tip="ablock" data-idx="${i}"><span class="k">${key}</span>${icon('lock')}<small>Lv ${H.abilityLevels[i]}</small></div>`; continue; }
       if (id) {
         const known = S.abilities.find((a) => a.id === id);
@@ -81,14 +81,14 @@
       } else out += `<div class="abslot empty" data-act="ab-slot" data-idx="${i}" data-drop="bar" data-tip="abempty"><span class="k">${key}</span>${icon('plus')}<small>Empty</small></div>`;
     }
     const sup = D.SUPERS[h];
-    out += `<div class="abslot super" data-tip="super"><span class="k">Q</span><span class="ab-ico">${icon(sup.icon)}</span><small>${esc(sup.name)}</small></div>`;
+    out += `<div class="abslot super" data-tip="super"><span class="k">${esc(DT.game.input.label('super'))}</span><span class="ab-ico">${icon(sup.icon)}</span><small>${esc(sup.name)}</small></div>`;
     return out;
   }
   function beltRow(G, h, S) {
     const C = G.chars[h];
     let out = '';
     for (let i = 0; i < 5; i++) {
-      const key = DT.game.input.KEY_LABEL.belt[i];
+      const key = esc(DT.game.input.label('belt' + i));
       const it = C.belt[i];
       if (i >= S.belt) { out += `<div class="beltwrap">${UI.emptyTile({ idx: i, locked: 'Locked', tip: 'beltlock', cls: 'small' })}<kbd>${key}</kbd></div>`; continue; }
       out += `<div class="beltwrap" data-drop="belt" data-idx="${i}">${it ? UI.tile(it, { src: 'belt', idx: i, sel: st.sel === it.uid, cls: 'small' }) : UI.emptyTile({ idx: i, drop: 'belt', cls: 'small', tip: 'belt' })}<kbd>${key}</kbd></div>`;
@@ -353,7 +353,7 @@
     for (let i = 0; i < S.backpack; i++) x += r.backpack[i] ? UI.tile(r.backpack[i], { src: 'pack', sel: st.sel === r.backpack[i].uid }) : UI.emptyTile({ drop: 'pack' });
     x += `</div><div class="eq-label">${icon(H.safeIcon)} ${esc(H.safeName)} <small>${C.safe.length}/${S.safe} · safe even if you’re knocked out</small></div><div class="grid" data-drop="rsafe">`;
     for (let i = 0; i < S.safe; i++) x += C.safe[i] ? UI.tile(C.safe[i], { src: 'rsafe' }) : UI.emptyTile({ drop: 'rsafe', ghost: icon(H.safeIcon) });
-    x += `</div><div class="eq-label">Snack belt</div><div class="eq-row">${C.belt.slice(0, S.belt).map((it, i) => `<div class="beltwrap">${it ? UI.tile(it, { src: 'rbelt', idx: i, cls: 'small', drag: false }) : UI.emptyTile({ cls: 'small' })}<kbd>${DT.game.input.KEY_LABEL.belt[i]}</kbd></div>`).join('')}</div>`;
+    x += `</div><div class="eq-label">Snack belt</div><div class="eq-row">${C.belt.slice(0, S.belt).map((it, i) => `<div class="beltwrap">${it ? UI.tile(it, { src: 'rbelt', idx: i, cls: 'small', drag: false }) : UI.emptyTile({ cls: 'small' })}<kbd>${esc(DT.game.input.label('belt' + i))}</kbd></div>`).join('')}</div>`;
     x += `<div class="gold-line">${icon('coin')} ${U.fmt(r.gold)} gold picked up this trip</div></section>`;
     x += `<section class="panel"><div class="eq-label">Wearing</div><div class="grid">${H.slots.filter((s) => !M.slotLock(G, h, s)).map((s) => C.equip[s.id] ? UI.tile(C.equip[s.id], { src: 'requip', slot: s.id, drag: false }) : UI.emptyTile({ ghost: UI.art.slotArt(s.kind), label: s.label })).join('')}</div>`;
     x += `<p class="eq-note">${icon('info')} Found something better? Select it and press Equip — your old item goes into the backpack.</p><div id="inv-card" class="inv-card">${st.sel && r.backpack.some((i) => i.uid === st.sel) ? LO.raidCard(r, st.sel) : `<p class="empty-note">Hover or click an item to see what it does.</p>`}</div></section>`;

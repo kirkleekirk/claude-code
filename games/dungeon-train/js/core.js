@@ -37,7 +37,7 @@
 
   const SAVE_KEY = 'dt.save.v1';
   const SETTINGS_KEY = 'dt.settings.v1';
-  const DEFAULT_SETTINGS = { volume: 0.6, muted: false, shake: true, sens: 1, invertY: false, fov: 70, numbers: true, invPause: true, freeCam: false, zoom: 1 };
+  const DEFAULT_SETTINGS = { volume: 0.6, muted: false, shake: true, sens: 1, invertY: false, fov: 70, numbers: true, invPause: true, dragLook: false, camDist: 5.8, binds: null };
   const store = {
     load() { try { const r = localStorage.getItem(SAVE_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; } },
     save(s) { try { localStorage.setItem(SAVE_KEY, JSON.stringify(s)); return true; } catch (e) { return false; } },
@@ -66,6 +66,8 @@
 
   /* 24px stroke icons for buttons, stats and small UI */
   const P = {
+    map: '<path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/>',
+    alert: '<path d="M12 3L2 21h20z"/><path d="M12 10v5M12 18v.5"/>',
     sword: '<path d="M14.5 3.5H20.5V9.5L9 21 3 15z"/><path d="M13 5l6 6M5 13l6 6M3 21l2-2"/>',
     fist: '<path d="M7 11V7.5a1.5 1.5 0 0 1 3 0V11M10 10V6.5a1.5 1.5 0 0 1 3 0V10M13 10V7a1.5 1.5 0 0 1 3 0v3M16 10.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-1a6 6 0 0 1-6-6v-3a1.5 1.5 0 0 1 3 0"/>',
     hat: '<path d="M4 17a8 8 0 0 1 16 0v3H4z"/><circle cx="7.5" cy="8" r="2"/><circle cx="16.5" cy="8" r="2"/><path d="M8 17h8"/>',

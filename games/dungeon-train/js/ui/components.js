@@ -322,16 +322,24 @@
     const st = M.tree.state(G, heroId, n.id);
     const br = T.branches.find((b) => b.id === n.branch);
     let h = `<div class="ncard t-${n.type}" style="--c:${n.color}"><header><span class="n-type">${UI.nodeTypeName(n.type)}</span>${br ? `<span class="n-br">${esc(br.name)}</span>` : n.branch === 'bridge' ? '<span class="n-br">Bridge</span>' : ''}</header><div class="n-name">${esc(n.name)}</div>`;
+    if (n.req > 1 || n.maxRank > 1) {
+      const lv = G.chars[heroId].level;
+      const bits = [];
+      if (n.req > 1) bits.push(`<span class="${lv >= n.req ? 'good' : 'bad'}">${icon('lock')} Level ${n.req}</span>`);
+      if (n.maxRank > 1) bits.push(`<span>${icon('refresh')} Rank ${st.rank || 0} of ${n.maxRank}${st.rank < n.maxRank && st.rank > 0 ? ` · next at level ${M.tree.reqFor(n, st.rank + 1)}` : ''}</span>`);
+      h += `<div class="n-req">${bits.join('')}</div>`;
+    }
     if (n.type === 'ability') h += UI.abilityCard(G, heroId, n.ability, {});
     else {
       const d = UI.nodeDesc(n);
-      h += `<p>${UI.kw(d)}</p>`;
+      h += `<p>${n.maxRank > 1 ? '<b>Each rank:</b> ' : ''}${UI.kw(d)}</p>`;
+      if (n.maxRank > 1 && st.rank > 1 && n.stats) h += `<p class="muted small">You have it ${st.rank} times: ${esc(Object.keys(n.stats).map((k) => UI.statText(k, n.stats[k] * st.rank)).join(', '))}.</p>`;
       if (n.desc && n.stats && n.type !== 'keystone') h += `<ul class="stat-lines">${statList(n.stats)}</ul>`;
       if (n.type === 'keystone') h += `<p class="ic-note">${icon('info')} Keystones change your build in a big way — with a catch.</p>`;
       if (n.type === 'mod') { const ab = Object.keys(n.abMods)[0]; h += `<p class="ic-note">${icon('info')} Upgrades ${esc(D.ABILITIES[ab].name)}. You need that ability first.</p>`; }
       h += UI.glossary([d]);
     }
-    const state = st.owned ? `<span class="good">${icon('check')} ${esc(st.reason)}</span>` : st.ok ? `<span class="good">${icon('unlock')} Click to unlock (1 point)</span>` : `<span class="bad">${icon('lock')} ${esc(st.reason)}</span>`;
+    const state = st.rankUp ? `<span class="good">${icon('arrowUp')} Rank ${st.rank} of ${st.max} · click for rank ${st.rank + 1} (1 point)</span>` : st.owned ? `<span class="good">${icon('check')} ${esc(st.reason)}</span>` : st.ok ? `<span class="good">${icon('unlock')} Click to unlock (1 point)</span>` : `<span class="bad">${icon('lock')} ${esc(st.reason)}</span>`;
     if (o.state !== false) h += `<footer>${state}</footer>`;
     return h + '</div>';
   };

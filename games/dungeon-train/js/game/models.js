@@ -398,7 +398,12 @@
       case 'bones': for (let i = 0; i < 5; i++) g.add(P(G('cyl', 0.04, 0.04, 0.5, 6), '#f5f0e1', [R.float(-0.5, 0.5), 0.05, R.float(-0.4, 0.4)], { rot: [Math.PI / 2, R.float(0, 3), 0], ink: false })); g.add(P(G('sphere', 0.14, 10, 8), '#f5f0e1', [0.2, 0.12, 0.1], { ink: false })); break;
       case 'cage': { g.add(P(G('box', 1.6, 0.12, 1.6), '#3a3f4b', [0, 0.06, 0])); g.add(P(G('box', 1.6, 0.12, 1.6), '#3a3f4b', [0, 2.3, 0])); for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; g.add(P(G('cyl', 0.035, 0.035, 2.3, 6), '#5a5f6a', [Math.cos(a) * 0.72, 1.15, Math.sin(a) * 0.72], { ink: false })); } if (o.skull) g.add(P(G('sphere', 0.16, 10, 8), '#f5f0e1', [0, 0.2, 0])); break; }
       case 'rack': { g.add(P(G('box', 2.0, 0.12, 0.3), '#6b4226', [0, 1.8, 0])); g.add(P(G('box', 2.0, 0.12, 0.3), '#6b4226', [0, 0.4, 0])); for (let i = 0; i < 5; i++) g.add(P(G('box', 0.06, 1.6, 0.06), '#b8c2cc', [-0.8 + i * 0.4, 1.1, 0.1], { ink: false })); break; }
-      case 'banquet': { g.add(P(G('box', 4.2, 0.12, 1.3), '#7a4b2a', [0, 0.85, 0])); for (const x of [-1.9, 1.9]) for (const z of [-0.5, 0.5]) g.add(P(G('box', 0.12, 0.8, 0.12), '#5c3b22', [x, 0.4, z])); for (let i = 0; i < 4; i++) g.add(P(G('cyl', 0.07, 0.05, 0.2, 8), '#ffcf3d', [-1.4 + i * 0.95, 1.0, R.float(-0.3, 0.3)], { ink: false })); g.add(P(G('cyl', 0.04, 0.04, 0.3, 6), '#f4efe6', [0, 1.06, 0], { ink: false })); const f = new THREE.Mesh(G('cone', 0.05, 0.14, 6), FLAME()); f.position.set(0, 1.28, 0); g.add(f); break; }
+      case 'banquet': {
+        g.add(P(G('box', 4.2, 0.12, 1.3), '#7a4b2a', [0, 0.85, 0])); for (const x of [-1.9, 1.9]) for (const z of [-0.5, 0.5]) g.add(P(G('box', 0.12, 0.8, 0.12), '#5c3b22', [x, 0.4, z]));
+        if (o.pies) for (let i = 0; i < 4; i++) { g.add(P(G('cyl', 0.3, 0.26, 0.12, 14), '#e8a95a', [-1.5 + i * 1.0, 0.97, R.float(-0.25, 0.25)])); g.add(P(G('cyl', 0.24, 0.24, 0.02, 14), R.pick(['#c2413a', '#7a3bc4', '#f0b429']), [-1.5 + i * 1.0, 1.04, 0], { ink: false })); }
+        else for (let i = 0; i < 4; i++) g.add(P(G('cyl', 0.07, 0.05, 0.2, 8), '#ffcf3d', [-1.4 + i * 0.95, 1.0, R.float(-0.3, 0.3)], { ink: false }));
+        g.add(P(G('cyl', 0.04, 0.04, 0.3, 6), '#f4efe6', [0, 1.06, 0], { ink: false })); const f = new THREE.Mesh(G('cone', 0.05, 0.14, 6), FLAME()); f.position.set(0, 1.28, 0); g.add(f); break;
+      }
       case 'mushroom': { const s = o.size || 1; g.add(P(G('cyl', 0.18 * s, 0.24 * s, 1.2 * s, 10), '#f4efe6', [0, 0.6 * s, 0])); g.add(P(G('sphere', 0.8 * s, 16, 10), o.color || '#e0423a', [0, 1.25 * s, 0], { scale: [1, 0.55, 1] })); for (let i = 0; i < 5; i++) { const a = i * 1.3; g.add(P(G('sphere', 0.1 * s, 8, 6), '#ffffff', [Math.cos(a) * 0.5 * s, 1.5 * s, Math.sin(a) * 0.5 * s], { ink: false })); } break; }
       case 'throne': g.add(P(G('box', 1.4, 0.6, 1.2), '#5c1a2a', [0, 0.3, 0])); g.add(P(G('box', 1.4, 2.4, 0.3), '#5c1a2a', [0, 1.3, -0.5])); g.add(P(G('box', 1.5, 0.2, 0.35), acc, [0, 2.55, -0.5])); break;
       case 'bench': g.add(P(G('box', 2.2, 0.45, 0.8), '#7a5a3a', [0, 0.32, 0])); g.add(P(G('box', 2.2, 0.7, 0.18), '#7a5a3a', [0, 0.8, -0.32])); break;
@@ -449,12 +454,13 @@
         for (const a of [0, 2.1, 4.2]) g.add(P(G('cyl', 0.05, 0.05, 0.3, 6), '#2a2e38', [Math.cos(a) * 0.45, 0.12, Math.sin(a) * 0.45], { ink: false }));
         break;
       }
-      /* vampire ballrooms */
+      /* vampire ballrooms (plain: grey stone, for the subway station) */
       case 'pillar':
-        g.add(P(G('cyl', 0.34, 0.38, 3.9, 12), '#6a4a5a', [0, 1.95, 0]));
-        g.add(P(G('box', 0.9, 0.2, 0.9), '#4a3040', [0, 0.1, 0]));
-        g.add(P(G('box', 0.9, 0.2, 0.9), '#4a3040', [0, 3.9, 0]));
-        g.add(P(G('cyl', 0.36, 0.36, 0.4, 12), '#a3122f', [0, 1.6, 0], { ink: false }));
+        g.add(P(G('cyl', 0.34, 0.38, 3.9, 12), o.plain ? '#8a8e86' : '#6a4a5a', [0, 1.95, 0]));
+        g.add(P(G('box', 0.9, 0.2, 0.9), o.plain ? '#5a5e56' : '#4a3040', [0, 0.1, 0]));
+        g.add(P(G('box', 0.9, 0.2, 0.9), o.plain ? '#5a5e56' : '#4a3040', [0, 3.9, 0]));
+        if (!o.plain) g.add(P(G('cyl', 0.36, 0.36, 0.4, 12), '#a3122f', [0, 1.6, 0], { ink: false }));
+        else g.add(P(G('cyl', 0.36, 0.36, 0.3, 12), '#e0c040', [0, 1.4, 0], { ink: false }));
         break;
       case 'chandelier': {
         const y = 3.6;
@@ -469,8 +475,174 @@
         }
         break;
       }
+      /* the Mystery Dungeon's carved stone at the entrance */
+      case 'obelisk': {
+        const c = o.color || '#c8b88a';
+        g.add(P(G('box', 1.0, 2.8, 0.5), c, [0, 1.4, 0]));
+        g.add(P(G('cone', 0.72, 0.5, 4), c, [0, 3.05, 0], { rot: [0, Math.PI / 4, 0] }));
+        for (let i = 0; i < 6; i++) g.add(P(G('box', 0.62 - (i % 2) * 0.14, 0.05, 0.02), INK, [0, 1.0 + i * 0.26, 0.26], { ink: false }));
+        g.add(P(G('ring', 0.08, 0.14, 16), INK, [0, 2.6, 0.26], { ink: false }));
+        break;
+      }
+      /* Wizard City */
+      case 'fountain': {
+        const w = o.color || '#5ec8ff';
+        g.add(P(G('cyl', 1.55, 1.65, 0.55, 24), '#b8b0a4', [0, 0.28, 0]));
+        g.add(P(G('circle', 1.4, 24), w, [0, 0.52, 0], { rot: [-Math.PI / 2, 0, 0], basic: true, ink: false }));
+        g.add(P(G('cyl', 0.22, 0.3, 1.3, 12), '#b8b0a4', [0, 0.9, 0]));
+        g.add(P(G('cyl', 0.62, 0.4, 0.2, 18), '#b8b0a4', [0, 1.55, 0]));
+        g.add(P(G('circle', 0.55, 18), w, [0, 1.66, 0], { rot: [-Math.PI / 2, 0, 0], basic: true, ink: false }));
+        g.add(P(G('sphere', 0.16, 10, 8), w, [0, 1.85, 0], { basic: true, ink: false }));
+        g.add(P(G('star4', 0.2), '#ffe14a', [0, 2.2, 0], { basic: true }));
+        break;
+      }
+      case 'lamppost': {
+        g.add(P(G('cyl', 0.2, 0.26, 0.3, 10), '#2a2e38', [0, 0.15, 0]));
+        g.add(P(G('cyl', 0.07, 0.09, 3.2, 8), '#2a2e38', [0, 1.7, 0]));
+        g.add(P(G('box', 0.42, 0.5, 0.42), '#2a2e38', [0, 3.45, 0]));
+        g.add(P(G('box', 0.32, 0.4, 0.32), '#ffe9a8', [0, 3.45, 0], { basic: true, ink: false }));
+        g.add(P(G('cone', 0.34, 0.3, 4), '#2a2e38', [0, 3.85, 0], { rot: [0, Math.PI / 4, 0] }));
+        break;
+      }
+      case 'stall': {
+        const c = o.color || '#e0423a';
+        g.add(P(G('box', 2.4, 0.9, 1.2), '#8a5a34', [0, 0.45, 0]));
+        for (const x of [-1.1, 1.1]) for (const z of [-0.55, 0.55]) g.add(P(G('cyl', 0.05, 0.05, 2.4, 6), '#5c3b22', [x, 1.2, z], { ink: false }));
+        for (let i = 0; i < 5; i++) g.add(P(G('box', 0.52, 0.06, 1.7), i % 2 ? '#fff4e0' : c, [-1.04 + i * 0.52, 2.45, 0.1], { rot: [0.18, 0, 0] }));
+        for (let i = 0; i < 6; i++) { const col = R.pick(['#7dff5a', '#b061ff', '#ff5fb4', '#5ec8ff', '#ffcf3d', '#e0423a']); if (i % 2) g.add(P(G('sphere', 0.13, 10, 8), col, [-0.9 + i * 0.36, 1.03, R.float(-0.2, 0.3)], { emissive: col, ei: 0.3 })); else g.add(P(G('cyl', 0.09, 0.11, 0.3, 8), col, [-0.9 + i * 0.36, 1.05, R.float(-0.2, 0.3)])); }
+        break;
+      }
+      case 'hedge': {
+        g.add(P(G('box', 1.6, 1.2, 1.1), '#3f8a3a', [0, 0.6, 0]));
+        for (const x of [-0.45, 0.45]) g.add(P(G('sphere', 0.55, 12, 10), '#4fa84a', [x, 1.25, 0], { scale: [1, 0.7, 1] }));
+        g.add(P(G('sphere', 0.12, 8, 6), '#ff5fb4', [0.3, 1.5, 0.35], { ink: false }));
+        break;
+      }
+      /* the Mystery Dungeon's baking room and steamy pool */
+      case 'oven': {
+        g.add(P(G('box', 1.6, 1.8, 1.2), '#9a5a3a', [0, 0.9, 0]));
+        g.add(P(G('cyl', 0.55, 0.55, 1.22, 16, Math.PI), '#9a5a3a', [0, 1.8, 0], { rot: [Math.PI / 2, 0, Math.PI / 2] }));
+        g.add(P(G('box', 0.9, 0.7, 0.05), '#ff8a2e', [0, 0.8, 0.61], { emissive: '#ff5a00', ei: 0.9, ink: false }));
+        g.add(P(G('box', 1.0, 0.1, 0.1), '#3a2a1a', [0, 1.2, 0.62], { ink: false }));
+        g.add(P(G('cyl', 0.16, 0.16, 1.2, 8), '#6a3a2a', [0.45, 2.6, -0.2]));
+        break;
+      }
+      case 'pool': {
+        const w = o.w || 6, d = o.d || 5, c = o.color || '#5ec8ff';
+        g.add(P(G('box', w - 0.3, 0.06, d - 0.3), c, [0, 0.06, 0], { basic: true, ink: false }));
+        for (const s of [-1, 1]) { g.add(P(G('box', w, 0.45, 0.35), '#8a8278', [0, 0.22, s * (d / 2 - 0.17)])); g.add(P(G('box', 0.35, 0.45, d), '#8a8278', [s * (w / 2 - 0.17), 0.22, 0])); }
+        for (let i = 0; i < 5; i++) g.add(P(G('sphere', 0.4 + (i % 2) * 0.2, 10, 8), '#ffffff', [R.float(-w / 3, w / 3), 0.6 + i * 0.25, R.float(-d / 3, d / 3)], { basic: true, opacity: 0.22, ink: false }));
+        break;
+      }
+      /* the Vampire Hive: six-sided wax columns */
+      case 'wax': {
+        const c = o.color || '#b0703a';
+        g.add(P(G('cyl', 0.82, 0.9, 4.4, 6), c, [0, 2.2, 0]));
+        g.add(P(G('cyl', 0.95, 0.95, 0.3, 6), '#5a2a1a', [0, 4.35, 0]));
+        for (let i = 0; i < 4; i++) { const a = i * 1.6 + 0.3; g.add(P(G('cone', 0.09, 0.4, 6), '#ffb84a', [Math.cos(a) * 0.82, 3.2 - i * 0.5, Math.sin(a) * 0.82], { rot: [Math.PI, 0, 0], emissive: '#ffae00', ei: 0.3, ink: false })); }
+        break;
+      }
+      /* the Lich's Well: a wrecked subway car on its side of the platform */
+      case 'subway_car': {
+        const w = o.w || 14, c = o.color || '#7a8a7a';
+        const car = new THREE.Group();
+        car.add(P(G('box', w, 2.6, 2.8), c, [0, 1.5, 0]));
+        car.add(P(G('box', w + 0.1, 0.3, 2.9), '#4a524a', [0, 2.9, 0]));
+        car.add(P(G('box', w + 0.1, 0.25, 2.9), '#c9a23a', [0, 1.0, 0], { ink: false }));
+        for (let x = -w / 2 + 1.2; x < w / 2 - 0.8; x += 1.8) car.add(P(G('box', 1.1, 0.8, 2.84), '#1e2a1c', [x, 2.0, 0], { ink: false }));
+        for (let i = 0; i < 3; i++) car.add(P(G('dodeca', 0.3 + i * 0.1), '#6a4a2a', [R.float(-w / 2, w / 2), 2.5, 1.35], { scale: [1.4, 0.5, 0.3], ink: false }));
+        for (const x of [-w / 2 + 1.5, w / 2 - 1.5]) car.add(P(G('cyl', 0.42, 0.42, 2.9, 12), '#2a2e38', [x, 0.2, 0], { rot: [Math.PI / 2, 0, 0] }));
+        car.rotation.z = 0.035; car.rotation.x = 0.03;
+        g.add(car);
+        break;
+      }
+      case 'pole': g.add(P(G('cyl', 0.05, 0.05, 3.2, 8), '#c9c9c0', [0, 1.6, 0])); break;
+      /* the Well of Power */
+      case 'well': {
+        g.add(P(G('cyl', 2.5, 2.7, 1.0, 24), '#4a524a', [0, 0.5, 0]));
+        g.add(P(G('torus', 2.35, 0.18, 24), '#2a302a', [0, 1.0, 0], { rot: [Math.PI / 2, 0, 0] }));
+        g.add(P(G('circle', 2.2, 28), o.color || '#7dff5a', [0, 0.96, 0], { rot: [-Math.PI / 2, 0, 0], basic: true, ink: false }));
+        for (let i = 0; i < 6; i++) g.add(P(G('sphere', 0.14 + (i % 3) * 0.06, 8, 6), '#c8ffb8', [R.float(-1.4, 1.4), 1.1 + i * 0.1, R.float(-1.4, 1.4)], { basic: true, ink: false }));
+        g.add(GF.beam(o.color || '#7dff5a', 7));
+        break;
+      }
       default: g.add(P(G('box', 0.8, 0.8, 0.8), '#999999', [0, 0.4, 0]));
     }
+    return g;
+  };
+  /* Landmarks of Ooo far behind the Tree Fort, for the title screen's opening sweep (like the show's
+     intro): the Ice Kingdom's mountain, the Candy Kingdom and a broken old highway from before the war. */
+  MD.oooLandmarks = function () {
+    const g = new THREE.Group();
+    /* the Ice Kingdom */
+    const ice = new THREE.Group();
+    ice.position.set(72, 0, -96);
+    ice.add(P(G('cone', 24, 38, 7), '#bfe9ff', [0, 19, 0], { inkT: 0.02 }));
+    ice.add(P(G('cone', 10.5, 16.5, 7), '#ffffff', [0, 29.8, 0], { ink: false }));
+    ice.add(P(G('box', 6, 4, 6), '#8fd3f5', [0, 39, 0]));
+    ice.add(P(G('cone', 4.4, 6, 4), '#6fc3ee', [0, 44, 0], { rot: [0, Math.PI / 4, 0] }));
+    for (const s of [-1, 1]) ice.add(P(G('cone', 1.6, 7, 6), '#8fd3f5', [s * 3.2, 42, 1.5]));
+    for (const [x, z, r] of [[-26, 10, 9], [24, 8, 11], [-10, 16, 6]]) ice.add(P(G('cone', r, r * 1.3, 6), '#d9f3ff', [x, r * 0.65, z], { inkT: 0.02 }));
+    g.add(ice);
+    /* the Candy Kingdom: pink towers, gumdrop hills */
+    const cc = new THREE.Group();
+    cc.position.set(-64, 0, -84);
+    cc.add(P(G('cyl', 8, 9, 13, 16), '#ffb3d9', [0, 6.5, 0]));
+    cc.add(P(G('cone', 9.5, 5, 16), '#ff5fa2', [0, 15.5, 0]));
+    for (const [x, z, h] of [[-9, 2, 20], [9, 2, 24], [0, -6, 30], [-4, 7, 16], [5, 7, 18]]) {
+      cc.add(P(G('cyl', 2.4, 2.6, h, 12), h > 22 ? '#ffd1e8' : '#ff9ccf', [x, h / 2, z]));
+      cc.add(P(G('cone', 3.2, 5, 12), ['#ff5fa2', '#b18cff', '#7ed6ff'][Math.round(h) % 3], [x, h + 2.5, z]));
+      cc.add(P(G('torus', 2.5, 0.35, 16), '#ffffff', [x, h * 0.6, z], { rot: [Math.PI / 2, 0, 0], ink: false }));
+    }
+    for (const [x, z, r, c] of [[-20, 12, 5, '#7ed6ff'], [18, 14, 6, '#b18cff'], [-28, -4, 4, '#ffe066'], [26, -2, 5, '#ff5fa2']]) cc.add(P(G('sphere', r, 16, 12), c, [x, r * 0.4, z], { scale: [1, 0.9, 1] }));
+    g.add(cc);
+    /* a broken highway from before the Mushroom War, grown over */
+    const hw = new THREE.Group();
+    hw.position.set(-22, 0, -48);
+    hw.rotation.y = 0.35;
+    for (const x of [-14, 0, 13]) hw.add(P(G('box', 2.2, 9, 2.2), '#a9a9ae', [x, 4.5, 0]));
+    hw.add(P(G('box', 16, 1.4, 6), '#9a9aa0', [-7, 9.6, 0]));
+    const broken = P(G('box', 10, 1.4, 6), '#9a9aa0', [10, 8.2, 0]);
+    broken.rotation.z = -0.28;
+    hw.add(broken);
+    hw.add(P(G('box', 16.2, 0.3, 0.3), '#ffe066', [-7, 10.35, 0], { ink: false }));
+    for (const [x, y] of [[-12, 10.6], [-3, 10.7], [6, 9.6]]) hw.add(P(G('sphere', 1.6, 12, 10), '#5fbf4a', [x, y, 2.4], { scale: [1.3, 0.8, 1] }));
+    const car = new THREE.Group();
+    car.position.set(4, 1.1, 6);
+    car.rotation.set(0.1, 0.8, 0.35);
+    car.add(P(G('box', 4.4, 1.6, 2.2), '#c2413a', [0, 0, 0]));
+    car.add(P(G('box', 2.4, 1.1, 2.0), '#9a2a24', [-0.3, 1.2, 0]));
+    hw.add(car);
+    g.add(hw);
+    /* a far ring of green hills */
+    for (let i = 0; i < 9; i++) {
+      const a = -0.4 - i * 0.28, rr = 130;
+      g.add(P(G('sphere', 26 + (i % 3) * 8, 18, 12), i % 2 ? '#5fae45' : '#4f9e37', [Math.sin(a) * rr, -8, -Math.cos(a) * rr * 0.9], { ink: false, scale: [1.3, 0.55, 1] }));
+    }
+    return g;
+  };
+  /* The way home that opens in a boss room off the train: a swirling rainbow-ish ring. */
+  MD.portal = function (color) {
+    const g = new THREE.Group();
+    const spin = new THREE.Group();
+    spin.position.y = 1.7;
+    spin.add(P(G('torus', 1.35, 0.16, 28), color || '#b88cff', [0, 0, 0], { emissive: color || '#b88cff', ei: 0.6 }));
+    spin.add(P(G('circle', 1.22, 32), '#fff7d6', [0, 0, 0], { basic: true, opacity: 0.75, ink: false }));
+    spin.add(P(G('circle', 1.22, 32), '#fff7d6', [0, 0, 0], { basic: true, opacity: 0.75, ink: false, rot: [0, Math.PI, 0] }));
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; spin.add(P(G('star4', 0.18), ['#ff5f6d', '#ffc93c', '#6bd66b', '#6ab7ff', '#c77dff', '#ffffff'][i], [Math.cos(a) * 0.8, Math.sin(a) * 0.8, 0.02], { basic: true })); }
+    g.add(spin);
+    g.add(P(G('circle', 1.6, 28), color || '#b88cff', [0, 0.04, 0], { rot: [-Math.PI / 2, 0, 0], basic: true, opacity: 0.35, ink: false }));
+    g.add(GF.beam(color || '#b88cff', 5));
+    g.userData.spin = spin;
+    return g;
+  };
+  /* Wizard City's magic barrier: a see-through wall of light across a doorway. */
+  MD.barrier = function (width, height, color) {
+    const g = new THREE.Group();
+    const c = color || '#b88cff';
+    g.add(P(G('box', 0.06, height, width), c, [0, height / 2, 0], { basic: true, opacity: 0.32, ink: false }));
+    for (let i = 0; i <= 4; i++) g.add(P(G('box', 0.08, height, 0.06), c, [0, height / 2, -width / 2 + (i * width) / 4], { basic: true, opacity: 0.8, ink: false }));
+    g.add(P(G('box', 0.1, 0.08, width), '#ffffff', [0, 0.5, 0], { basic: true, opacity: 0.7, ink: false }));
     return g;
   };
 

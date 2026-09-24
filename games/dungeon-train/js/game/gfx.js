@@ -269,6 +269,107 @@
     }, { repeat: [24, 6] });
   };
 
+  /* Walls and floors for the places off the train. Each texture covers a few metres and repeats. */
+  function hexPath(ctx, x, y, r) {
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2 + Math.PI / 6; const px = x + Math.cos(a) * r, py = y + Math.sin(a) * r; if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py); }
+    ctx.closePath();
+  }
+  function hexes(ctx, w, h, r, fill) {
+    const dx = r * Math.sqrt(3), dy = r * 1.5;
+    for (let row = -1; row * dy < h + r; row++) for (let col = -1; col * dx < w + r; col++) {
+      const x = col * dx + (row % 2 ? dx / 2 : 0), y = row * dy;
+      fill(x, y, row, col);
+    }
+  }
+  GF.wallTexture = function (style, line) {
+    if (style === 'facade') {
+      /* Wizard City: half-timbered shop fronts with warm windows and little secret symbols */
+      return canvasTex(256, 256, (ctx, w, h) => {
+        ctx.fillStyle = shade(line.wall, 1); ctx.fillRect(0, 0, w, h);
+        ctx.globalAlpha = 0.12;
+        for (let i = 0; i < 60; i++) { ctx.fillStyle = i % 2 ? '#000' : '#fff'; ctx.fillRect((i * 53) % w, (i * 97) % h, 10 + (i % 4) * 5, 3); }
+        ctx.globalAlpha = 1;
+        const beam = shade(line.trim, 1);
+        ctx.fillStyle = beam;
+        ctx.fillRect(0, 0, 12, h); ctx.fillRect(122, 0, 12, h); ctx.fillRect(0, 0, w, 10); ctx.fillRect(0, 124, w, 10);
+        ctx.lineWidth = 9; ctx.strokeStyle = beam;
+        ctx.beginPath(); ctx.moveTo(12, 134); ctx.lineTo(122, 256); ctx.moveTo(244, 134); ctx.lineTo(134, 256); ctx.stroke();
+        for (const [x, y] of [[36, 30], [158, 30]]) {
+          ctx.fillStyle = beam; ctx.fillRect(x - 6, y - 6, 74, 74);
+          ctx.fillStyle = '#ffd98a'; ctx.fillRect(x, y, 62, 62);
+          ctx.fillStyle = '#ffefb8'; ctx.fillRect(x + 6, y + 6, 22, 22);
+          ctx.fillStyle = beam; ctx.fillRect(x + 28, y, 6, 62); ctx.fillRect(x, y + 28, 62, 6);
+        }
+        ctx.fillStyle = shade(line.accent, 1);
+        for (const [x, y] of [[66, 190], [194, 190]]) { ctx.beginPath(); for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2 - Math.PI / 2, r = i % 2 ? 7 : 16; ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); } ctx.fill(); }
+      });
+    }
+    if (style === 'hive') {
+      /* the Vampire Hive: honeycomb wax, some cells dark with blood-honey, some glowing gold */
+      return canvasTex(256, 256, (ctx, w, h) => {
+        ctx.fillStyle = shade(line.trim, 1); ctx.fillRect(0, 0, w, h);
+        hexes(ctx, w, h, 22, (x, y, row, col) => {
+          const k = (row * 7 + col * 13 + 100) % 9;
+          hexPath(ctx, x, y, 19);
+          ctx.fillStyle = k === 0 ? '#5a0a1a' : k === 4 ? '#ffc04a' : shade(line.wall, 0.85 + (k % 3) * 0.12);
+          ctx.fill();
+          hexPath(ctx, x - 3, y - 3, 9);
+          ctx.fillStyle = 'rgba(255,255,255,0.12)';
+          ctx.fill();
+        });
+      });
+    }
+    if (style === 'tiles') {
+      /* the Lich's subway station: grimy white tiles with a stripe */
+      return canvasTex(256, 256, (ctx, w, h) => {
+        ctx.fillStyle = '#4a5248'; ctx.fillRect(0, 0, w, h);
+        for (let row = 0; row < 16; row++) for (let col = -1; col < 8; col++) {
+          const x = col * 36 + (row % 2 ? 18 : 0), y = row * 16;
+          ctx.fillStyle = row === 7 || row === 8 ? shade(line.trim, 1.6 + ((row + col) % 2) * 0.2) : shade(line.wall, 0.9 + ((row * 3 + col * 5) % 4) * 0.04);
+          ctx.fillRect(x + 1.5, y + 1.5, 33, 13);
+        }
+        ctx.globalAlpha = 0.18;
+        for (let i = 0; i < 26; i++) { ctx.fillStyle = i % 3 ? '#1a2a18' : '#2a4a1a'; ctx.beginPath(); ctx.ellipse((i * 71) % w, (i * 113) % h, 10 + (i % 4) * 8, 6 + (i % 3) * 5, 0, 0, Math.PI * 2); ctx.fill(); }
+        ctx.globalAlpha = 1;
+      });
+    }
+    return GF.brickTexture(line);
+  };
+  GF.siteFloorTexture = function (style, line) {
+    if (style === 'cobble') {
+      return canvasTex(256, 256, (ctx, w, h) => {
+        ctx.fillStyle = '#4a4038'; ctx.fillRect(0, 0, w, h);
+        for (let row = 0; row < 8; row++) for (let col = -1; col < 9; col++) {
+          const x = col * 32 + (row % 2 ? 16 : 0) + 16, y = row * 32 + 16;
+          ctx.fillStyle = shade(line.floor, 0.82 + ((row * 5 + col * 3) % 5) * 0.07);
+          ctx.beginPath(); ctx.ellipse(x, y, 13, 12, ((row + col) % 3) * 0.4, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = 'rgba(255,255,255,0.12)';
+          ctx.beginPath(); ctx.ellipse(x - 3, y - 4, 6, 4, 0, 0, Math.PI * 2); ctx.fill();
+        }
+      });
+    }
+    if (style === 'hex') {
+      return canvasTex(256, 256, (ctx, w, h) => {
+        ctx.fillStyle = shade(line.trim, 0.9); ctx.fillRect(0, 0, w, h);
+        hexes(ctx, w, h, 32, (x, y, row, col) => { hexPath(ctx, x, y, 29); ctx.fillStyle = shade(line.floor, 0.85 + ((row * 3 + col * 7 + 50) % 4) * 0.08); ctx.fill(); });
+      });
+    }
+    if (style === 'concrete') {
+      return canvasTex(256, 256, (ctx, w, h) => {
+        ctx.fillStyle = shade(line.floor, 1); ctx.fillRect(0, 0, w, h);
+        ctx.globalAlpha = 0.25;
+        for (let i = 0; i < 300; i++) { ctx.fillStyle = i % 2 ? '#000' : '#fff'; ctx.fillRect((i * 37) % w, (i * 91) % h, 2, 2); }
+        ctx.globalAlpha = 0.5;
+        ctx.strokeStyle = shade(line.floor, 0.6); ctx.lineWidth = 3;
+        ctx.strokeRect(0, 0, 128, 128); ctx.strokeRect(128, 128, 128, 128);
+        ctx.beginPath(); ctx.moveTo(30, 180); ctx.lineTo(60, 200); ctx.lineTo(70, 240); ctx.stroke();
+        ctx.globalAlpha = 1;
+      });
+    }
+    return GF.floorTexture(line);
+  };
+
   /* ---------- pooled effects ---------- */
   const fx = [];
   GF.fx = fx;

@@ -66,10 +66,17 @@
       const [x, y] = px(n);
       const s = states[n.id];
       const cls = ['node', 't-' + n.type, s.owned ? 'own' : s.ok ? 'ok' : s.adjacent ? 'adj' : 'far'];
+      if (s.levelLock && !s.owned) cls.push('lvl');
+      if (s.rankUp) cls.push('more');
       if (sel === n.id) cls.push('sel');
       if (st.q && matches(n, st.q)) cls.push('match');
       const ic = nodeIcon(h, n);
-      nodes += `<g class="${cls.join(' ')}" data-node="${n.id}" data-tip="node" style="--c:${n.color}">${shape(n, x, y)}${ic ? iconAt(ic, x, y, Math.round((SIZE[n.type] || 10) * 1.05)) : ''}</g>`;
+      const R = SIZE[n.type] || 10;
+      /* small nodes that can be bought more than once show their rank; nodes you can't reach yet by
+         level show the level they need */
+      const badge = n.maxRank > 1 && (s.owned || s.adjacent) ? `<text class="nrank" x="${x}" y="${y + 4}" text-anchor="middle">${s.rank || 0}/${n.maxRank}</text>` : '';
+      const lvl = !s.owned && n.req > 1 && G.chars[h].level < n.req ? `<text class="nlvl" x="${x + R * 0.8}" y="${y - R * 0.8}" text-anchor="middle">${n.req}</text>` : '';
+      nodes += `<g class="${cls.join(' ')}" data-node="${n.id}" data-tip="node" style="--c:${n.color}">${shape(n, x, y)}${ic ? iconAt(ic, x, y, Math.round(R * 1.05)) : ''}${badge}${lvl}</g>`;
       if (n.type !== 'minor') labels += `<text class="nlabel${s.owned ? ' own' : ''}${n.type === 'notable' || n.type === 'mod' || n.type === 'slot' ? ' small' : ''}" x="${x}" y="${y + (SIZE[n.type] || 10) + 17}" text-anchor="middle">${esc(n.name)}</text>`;
     }
     let brs = '';
@@ -93,7 +100,7 @@
     const n = id && T.nodes[id];
     if (!n) {
       let x = `<header class="p-head"><h3>${icon('tree')} ${esc(D.HEROES[h].name)}’s skill tree</h3></header><p class="sk-intro">${h === 'finn' ? 'Finn’s tree is smaller: he gets most of his power from gear. It makes his armor, sets and Powers even better.' : 'Jake’s tree is huge and powerful: this is where Jake gets strong. He earns a bonus point every 4 levels.'}</p>`;
-      x += `<ul class="sk-rules"><li>${icon('plus')} Each node costs 1 skill point. You get points when you level up.</li><li>${icon('arrowUp')} A node must connect to one you already have.</li><li>${icon('bolt')} <b>Hexagons</b> unlock abilities. <b>Diamonds</b> upgrade them.</li><li>${icon('star')} <b>Octagons</b> are keystones: huge, but with a catch.</li><li>${icon('refresh')} Right-click an owned node to refund it.</li></ul>`;
+      x += `<ul class="sk-rules"><li>${icon('plus')} Each node costs 1 skill point. You get points when you level up (2 every 5th level).</li><li>${icon('arrowUp')} A node must connect to one you already have.</li><li>${icon('lock')} The farther out a node is, the higher the level it needs (the little number on it). Small nodes get stronger the farther out they are.</li><li>${icon('refresh')} Small nodes near the middle can be bought up to 3 times (each rank adds its bonus again), so early points spent close to home pay off.</li><li>${icon('bolt')} <b>Hexagons</b> unlock abilities. <b>Diamonds</b> upgrade them.</li><li>${icon('star')} <b>Octagons</b> are keystones: huge, but with a catch.</li><li>${icon('refresh')} Right-click an owned node to refund it (one rank at a time).</li></ul>`;
       x += '<div class="sk-branches">' + T.branches.map((b) => { const owned = T.list.filter((m) => m.branch === b.id && C.tree[m.id]).length, total = T.list.filter((m) => m.branch === b.id).length; return `<button class="brcard" style="--c:${b.color}" data-act="tree-branch" data-branch="${b.id}">${icon(b.icon)}<div><b>${esc(b.name)}</b><small>${esc(b.blurb)}</small>${UI.bar(owned, total)}</div></button>`; }).join('') + '</div>';
       return x;
     }
@@ -103,7 +110,10 @@
     if (s.owned) {
       if (n.type !== 'start') {
         const why = M.tree.canRefund(G, h, id);
-        x += `<p class="sk-state good">${icon('check')} You have this.</p><button class="btn ghost" data-act="tree-refund" data-node="${id}" ${why ? 'disabled' : ''} title="${esc(why || '')}">${icon('refresh')} Refund · ${icon('coin')}${M.tree.refundCost(G, h)}</button>${why ? `<small class="muted">${esc(why)}</small>` : ''}`;
+        x += `<p class="sk-state good">${icon('check')} ${s.max > 1 ? `Rank ${s.rank} of ${s.max}.` : 'You have this.'}</p>`;
+        if (s.rankUp) x += `<button class="btn primary big" data-act="tree-buy" data-node="${id}">${icon('arrowUp')} Rank ${s.rank + 1} · 1 point</button>`;
+        else if (s.rank < s.max) x += `<p class="sk-state">${icon('lock')} ${esc(s.reason)}</p>`;
+        x += `<button class="btn ghost" data-act="tree-refund" data-node="${id}" ${why ? 'disabled' : ''} title="${esc(why || '')}">${icon('refresh')} ${s.rank > 1 ? 'Refund a rank' : 'Refund'} · ${icon('coin')}${M.tree.refundCost(G, h)}</button>${why ? `<small class="muted">${esc(why)}</small>` : ''}`;
       }
     } else if (s.ok) x += `<button class="btn primary big" data-act="tree-buy" data-node="${id}">${icon('unlock')} Unlock · 1 point</button>`;
     else {
@@ -141,7 +151,13 @@
     const T = D.TREES[h];
     const xs = T.list.map((n) => px(n)[0]), ys = T.list.map((n) => px(n)[1]);
     const pad = 95;
-    const minX = Math.min(...xs) - pad * 1.9, maxX = Math.max(...xs) + pad * 1.9, minY = Math.min(...ys) - pad * 1.25, maxY = Math.max(...ys) + pad * 1.25;
+    let minX = Math.min(...xs) - pad * 1.9, maxX = Math.max(...xs) + pad * 1.9, minY = Math.min(...ys) - pad * 1.25, maxY = Math.max(...ys) + pad * 1.25;
+    /* the branch names sit outside the last ring: keep them in view too */
+    for (const b of T.branches) {
+      const a = (b.angle * Math.PI) / 180 + ROT, R = 8.6 * 1.3 * PX;
+      const by = Math.sin(a) * R;
+      minY = Math.min(minY, by - 44); maxY = Math.max(maxY, by + 84);
+    }
     const w = c.clientWidth || 800, hh = c.clientHeight || 600;
     const k = Math.min(w / (maxX - minX), hh / (maxY - minY), 1.4);
     views[h] = { k, x: w / 2 - k * (minX + maxX) / 2, y: hh / 2 - k * (minY + maxY) / 2 };
