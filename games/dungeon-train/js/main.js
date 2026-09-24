@@ -478,7 +478,7 @@
     const t = ev.target;
     if (t.id === 'stash-search') { LO.state.search = t.value; render(); return; }
     if (t.id === 'tree-search') { TV.search(t.value); return; }
-    if (t.dataset && t.dataset.set && t.type === 'range') { const out = t.parentNode.querySelector('output'); const k = t.dataset.set; if (out) out.textContent = k === 'fov' ? t.value + '°' : k === 'volume' ? Math.round(t.value * 100) + '%' : (+t.value).toFixed(2); applySetting(k, +t.value); }
+    if (t.dataset && t.dataset.set && t.type === 'range') { const out = t.parentNode.querySelector('output'); const k = t.dataset.set; if (out) out.textContent = k === 'fov' ? t.value + '°' : k === 'volume' || k === 'zoom' ? Math.round(t.value * 100) + '%' : (+t.value).toFixed(2); applySetting(k, +t.value); }
   });
   document.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && ev.target.id === 'tree-search') { const id = TV.search(ev.target.value); if (id) { TV.state.sel[hero()] = id; TV.centerOn(hero(), id, 1); const box = $('sk-detail'); if (box) box.innerHTML = TV.detail(G, hero()); } } });
   document.addEventListener('change', (ev) => {
@@ -491,9 +491,18 @@
     if (k === 'volume') { DT.sfx.setVolume(v); return; }
     if (k === 'muted') { if (!!s.muted !== v) DT.sfx.toggleMute(); return; }
     s[k] = v;
-    if (k === 'fov') GF.setFov(v);
-    if (k === 'cursorAim') { IN.setMode(v ? 'cursor' : 'lock'); document.body.classList.toggle('cursor-aim', IN.mode === 'cursor'); }
+    if (k === 'fov' && !(DT.game.raid.current() && IN.fixed)) GF.setFov(v);
     DT.saveSettings();
+    if (k === 'freeCam' || k === 'cursorAim') {
+      DT.game.raid.setCameraMode(!s.freeCam);
+      document.body.classList.toggle('cursor-aim', IN.mode === 'cursor');
+      /* the settings list changes with the camera, so redraw whichever panel is showing it */
+      if (DT.game.raid.current()) HUD.render(DT.game.raid.current());
+      else {
+        document.querySelectorAll('.settings').forEach((el) => { el.outerHTML = HUD.settingsHtml(); });
+        document.querySelectorAll('.controls').forEach((el) => { el.outerHTML = HUD.controlsHtml(); });
+      }
+    }
   }
 
   /* ---------- tooltips ---------- */

@@ -49,7 +49,7 @@
     for (const car of R.shuffle(middle).slice(0, n >= 7 ? 2 : 1)) {
       const bx = car.x0 + R.float(7, L - 7);
       car.bailout = { x: bx };
-      train.inter.push({ kind: 'bailout', x: bx, z: W / 2 - 1.2, r: 1.6, car: car.i, time: 3.5 });
+      train.inter.push({ kind: 'bailout', x: bx, z: -(W / 2 - 1.2), r: 1.6, car: car.i, time: 3.5 });
     }
     const snailCar = R.chance(0.35) ? R.pick(middle) : null;
     if (snailCar) snailCar.snail = true;
@@ -65,9 +65,10 @@
 
   function layoutCar(train, car) {
     const x0 = car.x0, x1 = car.x1, cx = (x0 + x1) / 2;
-    const TALL = { mushroom: 1, bookshelf: 1, cage: 1, rack: 1, boiler: 1, throne: 1, crate: 1, crystals: 1, shelf: 1, pillar: 1, minecart: 1 };
+    /* props tall enough to hide a hero, with their height (they fade out when they get in the camera's way) */
+    const TALL = { mushroom: 1.6, bookshelf: 2.8, cage: 2.4, rack: 1.9, boiler: 3.7, throne: 2.7, crate: 1, crystals: 1.7, shelf: 2.4, pillar: 4.0, minecart: 1.3 };
     const prop = (type, x, z, w, d, o) => {
-      const p = Object.assign({ type, x, z, w, d, rot: 0, tall: !!TALL[type] }, o || {});
+      const p = Object.assign({ type, x, z, w, d, rot: 0, tall: !!TALL[type], h: TALL[type] || 1 }, o || {});
       car.props.push(p);
       if (!o || !o.walk) train.obstacles.push(box(x - w / 2, x + w / 2, z - d / 2, z + d / 2, 'prop', p));
       return p;
@@ -89,7 +90,7 @@
       return c;
     };
     const wallZ = W / 2 - 0.75;
-    const avoidDoor = (x, z) => car.bailout && Math.abs(x - car.bailout.x) < 2.4 && z > 0;
+    const avoidDoor = (x, z) => car.bailout && Math.abs(x - car.bailout.x) < 2.4 && z < 0;
     const along = (step, fn) => { for (let x = x0 + 3; x < x1 - 2.5; x += step) fn(x); };
     switch (car.def.layout) {
       case 'caboose':
@@ -103,34 +104,39 @@
         prop('candles', x0 + 4, 2.8, 0.4, 0.4, { walk: true });
         break;
       case 'library':
-        along(5.2, (x) => { for (const z of [-W / 2 + 0.7, W / 2 - 0.7]) if (!avoidDoor(x, z)) prop('bookshelf', x, z, 2.4, 0.7, { rot: z > 0 ? Math.PI : 0 }); });
+        along(5.2, (x) => { const z = -W / 2 + 0.7; if (!avoidDoor(x, z)) prop('bookshelf', x, z, 2.4, 0.7); });
+        along(8, (x) => { if (R.chance(0.6)) prop('bench', x + 1.5, W / 2 - 1.1, 2.2, 0.8, { rot: Math.PI }); });
+        prop('candles', R.float(x0 + 5, x1 - 5), 1.2, 0.4, 0.4, { walk: true });
         break;
       case 'armory':
-        along(6, (x) => { for (const z of [-W / 2 + 0.55, W / 2 - 0.55]) if (!avoidDoor(x, z)) prop('rack', x, z, 2.0, 0.4, { rot: z > 0 ? Math.PI : 0 }); });
+        along(6, (x) => { const z = -W / 2 + 0.55; if (!avoidDoor(x, z)) prop('rack', x, z, 2.0, 0.4); });
+        along(9, (x) => { if (R.chance(0.6)) prop('barrel', x + 2, W / 2 - 0.95, 0.85, 0.85); });
         break;
       case 'dining':
         prop('banquet', cx - 3, -1.2, 4.2, 1.3);
         prop('candles', cx + 4, 1.8, 0.4, 0.4, { walk: true });
         break;
       case 'prison':
-        along(5.5, (x) => { for (const z of [-W / 2 + 1.1, W / 2 - 1.1]) if (!avoidDoor(x, z) && R.chance(0.75)) prop('cage', x, z, 1.6, 1.6, { skull: R.chance(0.5) }); });
+        along(5.5, (x) => { const z = -W / 2 + 1.1; if (!avoidDoor(x, z) && R.chance(0.8)) prop('cage', x, z, 1.6, 1.6, { skull: R.chance(0.5) }); });
+        for (let i = 0; i < 2; i++) prop('bones', R.float(x0 + 3, x1 - 3), R.float(1.5, 3), 1, 1, { walk: true });
         break;
       case 'garden':
         for (let i = 0; i < 6; i++) { const x = R.float(x0 + 3, x1 - 3), z = R.pick([-1, 1]) * R.float(1.6, 3.2); if (!avoidDoor(x, z)) prop('mushroom', x, z, 0.5, 0.5, { size: R.float(0.8, 1.5), color: R.pick(['#e0423a', '#b76bff', '#ffae34']) }); }
         break;
       case 'mine':
-        prop('rails', (x0 + x1) / 2, -2.2, L - 4, 1.6, { walk: true });
-        prop('minecart', x0 + R.float(7, 12), -2.2, 1.7, 1.2, { gold: R.chance(0.5) });
-        along(6.5, (x) => { const z = wallZ - 0.2; if (!avoidDoor(x, z) && R.chance(0.75)) prop('crystals', x + R.float(-1, 1), z, 1.1, 1.1, { color: R.pick(['#ffd84a', '#6ab7ff', '#ff6b8a', '#b77bff']) }); });
+        prop('rails', (x0 + x1) / 2, 2.2, L - 4, 1.6, { walk: true });
+        prop('minecart', x0 + R.float(7, 12), 2.2, 1.7, 1.2, { gold: R.chance(0.5) });
+        along(6.5, (x) => { const z = -wallZ + 0.2; if (!avoidDoor(x, z) && R.chance(0.75)) prop('crystals', x + R.float(-1, 1), z, 1.1, 1.1, { color: R.pick(['#ffd84a', '#6ab7ff', '#ff6b8a', '#b77bff']) }); });
         for (let i = 0; i < 2; i++) prop('rocks', R.float(x0 + 4, x1 - 4), R.pick([-1, 1]) * R.float(2, 3), 0.9, 0.9, { walk: true });
         break;
       case 'lab':
-        along(6, (x) => { for (const z of [-W / 2 + 0.6, W / 2 - 0.6]) if (!avoidDoor(x, z)) prop('shelf', x, z, 2.2, 0.6, { rot: z > 0 ? Math.PI : 0 }); });
+        along(6, (x) => { const z = -W / 2 + 0.6; if (!avoidDoor(x, z)) prop('shelf', x, z, 2.2, 0.6); });
         prop('cauldron', (x0 + x1) / 2 - 2, R.pick([-1.6, 1.6]), 1.3, 1.3, { color: R.pick(['#7dff5a', '#b061ff', '#ff5fb4', '#5ec8ff']) });
         break;
       case 'ballroom':
-        along(6.5, (x) => { for (const z of [-W / 2 + 0.9, W / 2 - 0.9]) if (!avoidDoor(x, z)) prop('pillar', x, z, 0.8, 0.8); });
-        for (let x = x0 + 6; x < x1 - 4; x += 8) prop('chandelier', x, 0, 0.5, 0.5, { walk: true });
+        along(6.5, (x) => { const z = -W / 2 + 0.9; if (!avoidDoor(x, z)) prop('pillar', x, z, 0.8, 0.8); });
+        for (let x = x0 + 6; x < x1 - 4; x += 8) prop('chandelier', x, 0, 0.5, 0.5, { walk: true, ceiling: true });
+        along(7, (x) => { if (R.chance(0.7)) prop('candles', x + 1, W / 2 - 1.2, 0.4, 0.4, { walk: true }); });
         prop('coffin', x1 - 5, -wallZ + 0.4, 2.1, 0.9, { rot: Math.PI / 2, open: true });
         break;
       case 'vault':
@@ -181,7 +187,7 @@
     for (let tries = 0; tries < 50; tries++) {
       const x = R.float(Math.max(car.x0 + 2 + r, o.minX || -Infinity), car.x1 - 2 - r);
       const z = R.float(-W / 2 + WALL + r + 0.25, W / 2 - WALL - r - 0.25);
-      if (car.bailout && Math.abs(x - car.bailout.x) < 2.4 && z > 1.4) continue;
+      if (car.bailout && Math.abs(x - car.bailout.x) < 2.4 && z < -1.4) continue;
       if (avoid && U.dist2(x, z, avoid.x, avoid.z) < (avoid.r || 5) * (avoid.r || 5)) continue;
       let ok = true;
       for (const ob of train.obstacles) {
@@ -295,6 +301,9 @@
   const P = (geo, color, pos, o) => GF.part(geo, color, pos, Object.assign({ inkT: 0.012 }, o || {}));
   const B = (w, h, d) => GF.geo('box', w, h, d);
   const WIN_LO = 1.3, WIN_HI = 2.7;
+  /* the locked camera looks in from the aisle side, so that side is cut down like a dollhouse:
+     a low sill instead of the near wall, half-height walls between cars and no roof */
+  const SILL = 0.5, END_LO = 1.25;
   const addAt = (g, m, x, y, z) => { m.position.set(x, y, z); g.add(m); return m; };
 
   function sideWall(g, car, z, line, mats, doorX) {
@@ -323,23 +332,46 @@
     const g = new THREE.Group();
     const line = train.line;
     const cx = (car.x0 + car.x1) / 2;
+    /* what only the free camera sees (roof, near wall, full end walls) and the cut-away pieces the
+       locked camera sees instead; WG.setCameraMode switches between them */
+    const freeG = new THREE.Group(), lockG = new THREE.Group();
+    g.add(freeG, lockG);
+    car.camGroups = { free: freeG, locked: lockG };
     const floor = new THREE.Mesh(B(L, 0.3, W), mats.floor);
     floor.position.set(cx, -0.15, 0);
     g.add(floor);
     if (car.type !== 'caboose' && car.type !== 'engine') g.add(P(B(L - 2, 0.02, 2.6), car.type === 'boss' ? '#6a1a2a' : line.trim, [cx, 0.01, 0], { ink: false }));
-    sideWall(g, car, -W / 2 + WALL / 2, line, mats, null);
-    sideWall(g, car, W / 2 - WALL / 2, line, mats, car.bailout ? car.bailout.x : null);
+    /* undercarriage and wheels (they spin while the train runs) */
+    g.add(P(B(L - 1.2, 0.7, W - 1.4), '#23262f', [cx, -0.65, 0], { ink: false }));
+    for (const wx of [car.x0 + 2.6, car.x0 + 4.4, car.x1 - 4.4, car.x1 - 2.6]) {
+      for (const s of [-1, 1]) {
+        const wh = new THREE.Group();
+        wh.position.set(wx, -0.92, s * (W / 2 - 1.1));
+        wh.add(P(GF.geo('cyl', 0.52, 0.52, 0.22, 16), '#3a3f4b', [0, 0, 0], { rot: [Math.PI / 2, 0, 0] }));
+        wh.add(P(B(0.9, 0.12, 0.24), '#8a8f9a', [0, 0, 0], { ink: false }));
+        g.add(wh);
+        train.wheels.push(wh);
+      }
+    }
+    sideWall(g, car, -W / 2 + WALL / 2, line, mats, car.bailout ? car.bailout.x : null);
+    sideWall(freeG, car, W / 2 - WALL / 2, line, mats, null);
+    addAt(lockG, new THREE.Mesh(B(L, SILL, WALL), mats.sill), cx, SILL / 2, W / 2 - WALL / 2);
+    lockG.add(P(B(L, 0.12, WALL + 0.1), line.trim, [cx, SILL, W / 2 - WALL / 2]));
     /* ceiling and beams */
-    g.add(P(B(L, 0.25, W), line.trim, [cx, H + 0.12, 0], { ink: false }));
-    for (let x = car.x0 + 1.5; x < car.x1; x += 3.2) g.add(P(B(0.35, 0.3, W), '#4a3326', [x, H - 0.1, 0], { ink: false }));
-    for (let x = car.x0 + 4; x < car.x1 - 2; x += 6.5) { const lt = MD.lantern(train.line.id === 'night' ? '#ff6b6b' : train.line.id === 'ice' ? '#bfefff' : '#ffd66b'); lt.position.set(x, H - 0.5, 0); g.add(lt); }
+    freeG.add(P(B(L, 0.25, W), line.trim, [cx, H + 0.12, 0], { ink: false }));
+    for (let x = car.x0 + 1.5; x < car.x1; x += 3.2) freeG.add(P(B(0.35, 0.3, W), '#4a3326', [x, H - 0.1, 0], { ink: false }));
+    for (let x = car.x0 + 4; x < car.x1 - 2; x += 6.5) { const lt = MD.lantern(train.line.id === 'night' ? '#ff6b6b' : train.line.id === 'ice' ? '#bfefff' : '#ffd66b'); lt.position.set(x, H - 0.5, 0); freeG.add(lt); }
     /* end walls with door openings */
     for (const X of [car.x0, car.x1]) {
       const closed = (X === car.x0 && car.i === 0) || (X === car.x1 && car.i === train.cars.length - 1);
       if (closed) { addAt(g, new THREE.Mesh(B(WALL * 2, H, W), mats.end), X, H / 2, 0); continue; }
       const segW = W / 2 - DOOR;
-      for (const s of [-1, 1]) addAt(g, new THREE.Mesh(B(WALL, H, segW), mats.end), X, H / 2, s * (DOOR + segW / 2));
-      g.add(P(B(WALL, H - DOORH, DOOR * 2), line.wall, [X, (DOORH + H) / 2, 0], { ink: false }));
+      for (const s of [-1, 1]) addAt(freeG, new THREE.Mesh(B(WALL, H, segW), mats.end), X, H / 2, s * (DOOR + segW / 2));
+      freeG.add(P(B(WALL, H - DOORH, DOOR * 2), line.wall, [X, (DOORH + H) / 2, 0], { ink: false }));
+      for (const s of [-1, 1]) {
+        addAt(lockG, new THREE.Mesh(B(WALL, END_LO, segW), mats.endLow), X, END_LO / 2, s * (DOOR + segW / 2));
+        lockG.add(P(B(WALL + 0.1, 0.12, segW), line.trim, [X, END_LO, s * (DOOR + segW / 2)]));
+      }
       for (const s of [-1, 1]) g.add(P(B(WALL + 0.08, DOORH, 0.18), line.trim, [X, DOORH / 2, DOOR * s]));
       g.add(P(B(WALL + 0.08, 0.18, DOOR * 2 + 0.2), line.trim, [X, DOORH, 0]));
     }
@@ -347,18 +379,20 @@
     if (car.i < train.cars.length - 1) {
       const gx = car.x1 + GAP / 2;
       g.add(P(B(GAP, 0.2, DOOR * 2 + 0.4), '#3a3f4b', [gx, -0.1, 0], { ink: false }));
-      for (const s of [-1, 1]) g.add(P(B(GAP, DOORH + 0.2, 0.14), '#2a2e38', [gx, DOORH / 2, (DOOR + 0.2) * s], { ink: false }));
-      g.add(P(B(GAP, 0.14, DOOR * 2 + 0.5), '#2a2e38', [gx, DOORH + 0.1, 0], { ink: false }));
+      for (const s of [-1, 1]) freeG.add(P(B(GAP, DOORH + 0.2, 0.14), '#2a2e38', [gx, DOORH / 2, (DOOR + 0.2) * s], { ink: false }));
+      lockG.add(P(B(GAP, END_LO, 0.14), '#2a2e38', [gx, END_LO / 2, -(DOOR + 0.2)], { ink: false }));
+      lockG.add(P(B(GAP, SILL, 0.14), '#2a2e38', [gx, SILL / 2, DOOR + 0.2], { ink: false }));
+      freeG.add(P(B(GAP, 0.14, DOOR * 2 + 0.5), '#2a2e38', [gx, DOORH + 0.1, 0], { ink: false }));
     }
-    /* jump-off door */
+    /* jump-off door, in the far wall where the locked camera can always see it */
     if (car.bailout) {
-      const bx = car.bailout.x, z = W / 2 - WALL - 0.02;
+      const bx = car.bailout.x, z = -(W / 2 - WALL - 0.02);
       addAt(g, new THREE.Mesh(B(2.2, 2.6, 0.06), GF.basic('#0b2a14')), bx, 1.3, z);
       for (const s of [-1, 1]) g.add(P(B(0.2, 2.8, 0.3), '#3fe07a', [bx + 1.2 * s, 1.4, z], { emissive: '#22c55e', ei: 0.9 }));
       g.add(P(B(2.6, 0.2, 0.3), '#3fe07a', [bx, 2.8, z], { emissive: '#22c55e', ei: 0.9 }));
       const pad = new THREE.Mesh(GF.geo('circle', 1.4, 32), GF.basic('#3fe07a', { opacity: 0.25 }));
       pad.rotation.x = -Math.PI / 2;
-      pad.position.set(bx, 0.03, W / 2 - 1.2);
+      pad.position.set(bx, 0.03, -(W / 2 - 1.2));
       g.add(pad);
       car.bailoutMesh = pad;
     }
@@ -372,10 +406,13 @@
     const lower = brick.clone(); lower.needsUpdate = true; lower.repeat.set(L / 2.2, WIN_LO / 2.2);
     const upper = brick.clone(); upper.needsUpdate = true; upper.repeat.set(L / 2.2, (H - WIN_HI) / 2.2);
     const end = brick.clone(); end.needsUpdate = true; end.repeat.set(1.6, H / 2.2);
+    const sill = brick.clone(); sill.needsUpdate = true; sill.repeat.set(L / 2.2, SILL / 2.2);
+    const endLow = brick.clone(); endLow.needsUpdate = true; endLow.repeat.set(1.6, END_LO / 2.2);
     const floorT = GF.floorTexture(line); floorT.repeat.set(L / 3, W / 3);
-    const mats = { lower: GF.texMat(lower), upper: GF.texMat(upper), end: GF.texMat(end), floor: GF.texMat(floorT) };
-    train.textures = [brick, lower, upper, end, floorT];
+    const mats = { lower: GF.texMat(lower), upper: GF.texMat(upper), end: GF.texMat(end), sill: GF.texMat(sill), endLow: GF.texMat(endLow), floor: GF.texMat(floorT) };
+    train.textures = [brick, lower, upper, end, sill, endLow, floorT];
     train.materials = Object.values(mats);
+    train.wheels = [];
     for (const car of train.cars) {
       car.group = buildCar(train, car, mats);
       root.add(car.group);
@@ -410,12 +447,19 @@
     ground.rotation.x = -Math.PI / 2;
     ground.position.set(train.maxX / 2, -1.6, 0);
     root.add(ground);
-    for (const z of [-1.4, 1.4]) root.add(GF.part(GF.geo('box', train.maxX + 200, 0.12, 0.16), '#6b6f7a', [train.maxX / 2, -1.5, z], { ink: false }));
+    for (const z of [-(W / 2 - 1.1), W / 2 - 1.1]) root.add(GF.part(GF.geo('box', train.maxX + 200, 0.12, 0.16), '#6b6f7a', [train.maxX / 2, -1.5, z], { ink: false }));
     train.ground = ground; train.groundTex = groundTex;
     train.tunnelTex = GF.tunnelTexture();
     train.tunnelTex.repeat.set(6, 1);
     train.root = root;
     return root;
+  }
+  /* Locked camera: dollhouse cut-away (no roof, low near wall). Free camera: the whole car. */
+  function setCameraMode(train, fixed) {
+    for (const car of train.cars) {
+      if (car.camGroups) { car.camGroups.free.visible = !fixed; car.camGroups.locked.visible = fixed; }
+      for (const p of car.props) if (p.ceiling && p.mesh) p.mesh.visible = !fixed;
+    }
   }
   /* Swap the scenery for the dark Loop Tunnel (or back). */
   function setTunnel(train, on) {
@@ -435,5 +479,5 @@
     train.ground.material.dispose();
   }
 
-  Object.assign(WG, { buildMeshes, disposeTrain, setTunnel });
+  Object.assign(WG, { buildMeshes, disposeTrain, setTunnel, setCameraMode });
 })();

@@ -298,18 +298,24 @@
 
   /* ---------- overlays: click-to-play, pause, backpack ---------- */
   const CONTROLS = [
+    ['WASD', 'Move (arrow keys work too)'], ['Mouse', 'Aim — point at a monster'], ['Left click (hold)', 'Attack'], ['Space · Shift · Right click', 'Dodge roll'], ['1 2 3 4', 'Abilities'], ['Q', 'MATHEMATICAL! super'],
+    ['E (hold)', 'Open chests, doors, the brake'], ['Z X C V B', 'Snacks'], ['Tab', 'Backpack'], ['Esc', 'Pause'], ['Mouse wheel', 'Zoom camera'],
+  ];
+  const CONTROLS_FREE = [
     ['WASD', 'Move'], ['Mouse', 'Look / aim'], ['Left click (hold)', 'Attack'], ['Space · Shift · Right click', 'Dodge roll'], ['1 2 3 4', 'Abilities'], ['Q', 'MATHEMATICAL! super'],
     ['E (hold)', 'Open chests, doors, the brake'], ['Z X C V B', 'Snacks'], ['Tab', 'Backpack'], ['Esc', 'Pause'], ['Mouse wheel', 'Zoom camera'],
   ];
-  HUD.controlsHtml = () => `<div class="controls">${CONTROLS.map(([k, v]) => `<div><kbd>${esc(k)}</kbd><span>${esc(v)}</span></div>`).join('')}</div>`;
+  HUD.controlsHtml = () => `<div class="controls">${(DT.settings.freeCam ? CONTROLS_FREE : CONTROLS).map(([k, v]) => `<div><kbd>${esc(k)}</kbd><span>${esc(v)}</span></div>`).join('')}</div>`;
   function settingsHtml() {
     const s = DT.settings;
+    const free = !!s.freeCam;
     return `<div class="settings">
-      <label><span>Mouse sensitivity</span><input type="range" min="0.2" max="3" step="0.05" value="${s.sens}" data-set="sens"><output>${(+s.sens).toFixed(2)}</output></label>
-      <label><span>Field of view</span><input type="range" min="55" max="100" step="1" value="${s.fov}" data-set="fov"><output>${s.fov}°</output></label>
       <label><span>Volume</span><input type="range" min="0" max="1" step="0.05" value="${s.volume}" data-set="volume"><output>${Math.round(s.volume * 100)}%</output></label>
+      <label class="chk"><input type="checkbox" data-set="freeCam" ${free ? 'checked' : ''}><span>Free camera (mouse-look over the shoulder) instead of the locked camera</span></label>
+      ${free ? `<label><span>Mouse sensitivity</span><input type="range" min="0.2" max="3" step="0.05" value="${s.sens}" data-set="sens"><output>${(+s.sens).toFixed(2)}</output></label>
+      <label><span>Field of view</span><input type="range" min="55" max="100" step="1" value="${s.fov}" data-set="fov"><output>${s.fov}°</output></label>
       <label class="chk"><input type="checkbox" data-set="invertY" ${s.invertY ? 'checked' : ''}><span>Invert mouse Y</span></label>
-      <label class="chk"><input type="checkbox" data-set="cursorAim" ${s.cursorAim ? 'checked' : ''}><span>Aim with the cursor instead of mouse-look</span></label>
+      <label class="chk"><input type="checkbox" data-set="cursorAim" ${s.cursorAim ? 'checked' : ''}><span>Aim with the cursor instead of mouse-look</span></label>` : `<label><span>Camera zoom</span><input type="range" min="0.75" max="1.3" step="0.05" value="${s.zoom || 1}" data-set="zoom"><output>${Math.round((s.zoom || 1) * 100)}%</output></label>`}
       <label class="chk"><input type="checkbox" data-set="shake" ${s.shake !== false ? 'checked' : ''}><span>Screen shake</span></label>
       <label class="chk"><input type="checkbox" data-set="numbers" ${s.numbers !== false ? 'checked' : ''}><span>Damage numbers</span></label>
       <label class="chk"><input type="checkbox" data-set="invPause" ${s.invPause !== false ? 'checked' : ''}><span>Pause while the backpack is open</span></label>

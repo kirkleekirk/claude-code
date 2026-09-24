@@ -1,6 +1,6 @@
 /* Active abilities. src 'tree' = unlocked in a skill tree; src 'item' = comes with a unique item and
    leaves your ability bar when the item is unequipped. Damage numbers are multiples of your hit damage.
-   target: 'self' (around you), 'aim' (where the crosshair points on the floor), 'dir' (in the aim direction). */
+   target: 'self' (around you), 'aim' (where you point on the floor), 'dir' (in the aim direction). */
 (function () {
   'use strict';
   const D = DT.data;

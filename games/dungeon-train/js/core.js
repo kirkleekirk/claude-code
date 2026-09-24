@@ -37,7 +37,7 @@
 
   const SAVE_KEY = 'dt.save.v1';
   const SETTINGS_KEY = 'dt.settings.v1';
-  const DEFAULT_SETTINGS = { volume: 0.6, muted: false, shake: true, sens: 1, invertY: false, fov: 70, numbers: true, invPause: true };
+  const DEFAULT_SETTINGS = { volume: 0.6, muted: false, shake: true, sens: 1, invertY: false, fov: 70, numbers: true, invPause: true, freeCam: false, zoom: 1 };
   const store = {
     load() { try { const r = localStorage.getItem(SAVE_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; } },
     save(s) { try { localStorage.setItem(SAVE_KEY, JSON.stringify(s)); return true; } catch (e) { return false; } },

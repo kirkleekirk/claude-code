@@ -1,17 +1,20 @@
-/* PC input. Two aiming modes:
-     'lock'   – mouse-look with pointer lock (the crosshair is the screen centre). The default.
-     'cursor' – fallback when the browser won't lock the pointer (e.g. inside some embedded frames):
-                you aim with the cursor, and turn the camera with right-drag, the arrow keys or the screen edges.
+/* PC input. The camera is locked by default: it looks into the car from a fixed angle and never turns.
+   WASD (or the arrow keys) moves your hero on the screen and you aim with the mouse cursor.
+   Settings can switch to a free camera instead:
+     'lock'   – mouse-look with pointer lock (the crosshair is the screen centre).
+     'cursor' – used when the browser won't lock the pointer (e.g. inside some embedded frames):
+                you aim with the cursor and turn the camera with right-drag or the arrow keys.
    Each frame the raid asks for a *command* (move, aim, buttons). The simulation only ever sees commands,
    so a future network player can drive a hero the same way. */
 (function () {
   'use strict';
   const IN = {
-    enabled: false, mode: DT.settings.cursorAim ? 'cursor' : 'lock', locked: false, lockFailed: false, everLocked: false,
+    enabled: false, fixed: !DT.settings.freeCam, mode: 'cursor', locked: false, lockFailed: false, everLocked: false,
     held: new Set(), pressed: new Set(),
     mouse: { x: 0, y: 0, has: false }, look: { dx: 0, dy: 0 }, zoom: 0, rmbDrag: false,
     onLockChange: null,
   };
+  IN.mode = IN.fixed || DT.settings.cursorAim ? 'cursor' : 'lock';
   const KEYMAP = {
     KeyW: 'up', KeyS: 'down', KeyA: 'left', KeyD: 'right', ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'turnL', ArrowRight: 'turnR',
     Space: 'dash', ShiftLeft: 'dash', ShiftRight: 'dash', KeyJ: 'attack',
@@ -40,14 +43,15 @@
 
   window.addEventListener('mousemove', (e) => {
     IN.mouse.x = e.clientX; IN.mouse.y = e.clientY; IN.mouse.has = true;
-    if (!IN.enabled) return;
+    if (!IN.enabled || IN.fixed) return;
     if (IN.locked || IN.rmbDrag) { IN.look.dx += e.movementX || 0; IN.look.dy += e.movementY || 0; }
   });
   window.addEventListener('mousedown', (e) => {
     if (!IN.enabled || e.target !== canvas()) return;
     if (IN.mode === 'lock' && !IN.locked) { if (e.button === 0) IN.requestLock(); return; }
     if (e.button === 0) press('attack');
-    if (e.button === 2) { if (IN.mode === 'lock') press('dash'); else IN.rmbDrag = true; }
+    /* right click dodges, except with the free cursor camera where right-drag turns the camera */
+    if (e.button === 2) { if (IN.fixed || IN.mode === 'lock') press('dash'); else IN.rmbDrag = true; }
   });
   window.addEventListener('mouseup', (e) => {
     if (e.button === 0) release('attack');
@@ -56,10 +60,10 @@
   window.addEventListener('contextmenu', (e) => { if (e.target === canvas()) e.preventDefault(); });
   window.addEventListener('wheel', (e) => { if (IN.enabled && e.target === canvas()) { IN.zoom += Math.sign(e.deltaY); e.preventDefault(); } }, { passive: false });
 
-  /* ---------- pointer lock ---------- */
+  /* ---------- pointer lock (free camera only) ---------- */
   IN.requestLock = function () {
     const c = canvas();
-    if (!c || IN.mode !== 'lock' || IN.locked) return;
+    if (!c || IN.fixed || IN.mode !== 'lock' || IN.locked) return;
     if (!c.requestPointerLock) { IN.fallback(); return; }
     try {
       const r = c.requestPointerLock();
@@ -69,14 +73,17 @@
   /* If the lock has worked before, a failure is temporary (e.g. right after Esc): just wait for a click.
      If it never worked, this page can't lock the mouse, so switch to cursor aiming. */
   function lockFailed() {
+    if (IN.fixed) return;
     if (IN.everLocked) { if (IN.onLockChange) IN.onLockChange('retry'); }
     else IN.fallback();
   }
-  /* Settings: mouse-look (pointer lock) or cursor aiming. */
-  IN.setMode = function (mode) {
-    if (mode === IN.mode) return;
-    if (mode === 'cursor') { IN.releaseLock(); IN.mode = 'cursor'; }
+  /* Settings: locked camera, or a free camera with mouse-look (pointer lock) or cursor aiming. */
+  IN.setCamera = function (fixed, cursorAim) {
+    IN.fixed = !!fixed;
+    if (IN.fixed || cursorAim) { IN.releaseLock(); IN.mode = 'cursor'; }
     else { IN.mode = 'lock'; IN.lockFailed = false; }
+    IN.look.dx = IN.look.dy = 0;
+    IN.rmbDrag = false;
     if (IN.onLockChange) IN.onLockChange('mode');
   };
   IN.releaseLock = function () { if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock(); };
@@ -99,18 +106,15 @@
   IN.endFrame = () => IN.pressed.clear();
   IN.reset = () => { IN.pressed.clear(); IN.held.clear(); IN.look.dx = IN.look.dy = 0; IN.zoom = 0; IN.rmbDrag = false; };
 
-  /* Camera turning this frame (radians), from mouse, keys and screen edges. */
+  /* Camera turning this frame (radians) for the free camera, plus mouse-wheel zoom for both cameras. */
   IN.lookDelta = function (dt) {
     const s = DT.settings;
     const k = 0.0024 * (s.sens || 1);
     let yaw = -IN.look.dx * k, pitch = IN.look.dy * k * (s.invertY ? -1 : 1);
     IN.look.dx = IN.look.dy = 0;
-    if (IN.held.has('turnL')) yaw += 2.4 * dt;
-    if (IN.held.has('turnR')) yaw -= 2.4 * dt;
-    if (IN.mode === 'cursor' && IN.mouse.has && !IN.rmbDrag) {
-      const edge = Math.max(30, window.innerWidth * 0.05);
-      if (IN.mouse.x < edge) yaw += 1.8 * dt * (1 - IN.mouse.x / edge);
-      else if (IN.mouse.x > window.innerWidth - edge) yaw -= 1.8 * dt * (1 - (window.innerWidth - IN.mouse.x) / edge);
+    if (!IN.fixed) {
+      if (IN.held.has('turnL')) yaw += 2.4 * dt;
+      if (IN.held.has('turnR')) yaw -= 2.4 * dt;
     }
     const zoom = IN.zoom; IN.zoom = 0;
     return { yaw, pitch, zoom };
@@ -119,25 +123,32 @@
   const ray = window.THREE ? new THREE.Raycaster() : null;
   const floor = window.THREE ? new THREE.Plane(new THREE.Vector3(0, 1, 0), 0) : null;
   const hit = window.THREE ? new THREE.Vector3() : null;
-  /* Build this frame's command for the local player. */
+  const ndc = window.THREE ? new THREE.Vector2() : null;
+  /* Build this frame's command for the local player. `yaw` is the camera's heading: W moves that way.
+     `ground` is the point on the floor under the cursor (or the crosshair), and `ray` is the cursor's
+     line of sight, so the hero can aim at the monster under the cursor rather than the floor behind it. */
   IN.command = function (camera, yaw) {
     let f = 0, s = 0;
     if (IN.held.has('up')) f += 1;
     if (IN.held.has('down')) f -= 1;
     if (IN.held.has('right')) s += 1;
     if (IN.held.has('left')) s -= 1;
+    if (IN.fixed) { if (IN.held.has('turnR')) s += 1; if (IN.held.has('turnL')) s -= 1; s = Math.max(-1, Math.min(1, s)); }
     const fx = Math.sin(yaw), fz = Math.cos(yaw), rx = -Math.cos(yaw), rz = Math.sin(yaw);
     let mx = fx * f + rx * s, mz = fz * f + rz * s;
     const mag = Math.hypot(mx, mz);
     if (mag > 1) { mx /= mag; mz /= mag; }
-    let ground = null;
+    let ground = null, aimRay = null;
     if (ray && camera) {
-      const ndc = IN.mode === 'cursor' && IN.mouse.has ? new THREE.Vector2((IN.mouse.x / window.innerWidth) * 2 - 1, -(IN.mouse.y / window.innerHeight) * 2 + 1) : new THREE.Vector2(0, 0);
+      if (IN.mode === 'cursor' && IN.mouse.has) ndc.set((IN.mouse.x / window.innerWidth) * 2 - 1, -(IN.mouse.y / window.innerHeight) * 2 + 1);
+      else ndc.set(0, 0);
       ray.setFromCamera(ndc, camera);
-      if (ray.ray.intersectPlane(floor, hit) && hit.distanceTo(ray.ray.origin) < 60) ground = { x: hit.x, z: hit.z };
+      const o = ray.ray.origin, d = ray.ray.direction;
+      aimRay = { ox: o.x, oy: o.y, oz: o.z, dx: d.x, dy: d.y, dz: d.z };
+      if (ray.ray.intersectPlane(floor, hit) && hit.distanceTo(o) < 80) ground = { x: hit.x, z: hit.z };
     }
     return {
-      mx, mz, moving: mag > 0.1, yaw, ground,
+      mx, mz, moving: mag > 0.1, yaw, ground, ray: aimRay,
       attack: IN.held.has('attack'), attackPressed: IN.take('attack'),
       dash: IN.take('dash'), super: IN.take('super'), interact: IN.held.has('interact'),
       ab: [IN.take('ab0'), IN.take('ab1'), IN.take('ab2'), IN.take('ab3')],
@@ -145,7 +156,7 @@
     };
   };
   /* An empty command (for paused or remote heroes). */
-  IN.idle = (yaw) => ({ mx: 0, mz: 0, moving: false, yaw, ground: null, attack: false, attackPressed: false, dash: false, super: false, interact: false, ab: [false, false, false, false], belt: [false, false, false, false, false] });
+  IN.idle = (yaw) => ({ mx: 0, mz: 0, moving: false, yaw, ground: null, ray: null, attack: false, attackPressed: false, dash: false, super: false, interact: false, ab: [false, false, false, false], belt: [false, false, false, false, false] });
 
   DT.game.input = IN;
 })();

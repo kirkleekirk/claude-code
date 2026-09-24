@@ -351,7 +351,21 @@
     return g;
   };
 
-  MD.hero = (id, eq) => (id === 'finn' ? MD.finn(eq) : MD.jake(eq));
+  /* Everything but the shadow hangs from a "rig" pivot in the middle of the body, so dodge rolls and flips
+     turn around the hero's centre and never swing the model through the floor. */
+  const RIG_Y = { finn: 0.82, jake: 0.8 };
+  MD.hero = function (id, eq) {
+    const g = id === 'finn' ? MD.finn(eq) : MD.jake(eq);
+    const rig = new THREE.Group(), inner = new THREE.Group();
+    rig.position.y = RIG_Y[id];
+    inner.position.y = -RIG_Y[id];
+    rig.add(inner);
+    for (const c of g.children.slice()) if (c.renderOrder !== -1) inner.add(c);
+    g.add(rig);
+    rig.userData.y0 = RIG_Y[id];
+    g.userData.parts.rig = rig;
+    return g;
+  };
   DT.game.models = MD;
 })();
 

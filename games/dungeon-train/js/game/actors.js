@@ -25,8 +25,11 @@
   };
 
   /* ---------- heroes ---------- */
+  /* the x-ray silhouette color that shows a hero standing behind a wall, a prop or a boss */
+  AC.XRAY = { finn: '#8fdcff', jake: '#ffc04a' };
   AC.makeHero = function (run, heroId, x, z, S, equip, player) {
     const mesh = MD.hero(heroId, equip);
+    GF.xray(mesh, AC.XRAY[heroId]);
     mesh.position.set(x, 0, z);
     GF.scene.add(mesh);
     return {
@@ -52,15 +55,36 @@
   };
   AC.faceTo = function (a, x, z) { a.facing = Math.atan2(x - a.x, z - a.z); };
 
-  /* Where the hero is aiming on the floor, from the command. */
+  /* Where the hero is aiming on the floor, from the command. With the cursor, a monster under the cursor
+     wins over the floor point (on screen, the floor under a monster's body is a little behind it). */
   AC.aimFor = function (run, h, cmd) {
     const fx = Math.sin(cmd.yaw), fz = Math.cos(cmd.yaw);
+    const cursor = DT.game.input.mode === 'cursor';
+    if (cursor && cmd.ray) {
+      const ry = cmd.ray;
+      let best = null, bt = Infinity;
+      for (const e of run.enemies) {
+        if (e.dead || e.state === 'spawn') continue;
+        const cy = e.def.flying ? 1.45 : Math.max(0.45, e.r * 1.05);
+        const vx = e.x - ry.ox, vy = cy - ry.oy, vz = e.z - ry.oz;
+        const t = vx * ry.dx + vy * ry.dy + vz * ry.dz;
+        if (t <= 0) continue;
+        const qx = vx - ry.dx * t, qy = vy - ry.dy * t, qz = vz - ry.dz * t;
+        const rr = e.r + 0.3;
+        if (qx * qx + qy * qy + qz * qz < rr * rr && t < bt) { bt = t; best = e; }
+      }
+      if (best) {
+        const dx = best.x - h.x, dz = best.z - h.z;
+        return { x: best.x, z: best.z, dir: Math.atan2(dx, dz), dist: Math.hypot(dx, dz), target: best };
+      }
+    }
     const g = cmd.ground;
     if (g) {
       const dx = g.x - h.x, dz = g.z - h.z, d = Math.hypot(dx, dz);
-      const cursor = DT.game.input.mode === 'cursor';
-      if (d > 1.0 && (cursor || dx * fx + dz * fz > 0.6)) return { x: g.x, z: g.z, dir: Math.atan2(dx, dz), dist: d };
+      if (cursor && d > 0.35) return { x: g.x, z: g.z, dir: Math.atan2(dx, dz), dist: d };
+      if (d > 1.0 && dx * fx + dz * fz > 0.6) return { x: g.x, z: g.z, dir: Math.atan2(dx, dz), dist: d };
     }
+    if (cursor) return { x: h.x + Math.sin(h.facing) * 4, z: h.z + Math.cos(h.facing) * 4, dir: h.facing, dist: 4 };
     return { x: h.x + fx * 8, z: h.z + fz * 8, dir: cmd.yaw, dist: 8 };
   };
 
@@ -265,7 +289,7 @@
 
   /* ---------- animation ---------- */
   AC.animateHero = function (run, h, dt) {
-    const m = h.mesh, p = h.parts;
+    const m = h.mesh, p = h.parts, rig = p.rig;
     m.position.set(h.x, h.liftY || 0, h.z);
     const d = U.angleDiff(m.rotation.y, h.facing);
     m.rotation.y += d * Math.min(1, dt * 18);
@@ -276,8 +300,8 @@
     h.scale += (target - h.scale) * Math.min(1, dt * 6);
     /* squash & stretch: squash going into a dodge, stretch coming out of it, a little pop on each swing */
     if (h.state !== h.prevState) {
-      if (h.state === 'dash') h.sqV = (h.sqV || 0) - 6;
-      else if (h.prevState === 'dash') h.sqV = (h.sqV || 0) + 4;
+      if (h.state === 'dash') { h.sqV = (h.sqV || 0) - 5; h.dustT = 0.07; }
+      else if (h.prevState === 'dash') { h.sqV = (h.sqV || 0) + 3.5; if (!h.ko) GF.dust(h.x + h.dashDir.x * 0.3, h.z + h.dashDir.z * 0.3, 0.45); }
       else if (h.state === 'attack') h.sqV = (h.sqV || 0) + 2.2;
       h.prevState = h.state;
     }
@@ -287,15 +311,40 @@
     const sq = U.clamp(h.sq, -0.3, 0.3);
     m.scale.set(h.scale * (1 - sq * 0.5), h.scale * (1 + sq), h.scale * (1 - sq * 0.5));
     if (h.hurtT > 0) h.hurtT -= dt;
+    /* The dodge roll turns the rig (a pivot in the middle of the body), never the feet: tuck into a ball,
+       roll over once (Jake, a rubbery ball, rolls twice), untuck and pop back up. */
+    const rolling = h.state === 'dash' && !h.ko;
+    const ball = h.id === 'jake' && h.buffs.ball > 0 && !h.ko;
+    if (rolling) {
+      const k = Math.min(1, h.stateT / (h.dashDur || 0.3));
+      const e = k < 0.5 ? 2 * k * k : 1 - 2 * (1 - k) * (1 - k);
+      rig.rotation.x = e * Math.PI * 2 * (h.id === 'finn' ? 1 : 2);
+      h.tuck = Math.sin(Math.PI * Math.min(1, k * 1.15));
+      if ((h.dustT -= dt) <= 0) { h.dustT = 0.1; GF.dust(h.x, h.z, 0.35); }
+    } else if (ball) {
+      rig.rotation.x += dt * 16;
+      h.tuck = U.lerp(h.tuck || 0, 1, Math.min(1, dt * 20));
+    } else {
+      let rx = rig.rotation.x % (Math.PI * 2);
+      if (rx > Math.PI) rx -= Math.PI * 2; else if (rx < -Math.PI) rx += Math.PI * 2;
+      rig.rotation.x = rx * (1 - Math.min(1, dt * 16));
+      h.tuck = U.lerp(h.tuck || 0, 0, Math.min(1, dt * 14));
+    }
+    const tk = h.tuck || 0;
+    const round = h.id === 'jake' ? 0.12 : 0.06;
+    rig.scale.set(1 - round * tk, 1 - 0.3 * tk, 1 - round * tk);
+    rig.position.y = rig.userData.y0 + 0.12 * tk;
     if (h.ko) { m.rotation.z = U.lerp(m.rotation.z, Math.PI / 2, dt * 6); m.position.y = 0.2; return; }
     m.rotation.z = U.lerp(m.rotation.z, 0, dt * 8);
     const stunned = h.st.stun > 0 || h.st.freeze > 0;
     if (h.id === 'finn') {
       const sw = moving ? Math.sin(h.walkT) * 0.85 : 0;
-      p.legL.rotation.x = U.lerp(p.legL.rotation.x, sw, Math.min(1, dt * 16));
-      p.legR.rotation.x = U.lerp(p.legR.rotation.x, -sw, Math.min(1, dt * 16));
+      const legK = Math.min(1, dt * (rolling ? 30 : 16));
+      p.legL.rotation.x = U.lerp(p.legL.rotation.x, rolling ? -1.5 * tk : sw, legK);
+      p.legR.rotation.x = U.lerp(p.legR.rotation.x, rolling ? -1.25 * tk : -sw, legK);
       p.head.position.y = 1.34 + (moving ? Math.abs(Math.sin(h.walkT)) * 0.06 : Math.sin(h.animT * 2.4) * 0.015);
       p.head.rotation.z = stunned ? Math.sin(h.animT * 14) * 0.2 : U.lerp(p.head.rotation.z, moving ? Math.sin(h.walkT * 0.5) * 0.05 : 0, dt * 8);
+      p.head.rotation.x = U.lerp(p.head.rotation.x, rolling ? 0.5 * tk : 0, Math.min(1, dt * 20));
       if (h.state === 'attack') {
         const k = Math.min(1, h.stateT / h.swingTime);
         const type = h.S.weapon.type;
@@ -311,8 +360,15 @@
         }
         p.armL.rotation.x = U.lerp(p.armL.rotation.x, 0.5, dt * 12);
         h.lean = U.lerp(h.lean || 0, 0.14, dt * 12);
-      } else if (h.state === 'dash') {
-        m.rotation.x = Math.min(1, h.stateT / 0.28) * Math.PI * 2;
+      } else if (rolling) {
+        /* hug the knees, sword tucked along the body */
+        const ak = Math.min(1, dt * 30);
+        p.swingR.position.z = U.lerp(p.swingR.position.z, 0, ak);
+        p.swingR.rotation.y = U.lerp(p.swingR.rotation.y, 0, ak);
+        p.armR.rotation.x = U.lerp(p.armR.rotation.x, -1.1 * tk, ak);
+        p.armL.rotation.x = U.lerp(p.armL.rotation.x, -1.3 * tk, ak);
+        p.sword.rotation.x = U.lerp(p.sword.rotation.x, -1.6, ak);
+        h.lean = 0;
       } else {
         p.swingR.position.z = U.lerp(p.swingR.position.z, 0, dt * 10);
         p.swingR.rotation.y = U.lerp(p.swingR.rotation.y, 0, dt * 10);
@@ -322,10 +378,10 @@
         h.lean = U.lerp(h.lean || 0, moving ? 0.12 : 0, dt * 8);
       }
       if (h.hurtT > 0) h.lean = -0.25;
-      if (h.state !== 'dash') m.rotation.x = U.lerp(m.rotation.x % (Math.PI * 2), h.lean || 0, dt * 14);
+      m.rotation.x = U.lerp(m.rotation.x, h.lean || 0, Math.min(1, dt * 14));
     } else {
-      const bounce = moving ? Math.abs(Math.sin(h.walkT)) * 0.09 : Math.sin(h.animT * 2.2) * 0.02;
-      p.body.position.y = bounce;
+      const bounce = moving && !rolling ? Math.abs(Math.sin(h.walkT)) * 0.09 : Math.sin(h.animT * 2.2) * 0.02;
+      p.body.position.y = bounce * (1 - tk);
       const armR = p.armR, armL = p.armL;
       const main = h.fists.find((f) => f.main);
       if (main) {
@@ -345,24 +401,25 @@
       } else {
         p.body.rotation.y = U.lerp(p.body.rotation.y % (Math.PI * 2), 0, dt * 8);
         for (const [a, s] of [[armL, -1], [armR, 1]]) {
-          a.group.rotation.x = U.lerp(a.group.rotation.x, moving ? Math.sin(h.walkT + (s > 0 ? 0 : Math.PI)) * 0.55 : Math.sin(h.animT * 2.2 + s) * 0.05, dt * 10);
-          a.group.rotation.z = U.lerp(a.group.rotation.z, 0.15 * s, dt * 10);
-          if (a.len > 0.45) MD.stretchArm(a, U.lerp(a.len, 0.44, dt * 12));
+          /* rolling: arms pulled in tight against the ball */
+          const want = tk > 0.05 ? -0.6 * tk : moving ? Math.sin(h.walkT + (s > 0 ? 0 : Math.PI)) * 0.55 : Math.sin(h.animT * 2.2 + s) * 0.05;
+          a.group.rotation.x = U.lerp(a.group.rotation.x, want, Math.min(1, dt * (tk > 0.05 ? 24 : 10)));
+          a.group.rotation.z = U.lerp(a.group.rotation.z, 0.15 * s * (1 - tk) - 0.35 * s * tk, dt * 10);
+          const len = 0.44 - 0.2 * tk;
+          if (Math.abs(a.len - len) > 0.01) MD.stretchArm(a, U.lerp(a.len, len, Math.min(1, dt * 14)));
         }
       }
-      /* Jake waddles, his ears flop and his tail wags */
-      p.body.rotation.z = U.lerp(p.body.rotation.z, stunned ? Math.sin(h.animT * 14) * 0.12 : moving ? Math.sin(h.walkT) * 0.11 : 0, dt * 10);
+      /* Jake waddles, his ears flop and his tail wags (and all of it tucks in for a roll) */
+      p.body.rotation.z = U.lerp(p.body.rotation.z, stunned ? Math.sin(h.animT * 14) * 0.12 : moving && !rolling ? Math.sin(h.walkT) * 0.11 : 0, dt * 10);
       if (p.earL) {
         const flop = moving ? Math.sin(h.walkT * 2) * 0.22 : Math.sin(h.animT * 1.6) * 0.05;
-        p.earL.rotation.z = U.lerp(p.earL.rotation.z, -0.38 - flop - (h.hurtT > 0 ? 0.5 : 0), dt * 12);
-        p.earR.rotation.z = U.lerp(p.earR.rotation.z, 0.38 + flop + (h.hurtT > 0 ? 0.5 : 0), dt * 12);
+        const back = 0.9 * tk;
+        p.earL.rotation.z = U.lerp(p.earL.rotation.z, -0.38 - flop - back - (h.hurtT > 0 ? 0.5 : 0), dt * 12);
+        p.earR.rotation.z = U.lerp(p.earR.rotation.z, 0.38 + flop + back + (h.hurtT > 0 ? 0.5 : 0), dt * 12);
       }
-      if (p.tail) p.tail.rotation.y = Math.sin(h.animT * (moving ? 14 : 6)) * (h.hurtT > 0 ? 0.05 : 0.5);
-      const ball = h.state === 'dash' || h.buffs.ball > 0;
-      const k2 = ball ? 0.8 : 1;
-      p.body.scale.set(k2, k2, k2);
-      if (ball) m.rotation.x += dt * 25;
-      else m.rotation.x = U.lerp(m.rotation.x % (Math.PI * 2), h.hurtT > 0 ? -0.2 : moving ? 0.08 : 0, dt * 14);
+      if (p.tail) { p.tail.rotation.y = Math.sin(h.animT * (moving ? 14 : 6)) * (h.hurtT > 0 ? 0.05 : 0.5); p.tail.scale.setScalar(Math.max(0.01, 1 - tk)); }
+      p.body.scale.setScalar(1);
+      m.rotation.x = U.lerp(m.rotation.x, rolling || ball ? 0 : h.hurtT > 0 ? -0.2 : moving ? 0.08 : 0, Math.min(1, dt * 14));
     }
   };
   /* Cartoon animation for monsters: squash & stretch on a spring (hits, hops, landings), rubber-hose walk

@@ -8,7 +8,9 @@
   const M = DT.meta;
   const MAX_LEVEL = 40;
 
-  const xpToNext = (L) => Math.round(60 + 40 * L + 5 * L * L);
+  /* 330 XP for level 2, about 2,600 at level 10 and 8,600 at level 20: a first trip is worth a level or two,
+     and reaching level 24 (the Engine) takes a few dozen trips */
+  const xpToNext = (L) => Math.round(250 + 60 * L + 18 * L * L);
 
   function newChar(heroId) {
     const H = D.HEROES[heroId];

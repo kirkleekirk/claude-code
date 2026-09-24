@@ -193,6 +193,7 @@
         <p><b>The Loop:</b> the meter at the top fills up. When it’s full the train enters the Loop Tunnel: it gets dark, it hurts, and after 25 seconds you’re Looped — you lose your gear.</p>
         <p><b>Knocked out?</b> You lose everything you wore and carried, except what’s in your safe pocket (Finn’s Hat Stash, Jake’s Tummy).</p>
         <p><b>Two heroes:</b> Finn is a gear hero — swords, full armor, packs and up to 4 relics. Jake is a skill hero — no weapon or armor, but a huge skill tree, and his instrument changes how his stretchy punch works. Each hero has their own level, skill tree and ability keys. The stash is shared.</p>
+        <p><b>Loot:</b> most finds are Plain or Radical — good gear is rare, so bring it home! Bosses always drop a prize, and it gets better on harder lines. BMO’s workshop can upgrade and improve what you have.</p>
         <p><b>Rarities:</b> ${D.RARITIES.map((r) => `<span class="rc r${r.id}">${esc(r.name)}</span> ${esc(r.rule)}`).join(' ')}</p></div>
         <h3>${icon('keyboard')} Controls</h3>${UI.hud.controlsHtml()}`;
     } else if (sec === 'glossary') {

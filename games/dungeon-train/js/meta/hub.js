@@ -185,14 +185,14 @@
   HB.genMarket = function (G) {
     const tier = Math.max(1, ...D.HERO_IDS.map((h) => M.maxTier(G, h)));
     const L = M.loot;
+    /* the shop never sells anything better than Radical on the first line and Algebraic after that;
+       a Mathematical item shows up now and then from the Dungeon Cars on, a Legendary only rarely */
+    const cap = tier >= 2 ? 2 : 1;
     const stock = [L.makeConsumable('bacon_pancakes', 2), L.makeConsumable('candy', 1), L.makeConsumable('pocket_watch', 1), L.rollConsumable(), L.rollConsumable(), L.makeConsumable('skeleton_key', 1)];
-    for (const hero of ['finn', 'finn', 'jake', 'jake']) stock.push(L.rollGear(tier, { hero, luck: 0 }));
-    for (let i = 0; i < stock.length; i++) if (stock[i].rarity >= 4) stock[i] = L.rollGear(tier, { kind: stock[i].kind, luck: 0 });
-    for (const it of stock) if (it.rarity > 2 && !it.unique) { it.rarity = 2; it.power = null; it.name = L.nameOf(it); }
-    stock.push(L.makeItem({ base: R.pick(Object.keys(D.BASES).filter((b) => D.BASES[b].kind === 'relic')), rarity: R.weighted([[3, 0], [3, 1], [2, 2]]), ilvl: tier }));
-    const k = R.pick(D.GEAR_KINDS);
-    stock.push(L.makeItem({ base: R.pick(Object.keys(D.BASES).filter((b) => D.BASES[b].kind === k)), rarity: 3, ilvl: tier }));
-    if (R.chance(0.15)) { const u = L.rollGear(tier, { minRarity: 4 }); if (u.unique) stock.push(u); }
+    for (const hero of ['finn', 'finn', 'jake', 'jake']) stock.push(L.rollGear(tier, { hero, rarity: Math.min(cap, L.rollRarity(tier, 0)) }));
+    stock.push(L.makeItem({ base: R.pick(Object.keys(D.BASES).filter((b) => D.BASES[b].kind === 'relic')), rarity: Math.min(cap, R.weighted([[3, 0], [3, 1], [2, 2]])), ilvl: tier }));
+    if (tier >= 3 && R.chance(0.5)) { const k = R.pick(D.GEAR_KINDS); stock.push(L.makeItem({ base: R.pick(Object.keys(D.BASES).filter((b) => D.BASES[b].kind === k)), rarity: 3, ilvl: tier })); }
+    if (tier >= 4 && R.chance(0.1)) { const u = L.rollGear(tier, { rarity: 4 }); if (u.unique) stock.push(u); }
     G.market = { stock };
   };
   HB.refreshMarket = function (G) { if (G.gold < 30) return 'poor'; G.gold -= 30; HB.genMarket(G); return 'ok'; };

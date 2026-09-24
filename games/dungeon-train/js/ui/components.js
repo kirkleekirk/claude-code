@@ -300,7 +300,7 @@
     const T = D.TREES[heroId];
     const upgrades = T.list.filter((n) => n.type === 'mod' && n.abMods && n.abMods[id]);
     const own = G.chars[heroId].tree;
-    let h = `<div class="acard"><header><span class="ab-ico">${icon(ab.icon)}</span><div><div class="ac-name">${esc(ab.name)}</div><div class="ic-tags">${src}<span class="tag">${ab.target === 'aim' ? 'Aimed at the crosshair' : ab.target === 'dir' ? 'Fires where you face' : 'Around you'}</span></div></div></header>`;
+    let h = `<div class="acard"><header><span class="ab-ico">${icon(ab.icon)}</span><div><div class="ac-name">${esc(ab.name)}</div><div class="ic-tags">${src}<span class="tag">${ab.target === 'aim' ? 'Aimed where you point' : ab.target === 'dir' ? 'Fires where you face' : 'Around you'}</span></div></div></header>`;
     h += `<p>${UI.kw(ab.desc)}</p><div class="wstats">${nums.join('')}</div>`;
     if (upgrades.length) h += `<ul class="upg">${upgrades.map((n) => `<li class="${own[n.id] ? 'on' : ''}">${icon(own[n.id] ? 'check' : 'lock')} <b>${esc(n.name)}</b> — ${UI.kw(n.desc || '')}</li>`).join('')}</ul>`;
     if (known && known.src === 'item') h += `<p class="ic-note">${icon('info')} This ability comes from your ${esc(known.itemName)}. Take the item off and the ability leaves your bar.</p>`;

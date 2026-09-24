@@ -335,6 +335,45 @@
       scene.add(m);
     }
   };
+  /* An x-ray silhouette, so a boss or a wall in front of the hero never hides them. Pass 1 marks the
+     pixels where the hero is visible (stencil = 1); pass 2 draws a flat silhouette only where the hero is
+     behind something (depth test GREATER) and not visible, so the hero's own parts never show through. */
+  let xrayMark = null;
+  const xrayMats = {};
+  const xv = window.THREE ? new THREE.Vector3() : null;
+  GF.xray = function (root, color) {
+    if (!xrayMark) xrayMark = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, depthFunc: THREE.LessEqualDepth, stencilWrite: true, stencilRef: 1, stencilFunc: THREE.AlwaysStencilFunc, stencilZPass: THREE.ReplaceStencilOp, fog: false });
+    let sil = xrayMats[color];
+    if (!sil) sil = xrayMats[color] = new THREE.MeshBasicMaterial({ color: lin(color), transparent: true, opacity: 0.55, depthWrite: false, depthFunc: THREE.GreaterDepth, stencilWrite: true, stencilWriteMask: 0, stencilRef: 1, stencilFunc: THREE.NotEqualStencilFunc, fog: false });
+    root.updateMatrixWorld(true);
+    const list = [];
+    root.traverse((o) => {
+      if (!o.isMesh || o.userData.outline || o.renderOrder === -1 || o.userData.xray) return;
+      /* skip the feet: they sit a hair into the floor and would outline themselves */
+      xv.setFromMatrixPosition(o.matrixWorld); root.worldToLocal(xv);
+      if (xv.y < 0.2) return;
+      list.push(o);
+    });
+    for (const o of list) {
+      const a = new THREE.Mesh(o.geometry, xrayMark);
+      const b = new THREE.Mesh(o.geometry, sil);
+      a.renderOrder = 20; b.renderOrder = 21;
+      for (const m of [a, b]) { m.userData.outline = true; m.userData.xray = true; o.add(m); }
+    }
+  };
+  /* A small dust puff (dodge rolls, landings): quick outlined puffs, no sparkles. */
+  GF.dust = function (x, z, size, color) {
+    size = size || 0.5;
+    const n = 4;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const m = GF.part(GF.geo('sphere', 1, 10, 8), color || (i % 2 ? '#f2ebdd' : '#ddd3c0'), null, { inkT: 0.08 });
+      m.position.set(x + Math.cos(a) * size * 0.3, 0.12 + Math.random() * 0.1, z + Math.sin(a) * size * 0.3);
+      m.scale.setScalar(0.001);
+      scene.add(m);
+      fx.push({ m, t: -i * 0.02, dur: 0.38, kind: 'puff', s: size * (0.32 + Math.random() * 0.18), v: new THREE.Vector3(Math.cos(a) * size * 1.4, size * (0.6 + Math.random() * 0.5), Math.sin(a) * size * 1.4) });
+    }
+  };
   /* Cartoon smoke puff: ink-outlined cloud balls pop out and shrink away, plus a few sparkles. */
   GF.poof = function (x, y, z, size, color) {
     size = size || 1;

@@ -8,8 +8,8 @@ Open `index.html` in a desktop browser with WebGL (mouse and keyboard). Three.js
 
 | Key | Action |
 | --- | --- |
-| WASD | Move |
-| Mouse | Look and aim (the camera sits over your shoulder) |
+| WASD · arrow keys | Move (up the screen, down, left, right) |
+| Mouse | Aim — point at a monster to lock on |
 | Left click (hold) | Primary attack — Finn's sword combo, Jake's stretchy punch |
 | Space · Shift · Right click | Dodge roll / stretch-dash |
 | 1 2 3 4 | Abilities |
@@ -20,7 +20,9 @@ Open `index.html` in a desktop browser with WebGL (mouse and keyboard). Three.js
 | Esc | Pause, settings and controls |
 | Mouse wheel | Camera zoom |
 
-The game captures the mouse (pointer lock) for mouse-look. If the page isn't allowed to — some embedded frames block it — it switches to **cursor aiming**: aim with the cursor and turn the camera with right-drag, the arrow keys or the screen edges. You can pick cursor aiming in Settings too.
+The camera is **locked**: it looks into the car from a fixed angle, like a dollhouse with the roof and the near wall cut away, and slides along the train with you. It never turns, so W is always up the screen and D is always toward the engine. Tall furniture fades out when it gets between the camera and your hero, and your hero shows as an outline when a boss stands in front of them.
+
+Prefer the old over-the-shoulder view? Turn on **Free camera** in Settings: the mouse turns the camera (pointer lock). If the page isn't allowed to lock the mouse — some embedded frames block it — you aim with the cursor and turn with right-drag or the arrow keys.
 
 ## A trip
 
@@ -60,14 +62,16 @@ Each hero has their own level, skill points, skill tree, gear and ability keys. 
 
 ## Loot
 
-| Rarity | What it does |
-| --- | --- |
-| Plain | Base stats only |
-| Radical | Base stats + 1 random bonus |
-| Algebraic | Base stats + 2 random bonuses |
-| Mathematical | Stats, 2 bonuses and a **Power** that changes how you fight (sword beams, freezing hits, lingering fists, chain lightning…) |
-| Legendary | Named items with signature powers; some come with their own ability |
-| Glob-Tier | The rarest loot on the train: build-changing powers and their own ability |
+| Rarity | What it does | Where it turns up |
+| --- | --- | --- |
+| Plain | Base stats only | Everywhere |
+| Radical | Base stats + 1 random bonus | Everywhere |
+| Algebraic | Base stats + 2 random bonuses | A good find in a chest; every early boss drops one |
+| Mathematical | Stats, 2 bonuses and a **Power** that changes how you fight (sword beams, freezing hits, lingering fists, chain lightning…) | Rare: from the Candy Cars on, mostly from bosses and elites. From the Ice Cars on, every boss drops one |
+| Legendary | Named items with signature powers; some come with their own ability | Very rare, from the Dungeon Cars on |
+| Glob-Tier | The rarest loot on the train: build-changing powers and their own ability | Only on the last lines |
+
+Good gear is meant to be earned: a first trip usually brings home a few Plain and Radical pieces and one Algebraic prize from King Slime. Levels come slowly too — a trip is worth a level or two at first, and reaching level 24 for the Engine takes a few dozen trips. Choose Goose never sells anything better than Radical on the first line (Algebraic later), and Power items in the shop cost a lot.
 
 Examples: **Rainbow Riff** (a guitar whose fist stays out for seconds and can be dragged through enemies, and grants *Rock Out*), **Frost Heart** (a relic that Freezes enemies you hit), the **Ice King's Crown** (grants *Frost Nova*), the **Citadel Guardian's Blade** (grants a *Citadel Laser*), **The Future Orb** (blocks a hit every 8 seconds), the **Vampire King's Fang**, **Jake's Blues Harp**. Freezes, Chill, Shatter, Burn, Bleed, Shock, Stun, Root and Fear stack into late-game builds.
 

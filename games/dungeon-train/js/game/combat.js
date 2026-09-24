@@ -492,12 +492,13 @@
     const dx = mv ? cmd.mx : Math.sin(h.facing), dz = mv ? cmd.mz : Math.cos(h.facing);
     const d = Math.hypot(dx, dz) || 1;
     h.state = 'dash'; h.stateT = 0; h.dashDir = { x: dx / d, z: dz / d };
-    h.iframes = 0.3 + (h.S.mods.dashIframes || 0);
-    h.dashDur = h.id === 'finn' ? 0.28 : 0.24; h.dashSpeed = h.id === 'finn' ? 16 : 20;
+    /* Finn tucks into a somersault, Jake balls up and rolls: about 4.5 m either way */
+    h.dashDur = h.id === 'finn' ? 0.36 : 0.32; h.dashSpeed = h.id === 'finn' ? 12.5 : 15;
+    h.iframes = h.dashDur + 0.02 + (h.S.mods.dashIframes || 0);
     h.facing = Math.atan2(dx, dz);
     h.dashHit = new Set();
     DT.sfx.play('dash');
-    GF.burst(h.x, 0.3, h.z, '#ffffff', 5, 2, { dur: 0.3, flat: true });
+    GF.dust(h.x - h.dashDir.x * 0.3, h.z - h.dashDir.z * 0.3, 0.6);
   };
 
   /* Progress whatever the hero is doing (swing, dash, ability, fists). */

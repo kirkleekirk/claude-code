@@ -1,5 +1,5 @@
 /* A trip on the Dungeon Train: setup, the main loop, loot, interactions, the Loop, extraction and wipes,
-   and the third-person camera. The trip holds a list of players; each drives one hero with commands.
+   and the cameras (locked by default, or a free third-person camera). The trip holds a list of players; each drives one hero with commands.
    Right now there's one local player — the structure is ready for more. */
 (function () {
   'use strict';
@@ -33,8 +33,11 @@
       stats: { dmg: 0, kills: 0, elites: 0, chests: 0, supers: 0, bosses: 0 },
       luckBonus: offer.mod === 'crowded' ? 0.25 : offer.mod === 'elites' ? 0.4 : 0, over: null, pendingOver: null, paused: false,
       inCombat: false, hitstopT: 0, shakeT: 0, interact: { target: null, p: 0 }, fullNoteT: 0, carIdx: 0, boss: null, bossDown: false, trophy: null,
-      cam: { yaw: Math.PI / 2, pitch: 0.3, dist: 5.8, x: 0, y: 3, z: 0 },
+      cam: { yaw: IN.fixed ? Math.PI : Math.PI / 2, pitch: 0.3, dist: 5.8, x: 0, y: 3, z: 0 },
     };
+    WG.setCameraMode(train, IN.fixed);
+    GF.setFov(IN.fixed ? LOCK.fov : DT.settings.fov);
+    run.reticle = makeReticle();
     const c0 = train.cars[0];
     const hero = AC.makeHero(run, heroId, c0.x0 + 4, 0, S, G.chars[heroId].equip, 'p1');
     run.heroes.push(hero);
@@ -55,7 +58,7 @@
   function onLock(r, state) {
     if (r !== run || r.over) return;
     if (state === 'unlocked' && !r.paused && !r.pendingOver && !DT.ui.hud.isMenuOpen()) DT.ui.hud.togglePause(r, true);
-    if (state === 'failed') DT.ui.hud.note('Mouse lock isn’t available here, so aim with the cursor. Hold right-click (or use ← →) to turn the camera.', 8);
+    if (state === 'failed') DT.ui.hud.note('Mouse lock isn’t available here, so aim with the cursor. Hold right-click (or use ← →) to turn the camera — or switch back to the locked camera in Settings.', 8);
     DT.ui.hud.refresh(r);
   }
 
@@ -380,9 +383,14 @@
     r.time += dt;
     const look = IN.lookDelta(dtRaw);
     const cam = r.cam;
-    cam.yaw += look.yaw;
-    cam.pitch = U.clamp(cam.pitch + look.pitch, -0.3, 1.05);
-    cam.dist = U.clamp(cam.dist + look.zoom * 0.6, 3.5, 9);
+    if (IN.fixed) {
+      cam.yaw = Math.PI;
+      if (look.zoom) { DT.settings.zoom = U.clamp((DT.settings.zoom || 1) + look.zoom * 0.08, LOCK.zoomMin, LOCK.zoomMax); DT.saveSettings(); }
+    } else {
+      cam.yaw += look.yaw;
+      cam.pitch = U.clamp(cam.pitch + look.pitch, -0.3, 1.05);
+      cam.dist = U.clamp(cam.dist + look.zoom * 0.6, 3.5, 9);
+    }
     for (const p of r.players) {
       p.cmd = p.local && !r.pendingOver ? IN.command(GF.camera, cam.yaw) : IN.idle(cam.yaw);
       AC.updateHero(r, p.hero, p.cmd, dt);
@@ -456,14 +464,42 @@
     }
     for (const t of r.train.skyTex) t.offset.x += dt * 0.012;
     r.train.groundTex.offset.x += dt * 1.6;
+    for (const w of r.train.wheels) w.rotation.z -= dt * 9;
+    updateReticle(r, dt);
     for (const s of r.train.skies) s.position.x = GF.camera.position.x;
     updateCamera(r, dt);
     DT.ui.hud.update(r, dt);
     IN.endFrame();
   };
 
-  /* Third-person camera over the right shoulder, pulled in so walls never block the view. */
+  /* ---------- cameras ---------- */
+  /* The locked camera looks into the car from the aisle side, at a fixed angle, and slides along the
+     train with the hero. It never turns, so W is always up the screen and D is always toward the engine.
+     The near wall and the roof are cut away (see WG.setCameraMode). */
+  const LOCK = { pitch: 0.7, fov: 40, dist: 14, zoomMin: 0.75, zoomMax: 1.3, lookZ: 0 };
+  RA.LOCK = LOCK;
   function updateCamera(r, dt) {
+    if (IN.fixed) lockedCamera(r, dt); else freeCamera(r, dt);
+    fadeProps(r, dt);
+  }
+  function lockedCamera(r, dt) {
+    const h = r.local, cam = r.cam;
+    const big = h.buffs.mega > 0 || h.buffs.giant > 0 ? 1.2 : 1;
+    const dist = LOCK.dist * (DT.settings.zoom || 1) * big * (r.superAct ? 1.06 : 1);
+    /* follow along the train only: the whole width of the car always fits on screen */
+    if (cam.fx == null) cam.fx = h.x;
+    const k = dt ? 1 - Math.exp(-dt * 8) : 0;
+    cam.fx += (h.x - cam.fx) * k;
+    cam.fd = cam.fd == null ? dist : cam.fd + (dist - cam.fd) * (dt ? 1 - Math.exp(-dt * 6) : 0);
+    const ty = 0.8, tz = LOCK.lookZ;
+    cam.x = cam.fx; cam.y = ty + Math.sin(LOCK.pitch) * cam.fd; cam.z = tz + Math.cos(LOCK.pitch) * cam.fd;
+    let sx = 0, sy = 0;
+    if (r.shakeT > 0 && dt) { r.shakeT = Math.max(0, r.shakeT - dt); const s = r.shakeT * 0.9; sx = R.float(-s, s); sy = R.float(-s, s); }
+    GF.camera.position.set(cam.x + sx, cam.y + sy, cam.z);
+    GF.camera.lookAt(cam.fx + sx, ty + sy, tz);
+  }
+  /* Free camera: third person over the right shoulder, pulled in so walls never block the view. */
+  function freeCamera(r, dt) {
     const h = r.local;
     const cam = r.cam;
     const sc = Math.sqrt(h.scale);
@@ -488,25 +524,107 @@
     }
     if (pull < 1) safe = { x: pivot.x + segx * pull, y: Math.min(WG.WD.H - 0.5, safe.y + (1 - pull) * 1.5), z: pivot.z + segz * pull };
     const k = dt ? Math.min(1, dt * (pull < 1 ? 8 : 18)) : 1;
-    cam.x = U.lerp(cam.x || safe.x, safe.x, k); cam.y = U.lerp(cam.y || safe.y, safe.y, k); cam.z = U.lerp(cam.z || safe.z, safe.z, k);
+    if (cam.free !== true) { cam.x = safe.x; cam.y = safe.y; cam.z = safe.z; cam.free = true; }
+    cam.x = U.lerp(cam.x, safe.x, k); cam.y = U.lerp(cam.y, safe.y, k); cam.z = U.lerp(cam.z, safe.z, k);
     let sx = 0, sy = 0;
     if (r.shakeT > 0 && dt) { r.shakeT = Math.max(0, r.shakeT - dt); const s = r.shakeT * 0.9; sx = R.float(-s, s); sy = R.float(-s, s); }
     GF.camera.position.set(cam.x + sx, cam.y + sy, cam.z);
     GF.camera.lookAt(pivot.x + lx * 12, pivot.y + ly * 12, pivot.z + lz * 12);
-    cutaway(r, cam, pivot);
   }
-  /* Hide tall props (mushrooms, shelves, cages…) that stand between the camera and the hero. */
-  function cutaway(r, cam, pivot) {
-    const vx = pivot.x - cam.x, vz = pivot.z - cam.z, L2 = vx * vx + vz * vz || 1;
-    for (let ci = Math.max(0, r.carIdx - 1); ci <= Math.min(r.train.cars.length - 1, r.carIdx + 1); ci++) {
-      for (const p of r.train.cars[ci].props) {
+  /* Switch cameras (from Settings), even in the middle of a trip. */
+  RA.setCameraMode = function (fixed) {
+    const r = run;
+    IN.setCamera(fixed, DT.settings.cursorAim);
+    if (!r) return;
+    WG.setCameraMode(r.train, IN.fixed);
+    GF.setFov(IN.fixed ? LOCK.fov : DT.settings.fov);
+    r.cam.yaw = IN.fixed ? Math.PI : Math.PI / 2;
+    r.cam.pitch = 0.3;
+    r.cam.fx = null; r.cam.fd = null; r.cam.free = false;
+    updateCamera(r, 0);
+  };
+
+  /* Tall props (mushrooms, shelves, cages…) that stand between the camera and the hero fade out,
+     so they never hide your hero. The test is a real line of sight against each prop's box. */
+  function segBox(ax, ay, az, bx, by, bz, x0, y0, z0, x1, y1, z1) {
+    let t0 = 0, t1 = 1;
+    const a = [ax, ay, az], d = [bx - ax, by - ay, bz - az], lo = [x0, y0, z0], hi = [x1, y1, z1];
+    for (let i = 0; i < 3; i++) {
+      if (Math.abs(d[i]) < 1e-9) { if (a[i] < lo[i] || a[i] > hi[i]) return false; continue; }
+      let ta = (lo[i] - a[i]) / d[i], tb = (hi[i] - a[i]) / d[i];
+      if (ta > tb) { const t = ta; ta = tb; tb = t; }
+      if (ta > t0) t0 = ta;
+      if (tb < t1) t1 = tb;
+      if (t0 > t1) return false;
+    }
+    return true;
+  }
+  function fadeProps(r, dt) {
+    const c = GF.camera.position, h = r.local;
+    const cars = r.train.cars;
+    for (let ci = Math.max(0, r.carIdx - 1); ci <= Math.min(cars.length - 1, r.carIdx + 1); ci++) {
+      for (const p of cars[ci].props) {
         if (!p.tall || !p.mesh) continue;
-        const t = ((p.x - cam.x) * vx + (p.z - cam.z) * vz) / L2;
-        const qx = cam.x + vx * t, qz = cam.z + vz * t;
-        const hide = t > -0.15 && t < 0.95 && Math.hypot(p.x - qx, p.z - qz) < Math.max(p.w, p.d) * 0.5 * (p.size || 1) + 0.55;
-        p.mesh.visible = !hide;
+        const s = p.size || 1, hw = (p.w * s) / 2 + 0.2, hd = (p.d * s) / 2 + 0.2, top = p.h * s;
+        let hide = false;
+        for (const y of [0.45, 1.35]) {
+          if (segBox(c.x, c.y, c.z, h.x, (h.liftY || 0) + y * h.scale, h.z, p.x - hw, 0, p.z - hd, p.x + hw, top, p.z + hd)) { hide = true; break; }
+        }
+        setFade(r, p, hide ? 0.25 : 1, dt);
       }
     }
+  }
+  function setFade(r, p, want, dt) {
+    const cur = p.fade == null ? 1 : p.fade;
+    if (cur === want) return;
+    let next = dt ? cur + (want - cur) * Math.min(1, dt * 12) : want;
+    if (Math.abs(next - want) < 0.03) next = want;
+    if (!p.fadeMats) {
+      /* the first time a prop fades it gets its own materials (the originals are shared) */
+      p.fadeMats = []; p.fadeInk = [];
+      p.mesh.traverse((o) => {
+        if (!o.isMesh) return;
+        if (o.userData.outline || o.renderOrder === -1) { p.fadeInk.push(o); return; }
+        o.material = o.material.clone();
+        p.fadeMats.push(o.material);
+        r.train.materials.push(o.material);
+      });
+    }
+    p.fade = next;
+    const solid = next >= 0.999;
+    for (const m of p.fadeMats) {
+      if (m.transparent !== !solid) { m.transparent = !solid; m.needsUpdate = true; }
+      m.opacity = next; m.depthWrite = solid;
+    }
+    for (const o of p.fadeInk) o.visible = solid;
+  }
+
+  /* The aim marker on the floor under the cursor (it hugs the monster you're pointing at). */
+  function makeReticle() {
+    const g = new THREE.Group();
+    const ring = new THREE.Mesh(GF.geo('ring', 0.8, 1, 40), GF.basic('#ffffff', { opacity: 0.7 }));
+    ring.rotation.x = -Math.PI / 2;
+    const dot = new THREE.Mesh(GF.geo('circle', 0.12, 16), GF.basic('#ffffff', { opacity: 0.8 }));
+    dot.rotation.x = -Math.PI / 2;
+    g.add(ring, dot);
+    g.userData = { ring, dot };
+    g.visible = false;
+    GF.scene.add(g);
+    return g;
+  }
+  const RET_IDLE = window.THREE ? GF.lin('#ffffff') : null, RET_HOT = window.THREE ? GF.lin('#ff5a4a') : null;
+  function updateReticle(r, dt) {
+    const g = r.reticle, h = r.local;
+    if (!g) return;
+    g.visible = IN.mode === 'cursor' && !h.ko && !r.paused && !!h.aim;
+    if (!g.visible) return;
+    const tgt = h.aim.target && !h.aim.target.dead ? h.aim.target : null;
+    const rad = tgt ? tgt.r + 0.25 : 0.34;
+    g.userData.rad = U.lerp(g.userData.rad || rad, rad, Math.min(1, dt * 16));
+    g.position.set(tgt ? tgt.x : h.aim.x, 0.04, tgt ? tgt.z : h.aim.z);
+    g.scale.setScalar(g.userData.rad * (tgt ? 1 + Math.sin(r.time * 10) * 0.06 : 1));
+    g.userData.ring.material.color.copy(tgt ? RET_HOT : RET_IDLE);
+    g.userData.dot.visible = !tgt;
   }
 
   /* ---------- the end of a trip ---------- */
@@ -528,7 +646,7 @@
       const haul = U.sum(items, (i) => M.loot.value(i)) + gold;
       const before = G.overflow.length;
       for (const it of items) { it.isNew = true; M.hub.addToStash(G, it); }
-      if (r.trophy && D.TROPHIES[line.id] && !G.trophies[line.id]) { G.trophies[line.id] = true; result.trophy = line.id; xp += 200 * tier; }
+      if (r.trophy && D.TROPHIES[line.id] && !G.trophies[line.id]) { G.trophies[line.id] = true; result.trophy = line.id; xp += 150 * tier; }
       const levels = M.gainXp(G, heroId, xp);
       G.stats.escapes += 1;
       G.stats.bestHaul = Math.max(G.stats.bestHaul, haul);
@@ -561,9 +679,11 @@
     for (const z of r.zones) { if (z.mesh) GF.scene.remove(z.mesh); if (z.tele) z.tele.alive = false; if (z.ring) z.ring.alive = false; }
     for (const d of r.drops) GF.scene.remove(d.mesh);
     for (const c of r.coins) GF.scene.remove(c.mesh);
+    if (r.reticle) GF.scene.remove(r.reticle);
     GF.clearFx();
     WG.disposeTrain(r.train);
     GF.setMood({ light: 1, fog: null });
+    GF.setFov(DT.settings.fov);
     DT.ui.hud.hide();
     IN.enabled = false;
     IN.onLockChange = null;
@@ -634,6 +754,7 @@
     h.fists = [];
     const old = h.mesh;
     h.mesh = MD.hero(h.id, r.G.chars[h.id].equip);
+    GF.xray(h.mesh, AC.XRAY[h.id]);
     h.mesh.position.copy(old.position); h.mesh.rotation.copy(old.rotation);
     h.parts = h.mesh.userData.parts;
     GF.scene.remove(old); GF.scene.add(h.mesh);

@@ -125,19 +125,34 @@
     return Math.round((D.KINDS[it.kind].value || 12) * D.RARITIES[it.rarity].value * (1 + 0.35 * (it.ilvl - 1)) * (1 + 0.25 * (it.upg || 0)) * (it.set ? 1.3 : 1));
   }
   const sellPrice = (it, S) => (it.kind === 'trophy' ? 0 : Math.max(1, Math.round(value(it) * (1 + ((S && S.sellBonus) || 0)))));
-  const buyPrice = (it, S) => Math.max(1, Math.round(value(it) * 2.5 * Math.max(0.5, 1 - ((S && S.buyDiscount) || 0))));
+  /* the better the item, the steeper Choose Goose's markup */
+  const buyPrice = (it, S) => Math.max(1, Math.round(value(it) * (2.5 + 0.75 * Math.min(4, it.rarity || 0)) * Math.max(0.5, 1 - ((S && S.buyDiscount) || 0))));
   function salvageYield(it) {
     if (!isGear(it)) return null;
     return { dust: Math.max(1, Math.round(value(it) / 5)), shards: it.rarity >= 4 ? 3 : it.rarity === 3 ? 1 : 0 };
   }
 
   /* ---------- drop tables ---------- */
+  /* Most finds are Plain or Radical. Algebraic gear is a nice find, Mathematical gear (with a Power) is
+     rare and only drops from the Candy Cars on, Legendaries start in the Dungeon Cars and are rarer still,
+     and Glob-Tier items only turn up on the last lines. Luck helps, but it can't turn every chest gold. */
+  const RARITY_W = (tier) => [60, 28 + tier * 0.5, 6 + tier * 1.6, tier >= 2 ? 0.6 + tier * 0.45 : 0, tier >= 3 ? 0.15 + (tier - 3) * 0.12 : 0, tier >= 6 ? (tier - 5) * 0.05 : 0];
   function rollRarity(tier, luck, min) {
-    const w = [52, 30, 13 + tier * 1.2, 3.5 + tier * 0.8, 0.6 + tier * 0.3, tier >= 5 ? (tier - 4) * 0.18 : 0];
-    const lf = 1 + (luck || 0);
-    for (let r = 2; r < w.length; r++) w[r] *= Math.pow(lf, r * 0.6);
+    const w = RARITY_W(tier);
+    const lf = 1 + Math.max(0, luck || 0);
+    for (let r = 2; r < w.length; r++) w[r] *= Math.pow(lf, r * 0.4);
     let r = R.weighted(w.map((x, i) => [x, i]));
     if (min && r < min) r = min;
+    return r;
+  }
+  /* The prize a boss (or an elite, or a vault) is guaranteed to drop at this tier: rarity floor, and the
+     chance to go one better (Legendary from tier 3, Glob-Tier from tier 6). */
+  function prizeRarity(tier, luck, floor, upChance) {
+    const lf = 1 + Math.max(0, luck || 0) * 0.5;
+    let r = floor;
+    if (R.chance(upChance * lf)) r += 1;
+    if (r >= 4 && tier < 3) r = 3;
+    if (r >= 5 && tier < 6) r = 4;
     return r;
   }
   const KIND_W = { sword: 2, helmet: 1, armor: 1, gauntlets: 1, boots: 1, pack: 0.7, instrument: 3.2, collar: 1.8, relic: 2.6 };
@@ -156,7 +171,7 @@
   }
   function rollGear(tier, o) {
     o = o || {};
-    const rarity = rollRarity(tier, o.luck, o.minRarity);
+    const rarity = o.rarity != null ? o.rarity : rollRarity(tier, o.luck, o.minRarity);
     const ilvl = U.clamp(tier + (o.ilvlBonus || 0), 1, 10);
     const kind = o.kind || pickKind(o.hero);
     if (rarity >= 4) { const u = rollUnique(tier, rarity, kind, o.hero); if (u) return makeItem({ unique: u, ilvl }); }
@@ -180,7 +195,7 @@
   const CONS_W = [[6, 'bacon_pancakes'], [4, 'candy'], [1.6, 'burrito'], [2.5, 'ice_cream'], [2.5, 'science_potion'], [3, 'gunter_bomb'], [2, 'pocket_watch'], [1, 'rainbow_flare'], [1.5, 'skeleton_key'], [0.8, 'perfect_sandwich'], [2, 'garlic_bread'], [2, 'hot_sauce']];
   const rollConsumable = () => makeConsumable(R.weighted(CONS_W), 1);
   function rollAny(tier, o) {
-    const pick = R.weighted([[46, 'gear'], [32, 'valuable'], [22, 'consumable']]);
+    const pick = R.weighted([[50, 'gear'], [32, 'valuable'], [18, 'consumable']]);
     if (pick === 'gear') return rollGear(tier, o);
     if (pick === 'valuable') return rollValuable(tier, o);
     return rollConsumable();
@@ -202,29 +217,34 @@
         break;
       case 'chest':
         gold = R.int(10, 25) * tier;
-        items.push(rollGear(tier, g), rollAny(tier, g));
-        if (R.chance(0.45 * lf)) items.push(rollAny(tier, g));
+        items.push(rollAny(tier, g));
+        if (R.chance(0.3 * lf)) items.push(rollAny(tier, g));
         break;
       case 'vaultChest':
         gold = R.int(30, 60) * tier;
-        items.push(rollGear(tier, Object.assign({ minRarity: 2, ilvlBonus: 1 }, g)), rollValuable(tier, { minRarity: 2 }), rollAny(tier, g));
-        if (R.chance(0.3)) items.push(rollGear(tier, Object.assign({ minRarity: 4 }, g)));
+        items.push(rollGear(tier, Object.assign({ minRarity: 1, ilvlBonus: 1 }, g)), rollValuable(tier, { minRarity: 1 }));
+        if (R.chance(0.25 * lf)) items.push(rollGear(tier, Object.assign({ rarity: prizeRarity(tier, luck, 2, tier >= 3 ? 0.12 : 0.05), ilvlBonus: 1 }, g)));
         break;
       case 'enemy':
         gold = R.int(1, 4) * tier;
-        if (R.chance(0.09 * lf)) items.push(rollGear(tier, g));
-        if (R.chance(0.05 * lf)) items.push(rollValuable(tier));
+        if (R.chance(0.035 * lf)) items.push(rollGear(tier, g));
+        if (R.chance(0.04 * lf)) items.push(rollValuable(tier));
         if (R.chance(0.05)) items.push(rollConsumable());
         break;
       case 'elite':
         gold = R.int(40, 70) * tier;
-        items.push(rollGear(tier, Object.assign({ minRarity: 2, ilvlBonus: 1 }, g)), rollValuable(tier, { minRarity: 1 }));
-        if (R.chance(0.25 * lf)) items.push(rollGear(tier, Object.assign({ minRarity: 4 }, g)));
+        items.push(rollGear(tier, Object.assign({ minRarity: 1, ilvlBonus: 1 }, g)), rollValuable(tier, { minRarity: 1 }));
+        if (R.chance(0.3 * lf)) items.push(rollGear(tier, Object.assign({ rarity: prizeRarity(tier, luck, 2, tier >= 2 ? 0.15 : 0), ilvlBonus: 1 }, g)));
+        if (tier >= 3 && R.chance(0.04 * lf)) items.push(rollGear(tier, Object.assign({ rarity: 4 }, g)));
         break;
       case 'boss':
         gold = R.int(150, 220) * tier;
-        items.push(rollGear(tier, Object.assign({ minRarity: 4, ilvlBonus: 1 }, g)), rollGear(tier, Object.assign({ minRarity: 3, ilvlBonus: 1 }, g)), rollValuable(tier, { minRarity: 3 }), rollAny(tier, g));
-        if (tier >= 6 && R.chance(0.35)) items.push(rollGear(tier, Object.assign({ minRarity: 5 }, g)));
+        /* the boss prize: Algebraic on the first lines, with a growing chance of a Mathematical (Power) item;
+           from the Ice Cars on it's always a Power item, with a growing chance of a Legendary */
+        items.push(rollGear(tier, Object.assign({ rarity: tier >= 5 ? prizeRarity(tier, luck, 3, 0.1 + 0.03 * (tier - 5)) : prizeRarity(tier, luck, 2, [0, 0.12, 0.3, 0.45, 0.6][tier]), ilvlBonus: 1 }, g)));
+        if (tier >= 3 && tier < 5 && R.chance(0.06 * lf)) items.push(rollGear(tier, Object.assign({ rarity: 4 }, g)));
+        items.push(rollValuable(tier, { minRarity: 2 }), rollAny(tier, g));
+        if (tier >= 6 && R.chance(0.06 * lf)) items.push(rollGear(tier, Object.assign({ rarity: 5 }, g)));
         break;
       default: break;
     }
@@ -234,5 +254,5 @@
   }
 
   DT.meta.loot = { makeItem, makeConsumable, makeValuable, makeTrophy, nameOf, artOf, iconOf, effects, summaryOf, value, sellPrice, buyPrice, salvageYield, reqLevel, heroFor, isGear,
-    rollRarity, rollGear, rollValuable, rollConsumable, rollAny, rollAffixes, rollPower, powerPool, drops, weaponDmg, powerP };
+    rollRarity, prizeRarity, RARITY_W, rollGear, rollValuable, rollConsumable, rollAny, rollAffixes, rollPower, powerPool, drops, weaponDmg, powerP };
 })();

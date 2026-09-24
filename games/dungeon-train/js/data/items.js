@@ -11,9 +11,9 @@
     { id: 0, name: 'Plain',        affixes: 0, powers: 0, value: 1,   color: '#a7adbb', rule: 'Base stats only.' },
     { id: 1, name: 'Radical',      affixes: 1, powers: 0, value: 2.2, color: '#4cc38a', rule: 'Base stats plus 1 random bonus.' },
     { id: 2, name: 'Algebraic',    affixes: 2, powers: 0, value: 4.5, color: '#4d9bff', rule: 'Base stats plus 2 random bonuses.' },
-    { id: 3, name: 'Mathematical', affixes: 2, powers: 1, value: 10,  color: '#b76bff', rule: 'Stats, 2 bonuses and a special Power that changes how you fight.' },
-    { id: 4, name: 'Legendary',    affixes: 2, powers: 0, value: 28,  color: '#ffae34', rule: 'A one-of-a-kind named item with signature powers. Some come with their own ability.' },
-    { id: 5, name: 'Glob-Tier',    affixes: 3, powers: 0, value: 70,  color: '#ff5fb4', rule: 'The rarest loot on the train. Build-changing powers and their own ability.' },
+    { id: 3, name: 'Mathematical', affixes: 2, powers: 1, value: 10,  color: '#b76bff', rule: 'Stats, 2 bonuses and a special Power that changes how you fight. Rare — bosses and elites are your best bet, from the Candy Cars on.' },
+    { id: 4, name: 'Legendary',    affixes: 2, powers: 0, value: 28,  color: '#ffae34', rule: 'A one-of-a-kind named item with signature powers. Some come with their own ability. Very rare, from the Dungeon Cars on.' },
+    { id: 5, name: 'Glob-Tier',    affixes: 3, powers: 0, value: 70,  color: '#ff5fb4', rule: 'The rarest loot on the train, only on the last lines. Build-changing powers and their own ability.' },
   ];
 
   D.KINDS = {
@@ -196,7 +196,7 @@
     candy:          { name: 'Candy Kingdom Candy', icon: 'star',    value: 12, rarity: 0, desc: 'Sugar rush: +35% move speed for 8 seconds.' },
     ice_cream:      { name: 'Ice Cream Sandwich',  icon: 'snow',    value: 18, rarity: 1, desc: 'Brain freeze! Every enemy within 6 meters is Frozen for 2.5 seconds.' },
     science_potion: { name: "PB's Science Potion", icon: 'potion',  value: 22, rarity: 1, desc: 'SCIENCE! +40% damage for 10 seconds.' },
-    gunter_bomb:    { name: 'Gunter Bomb',         icon: 'bomb',    value: 18, rarity: 1, desc: 'Throw a penguin-shaped bomb at your crosshair. Big boom.' },
+    gunter_bomb:    { name: 'Gunter Bomb',         icon: 'bomb',    value: 18, rarity: 1, desc: 'Throw a penguin-shaped bomb where you point. Big boom.' },
     pocket_watch:   { name: 'Cosmic Pocket Watch', icon: 'watch',   value: 24, rarity: 1, desc: 'Wind back time: the Loop meter drops by 15% (or the Loop Tunnel lets you go for now).' },
     rainbow_flare:  { name: 'Rainicorn Flare',     icon: 'rainbow', value: 40, rarity: 2, desc: 'Call Lady Rainicorn. Stay near the flare for 6 seconds to fly off the train from anywhere.' },
     skeleton_key:   { name: 'Skeleton Key',        icon: 'key',     value: 30, rarity: 1, desc: 'Opens a locked vault door or a locked treasure chest. Used automatically.' },
