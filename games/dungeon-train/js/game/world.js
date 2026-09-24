@@ -746,11 +746,33 @@
     }
   }
   /* A random point in a room, `m` from the walls (boss attacks that fill the room). */
+  /* The nearest point to (x, z) in a room with r of clear floor around it, searching outward and starting
+     on the side facing `toward`. (The Well of Power fills the middle of the Lich's room, so the way home
+     can't open right in the middle there.) */
+  function clearNear(T, room, x, z, r, toward) {
+    const ok = (px, pz) => {
+      if (px < room.x0 + WALL + r || px > room.x1 - WALL - r || pz < room.z0 + WALL + r || pz > room.z1 - WALL - r) return false;
+      if (solidAt(T, px, pz)) return false;
+      for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; if (solidAt(T, px + Math.cos(a) * r, pz + Math.sin(a) * r)) return false; }
+      return true;
+    };
+    if (ok(x, z)) return { x, z };
+    const a0 = toward ? Math.atan2(toward.z - z, toward.x - x) : 0;
+    for (let d = 0.5; d < 14; d += 0.5) {
+      const n = Math.max(8, Math.round(d * 6));
+      for (let i = 0; i < n; i++) {
+        const a = a0 + (i % 2 ? -1 : 1) * Math.ceil(i / 2) * ((Math.PI * 2) / n);
+        const px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d;
+        if (ok(px, pz)) return { x: px, z: pz };
+      }
+    }
+    return { x, z };
+  }
   function roomPoint(room, m) {
     return { x: R.float(room.x0 + WALL + m, room.x1 - WALL - m), z: R.float(room.z0 + WALL + m, room.z1 - WALL - m) };
   }
 
-  DT.game.world = { WD, generate, freeSpot, carAt, inRoom, rectAt, resolve, solidAt, pushOut, cameraSafe, cameraFree, clampPath, los, steer, setArena, roomPoint, doorPoint };
+  DT.game.world = { WD, generate, freeSpot, clearNear, carAt, inRoom, rectAt, resolve, solidAt, pushOut, cameraSafe, cameraFree, clampPath, los, steer, setArena, roomPoint, doorPoint };
 })();
 
 /* ---------- meshes ---------- */

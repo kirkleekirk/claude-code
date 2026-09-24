@@ -109,12 +109,15 @@
       WG.setArena(r.train, car, false);
       DT.sfx.play('door');
       const line = r.train.line, site = r.train.site;
-      /* off the train, a way home opens in the middle of the boss room */
+      /* off the train, a way home opens in the middle of the boss room (or the nearest clear floor to it) */
       if (site) {
-        const px = car.cx, pz = car.cz;
+        const door = car.doors[0] ? WG.doorPoint(car, car.doors[0]) : null;
+        const spot = WG.clearNear(r.train, car, car.cx, car.cz, 1.7, door);
+        const px = spot.x, pz = spot.z;
         r.train.inter.push({ kind: 'portal', x: px, z: pz, r: 2.2, car: car.i, time: 1.2 });
         const m = MD.portal(line.accent);
         m.position.set(px, 0, pz);
+        if (door) m.rotation.y = Math.atan2(door.x - px, door.z - pz);
         car.group.add(m);
         r.portal = m;
       }

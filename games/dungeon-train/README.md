@@ -37,7 +37,7 @@ The camera sits **behind your hero, over the right shoulder, and is locked there
 
 The branch lines and the Lich's Well aren't train cars. The train stops and you explore a **place**: a map of rooms and halls, different every trip, with side rooms, loops, dead ends, a treasure vault in a dead end, and the boss room somewhere you have to find (the exact center of the Mystery Dungeon, the far corner of the Vampire Hive, across Wizard City, down the tracks in the Lich's Well). The HUD shows a map of the rooms you've found.
 
-Instead of the Loop, each place has its own **alarm** that fills while you're there (the dungeon stirring, the Wizard Police, the hive waking, the Well rising). Get out through one of the green **exits** before it's full. When you walk into the boss room its gates close behind you: you're locked in until the boss falls, and then a **way home** opens in the middle of the room.
+Instead of the Loop, each place has its own **alarm** that fills while you're there (the dungeon stirring, the Wizard Police, the hive waking, the Well rising). Get out through one of the green **exits** before it's full. When you walk into the boss room its gates close behind you: you're locked in until the boss falls, and then a **way home** opens near the middle of the room (the boss's summons vanish with it, so the way out is clear).
 
 ### Bosses
 

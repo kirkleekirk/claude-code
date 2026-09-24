@@ -275,8 +275,21 @@
       GF.ring(e.x, e.z, 2.6, '#ff5a1f', 0.4, { add: true });
       run.later(0.05, () => { for (const n of C.enemiesNear(run, e.x, e.z, 2.6)) if (n !== e) { C.damage(run, n, S.power * M.killBurst, { hero: h, src: 'proc', noProc: true, noCrit: true, meter: 0 }); C.addStatus(run, n, 'burn', 3, { hero: h, dps: S.power * 0.3 }); } });
     }
-    if (e.boss) run.onBossDown(e);
+    if (e.boss) {
+      for (const m of run.enemies) if (m.master === e) C.dismiss(run, m);
+      run.onBossDown(e);
+    }
     run.checkCarClear(e.car);
+  };
+  /* A boss's summons vanish in a puff when the boss falls (no loot, no XP), so the way out is clear. */
+  C.dismiss = function (run, e) {
+    if (e.dead) return;
+    e.dead = true;
+    e.hp = 0;
+    if (e.tele) { e.tele.alive = false; e.tele = null; }
+    const size = Math.max(0.7, e.r * 1.5);
+    GF.poof(e.x, 0.45 + size * 0.35, e.z, size, '#f4efe0');
+    GF.pop(e.mesh, 0.16);
   };
 
   C.summon = function (run, e, ids, n) {
@@ -284,7 +297,8 @@
       const a = Math.random() * Math.PI * 2;
       const p = { x: e.x + Math.cos(a) * 2.4, z: e.z + Math.sin(a) * 2.4 };
       WG.resolve(run.train, p, 0.5);
-      DT.game.actors.spawnEnemy(run, R.pick(ids), p.x, p.z, { car: e.car });
+      const m = DT.game.actors.spawnEnemy(run, R.pick(ids), p.x, p.z, { car: e.car });
+      m.master = e;
     }
   };
 
