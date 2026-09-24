@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dungeon Train</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&family=Luckiest+Guy&family=Patrick+Hand&family=Titan+One&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="scene" aria-label="Game view"></canvas>
+<div id="dmg-layer" aria-hidden="true"></div>
+<div id="hud" hidden></div>
+<main id="app">
+  <div class="boot"><p class="boot-title">Dungeon Train</p><p class="boot-sub">All aboard&hellip;</p></div>
+</main>
+<div id="modal-root"></div>
+<div id="toast-root" class="toasts" role="status" aria-live="polite"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="js/core.js"></script>
+<script src="js/data/heroes.js"></script>
+<script src="js/data/items.js"></script>
+<script src="js/data/powers.js"></script>
+<script src="js/data/uniques.js"></script>
+<script src="js/data/abilities.js"></script>
+<script src="js/data/trees.js"></script>
+<script src="js/data/world.js"></script>
+<script src="js/meta/state.js"></script>
+<script src="js/meta/stats.js"></script>
+<script src="js/meta/loot.js"></script>
+<script src="js/meta/tree.js"></script>
+<script src="js/meta/hub.js"></script>
+<script src="js/game/gfx.js"></script>
+<script src="js/game/models.js"></script>
+<script src="js/game/bestiary.js"></script>
+<script src="js/game/world.js"></script>
+<script src="js/game/input.js"></script>
+<script src="js/game/actors.js"></script>
+<script src="js/game/combat.js"></script>
+<script src="js/game/abilities.js"></script>
+<script src="js/game/raid.js"></script>
+<script src="js/ui/art.js"></script>
+<script src="js/ui/components.js"></script>
+<script src="js/ui/loadout.js"></script>
+<script src="js/ui/tree-view.js"></script>
+<script src="js/ui/hud.js"></script>
+<script src="js/ui/hub-view.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
