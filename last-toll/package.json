@@ -1,0 +1,19 @@
+{
+  "name": "last-toll",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A zombie extraction survival game in the spirit of The Walking Dead: Saints & Sinners. Desktop first, VR-ready architecture.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "build:artifact": "node tools/build-artifact.mjs"
+  },
+  "dependencies": {
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "vite": "^8.3.1"
+  }
+}
