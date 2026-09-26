@@ -220,7 +220,8 @@ small,.muted{opacity:.75;font-size:12px}
 .technode.locked{filter:grayscale(.7) brightness(.6)}
 .technode.avail{outline:3px solid var(--gold);animation:pulse 1.4s infinite}
 /* ----- result / chest ----- */
-.result-title{font-size:44px;font-weight:900;text-transform:uppercase;text-align:center;-webkit-text-stroke:2px #3a1c10;text-shadow:0 6px 0 #3a1c10,0 10px 20px rgba(0,0,0,.6);color:#ffd23a;animation:bannerIn 1.2s forwards;animation-fill-mode:both;letter-spacing:2px}
+.result-title{font-size:44px;font-weight:900;text-transform:uppercase;text-align:center;-webkit-text-stroke:2px #3a1c10;text-shadow:0 6px 0 #3a1c10,0 10px 20px rgba(0,0,0,.6);color:#ffd23a;animation:titleIn .9s both;letter-spacing:2px}
+@keyframes titleIn{0%{transform:scale(0) rotate(-6deg);opacity:0}60%{transform:scale(1.15) rotate(2deg);opacity:1}100%{transform:scale(1) rotate(0);opacity:1}}
 .result-title.lose{color:#9aa7b5}
 .chest{width:150px;height:130px;margin:10px auto;cursor:pointer;filter:drop-shadow(0 10px 14px rgba(0,0,0,.6));animation:pulse 1.6s infinite}
 .reveal{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;min-height:120px}
@@ -297,7 +298,7 @@ const TUNE = {
   LAND_ATK: 1, LAND_DEF: 1, P2_AP: 1, P2_TURNS: 2, P2_APMAX: 0, TURN_LIMIT: 40, MOVE_COST: 1,
   TIMER: 30, LAND_FLOOP_COST: 2,
   // hero passive magnitudes (tuned by the AI-vs-AI simulator)
-  finn: 1, jakeMove: 0, pb: 1, pbDef: 1, marcy: 2, iceking: 1, lsp: 1, bmo: 1, bmoQuick: 1, fp: 2, lemon: 2, rainicorn: 1, rainicornAtk: 1, lich: 1, lichHp: 30,
+  finn: 1, jakeMove: 0, jakeMoveAtk: 1, pb: 1, pbDef: 1, marcy: 2, iceking: 1, lsp: 1, bmo: 1, bmoQuick: 1, fp: 0, fpAtk: 1, lemon: 2, rainicorn: 1, rainicornAtk: 0, rainicornOn: 1, rainicornDef: 2, lspOnce: 1, lich: 1, lichHp: 30,
 };
 
 const LANDS = {
@@ -509,11 +510,11 @@ function HERO(o){ HEROES[o.id]=o; return o; }
 HERO({id:'finn',name:'Finn',title:'the Human',color:'#5fb6ff',accent:'#ffffff',hp:25,style:'Aggro',
   passive:{name:'Righteous Blade',text:'The first creature to hit the enemy hero each turn deals +1 damage.'},sig:'finn_sword',
   intro:'Mathematical! Let\'s card-fight!',taunt:'Aw, man!',win:'Ha HA! Righteous!',
-  lands:['blue','blue','sand','sand'],deck:['finn_sword','cactus_bandit','archer_dan','smiley_ninja','cloud_wolf','fisher_fish','mace_stump','bloodstorm']});
+  lands:['blue','blue','sand','sand'],deck:['finn_sword','cactus_bandit','archer_dan','smiley_ninja','cloud_wolf','fisher_fish','mace_stump','freeze']});
 HERO({id:'jake',name:'Jake',title:'the Dog',color:'#ffcc33',accent:'#f4a300',hp:25,style:'Mobility',
-  passive:{name:'Stretchy Powers',text:'Moving your creatures costs 0 AP.'},sig:'jake_suit',
+  passive:{name:'Stretchy Powers',text:'Moving your creatures costs 0 AP, and a creature gets +1 ATK the first time it moves each turn.'},sig:'jake_suit',
   intro:'Card Wars, baby! I am the Cornfield.',taunt:'Oh no, my Husker Knights!',win:'Bacon pancakes for everyone!',
-  lands:['corn','corn','corn','nice'],deck:['jake_suit','husker','pig','corn_dog','corn_ronin','earlings','silo','fertilizer']});
+  lands:['corn','corn','corn','nice'],deck:['jake_suit','husker','pig','corn_dog','corn_ronin','earlings','silo','maize_walker']});
 HERO({id:'pb',name:'Princess Bubblegum',title:'of the Candy Kingdom',color:'#ff8fd0',accent:'#ff4fb0',hp:25,style:'Builder',
   passive:{name:'Science!',text:'Your buildings cost 1 less AP, and creatures in a lane with your building get +1 DEF.'},sig:'gumball_guardian',
   intro:'This is basic candy chemistry.',taunt:'That is not scientifically fair.',win:'As calculated.',
@@ -527,15 +528,15 @@ HERO({id:'iceking',name:'Ice King',title:'of the Ice Kingdom',color:'#7fdcff',ac
   intro:'Gunter! Bring me my cards!',taunt:'Why is everyone so mean to me?!',win:'Ice to meet you! Ha!',
   lands:['blue','blue','blue','nice'],deck:['gunter','freeze','bloodstorm','cloud_wolf','fisher_fish','jump_twist','blue_merchant','nice_knight']});
 HERO({id:'lsp',name:'Lumpy Space Princess',title:'of Lumpy Space',color:'#c07de6',accent:'#ffd966',hp:25,style:'Sacrifice',
-  passive:{name:'Drama Bomb',text:'Whenever your creature dies, deal 1 damage to the enemy hero.'},sig:'lumps',
+  passive:{name:'Drama Bomb',text:'Once per round, when one of your creatures dies, deal 1 damage to the enemy hero.'},sig:'lumps',
   intro:'Oh my GLOB, you are going down.',taunt:'Whatever! I\'m not even mad!',win:'Lumping flawless.',
-  lands:['swamp','swamp','sand','sand'],deck:['lumps','bog_frog','swamp_rat','mushroom_man','scorpion_rider','mace_stump','peppermint','swamp_gas']});
+  lands:['swamp','swamp','sand','sand'],deck:['lumps','hug_wolf','swamp_rat','mud_golem','scorpion_rider','mace_stump','peppermint','swamp_gas']});
 HERO({id:'bmo',name:'BMO',title:'the Living Game Console',color:'#78d9c8',accent:'#2e6b5f',hp:25,style:'Floop tempo',
   passive:{name:'Cheat Code',text:'Your floop abilities cost 1 less AP, and your creatures can floop the turn they are played.'},sig:'football',
   intro:'Player two has entered the game!',taunt:'That was not in the manual!',win:'High score! Beep boop!',
-  lands:['blue','blue','corn','corn'],deck:['football','fisher_fish','bookish_owl','husker','corn_dog','corn_ronin','earlings','lookout']});
+  lands:['blue','blue','corn','corn'],deck:['football','fisher_fish','husker','corn_dog','corn_ronin','earlings','lookout','smiley_ninja']});
 HERO({id:'fp',name:'Flame Princess',title:'of the Fire Kingdom',color:'#ff7a2a',accent:'#ffd23a',hp:25,style:'Burn',
-  passive:{name:'Burning Heart',text:'Damage from your spells and floop abilities is +2.'},sig:'fire_blast',
+  passive:{name:'Burning Heart',text:'Your creatures on Sand Lands get +1 ATK.'},sig:'fire_blast',
   intro:'I hope you brought something fireproof.',taunt:'You are making me ANGRY.',win:'Everything burns eventually.',
   lands:['sand','sand','sand','sand'],deck:['flambo','fire_blast','archer_dan','scorpion_rider','sand_angel','beach_mum','sandhorn','mace_stump']});
 HERO({id:'lemongrab',name:'Lemongrab',title:'Earl of Lemongrab',color:'#f2e33a',accent:'#8a8a8a',hp:25,style:'Fortress',
@@ -543,7 +544,7 @@ HERO({id:'lemongrab',name:'Lemongrab',title:'Earl of Lemongrab',color:'#f2e33a',
   intro:'THIS CARD GAME IS UNACCEPTABLE!',taunt:'One million years dungeon!',win:'ACCEPTABLE.',
   lands:['nice','nice','nice','swamp'],deck:['lemonjon','music_mallard','nice_knight','rattleballs','woadic_chief','candy_nurse','cursed_idol','bog_bum']});
 HERO({id:'rainicorn',name:'Lady Rainicorn',title:'the Rainicorn',color:'#ff9ad5',accent:'#8ad7ff',hp:25,style:'Prismatic',
-  passive:{name:'Prism',text:'Every lane counts as home land for your creatures, and they get +1 extra ATK.'},sig:'rainicorn_ride',
+  passive:{name:'Prism',text:'Every lane counts as home land for your creatures, and they get +2 extra DEF.'},sig:'rainicorn_ride',
   intro:'안녕하세요! 재미있게 놀아요!',taunt:'아이고...',win:'제가 이겼어요!',
   lands:['corn','nice','blue','sand'],deck:['rainicorn_ride','cloud_wolf','corn_ronin','nice_knight','sand_witch','husker','fisher_fish','gazer']});
 HERO({id:'lich',name:'The Lich',title:'Final Boss',color:'#7dff5a',accent:'#0a1a0a',hp:30,boss:true,style:'Boss',
@@ -559,14 +560,14 @@ function onLand(st,c){ const pl=st.players[c.owner]; if(pl.hero==='rainicorn'&&T
 function buildingOf(st,p,lane){ return st.players[p].builds[lane]; }
 function atkOf(st,c){
   const d=CARD[c.id], pl=st.players[c.owner]; let a=d.atk+lvlAtk(c.lvl)+c.pAtk+c.tAtk;
-  const home=onLand(st,c); if(home) a+=TUNE.LAND_ATK; if(pl.hero==='rainicorn') a+=TUNE.rainicornAtk;
+  const home=onLand(st,c); if(home) a+=TUNE.LAND_ATK; if(pl.hero==='rainicorn'&&(TUNE.rainicornOn?pl.lands[c.lane]===d.land:pl.lands[c.lane]!==d.land)) a+=TUNE.rainicornAtk; if(pl.hero==='fp'&&pl.lands[c.lane]==='sand') a+=TUNE.fpAtk;
   const b=pl.builds[c.lane]; if(b){ const bd=CARD[b.id]; if(bd.aura&&bd.aura.who==='own') a+=bd.aura.atk; }
   const eb=st.players[1-c.owner].builds[c.lane]; if(eb){ const bd=CARD[eb.id]; if(bd.aura&&bd.aura.who==='enemy') a+=bd.aura.atk; }
   return Math.max(0,a);
 }
 function maxDefOf(st,c){
   const d=CARD[c.id], pl=st.players[c.owner]; let v=d.def+lvlDef(c.lvl)+c.pDef+c.tDef;
-  if(onLand(st,c)) v+=TUNE.LAND_DEF;
+  if(onLand(st,c)) v+=TUNE.LAND_DEF; if(pl.hero==='rainicorn') v+=TUNE.rainicornDef;
   const b=pl.builds[c.lane]; if(b){ const bd=CARD[b.id]; if(bd.aura&&bd.aura.who==='own') v+=bd.aura.def; if(pl.hero==='pb') v+=TUNE.pbDef; }
   const eb=st.players[1-c.owner].builds[c.lane]; if(eb){ const bd=CARD[eb.id]; if(bd.aura&&bd.aura.who==='enemy') v+=bd.aura.def; }
   return v;
@@ -630,7 +631,7 @@ function killCreature(st,c,ctx){
   emit(st,{type:'death',uid:c.uid,id:c.id,owner:c.owner,lane:c.lane});
   const d=CARD[c.id];
   if(d.on&&d.on.death) resolveFx(st,d.on.death,{p:c.owner,src:c,lane:c.lane,pow:powOf(c.lvl)});
-  if(pl.hero==='lsp') damageHero(st,1-c.owner,TUNE.lsp,{passive:'lsp'});
+  if(pl.hero==='lsp'&&!(TUNE.lspOnce&&pl.dramaUsed)){ pl.dramaUsed=true; emit(st,{type:'passive',p:c.owner,hero:'lsp'}); damageHero(st,1-c.owner,TUNE.lsp,{passive:'lsp'}); }
   const en=st.players[1-c.owner]; if(en.hero==='marcy') healHero(st,1-c.owner,TUNE.marcy);
   if(has(c,'immortal')&&c.cardUid!=null){ const i=pl.cycle.findIndex(k=>k.uid===c.cardUid); if(i>0){ const k=pl.cycle.splice(i,1)[0]; pl.cycle.unshift(k); emit(st,{type:'immortal',p:c.owner,id:c.id}); } }
 }
@@ -706,7 +707,7 @@ function resolveFx(st,fxs,ctx){
 }
 function setLand(st,p,lane,land){ const pl=st.players[p]; if(pl.lands[lane]===land) return; pl.lands[lane]=land; emit(st,{type:'land',p,lane,land}); checkDeaths(st); }
 function destroyBuilding(st,b){ const pl=st.players[b.owner]; if(pl.builds[b.lane]!==b) return; pl.builds[b.lane]=null; emit(st,{type:'destroyBuilding',uid:b.uid,owner:b.owner,lane:b.lane,id:b.id}); checkDeaths(st); }
-function moveCreature(st,c,lane){ const pl=st.players[c.owner]; if(pl.slots[lane]||c.dead) return false; const from=c.lane; pl.slots[from]=null; pl.slots[lane]=c; c.lane=lane; c.moved=true; emit(st,{type:'move',uid:c.uid,from,to:lane,owner:c.owner}); checkDeaths(st); return true; }
+function moveCreature(st,c,lane){ const pl=st.players[c.owner]; if(pl.slots[lane]||c.dead) return false; const from=c.lane; pl.slots[from]=null; pl.slots[lane]=c; c.lane=lane; emit(st,{type:'move',uid:c.uid,from,to:lane,owner:c.owner}); if(pl.hero==='jake'&&!c.moved&&TUNE.jakeMoveAtk&&st.active===c.owner){ c.tAtk+=TUNE.jakeMoveAtk; emit(st,{type:'buff',uid:c.uid,atk:TUNE.jakeMoveAtk,def:0,perm:false,atkNow:atkOf(st,c),hp:hpOf(st,c),maxHp:maxDefOf(st,c)}); } c.moved=true; checkDeaths(st); return true; }
 function bounce(st,c){ const pl=st.players[c.owner]; if(pl.slots[c.lane]!==c) return; pl.slots[c.lane]=null; c.dead=true; emit(st,{type:'bounce',uid:c.uid,owner:c.owner,lane:c.lane,id:c.id});
   if(!c.token&&c.cardUid!=null){ const i=pl.cycle.findIndex(k=>k.uid===c.cardUid); if(i>=0){ const k=pl.cycle.splice(i,1)[0]; if(pl.hand.length<TUNE.HAND_MAX){ pl.hand.push(k); emit(st,{type:'draw',p:c.owner,card:k,next:pl.cycle[0]?pl.cycle[0].id:null,bounced:true}); } else pl.cycle.unshift(k); } } }
 function summon(st,p,card,lane,o){
@@ -722,7 +723,7 @@ function startTurn(st){
   const p=st.active, pl=st.players[p]; st.turn++;
   pl.apMax=Math.min(TUNE.AP_CAP,pl.apMax+1); pl.ap=pl.apMax;
   if(p!==st.first&&(pl.turns===0||pl.turns===TUNE.P2_TURNS)){ pl.ap+=TUNE.P2_AP; } if(p!==st.first&&pl.turns===0){ pl.apMax+=TUNE.P2_APMAX; pl.ap+=TUNE.P2_APMAX; }
-  pl.turns++; pl.discount=0; pl.played=0; pl.landFlooped=false; pl.finnHit=false;
+  pl.turns++; pl.discount=0; pl.played=0; pl.landFlooped=false; pl.finnHit=false; pl.dramaUsed=false;
   emit(st,{type:'turnStart',p,turn:st.turn,ap:pl.ap,apMax:pl.apMax});
   for(const c of pl.slots){ if(!c) continue; if(c.frozen){ c.frozen=false; emit(st,{type:'thaw',uid:c.uid}); } else if(c.flooped){ c.flooped=false; emit(st,{type:'unfloop',uid:c.uid}); } c.sleepy=false; c.shield=0; c.moved=false; c.quick=false; }
   for(const c of pl.slots.slice()){ if(c&&c.poison>0&&!c.dead){ emit(st,{type:'poisonTick',uid:c.uid,n:c.poison}); dealDamage(st,c,c.poison,{p:1-p,poison:true}); } }
@@ -793,7 +794,7 @@ function legalActions(st,p){
   const mc=moveCost(st,p);
   for(const c of pl.slots){ if(!c) continue;
     if(canFloop(st,c)){ for(const t of enumTargets(st,p,CARD[c.id].floop.target,c)) acts.push({t:'floop',uid:c.uid,target:t}); }
-    if(mc<=pl.ap) for(const l of emptyLanes(st,p)) acts.push({t:'move',uid:c.uid,lane:l});
+    if(mc<=pl.ap&&!c.moved) for(const l of emptyLanes(st,p)) acts.push({t:'move',uid:c.uid,lane:l});
   }
   if(!pl.landFlooped&&pl.ap>=TUNE.LAND_FLOOP_COST) for(let l=0;l<TUNE.LANES;l++) for(const land of LAND_IDS) if(pl.lands[l]!==land) acts.push({t:'landFloop',lane:l,land});
   acts.push({t:'endTurn'});
@@ -836,7 +837,7 @@ function act(st,a){
       resolveFx(st,f.fx,{p,src:c,target,lane:c.lane,pow:powOf(c.lvl)}); checkDeaths(st);
     }
     else if(a.t==='move'){
-      const c=findCreature(st,a.uid); if(!c||c.owner!==p) throw new Error('no creature'); const mc=moveCost(st,p); if(mc>pl.ap) throw new Error('no AP'); if(pl.slots[a.lane]) throw new Error('occupied');
+      const c=findCreature(st,a.uid); if(!c||c.owner!==p) throw new Error('no creature'); if(c.moved) throw new Error('already moved this turn'); const mc=moveCost(st,p); if(mc>pl.ap) throw new Error('no AP'); if(pl.slots[a.lane]) throw new Error('occupied');
       pl.ap-=mc; moveCreature(st,c,a.lane);
     }
     else if(a.t==='landFloop'){
@@ -1671,7 +1672,7 @@ let galleryScene=null, galleryGroup=null, galleryCam=null;
 function galleryShow(key){ if(!D.ready) return; if(!galleryScene){ galleryScene=new THREE.Scene(); galleryScene.background=new THREE.Color(0x1a1010); galleryScene.add(new THREE.HemisphereLight(0xffe8c8,0x5a3a30,0.7)); const d=new THREE.DirectionalLight(0xfff2dc,0.9); d.position.set(3,6,5); galleryScene.add(d); const d2=new THREE.DirectionalLight(0xa0c0ff,0.3); d2.position.set(-4,2,-3); galleryScene.add(d2); const ped=new THREE.Mesh(new THREE.CylinderGeometry(1.4,1.6,0.3,24),new THREE.MeshToonMaterial({color:0x4a2a1a,gradientMap:gradTex})); ped.position.y=-0.15; galleryScene.add(ped); galleryCam=new THREE.PerspectiveCamera(32,1,0.1,50); }
   if(galleryGroup){ galleryScene.remove(galleryGroup); galleryGroup=null; } const model=MODELS.get(key,CW.CARD); const d=key.startsWith('card:')?CW.CARD[key.slice(5)]:null; galleryGroup=buildGroup(model,key,d?{mat:landMat(d.land,d.type==='building')}:null); galleryScene.add(galleryGroup); const box=new THREE.Box3().setFromObject(galleryGroup); const size=box.getSize(new THREE.Vector3()); const c=box.getCenter(new THREE.Vector3()); galleryGroup.userData.center=c; galleryGroup.userData.rad=Math.max(size.x,size.y,size.z)*0.5; D.gallery=true; }
 function galleryEnd(){ D.gallery=false; if(galleryGroup&&galleryScene){ galleryScene.remove(galleryGroup); galleryGroup=null; } }
-function renderGallery(dt){ if(!galleryGroup) return; galleryGroup.rotation.y+=dt*0.6; const c=galleryGroup.userData.center, r=galleryGroup.userData.rad; galleryCam.aspect=W/H; galleryCam.updateProjectionMatrix(); const dist=r/Math.tan(galleryCam.fov*Math.PI/360)*1.25+r; galleryCam.position.set(Math.sin(D.time*0.2)*dist*0.4,c.y+dist*0.45,dist); galleryCam.lookAt(c.x,c.y,c.z); renderer.setRenderTarget(null); renderer.render(galleryScene,galleryCam); }
+function renderGallery(dt){ if(!galleryGroup) return; galleryGroup.rotation.y+=dt*0.6; const c=galleryGroup.userData.center, r=galleryGroup.userData.rad; galleryCam.aspect=W/H; galleryCam.updateProjectionMatrix(); const dist=r/Math.tan(galleryCam.fov*Math.PI/360)*1.6+r; galleryCam.position.set(Math.sin(D.time*0.2)*dist*0.4,c.y+dist*0.45,dist); galleryCam.lookAt(c.x,c.y,c.z); renderer.setRenderTarget(null); renderer.render(galleryScene,galleryCam); }
 function clearBoard(){ for(const uid of Array.from(D.pieces.keys())) removePiece(uid); for(const uid of Array.from(D.builds.keys())) removePiece(uid); clearHighlights(); for(const p of D.particlePool) p.m.visible=false; }
 function init(cv){
   canvas=cv;
@@ -2036,8 +2037,8 @@ function result(res){ const s=$('#s-result'); s.innerHTML=''; const box=h(`<div 
   box.appendChild(foot); s.appendChild(box); show('s-result',{bg:PROG.THEMES.treefort.bg}); }
 function chestSvg(col){ return `<svg viewBox="0 0 100 80"><rect x="8" y="34" width="84" height="40" rx="6" fill="${col}" stroke="#1c1520" stroke-width="3"/><path d="M8 40q42-30 84 0v-6q-42-30-84 0z" fill="${MODELS.shade(col,1.2)}" stroke="#1c1520" stroke-width="3"/><rect x="8" y="34" width="84" height="8" fill="${MODELS.shade(col,0.7)}"/><rect x="42" y="30" width="16" height="18" rx="3" fill="#ffd23a" stroke="#1c1520" stroke-width="2.5"/><circle cx="50" cy="40" r="3" fill="#1c1520"/></svg>`; }
 function chest(type,onDone){ const s=$('#s-chest'); s.innerHTML=''; const spec=PROG.CHESTS[type]; const ch=PROG.rollChest(type); const box=h(`<div class="scroll stack center" style="justify-content:center;align-items:center"></div>`);
-  box.appendChild(h(`<h2>${esc(spec.name)}</h2>`)); const c=h(`<div class="chest">${chestSvg(spec.col)}</div>`); box.appendChild(c); box.appendChild(h(`<div class="muted">Tap the chest to open it</div>`)); const rev=h(`<div class="reveal"></div>`); box.appendChild(rev); const foot=h(`<div class="stack" style="width:min(360px,92vw)"></div>`); box.appendChild(foot); s.appendChild(box); show('s-chest');
-  let opened=false; c.addEventListener('click',()=>{ if(opened) return; opened=true; AUDIO.sfx('chest'); c.style.animation='none'; c.style.transform='scale(1.15)'; PROG.applyChest(ch); let i=0; const items=ch.cards.slice(); const step=()=>{ if(i<items.length){ const it=items[i]; const e=cardEl(it.id,{w:76,lvl:PROG.cardLevel(it.id)}); e.style.animationDelay='0s'; e.style.position='relative'; e.appendChild(h(`<div class="gain">+${it.n}</div>`)); e.addEventListener('click',()=>inspect(it.id,{upgrade:true})); rev.appendChild(e); AUDIO.sfx('card'); i++; setTimeout(step,260); } else { rev.appendChild(h(`<div class="pill" style="align-self:center"><i>🪙</i>+${ch.gold} gold</div>`)); AUDIO.sfx('coin'); foot.appendChild(btn('Continue','red big',()=>onDone&&onDone())); } }; setTimeout(step,300); }); }
+  box.appendChild(h(`<h2>${esc(spec.name)}</h2>`)); const c=h(`<div class="chest">${chestSvg(spec.col)}</div>`); box.appendChild(c); const tip=h(`<div class="muted">Tap the chest to open it</div>`); box.appendChild(tip); const rev=h(`<div class="reveal"></div>`); box.appendChild(rev); const foot=h(`<div class="stack" style="width:min(360px,92vw)"></div>`); box.appendChild(foot); s.appendChild(box); show('s-chest');
+  let opened=false; c.addEventListener('click',()=>{ if(opened) return; opened=true; tip.remove(); AUDIO.sfx('chest'); c.style.animation='none'; c.style.transform='scale(1.15)'; PROG.applyChest(ch); let i=0; const items=ch.cards.slice(); const step=()=>{ if(i<items.length){ const it=items[i]; const e=cardEl(it.id,{w:76,lvl:PROG.cardLevel(it.id)}); e.style.animationDelay='0s'; e.style.position='relative'; e.appendChild(h(`<div class="gain">+${it.n}</div>`)); e.addEventListener('click',()=>inspect(it.id,{upgrade:true})); rev.appendChild(e); AUDIO.sfx('card'); i++; setTimeout(step,260); } else { rev.appendChild(h(`<div class="pill" style="align-self:center"><i>🪙</i>+${ch.gold} gold</div>`)); AUDIO.sfx('coin'); foot.appendChild(btn('Continue','red big',()=>onDone&&onDone())); } }; setTimeout(step,300); }); }
 // ---------------------------------------------------------------- SETTINGS
 function settings(){ const st=STORE.d.settings; const box=h(`<div class="stack"><h2>Settings</h2></div>`);
   const mk=(label,el)=>{ const r=h(`<div class="setrow"><span>${label}</span></div>`); r.appendChild(el); box.appendChild(r); };
@@ -2152,11 +2153,11 @@ function laneSheet(lane){ clearSel(); const me=P(ME); const land=me.lands[lane];
   for(const id of CW.LAND_IDS){ if(id===land) continue; const bt=UI.btn(`<span class="land-ic land-${id}"></span><span class="sub">${esc(CW.LANDS[id].short)}</span>`,'ghost',()=>{ if(!can) return UI.toast(why); doAction({t:'landFloop',lane,land:id}); }); if(!can) bt.classList.add('dis'); bt.style.minWidth='0'; bt.style.padding='6px 2px'; acts.appendChild(bt); }
   sh.classList.add('on'); BOARD.highlight(ME,lane,'hot'); highlight(ME,lane); }
 function highlight(side,lane){ /* keeps the tapped lane lit while its sheet is open */ void side; void lane; }
-function openSheet(c){ clearSel(); const d=CW.CARD[c.id]; const sh=$('#sheet'); const me=P(ME); const mine=st.active===ME; const fc=CW.floopCost(st,c); const canF=mine&&CW.canFloop(st,c)&&CW.enumTargets(st,ME,d.floop?d.floop.target:'none',c).length>0; const mc=CW.moveCost(st,ME); const canM=mine&&mc<=me.ap&&CW.emptyLanes(st,ME).length>0;
+function openSheet(c){ clearSel(); const d=CW.CARD[c.id]; const sh=$('#sheet'); const me=P(ME); const mine=st.active===ME; const fc=CW.floopCost(st,c); const canF=mine&&CW.canFloop(st,c)&&CW.enumTargets(st,ME,d.floop?d.floop.target:'none',c).length>0; const mc=CW.moveCost(st,ME); const canM=mine&&!c.moved&&mc<=me.ap&&CW.emptyLanes(st,ME).length>0;
   const why=!d.floop?'No floop ability':c.flooped?'Already flooped this turn':c.sleepy&&!CW.hasQuick(st,c)?'Sleepy: wakes next turn':me.ap<fc?`Needs ${fc} AP`:!canF?'No valid target':'';
   sh.innerHTML=''; const p=h(`<div class="panel"><div class="title"><span>${esc(d.name)} <small>${CW.atkOf(st,c)} ATK · ${CW.hpOf(st,c)}/${CW.maxDefOf(st,c)} HP${CW.onLand(st,c)?' · ★ home land':''}</small></span><span style="cursor:pointer;padding:0 6px">✕</span></div><div class="desc">${UI.fullText(d,c.lvl)}${c.poison?'<br>☠ Poisoned':''}${c.shield?'<br>🛡 Guarded':''}${c.frozen?'<br>❄ Frozen':''}</div><div class="acts"></div></div>`); sh.appendChild(p); p.querySelector('.title span:last-child').addEventListener('click',clearSel);
   const acts=p.querySelector('.acts'); const fb=UI.btn(`FLOOP<span class="sub">${d.floop?`${fc} AP · ${esc(d.floop.text.split(':')[0])}`:'—'}</span>`,'blue',()=>{ if(!canF){ UI.toast(why); return; } const tt=d.floop.target; const targets=CW.enumTargets(st,ME,tt,c); if(tt==='none'||tt==='opp'||tt==='self'){ doAction({t:'floop',uid:c.uid,target:targets[0]}); return; } sel={kind:'floop',uid:c.uid,uids:new Set(targets.filter(t=>t.uid!=null).map(t=>t.uid)),lanes:new Set(targets.filter(t=>t.lane!=null).map(t=>t.p*10+t.lane))}; showTargets({lanes:sel.lanes,uids:sel.uids},'ok'); hint(tt==='ownEmptyLane'?'Tap an empty lane':'Tap a target'); sh.classList.remove('on'); }); if(!canF) fb.classList.add('dis'); if(why&&!canF) fb.title=why; acts.appendChild(fb);
-  const mb=UI.btn(`MOVE<span class="sub">${mc} AP</span>`,'green',()=>{ if(!canM) return UI.toast(mc>me.ap?`Needs ${mc} AP`:'No empty lane'); sel={kind:'move',uid:c.uid,lanes:new Set(CW.emptyLanes(st,ME).map(l=>ME*10+l)),uids:new Set()}; showTargets({lanes:sel.lanes,uids:sel.uids},'ok'); hint('Tap an empty lane to move'); sh.classList.remove('on'); }); if(!canM) mb.classList.add('dis'); acts.appendChild(mb);
+  const mb=UI.btn(`MOVE<span class="sub">${c.moved?'moved':mc+' AP'}</span>`,'green',()=>{ if(!canM) return UI.toast(c.moved?'Already moved this turn':mc>me.ap?`Needs ${mc} AP`:'No empty lane'); sel={kind:'move',uid:c.uid,lanes:new Set(CW.emptyLanes(st,ME).map(l=>ME*10+l)),uids:new Set()}; showTargets({lanes:sel.lanes,uids:sel.uids},'ok'); hint('Tap an empty lane to move'); sh.classList.remove('on'); }); if(!canM) mb.classList.add('dis'); acts.appendChild(mb);
   acts.appendChild(UI.btn('INFO','ghost',()=>UI.inspect(c.id,{lvl:c.lvl}))); sh.classList.add('on'); BOARD.highlightPiece&&BOARD.highlightPiece(c.uid,true); }
 function infoSheet(c){ clearSel(); const d=CW.CARD[c.id]; const sh=$('#sheet'); sh.innerHTML=''; const p=h(`<div class="panel"><div class="title"><span>${esc(d.name)} <small>(enemy) ${CW.atkOf(st,c)} ATK · ${CW.hpOf(st,c)}/${CW.maxDefOf(st,c)} HP${CW.onLand(st,c)?' · ★ home land':''}</small></span><span style="cursor:pointer;padding:0 6px">✕</span></div><div class="desc">${UI.fullText(d,c.lvl)}${c.poison?'<br>☠ Poisoned':''}${c.frozen?'<br>❄ Frozen':''}${c.flooped?'<br>⟲ Flooped':''}</div><div class="acts"></div></div>`); sh.appendChild(p); p.querySelector('.title span:last-child').addEventListener('click',clearSel); p.querySelector('.acts').appendChild(UI.btn('Full card','ghost',()=>UI.inspect(c.id,{lvl:c.lvl}))); sh.classList.add('on'); }
 // ---------------------------------------------------------------- actions & event playback
@@ -2362,7 +2363,68 @@ setTimeout(()=>{ try{ if(q.get('gallery')==='1'){ UI.gallery(); } else { UI.titl
 })();
 </script>
 <!--
-  BALANCE REPORT — filled in by the AI-vs-AI simulator run (see the end of the build process).
+  BALANCE REPORT (AI vs AI, headless simulator: node harness over the engine in <script id="engine">; in the browser use ?sim=1&n=1000)
+  Suite: 1000 matches per hero pairing (55 pairings incl. mirrors, first player alternating), medium AI, 55000 matches, 1285s on 4 cores.
+  Tuned knobs: HP 25 · AP cap 8 · second player +1 AP on turns 1 and 3 · land bonus +1/+1 · move 1 AP · land floop 2 AP · turn limit 40
+  Hero passives tuned: Finn +1 first face hit · Bubblegum buildings -1 AP & +1 DEF · Marceline heal 2 · Ice King Cold Snap every other turn · LSP Drama Bomb 1 once per round · BMO floops -1 AP & immediate · Flame Princess +1 ATK on Sand & +0 burn · Lemongrab heal 2 · Rainicorn home everywhere & +2 DEF · Lich decay 1 (boss, 30 HP)
+  First-player win rate: 51.2%   Average game length: 30.1 turns (15.1 per player)
+  Hero win rates (default decks):
+    jake        55.6%
+    rainicorn   52.6%
+    iceking     51.0%
+    lsp         49.7%
+    pb          49.2%
+    bmo         47.3%
+    lemongrab   47.0%
+    fp          46.9%
+    finn        46.6%
+    marcy       45.0%
+  Pairings (row hero win %):
+    finn       vs jake        59%
+    finn       vs pb          49%
+    finn       vs marcy       45%
+    finn       vs iceking     24%
+    finn       vs lsp         60%
+    finn       vs bmo         19%
+    finn       vs fp          76%
+    finn       vs lemongrab   54%
+    finn       vs rainicorn   27%
+    jake       vs pb          51%
+    jake       vs marcy       91%
+    jake       vs iceking     51%
+    jake       vs lsp         83%
+    jake       vs bmo         23%
+    jake       vs fp          60%
+    jake       vs lemongrab   78%
+    jake       vs rainicorn   35%
+    pb         vs marcy       78%
+    pb         vs iceking     37%
+    pb         vs lsp         48%
+    pb         vs bmo         55%
+    pb         vs fp          39%
+    pb         vs lemongrab   56%
+    pb         vs rainicorn   31%
+    marcy      vs iceking     87%
+    marcy      vs lsp         80%
+    marcy      vs bmo         45%
+    marcy      vs fp          41%
+    marcy      vs lemongrab    8%
+    marcy      vs rainicorn   60%
+    iceking    vs lsp         12%
+    iceking    vs bmo         68%
+    iceking    vs fp          64%
+    iceking    vs lemongrab   65%
+    iceking    vs rainicorn   65%
+    lsp        vs bmo         59%
+    lsp        vs fp          23%
+    lsp        vs lemongrab   71%
+    lsp        vs rainicorn   91%
+    bmo        vs fp          52%
+    bmo        vs lemongrab   12%
+    bmo        vs rainicorn   34%
+    fp         vs lemongrab   60%
+    fp         vs rainicorn   14%
+    lemongrab  vs rainicorn   36%
 -->
 </body>
 </html>
