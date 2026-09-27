@@ -15,6 +15,50 @@ export class World {
     this.interactables = [];
     this.interiors = []; // rects {x0,z0,x1,z1} with wooden floors
     this.nav = null;
+    // Floor mode: when set, only these rects can be walked on (boardwalks over water).
+    this.floorMode = false;
+    this.floors = [];
+    this.floorGrid = null;
+  }
+
+  addFloor(x0, z0, x1, z1, surface = 'wood') {
+    this.floorMode = true;
+    this.floors.push({ x0: Math.min(x0, x1), z0: Math.min(z0, z1), x1: Math.max(x0, x1), z1: Math.max(z0, z1), surface });
+    this.floorGrid = null;
+  }
+
+  _buildFloorGrid() {
+    const g = new Array(this.gn * this.gn);
+    for (let i = 0; i < g.length; i++) g[i] = [];
+    for (const f of this.floors) {
+      for (let cz = this._cell(f.z0); cz <= this._cell(f.z1); cz++) for (let cx = this._cell(f.x0); cx <= this._cell(f.x1); cx++) g[cz * this.gn + cx].push(f);
+    }
+    this.floorGrid = g;
+  }
+
+  onFloor(x, z) {
+    if (!this.floorMode) return true;
+    if (!this.floorGrid) this._buildFloorGrid();
+    const arr = this.floorGrid[this._cell(z) * this.gn + this._cell(x)];
+    for (let i = 0; i < arr.length; i++) {
+      const f = arr[i];
+      if (x >= f.x0 && x <= f.x1 && z >= f.z0 && z <= f.z1) return true;
+    }
+    return false;
+  }
+
+  floorOK(x, z, r) {
+    return this.onFloor(x + r, z) && this.onFloor(x - r, z) && this.onFloor(x, z + r) && this.onFloor(x, z - r);
+  }
+
+  // Keep a circle on the walkable floor, sliding along edges. (px, pz) is where it was.
+  constrain(pos, px, pz, r) {
+    if (!this.floorMode || this.floorOK(pos.x, pos.z, r)) return false;
+    if (this.floorOK(pos.x, pz, r)) { pos.z = pz; return true; }
+    if (this.floorOK(px, pos.z, r)) { pos.x = px; return true; }
+    pos.x = px;
+    pos.z = pz;
+    return true;
   }
 
   addBox(x0, y0, z0, x1, y1, z1, opts = {}) {
@@ -161,6 +205,7 @@ export class World {
 
   surfaceAt(x, z) {
     for (const r of this.interiors) if (x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1) return r.surface || 'wood';
+    if (this.floorMode) return 'wood';
     return 'ground';
   }
 
@@ -184,6 +229,14 @@ export class World {
       const j0 = Math.max(0, Math.ceil((b.z0 - pad + this.half) / res - 0.5));
       const j1 = Math.min(n - 1, Math.floor((b.z1 + pad + this.half) / res - 0.5));
       for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) nav[j * n + i] = 1;
+    }
+    if (this.floorMode) {
+      for (let j = 0; j < n; j++) {
+        for (let i = 0; i < n; i++) {
+          const x = (i + 0.5) * res - this.half, z = (j + 0.5) * res - this.half;
+          if (!this.floorOK(x, z, 0.2)) nav[j * n + i] = 1;
+        }
+      }
     }
     this.nav = nav;
     this.queue = new Int32Array(n * n);

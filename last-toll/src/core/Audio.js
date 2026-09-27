@@ -31,7 +31,7 @@ export class Audio {
     this.master.connect(comp);
     comp.connect(ctx.destination);
 
-    // Shared reverb bus for the outdoor slap and the bell.
+    // Shared reverb bus for the outdoor slap and distant sounds.
     this.reverb = ctx.createConvolver();
     this.reverb.buffer = this._impulse(3.2, 2.6);
     this.reverbGain = ctx.createGain();
@@ -488,43 +488,266 @@ export class Audio {
     } else this._noise(out, t, 0.03, { type: 'bandpass', freq: 2200, q: 2, gain: 0.15 });
   }
 
-  // A church bell: inharmonic partials with long, staggered decays.
-  bell(distance = 1, strikes = 1) {
+  // Curfew siren: a rising and falling wail from far across the water.
+  siren(duration = 9) {
     if (!this.enabled) return;
     const ctx = this.ctx;
-    const base = 98;
-    const partials = [
-      [0.5, 0.9, 9], [1, 0.7, 7], [1.19, 0.5, 5], [1.5, 0.35, 4], [2.0, 0.4, 3.5],
-      [2.51, 0.2, 2.5], [2.66, 0.18, 2.2], [3.01, 0.15, 1.8], [4.1, 0.08, 1.2],
-    ];
-    for (let s = 0; s < strikes; s++) {
-      const t = this.now + s * 3.2;
-      const out = ctx.createGain();
-      out.gain.value = 0.55 * distance;
-      const lp = ctx.createBiquadFilter();
-      lp.type = 'lowpass';
-      lp.frequency.value = 2400 * distance + 400;
-      out.connect(lp);
-      lp.connect(this.sfx);
-      const send = ctx.createGain();
-      send.gain.value = 0.9;
-      lp.connect(send);
-      send.connect(this.reverb);
-      for (const [ratio, amp, dec] of partials) {
-        const o = ctx.createOscillator();
-        o.type = 'sine';
-        o.frequency.value = base * ratio * (1 + (Math.random() - 0.5) * 0.002);
-        const g = ctx.createGain();
-        g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(amp * 0.4, t + 0.01);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + dec);
-        o.connect(g);
-        g.connect(out);
-        o.start(t);
-        o.stop(t + dec + 0.1);
+    const t = this.now;
+    const out = ctx.createGain();
+    out.gain.setValueAtTime(0.0001, t);
+    out.gain.exponentialRampToValueAtTime(0.32, t + 1.2);
+    out.gain.setValueAtTime(0.32, t + duration - 1.5);
+    out.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 1400;
+    out.connect(lp);
+    lp.connect(this.sfx);
+    const send = ctx.createGain();
+    send.gain.value = 0.8;
+    lp.connect(send);
+    send.connect(this.reverb);
+    for (const [type, mul, g] of [['sawtooth', 1, 0.5], ['square', 1.006, 0.25], ['sine', 0.5, 0.6]]) {
+      const o = ctx.createOscillator();
+      o.type = type;
+      const og = ctx.createGain();
+      og.gain.value = g;
+      const base = 280 * mul;
+      o.frequency.setValueAtTime(base, t);
+      for (let k = 0; k < duration / 3; k++) {
+        o.frequency.linearRampToValueAtTime(base * 2.2, t + k * 3 + 1.5);
+        o.frequency.linearRampToValueAtTime(base, t + k * 3 + 3);
       }
-      this._noise(out, t, 0.05, { type: 'bandpass', freq: 2000, q: 1, gain: 0.3 });
+      o.connect(og);
+      og.connect(out);
+      o.start(t);
+      o.stop(t + duration + 0.1);
     }
+  }
+
+  // The herder pylons: a sub-bass throb with a thin dissonant whine on top.
+  herderPulse(duration = 7, level = 1) {
+    if (!this.enabled) return;
+    const ctx = this.ctx;
+    const t = this.now;
+    const out = ctx.createGain();
+    out.gain.setValueAtTime(0.0001, t);
+    out.gain.exponentialRampToValueAtTime(0.5 * level, t + 1);
+    out.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+    out.connect(this.sfx);
+    const sub = ctx.createOscillator();
+    sub.frequency.value = 38;
+    const am = ctx.createGain();
+    am.gain.value = 0.6;
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 1.6;
+    const lfoG = ctx.createGain();
+    lfoG.gain.value = 0.5;
+    lfo.connect(lfoG);
+    lfoG.connect(am.gain);
+    sub.connect(am);
+    am.connect(out);
+    const whine = ctx.createOscillator();
+    whine.type = 'sine';
+    whine.frequency.setValueAtTime(1480, t);
+    whine.frequency.linearRampToValueAtTime(1395, t + duration);
+    const wg = ctx.createGain();
+    wg.gain.value = 0.05;
+    whine.connect(wg);
+    wg.connect(out);
+    for (const n of [sub, lfo, whine]) { n.start(t); n.stop(t + duration + 0.1); }
+  }
+
+  thunder(delay = 1) {
+    if (!this.enabled) return;
+    const t = this.now + delay;
+    const out = this._out(null, { reverb: 0.5 });
+    this._noise(out, t, 0.25, { type: 'lowpass', freq: 1800, freqEnd: 300, gain: 0.5 * Math.min(1, 1.5 / delay) });
+    this._noise(out, t + 0.1, 4.5, { type: 'lowpass', freq: 380, freqEnd: 60, gain: 0.9, attack: 0.2, buf: this.brownBuf });
+    this._noise(out, t + 0.8, 2.5, { type: 'lowpass', freq: 220, freqEnd: 60, gain: 0.5, attack: 0.3, buf: this.brownBuf });
+  }
+
+  laserCharge(pos, dur = 0.6) {
+    if (!this.enabled) return;
+    const t = this.now;
+    const out = this._out(pos, { ref: 3, rolloff: 1 });
+    this._tone(out, t, dur, { type: 'sawtooth', freq: 220, freqEnd: 1900, gain: 0.08, attack: dur * 0.8 });
+    this._tone(out, t, dur, { type: 'sine', freq: 440, freqEnd: 3800, gain: 0.05, attack: dur * 0.8 });
+  }
+
+  laser(pos, player = false) {
+    if (!this.enabled) return;
+    const t = this.now;
+    const out = this._out(pos, { ref: player ? 2 : 4, rolloff: 0.9, reverb: 0.35 });
+    this._tone(out, t, 0.22, { type: 'sawtooth', freq: 2600, freqEnd: 180, gain: 0.35 });
+    this._tone(out, t, 0.16, { type: 'square', freq: 1300, freqEnd: 90, gain: 0.12 });
+    this._noise(out, t, 0.12, { type: 'bandpass', freq: 3200, q: 1.5, gain: 0.45 });
+    this._noise(out, t + 0.02, 0.35, { type: 'highpass', freq: 5000, gain: 0.12 });
+  }
+
+  burn(pos) {
+    if (!this.enabled) return;
+    const out = this._out(pos, { ref: 1.5 });
+    this._noise(out, this.now, 0.3, { type: 'highpass', freq: 2500, gain: 0.3 });
+  }
+
+  splash(pos, big = 1) {
+    if (!this.enabled) return;
+    const t = this.now;
+    const out = this._out(pos, { ref: 3 });
+    this._noise(out, t, 0.5 * big, { type: 'lowpass', freq: 1600, freqEnd: 300, gain: 0.55 * big });
+    this._noise(out, t + 0.05, 0.3, { type: 'bandpass', freq: 800, q: 1, gain: 0.3 });
+    for (let i = 0; i < 4; i++) this._tone(out, t + 0.35 + Math.random() * 0.6, 0.05, { type: 'sine', freq: 900 + Math.random() * 900, freqEnd: 500, gain: 0.05 });
+  }
+
+  wade() {
+    if (!this.enabled) return;
+    const out = this._out(null);
+    this._noise(out, this.now, 0.25, { type: 'lowpass', freq: 900, freqEnd: 300, gain: 0.12 });
+  }
+
+  // A looping hum for things that hover: returns a handle to move and stop it.
+  hum(pos, freq = 118) {
+    if (!this.enabled) return null;
+    const ctx = this.ctx;
+    const p = ctx.createPanner();
+    p.panningModel = 'equalpower';
+    p.distanceModel = 'inverse';
+    p.refDistance = 4;
+    p.rolloffFactor = 1.2;
+    p.connect(this.sfx);
+    const g = ctx.createGain();
+    g.gain.value = 0.14;
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.value = 520;
+    f.Q.value = 0.8;
+    f.connect(g);
+    g.connect(p);
+    const oscs = [freq, freq * 1.03, freq * 2.01].map((fr, i) => {
+      const o = ctx.createOscillator();
+      o.type = i === 2 ? 'square' : 'sawtooth';
+      o.frequency.value = fr;
+      o.connect(f);
+      o.start();
+      return o;
+    });
+    const set = (v) => {
+      if (p.positionX) { p.positionX.value = v.x; p.positionY.value = v.y; p.positionZ.value = v.z; } else p.setPosition(v.x, v.y, v.z);
+    };
+    set(pos);
+    return {
+      set,
+      level: (v) => g.gain.setTargetAtTime(v, ctx.currentTime, 0.2),
+      stop: () => { for (const o of oscs) { try { o.stop(); } catch (_) { /* stopped */ } } p.disconnect(); },
+    };
+  }
+
+  alarm(pos) {
+    if (!this.enabled) return;
+    const t = this.now;
+    const out = this._out(pos, { ref: 6, rolloff: 0.7 });
+    for (let i = 0; i < 4; i++) {
+      this._tone(out, t + i * 0.32, 0.14, { type: 'square', freq: 1320, gain: 0.12 });
+      this._tone(out, t + i * 0.32 + 0.16, 0.14, { type: 'square', freq: 990, gain: 0.12 });
+    }
+  }
+
+  radio() {
+    if (!this.enabled) return;
+    const out = this._out(null);
+    this._noise(out, this.now, 0.6, { type: 'bandpass', freq: 2200, q: 0.8, gain: 0.08, attack: 0.05 });
+  }
+
+  // Spoken Guard broadcasts through the browser's speech engine, when it has one.
+  broadcast(text) {
+    if (!this.enabled) return;
+    this.radio();
+    try {
+      const synth = window.speechSynthesis;
+      if (!synth) return;
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 0.82;
+      u.pitch = 0.45;
+      u.volume = Math.min(1, this.volume * 0.9);
+      synth.cancel();
+      synth.speak(u);
+    } catch (_) { /* speech is optional */ }
+  }
+
+  // ---- Distant horror, placed around the listener -----------------------------
+
+  _around(dist) {
+    const a = Math.random() * Math.PI * 2;
+    const l = this.listenerPos;
+    return { x: l.x + Math.cos(a) * dist, y: 1.5, z: l.z + Math.sin(a) * dist };
+  }
+
+  scream() {
+    if (!this.enabled) return;
+    const ctx = this.ctx;
+    const t = this.now;
+    const out = this._out(this._around(40 + Math.random() * 30), { ref: 8, rolloff: 0.6, reverb: 0.8 });
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    const f0 = 480 + Math.random() * 200;
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.linearRampToValueAtTime(f0 * 1.5, t + 0.3);
+    o.frequency.linearRampToValueAtTime(f0 * 0.7, t + 1.4);
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 1100;
+    bp.Q.value = 3;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.18, t + 0.1);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
+    o.connect(bp);
+    bp.connect(g);
+    g.connect(out);
+    o.start(t);
+    o.stop(t + 1.6);
+  }
+
+  distantShots() {
+    if (!this.enabled) return;
+    const pos = this._around(80 + Math.random() * 40);
+    const n = 1 + Math.floor(Math.random() * 4);
+    for (let i = 0; i < n; i++) setTimeout(() => (Math.random() < 0.5 ? this.laser(pos) : this.gunshot('rifle', pos)), i * (180 + Math.random() * 300));
+  }
+
+  creak() {
+    if (!this.enabled) return;
+    this.open(this._around(6 + Math.random() * 10), 'wood');
+  }
+
+  chime() {
+    if (!this.enabled) return;
+    const t = this.now;
+    const out = this._out(this._around(8 + Math.random() * 10), { ref: 3, reverb: 0.6 });
+    for (let i = 0; i < 4; i++) {
+      const f = [1318, 1568, 1760, 2093, 2349][Math.floor(Math.random() * 5)];
+      this._tone(out, t + i * (0.2 + Math.random() * 0.3), 1.8, { type: 'sine', freq: f, gain: 0.03 });
+    }
+  }
+
+  frogs() {
+    if (!this.enabled) return;
+    const t = this.now;
+    const out = this._out(this._around(10 + Math.random() * 25), { ref: 4 });
+    const n = 3 + Math.floor(Math.random() * 5);
+    const f = 110 + Math.random() * 80;
+    for (let i = 0; i < n; i++) {
+      this._tone(out, t + i * 0.28, 0.16, { type: 'square', freq: f, freqEnd: f * 0.7, gain: 0.05 });
+      this._noise(out, t + i * 0.28, 0.1, { type: 'bandpass', freq: 600, q: 4, gain: 0.05 });
+    }
+  }
+
+  gatorBellow() {
+    if (!this.enabled) return;
+    const out = this._out(this._around(30 + Math.random() * 30), { ref: 6, reverb: 0.3 });
+    this._noise(out, this.now, 1.6, { type: 'lowpass', freq: 180, freqEnd: 90, gain: 0.5, attack: 0.3, buf: this.brownBuf });
+    this._tone(out, this.now, 1.5, { type: 'sawtooth', freq: 48, freqEnd: 42, gain: 0.12, attack: 0.3 });
   }
 
   // ---- Ambience ------------------------------------------------------------
@@ -598,7 +821,7 @@ export class Audio {
     bugOut.connect(this.master);
     bug.start();
     bugAm.start();
-    // dread drone (after the toll)
+    // dread drone (during the Sweep)
     const drone = ctx.createOscillator();
     drone.type = 'sawtooth';
     drone.frequency.value = 41;

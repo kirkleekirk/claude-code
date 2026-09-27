@@ -10,7 +10,7 @@ export class HubScene {
   constructor() {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 800);
-    this.env = new Environment(this.scene, { towerDir: new THREE.Vector3(0.6, 0, -1), shadows: true });
+    this.env = new Environment(this.scene, { mastDir: new THREE.Vector3(0.6, 0, -1), shadows: true, fireflies: true });
     this.env.setTime(19.15);
     this.env.water.position.y = -0.6;
     const b = new Batcher();

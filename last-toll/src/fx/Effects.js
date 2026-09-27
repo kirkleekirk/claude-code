@@ -59,6 +59,20 @@ export class Effects {
     scene.add(this.holes);
     this.nextHole = 0;
 
+    // laser beams: a hot core and a soft glow, pooled
+    this.beams = [];
+    const coreGeo = new THREE.CylinderGeometry(0.012, 0.012, 1, 6, 1, true).translate(0, 0.5, 0);
+    const glowGeo = new THREE.CylinderGeometry(0.05, 0.05, 1, 8, 1, true).translate(0, 0.5, 0);
+    for (let i = 0; i < 10; i++) {
+      const core = new THREE.Mesh(coreGeo, new THREE.MeshBasicMaterial({ color: 0xffe0d0, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+      const glow = new THREE.Mesh(glowGeo, new THREE.MeshBasicMaterial({ color: 0xff3a24, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+      core.visible = glow.visible = false;
+      core.frustumCulled = glow.frustumCulled = false;
+      scene.add(core, glow);
+      this.beams.push({ core, glow, t: 0 });
+    }
+    this.nextBeam = 0;
+
     this.flash = new THREE.PointLight(0xffc27a, 0, 14, 1.6);
     scene.add(this.flash);
     this.flashT = 0;
@@ -98,6 +112,13 @@ export class Effects {
       this._emit(point, _p, { life: 6 + Math.random() * 4, size: 0.05 + Math.random() * 0.05, color: i === 0 ? 0x7a8070 : 0x3a0404, bounce: 0.3, spin: 12 });
     }
     this.blood(point, 20, 1.5);
+  }
+
+  splash(point) {
+    for (let i = 0; i < 16; i++) {
+      _p.set((Math.random() - 0.5) * 2.2, 1.5 + Math.random() * 2.5, (Math.random() - 0.5) * 2.2);
+      this._emit(point, _p, { life: 0.8 + Math.random() * 0.5, size: 0.03 + Math.random() * 0.04, color: 0x3a4a44, bounce: 0 });
+    }
   }
 
   brass(pos, vel) {
@@ -152,11 +173,38 @@ export class Effects {
     this.holes.setMatrixAt(i, _m);
     this.holes.count = Math.max(this.holes.count, i + 1);
     this.holes.instanceMatrix.needsUpdate = true;
+    if (surface === 'burn') {
+      this.sparks(point, 7);
+      for (let i = 0; i < 4; i++) {
+        _p.copy(normal).multiplyScalar(0.4 + Math.random() * 0.4).add(_s.set((Math.random() - 0.5) * 0.3, 0.5 + Math.random() * 0.5, (Math.random() - 0.5) * 0.3));
+        this._emit(point, _p, { life: 1.2 + Math.random(), size: 0.04 + Math.random() * 0.04, color: 0x2a2826, g: -0.4, bounce: 0 });
+      }
+      return;
+    }
     if (surface === 'hard') this.sparks(point, 3);
     this.dust(point, normal, 5);
   }
 
-  muzzleFlash(pos, intensity = 1) {
+  beam(from, to, color = 0xff3a24) {
+    const b = this.beams[this.nextBeam];
+    this.nextBeam = (this.nextBeam + 1) % this.beams.length;
+    const dir = _p.copy(to).sub(from);
+    const len = dir.length();
+    if (len < 0.01) return;
+    dir.normalize();
+    for (const m of [b.core, b.glow]) {
+      m.position.copy(from);
+      m.quaternion.setFromUnitVectors(UP, dir);
+      m.scale.set(1, len, 1);
+      m.visible = true;
+      m.material.opacity = 1;
+    }
+    b.glow.material.color.setHex(color);
+    b.t = 0.16;
+  }
+
+  muzzleFlash(pos, intensity = 1, color = 0xffc27a) {
+    this.flash.color.setHex(color);
     this.flash.position.copy(pos);
     this.flash.intensity = 30 * intensity;
     this.flashT = 0.06;
@@ -174,7 +222,7 @@ export class Effects {
       if (p.life <= 0) { p.alive = false; continue; }
       p.vel.y -= p.g * dt;
       p.pos.addScaledVector(p.vel, dt);
-      if (p.pos.y < 0.06 + p.size / 2) {
+      if (p.pos.y < 0.06 + p.size / 2 && p.pos.y > -0.3) {
         p.pos.y = 0.06 + p.size / 2;
         if (p.vel.y < -1 && p.bounce > 0) {
           p.vel.y = -p.vel.y * p.bounce;
@@ -230,6 +278,14 @@ export class Effects {
       }
     }
 
+    for (const b of this.beams) {
+      if (b.t <= 0) continue;
+      b.t -= dt;
+      const k = Math.max(0, b.t / 0.16);
+      b.core.material.opacity = k;
+      b.glow.material.opacity = k * 0.7;
+      if (b.t <= 0) b.core.visible = b.glow.visible = false;
+    }
     if (this.flashT > 0) {
       this.flashT -= dt;
       if (this.flashT <= 0) this.flash.intensity = 0;
@@ -239,5 +295,6 @@ export class Effects {
 
   dispose() {
     for (const o of [this.parts, this.sparks_, this.pools, this.holes, this.flash]) this.scene.remove(o);
+    for (const b of this.beams) this.scene.remove(b.core, b.glow);
   }
 }

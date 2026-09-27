@@ -1,9 +1,11 @@
 import * as THREE from 'three';
 import { ChunkedBatcher, Batcher } from './Batcher.js';
+import { DecalBatch } from './Decals.js';
 import { World } from './World.js';
 import { RNG } from '../core/rng.js';
 import { rollContainer, rollItem } from '../data/loot.js';
 import { grimeTexture, groundTexture } from './Textures.js';
+import { CONTAINER_SPECS, containerHeight } from '../game/containers.js';
 
 // Procedural flooded-parish city. A 4x4 grid of blocks separated by streets,
 // bounded by a levee with two docks where the skiffs wait.
@@ -28,7 +30,9 @@ const C = {
   foliage: [0x2c3a20, 0x34401e, 0x394426, 0x283420], trunk: 0x3a2e22, moss: 0x7a8166, white: 0xcfcbbf,
 };
 
-const LOT_SCALE = { house: 'quarter', yard: 'quarter', shop: 'half', clinic: 'half', warehouse: 'whole', containers: 'whole', park: 'whole', checkpoint: 'whole' };
+const LOT_SCALE = { house: 'quarter', yard: 'quarter', shop: 'half', clinic: 'half', warehouse: 'whole', containers: 'whole', park: 'whole', checkpoint: 'whole', cemetery: 'whole', compound: 'whole' };
+
+export { C, T, ROADS };
 
 export class CityGen {
   constructor({ zone, seed, scene, loot }) {
@@ -41,13 +45,21 @@ export class CityGen {
     loot.batch = this.batch;
     this.clear = [];
     this.winClear = [];
-    this.candidates = { street: [], interior: [], dormant: [], edge: [], checkpoint: [] };
+    this.candidates = { street: [], interior: [], dormant: [], edge: [], checkpoint: [], guardPost: [], patrol: [] };
+    this.decals = new DecalBatch();
+    this.glow = new Batcher();
+    this.floods = [];
     this.map = { roads: [], buildings: [], docks: [], props: [] };
     this.fires = [];
     this.extraLights = [];
   }
 
   build() {
+    this._layout();
+    return this._finish();
+  }
+
+  _layout() {
     this._ground();
     this._streets();
     for (let bi = 0; bi < 4; bi++) {
@@ -59,9 +71,14 @@ export class CityGen {
     }
     this._levee();
     this._horizon();
+  }
 
+  _finish() {
     const mat = new THREE.MeshLambertMaterial({ vertexColors: true, map: grimeTexture() });
     const mesh = this.batch.build(mat);
+    mesh.add(this.decals.build());
+    this.glowMat = new THREE.MeshBasicMaterial({ vertexColors: true });
+    if (this.glow.vcount) mesh.add(this.glow.build(this.glowMat));
     const far = this.horizon.build(mat);
     far.castShadow = false;
     mesh.add(far);
@@ -77,8 +94,11 @@ export class CityGen {
       dormant: filt(this.candidates.dormant),
       edge: filt(this.candidates.edge),
       checkpoint: filt(this.candidates.checkpoint),
+      guardPost: this.candidates.guardPost.filter((p) => w.isWalkable(p.x, p.z)),
+      patrol: filt(this.candidates.patrol),
+      emerge: (this.candidates.emerge || []).filter((e) => w.isWalkable(e.to.x, e.to.z)),
     };
-    return { world: this.world, mesh, docks: this.docks, spawns, map: this.map, fires: this.fires };
+    return { world: this.world, mesh, docks: this.docks, spawns, map: this.map, fires: this.fires, floods: this.floods, glowMat: this.glowMat };
   }
 
   // ---- helpers ---------------------------------------------------------------
@@ -118,10 +138,15 @@ export class CityGen {
       else this.world.addBox(fixed - t / 2, y0, s, fixed + t / 2, y1, e, { occlude });
     };
     let cur = a0;
-    for (const o of ops) {
+    for (let i = 0; i < ops.length; i++) {
+      const o = ops[i];
       const s = Math.max(cur, o.c - o.w / 2), e = Math.min(a1, o.c + o.w / 2);
       if (e <= s) continue;
       seg(cur, s, 0, h);
+      // free wall on either side of this opening (for shutters and boards)
+      const prevEnd = i > 0 ? ops[i - 1].c + ops[i - 1].w / 2 : a0;
+      const nextStart = i < ops.length - 1 ? ops[i + 1].c - ops[i + 1].w / 2 : a1;
+      const gapL = s - prevEnd, gapR = nextStart - e;
       if (o.kind === 'door') {
         seg(s, e, 2.2, h);
         const cz = 1.3;
@@ -130,25 +155,31 @@ export class CityGen {
       } else if (o.kind === 'window') {
         if (axis === 'x') this.winClear.push({ x0: s - 0.1, x1: e + 0.1, z0: fixed - 0.5, z1: fixed + 0.5 });
         else this.winClear.push({ z0: s - 0.1, z1: e + 0.1, x0: fixed - 0.5, x1: fixed + 0.5 });
-        seg(s, e, 0, o.sill ?? sill);
-        seg(s, e, o.top ?? top, h);
+        const wsill = o.sill ?? sill, wtop = o.top ?? top;
+        seg(s, e, 0, wsill);
+        seg(s, e, wtop, h);
         if (opts.shutters && out) {
-          // decorative shutters either side of the window
-          const sw = 0.36, sh = (o.top ?? top) - (o.sill ?? sill), sy = ((o.top ?? top) + (o.sill ?? sill)) / 2;
+          // shutters only where there is solid wall for them to hang on
+          const sh = wtop - wsill, sy = (wtop + wsill) / 2;
           const oz = out * (t / 2 + 0.03);
+          const swL = Math.min(0.36, gapL - 0.1), swR = Math.min(0.36, gapR - 0.1);
           if (axis === 'x') {
-            this.batch.box(s - sw / 2, sy, fixed + oz, sw, sh, 0.04, opts.shutters);
-            this.batch.box(e + sw / 2, sy, fixed + oz, sw, sh, 0.04, opts.shutters);
+            if (swL >= 0.18) this.batch.box(s - swL / 2, sy, fixed + oz, swL, sh, 0.04, opts.shutters);
+            if (swR >= 0.18) this.batch.box(e + swR / 2, sy, fixed + oz, swR, sh, 0.04, opts.shutters);
           } else {
-            this.batch.box(fixed + oz, sy, s - sw / 2, 0.04, sh, sw, opts.shutters);
-            this.batch.box(fixed + oz, sy, e + sw / 2, 0.04, sh, sw, opts.shutters);
+            if (swL >= 0.18) this.batch.box(fixed + oz, sy, s - swL / 2, 0.04, sh, swL, opts.shutters);
+            if (swR >= 0.18) this.batch.box(fixed + oz, sy, e + swR / 2, 0.04, sh, swR, opts.shutters);
           }
         }
         if (this.rng.chance(0.35)) {
-          // boarded window: planks block movement already via the sill; purely visual
-          const py = (o.sill ?? sill) + 0.3 + this.rng.next() * 0.4;
-          if (axis === 'x') this.batch.box((s + e) / 2, py, fixed + (out || 1) * (t / 2 + 0.02), e - s + 0.2, 0.14, 0.03, C.woodLight, { rotY: 0 });
-          else this.batch.box(fixed + (out || 1) * (t / 2 + 0.02), py, (s + e) / 2, 0.03, 0.14, e - s + 0.2, C.woodLight);
+          // boarded window: planks overlap the frame but never the neighbouring opening
+          const over = Math.max(0, Math.min(0.1, gapL - 0.05, gapR - 0.05));
+          const oz = (out || 1) * (t / 2 + 0.02);
+          for (let k = 0; k < 2; k++) {
+            const py = wsill + 0.25 + k * 0.45 + this.rng.next() * 0.15;
+            if (axis === 'x') this.batch.box((s + e) / 2, py, fixed + oz, e - s + over * 2, 0.13, 0.03, C.woodLight, { rotY: 0 });
+            else this.batch.box(fixed + oz, py, (s + e) / 2, 0.03, 0.13, e - s + over * 2, C.woodLight);
+          }
         }
       }
       cur = e;
@@ -156,16 +187,72 @@ export class CityGen {
     seg(cur, a1, 0, h);
   }
 
+  // Lay out openings on a wall span so nothing overlaps: doors first, then windows.
+  // Keeps clear of the wall ends and of junctions with interior walls, and leaves room
+  // for shutters. Windows that can't fit are dropped; doors slide to the nearest free spot.
+  _plan(a0, a1, reqs, blocked = [], shutters = false) {
+    const placed = [];
+    const endPad = 0.45;
+    const sorted = reqs.slice().sort((p, q) => (p.kind === 'door' ? 0 : 1) - (q.kind === 'door' ? 0 : 1));
+    for (const r of sorted) {
+      const fits = (c) => {
+        const s0 = c - r.w / 2, e0 = c + r.w / 2;
+        if (s0 < a0 + endPad || e0 > a1 - endPad) return false;
+        for (const b of blocked) if (s0 < b[1] + 0.35 && e0 > b[0] - 0.35) return false;
+        for (const p of placed) {
+          const need = shutters && (p.kind === 'window' || r.kind === 'window') ? 0.95 : 0.6;
+          if (s0 < p.c + p.w / 2 + need && e0 > p.c - p.w / 2 - need) return false;
+        }
+        return true;
+      };
+      const reach = r.kind === 'door' ? Math.max(a1 - a0, 2) : 1.2;
+      let found = null;
+      for (let k = 0; found === null && k <= 80; k++) {
+        const off = k === 0 ? 0 : Math.ceil(k / 2) * 0.2 * (k % 2 ? 1 : -1);
+        if (Math.abs(off) > reach) break;
+        if (fits(r.c + off)) found = r.c + off;
+      }
+      if (found !== null) placed.push({ ...r, c: found });
+    }
+    return placed;
+  }
+
   // A rectangular building shell. Returns the interior rect.
   _building(b) {
     const { x0, z0, x1, z1, h } = b;
     const op = b.openings;
-    this._wall('x', z0, x0 - T / 2, x1 + T / 2, T, h, op.n || [], b.wall, b.inner, -1, b);
-    this._wall('x', z1, x0 - T / 2, x1 + T / 2, T, h, op.s || [], b.wall, b.inner, 1, b);
-    this._wall('z', x0, z0 + T / 2, z1 - T / 2, T, h, op.w || [], b.wall, b.inner, -1, b);
-    this._wall('z', x1, z0 + T / 2, z1 - T / 2, T, h, op.e || [], b.wall, b.inner, 1, b);
-    for (const p of b.partitions || []) {
-      this._wall(p.axis, p.at, p.from, p.to, 0.12, h, p.doors.map((c) => ({ c, w: 1.15, kind: 'door' })), b.inner, null, 0);
+    const parts = b.partitions || [];
+    // where interior walls meet each exterior wall
+    const junction = { n: [], s: [], w: [], e: [] };
+    for (const p of parts) {
+      if (p.axis === 'x') {
+        if (p.from <= x0 + T + 0.05) junction.w.push([p.at - 0.06, p.at + 0.06]);
+        if (p.to >= x1 - T - 0.05) junction.e.push([p.at - 0.06, p.at + 0.06]);
+      } else {
+        if (p.from <= z0 + T + 0.05) junction.n.push([p.at - 0.06, p.at + 0.06]);
+        if (p.to >= z1 - T - 0.05) junction.s.push([p.at - 0.06, p.at + 0.06]);
+      }
+    }
+    const sh = !!b.shutters;
+    const plan = {
+      n: this._plan(x0, x1, op.n || [], junction.n, sh), s: this._plan(x0, x1, op.s || [], junction.s, sh),
+      w: this._plan(z0, z1, op.w || [], junction.w, sh), e: this._plan(z0, z1, op.e || [], junction.e, sh),
+    };
+    this._wall('x', z0, x0 - T / 2, x1 + T / 2, T, h, plan.n, b.wall, b.inner, -1, b);
+    this._wall('x', z1, x0 - T / 2, x1 + T / 2, T, h, plan.s, b.wall, b.inner, 1, b);
+    this._wall('z', x0, z0 + T / 2, z1 - T / 2, T, h, plan.w, b.wall, b.inner, -1, b);
+    this._wall('z', x1, z0 + T / 2, z1 - T / 2, T, h, plan.e, b.wall, b.inner, 1, b);
+    this.lastPlan = plan;
+    this._dressWalls(b, plan);
+    for (const p of parts) {
+      // doors in an interior wall must also dodge walls that cross or butt into it
+      const blocked = [];
+      for (const q of parts) {
+        if (q === p || q.axis === p.axis) continue;
+        if (q.at > p.from && q.at < p.to && p.at >= q.from - 0.25 && p.at <= q.to + 0.25) blocked.push([q.at - 0.06, q.at + 0.06]);
+      }
+      const doors = this._plan(p.from, p.to, p.doors.map((c) => ({ c, w: 1.15, kind: 'door' })), blocked);
+      this._wall(p.axis, p.at, p.from, p.to, 0.12, h, doors, b.inner, null, 0);
     }
     const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, w = x1 - x0, d = z1 - z0;
     this.batch.box(cx, 0.05, cz, w, 0.06, d, b.floor, { jitter: 0.02, ao: 1 });
@@ -214,19 +301,20 @@ export class CityGen {
 
   _container(kind, room, table, sides) {
     const spec = CONTAINER_SPECS[kind];
-    const spot = this._againstWall(room, spec.w, spec.d, sides, 0, !!spec.mount || spec.h > 1.2);
+    const fw = spec.footW || spec.w;
+    const spot = this._againstWall(room, fw, spec.d, sides, 0, !!spec.mount || spec.h > 1.2);
     if (!spot) return null;
     const y0 = spec.mount || 0;
     const s = spot;
-    this.batch.box(s.cx, y0 + spec.h / 2, s.cz, spec.w, spec.h, spec.d, spec.color, { rotY: s.rotY, ao: 1, top: spec.top });
     if (!spec.mount) {
       const ex = s.fx !== 0;
-      this.world.addBoxC(s.cx, spec.h / 2, s.cz, ex ? spec.d : spec.w, spec.h, ex ? spec.w : spec.d, { occlude: spec.h > 1.2, kind: 'furniture' });
+      this.world.addBoxC(s.cx, containerHeight(spec) / 2, s.cz, ex ? spec.d : fw, containerHeight(spec), ex ? fw : spec.d, { occlude: spec.h > 1.2, kind: 'furniture' });
     }
     const loot = rollContainer(this.rng, table, this.zone.lootTier);
-    this.loot.addContainer({ kind, spec, x: s.cx, z: s.cz, y0, rotY: s.rotY, fx: s.fx, fz: s.fz, items: loot, label: spec.label });
+    this.loot.addContainer({ kind, spec, x: s.cx, z: s.cz, y0, rotY: s.rotY, items: loot });
     return s;
   }
+
 
   _prop(kind, room, sides) {
     const r = this.rng;
@@ -284,12 +372,23 @@ export class CityGen {
       let bad = false;
       for (const o of room.occ) if (x > o.x0 && x < o.x1 && z > o.z0 && z < o.z1) bad = true;
       if (bad) continue;
-      this.loot.spawnItem(rollItem(r, 'floor', this.zone.lootTier), new THREE.Vector3(x, 0.06, z), r.range(0, Math.PI * 2));
+      this.loot.spawnItem(rollItem(r, 'floor', this.zone.lootTier), new THREE.Vector3(x, 0.08, z), r.range(0, Math.PI * 2));
       return;
     }
   }
 
   _markInterior(room, dormantChance = 0.22) {
+    if (this.rng.chance(0.16)) {
+      const side = this.rng.int(0, 3);
+      const kind = this.rng.chance(0.6) ? 'hands' : 'smear';
+      const x = this.rng.range(room.x0 + 0.8, Math.max(room.x0 + 0.9, room.x1 - 0.8));
+      const z = this.rng.range(room.z0 + 0.8, Math.max(room.z0 + 0.9, room.z1 - 0.8));
+      const y = this.rng.range(0.9, 1.5);
+      if (side === 0) this.decals.add(kind, x, y, room.z0 + 0.01, 0, 1, 1.1, 0.55);
+      else if (side === 1) this.decals.add(kind, x, y, room.z1 - 0.01, 0, -1, 1.1, 0.55);
+      else if (side === 2) this.decals.add(kind, room.x0 + 0.01, y, z, 1, 0, 1.1, 0.55);
+      else this.decals.add(kind, room.x1 - 0.01, y, z, -1, 0, 1.1, 0.55);
+    }
     const cx = (room.x0 + room.x1) / 2, cz = (room.z0 + room.z1) / 2;
     this.candidates.interior.push({ x: cx, z: cz });
     if (this.rng.chance(dormantChance)) this.candidates.dormant.push({ x: cx + this.rng.range(-0.6, 0.6), z: cz + this.rng.range(-0.6, 0.6) });
@@ -323,6 +422,7 @@ export class CityGen {
         b.box(s + 0.75, 0.015, c, 1.5, 0.01, 0.12, C.line, { jitter: 0.15 });
       }
     }
+    for (const a of ROADS) for (const b2 of ROADS) if (Math.abs(a) < CITY_HALF - 2 && Math.abs(b2) < CITY_HALF - 2) this.candidates.patrol.push({ x: a, z: b2 });
     // cars, wrecks and roadblocks along each road segment
     const r = this.rng;
     for (let i = 0; i < ROADS.length; i++) {
@@ -360,25 +460,39 @@ export class CityGen {
     const col = burned ? 0x1c1a18 : r.pick(C.cars);
     const L = 4.3, W = 1.8;
     const ca = Math.cos(ang), sa = Math.sin(ang);
-    // chassis and cabin
-    this.batch.box(x, 0.55, z, W, 0.62, L, col, { rotY: ang, ao: 1 });
-    this.batch.box(x + sa * 0.25, 1.1, z + ca * 0.25, W - 0.14, 0.5, L * 0.48, burned ? 0x121110 : 0x1d2327, { rotY: ang, ao: 1, top: col });
+    // car-local (lx along the width, lz along the length; +lz is the rear) to world
+    const at = (lx, lz) => [x + lx * ca + lz * sa, z - lx * sa + lz * ca];
+    const trunk = !burned && r.chance(0.55);
+    const TL = 0.97;
+    if (trunk) {
+      // solid front, and a hollow trunk well at the rear
+      const [fx, fz] = at(0, -TL / 2);
+      this.batch.box(fx, 0.55, fz, W, 0.62, L - TL, col, { rotY: ang, ao: 1 });
+      const [bx, bz] = at(0, L / 2 - TL / 2);
+      this.batch.box(bx, 0.37, bz, W, 0.26, TL, col, { rotY: ang, ao: 1 });
+    } else this.batch.box(x, 0.55, z, W, 0.62, L, col, { rotY: ang, ao: 1 });
+    const [cx, cz] = at(0, -0.2);
+    this.batch.box(cx, 1.1, cz, W - 0.14, 0.5, L * 0.48, burned ? 0x121110 : 0x1d2327, { rotY: ang, ao: 1, top: col });
     for (const [lx, lz] of [[-0.85, -1.35], [0.85, -1.35], [-0.85, 1.35], [0.85, 1.35]]) {
-      const wx = x + lx * ca + lz * sa, wz = z - lx * sa + lz * ca;
+      const [wx, wz] = at(lx, lz);
       this.batch.box(wx, 0.32, wz, 0.24, 0.64, 0.64, 0x151515, { rotY: ang, ao: 1 });
+    }
+    for (const lx of [-0.72, 0.72]) {
+      const [tx, tz] = at(lx, L / 2 + 0.01);
+      this.batch.box(tx, 0.72, tz, 0.26, 0.1, 0.03, burned ? 0x1a1414 : 0x6a1410, { rotY: ang, ao: 1 });
     }
     const ex = Math.abs(sa) * L + Math.abs(ca) * W, ez = Math.abs(ca) * L + Math.abs(sa) * W;
     this.world.addBoxC(x, 0.7, z, ex * 0.8, 1.4, ez * 0.8, { occlude: false, kind: 'car' });
     this.map.props.push({ x, z, w: ex * 0.8, d: ez * 0.8 });
-    if (!burned && r.chance(0.55)) {
-      // trunk at the rear (+local z)
-      const tx = x + sa * (L / 2 + 0.05), tz = z + ca * (L / 2 + 0.05);
+    if (trunk) {
+      const [tx, tz] = at(0, L / 2 - TL / 2);
       this.loot.addContainer({
-        kind: 'trunk', spec: CONTAINER_SPECS.trunk, x: tx, z: tz, y0: 0.62, rotY: ang, fx: sa, fz: ca,
-        items: rollContainer(r, 'trunk', this.zone.lootTier), label: 'Car Trunk',
+        kind: 'trunk', spec: { ...CONTAINER_SPECS.trunk, w: W, d: TL, h: 0.36, color: col }, x: tx, z: tz, y0: 0.5, rotY: ang,
+        items: rollContainer(r, 'trunk', this.zone.lootTier),
       });
     }
   }
+
 
   _roadblock(x, z, alongZ) {
     const r = this.rng;
@@ -405,6 +519,7 @@ export class CityGen {
       this.batch.cylinder(px, 2.6, pz, 0.08, 0.11, 5.2, 0x3a3a38, 6);
       this.batch.box(px + (px < (x0 + x1) / 2 ? -0.5 : 0.5), 5.1, pz, 1.1, 0.08, 0.08, 0x3a3a38);
       this.world.addBoxC(px, 2.6, pz, 0.25, 5.2, 0.25, { occlude: false, kind: 'pole' });
+      if (r.chance(0.12)) this._hanged(px + (px < (x0 + x1) / 2 ? -0.95 : 0.95), pz, 5.05, r.range(0, Math.PI * 2));
     }
   }
 
@@ -436,7 +551,7 @@ export class CityGen {
 
   _lot(type, x0, z0, x1, z1, front, whole = false) {
     const b = this.batch;
-    const groundCol = type === 'park' || type === 'house' ? C.grass : type === 'checkpoint' || type === 'containers' || type === 'warehouse' ? C.gravel : C.dirt;
+    const groundCol = type === 'park' || type === 'house' ? C.grass : type === 'cemetery' ? 0x333a26 : type === 'checkpoint' || type === 'containers' || type === 'warehouse' || type === 'compound' ? C.gravel : C.dirt;
     b.box((x0 + x1) / 2, 0.02, (z0 + z1) / 2, x1 - x0, 0.04, z1 - z0, groundCol, { jitter: 0.04, ao: 1 });
     switch (type) {
       case 'house': this._house(x0, z0, x1, z1, front); break;
@@ -446,6 +561,8 @@ export class CityGen {
       case 'containers': this._containerYard(x0, z0, x1, z1); break;
       case 'park': this._park(x0, z0, x1, z1); break;
       case 'checkpoint': this._checkpoint(x0, z0, x1, z1); break;
+      case 'cemetery': this._cemetery(x0, z0, x1, z1); break;
+      case 'compound': this._compound(x0, z0, x1, z1); break;
       default: this._yard(x0, z0, x1, z1, front);
     }
     // street spawn candidates within the lot's open ground
@@ -500,6 +617,28 @@ export class CityGen {
       const cz2 = front === 'n' ? bz0 - 2.05 : bz1 + 2.05;
       this.batch.box(px, 1.5, cz2, 0.16, 2.9, 0.16, C.trim);
       this.world.addBoxC(px, 1.5, cz2, 0.2, 2.9, 0.2, { occlude: false, kind: 'pole' });
+    }
+    if (r.chance(0.1)) this._candles(bx0 + 0.7, front === 'n' ? bz0 - 0.6 : bz1 + 0.6, 0.12);
+    if (r.chance(0.05)) this._hanged(cx + r.range(-1.5, 1.5), front === 'n' ? bz0 - 1.6 : bz1 + 1.6, 2.88, r.range(0, 6));
+    // search-team X-code by the door
+    if (r.chance(0.55)) {
+      const f = front === 'n' ? { z: bz0 - T / 2, nz: -1 } : { z: bz1 + T / 2, nz: 1 };
+      const side = doorX > cx ? -1 : 1;
+      const xx = Math.max(bx0 + 0.7, Math.min(bx1 - 0.7, doorX + side * 1.2));
+      this.decals.add('xcode', xx, 2.35, f.z, 0, f.nz, 1.1, 0.55);
+    }
+    // candlelight in a window: somebody is still here, or was
+    if (r.chance(0.12)) {
+      const sides = Object.keys(this.lastPlan).filter((k) => this.lastPlan[k].some((o) => o.kind === 'window'));
+      if (sides.length) {
+        const sd = r.pick(sides);
+        const win = this.lastPlan[sd].find((o) => o.kind === 'window');
+        const inset = 0.16;
+        const gx = sd === 'w' ? bx0 + inset : sd === 'e' ? bx1 - inset : win.c;
+        const gz = sd === 'n' ? bz0 + inset : sd === 's' ? bz1 - inset : win.c;
+        const along = sd === 'n' || sd === 's';
+        this.glow.box(gx, 1.45, gz, along ? win.w - 0.1 : 0.02, 0.95, along ? 0.02 : win.w - 0.1, 0x9a5a20, { jitter: 0.1, ao: 1 });
+      }
     }
     // rooms front to back
     const rooms = [];
@@ -670,7 +809,7 @@ export class CityGen {
     for (let i = 0; i < n; i++) this._junk(r.range(x0 + 1.5, x1 - 1.5), r.range(z0 + 1.5, z1 - 1.5));
     if (r.chance(0.6)) this._car(r.range(x0 + 3, x1 - 3), front === 'n' ? z0 + 3 : z1 - 3, r.range(0, Math.PI * 2), r.chance(0.3));
     if (r.chance(0.5)) this._tree(r.range(x0 + 1.5, x1 - 1.5), r.range(z0 + 1.5, z1 - 1.5));
-    if (r.chance(0.5)) this.loot.spawnItem(rollItem(r, 'floor', this.zone.lootTier), new THREE.Vector3(r.range(x0 + 1, x1 - 1), 0.1, r.range(z0 + 1, z1 - 1)), r.range(0, 6));
+    if (r.chance(0.5)) this.loot.spawnItem(rollItem(r, 'floor', this.zone.lootTier), new THREE.Vector3(r.range(x0 + 1, x1 - 1), 0.04, r.range(z0 + 1, z1 - 1)), r.range(0, 6));
   }
 
   _shop(x0, z0, x1, z1, front) {
@@ -729,17 +868,29 @@ export class CityGen {
     for (let i = 0; i < 4; i++) this.batch.box(x, 0.15 + i * 0.48, z, sx, 0.04, sz, col, { jitter: 0.02 });
     for (const a of [-1, 1]) for (const b of [-1, 1]) this.batch.box(x + a * (sx / 2 - 0.03), 0.85, z + b * (sz / 2 - 0.03), 0.05, 1.7, 0.05, 0x3a3e42);
     const r = this.rng;
-    for (let i = 0; i < 8; i++) {
-      if (r.chance(0.4)) continue;
-      const lvl = r.int(0, 3);
-      this.batch.box(x + (alongZ ? 0 : r.range(-len / 2 + 0.2, len / 2 - 0.2)), 0.25 + lvl * 0.48, z + (alongZ ? r.range(-len / 2 + 0.2, len / 2 - 0.2) : 0), 0.2, 0.18, 0.2, r.pick([0x8a3a22, 0xc0a060, 0x3a5a7a, 0xb8b0a0]), { jitter: 0.1 });
+    // leftover stock on the bottom and top boards
+    for (let i = 0; i < 6; i++) {
+      if (r.chance(0.35)) continue;
+      const lvl = r.chance(0.5) ? 0 : 3;
+      const along = r.range(-len / 2 + 0.2, len / 2 - 0.2);
+      this.batch.box(x + (alongZ ? 0 : along), 0.26 + lvl * 0.48, z + (alongZ ? along : 0), 0.2, 0.18, 0.2, r.pick([0x8a3a22, 0xc0a060, 0x3a5a7a, 0xb8b0a0]), { jitter: 0.1 });
     }
     this.world.addBoxC(x, 0.85, z, sx, 1.7, sz, { occlude: false, kind: 'furniture' });
-    this.loot.addContainer({
-      kind: 'shelf', spec: { ...CONTAINER_SPECS.shelf, w: sx, d: sz, h: 1.7 }, x, z, y0: 0, rotY: 0, fx: alongZ ? 1 : 0, fz: alongZ ? 0 : 1,
-      items: rollContainer(r, 'shelf', this.zone.lootTier), label: 'Store Shelf', noDoor: true,
+    // loot sits on the two middle boards, in plain sight
+    const items = rollContainer(r, 'shelf', this.zone.lootTier).concat(r.chance(0.5) ? rollContainer(r, 'shelf', this.zone.lootTier) : []);
+    const spots = [];
+    for (const lvl of [1, 2]) for (const k of [-1, 0, 1]) spots.push([lvl, k]);
+    r.shuffle(spots);
+    items.slice(0, spots.length).forEach((it, i) => {
+      const [lvl, k] = spots[i];
+      const along = (k * len) / 3;
+      const slot = { max: [len / 3 - 0.06, 0.4, w - 0.08] };
+      const fit = this.loot._fit(it.id, slot);
+      const pos = new THREE.Vector3(x + (alongZ ? 0 : along), 0.17 + lvl * 0.48, z + (alongZ ? along : 0));
+      this.loot.spawnItem(it, pos, fit.rot + (alongZ ? Math.PI / 2 : 0), { scale: fit.scale });
     });
   }
+
 
   _clinic(x0, z0, x1, z1, front) {
     const r = this.rng;
@@ -855,12 +1006,14 @@ export class CityGen {
     this.world.addBoxC(cx, 1.25, z, len, 2.5, 1.0, { occlude: true, kind: 'rack' });
   }
 
-  _crateAt(x, z, kind) {
+  _crateAt(x, z, kind, rotY = 0) {
     const spec = CONTAINER_SPECS[kind];
-    this.batch.box(x, spec.h / 2, z, spec.w, spec.h, spec.d, spec.color, { ao: 1, top: spec.top });
-    this.world.addBoxC(x, spec.h / 2, z, spec.w, spec.h, spec.d, { occlude: false, kind: 'furniture' });
-    this.loot.addContainer({ kind, spec, x, z, y0: 0, rotY: 0, fx: 0, fz: 1, items: rollContainer(this.rng, kind === 'military' ? 'military' : kind === 'locker' ? 'locker' : 'crate', this.zone.lootTier), label: spec.label });
+    const ex = Math.abs(Math.sin(rotY)) > 0.5;
+    this.world.addBoxC(x, spec.h / 2, z, ex ? spec.d : spec.w, spec.h, ex ? spec.w : spec.d, { occlude: false, kind: 'furniture' });
+    const table = { military: 'military', locker: 'locker', guardlocker: 'military', crypt: 'crypt' }[kind] || 'crate';
+    this.loot.addContainer({ kind, spec, x, z, y0: 0, rotY, items: rollContainer(this.rng, table, this.zone.lootTier) });
   }
+
 
   _truck(x, z, ang) {
     const ca = Math.cos(ang), sa = Math.sin(ang);
@@ -892,7 +1045,7 @@ export class CityGen {
           const ex = endE ? x1c : x0c;
           this.batch.box(ex + (endE ? 0.1 : -0.1), H / 2, z0c - 0.6, 0.06, H, 1.2, col, { rotY: 0 });
           const rm = this._room(inner.x0, inner.z0, inner.x1, inner.z1, 'container');
-          this._crateAt(endE ? inner.x0 + 0.7 : inner.x1 - 0.7, cz, r.chance(0.8) ? 'crate' : 'locker');
+          this._crateAt(endE ? inner.x0 + 0.7 : inner.x1 - 0.7, cz, r.chance(0.8) ? 'crate' : 'locker', endE ? Math.PI / 2 : -Math.PI / 2);
           this._floorLoot(rm, 0.4);
           if (r.chance(0.35)) this.candidates.dormant.push({ x: cx, z: cz });
         } else {
@@ -943,7 +1096,7 @@ export class CityGen {
       const bx = gx + Math.cos(a) * 6, bz = gz + Math.sin(a) * 6;
       this.batch.box(bx, 0.45, bz, 1.6, 0.08, 0.5, C.woodLight, { rotY: -a });
       this.world.addBoxC(bx, 0.3, bz, 1.2, 0.6, 1.2, { occlude: false, kind: 'furniture' });
-      if (r.chance(0.35)) this.loot.spawnItem(rollItem(r, 'floor', this.zone.lootTier), new THREE.Vector3(bx, 0.5, bz), r.range(0, 6));
+      if (r.chance(0.35)) this.loot.spawnItem(rollItem(r, 'floor', this.zone.lootTier), new THREE.Vector3(bx, 0.49, bz), r.range(0, 6));
     }
     this._fireBarrel(gx + 1.2, gz + 0.4);
     for (let i = 0; i < 4; i++) this.candidates.street.push({ x: r.range(x0 + 2, x1 - 2), z: r.range(z0 + 2, z1 - 2) });
@@ -981,7 +1134,8 @@ export class CityGen {
     for (const s of [-1, 1]) {
       const tx0 = cx + s * 5 - 3, tz0 = cz - 2.2 + s * 4;
       const ops = { s: [{ c: tx0 + 3, w: 2.0, kind: 'door' }], n: [{ c: tx0 + 3, w: 2.0, kind: 'door' }] };
-      const inner = this._building({ x0: tx0, z0: tz0, x1: tx0 + 6, z1: tz0 + 4, h: 2.4, wall: C.tent, inner: C.tent, roof: C.tent, floor: 0x3a3a2e, openings: ops, kind: 'tent', surface: 'ground' });
+      const inner = this._building({ x0: tx0, z0: tz0, x1: tx0 + 6, z1: tz0 + 4, h: 2.4, wall: 0x3e454c, inner: 0x4a5058, roof: 0x353b41, floor: 0x3a3a2e, trim: 0x9a1e18, openings: ops, kind: 'tent', surface: 'ground' });
+      this.decals.add('guardsign', tx0 + 1.4, 1.3, s < 0 ? tz0 - T / 2 : tz0 + 4 + T / 2, 0, s < 0 ? -1 : 1, 1.2, 0.6);
       const rm = this._room(inner.x0, inner.z0, inner.x1, inner.z1, 'tent');
       this._container('military', rm, 'military', ['e', 'w']);
       if (r.chance(0.7)) this._container('military', rm, 'military', ['e', 'w']);
@@ -996,6 +1150,227 @@ export class CityGen {
     // body bags
     for (let i = 0; i < 5; i++) this.batch.box(r.range(x0 + 4, x1 - 4), 0.14, r.range(z0 + 4, z1 - 4), 0.6, 0.28, 1.8, 0x1e2418, { rotY: r.range(0, 3) });
     this._fireBarrel(cx - 1.5, cz + 0.5);
+  }
+
+  // Paint on the outside of a building: graffiti and Guard notices on bare wall.
+  _dressWalls(b, plan) {
+    const r = this.rng;
+    const chance = { house: 0.18, shop: 0.4, warehouse: 0.55, clinic: 0.3, container: 0.3, shed: 0.2, barracks: 0.6 }[b.kind] ?? 0.1;
+    if (!r.chance(chance)) return;
+    const { x0, z0, x1, z1, h } = b;
+    const sides = [['n', x0, x1], ['s', x0, x1], ['w', z0, z1], ['e', z0, z1]];
+    const [side, a0, a1] = r.pick(sides);
+    // largest stretch of solid wall on that side
+    const ops = plan[side].slice().sort((p, q) => p.c - q.c);
+    let best = null, prev = a0 + 0.3;
+    for (const o of [...ops, { c: a1 - 0.3 + 1000, w: 2000 }]) {
+      const s0 = prev, e0 = Math.min(a1 - 0.3, o.c - o.w / 2 - 0.2);
+      if (e0 - s0 > (best ? best[1] - best[0] : 1.6)) best = [s0, e0];
+      prev = o.c + o.w / 2 + 0.2;
+    }
+    if (!best) return;
+    const w = Math.min(2.4, best[1] - best[0] - 0.2), c = (best[0] + best[1]) / 2;
+    const kind = b.kind === 'barracks' || (b.kind !== 'house' && r.chance(0.2)) ? 'guardsign' : 'graffiti';
+    const hh = kind === 'guardsign' ? Math.min(w * 0.5, 0.8) : w * 0.5;
+    const ww = hh * 2;
+    const y = Math.min(h - hh / 2 - 0.25, 1.55);
+    if (side === 'n') this.decals.add(kind, c, y, z0 - T / 2, 0, -1, ww, hh);
+    else if (side === 's') this.decals.add(kind, c, y, z1 + T / 2, 0, 1, ww, hh);
+    else if (side === 'w') this.decals.add(kind, x0 - T / 2, y, c, -1, 0, ww, hh);
+    else this.decals.add(kind, x1 + T / 2, y, c, 1, 0, ww, hh);
+  }
+
+  // The Living Guard's justice: a body on a rope with a placard.
+  _hanged(x, z, topY, face) {
+    const r = this.rng;
+    const b = this.batch;
+    const neck = topY - 0.75;
+    const clothes = r.pick([0x4a4a42, 0x3a3226, 0x5a4a3a, 0x2e3440, 0x6a5a4a]);
+    const skin = r.pick([0x7a7a6a, 0x6a6458, 0x8a7a6a]);
+    b.box(x, topY - 0.36, z, 0.03, 0.72, 0.03, 0x8a7a5a, { jitter: 0.05 });
+    b.box(x, neck - 0.12, z, 0.2, 0.24, 0.21, skin, { rotY: face, ao: 1 });
+    b.box(x, neck - 0.52, z, 0.38, 0.56, 0.22, clothes, { rotY: face, ao: 1 });
+    const cs = Math.cos(face), sn = Math.sin(face);
+    for (const sx of [-1, 1]) {
+      b.box(x + sx * 0.25 * cs, neck - 0.5, z - sx * 0.25 * sn, 0.09, 0.6, 0.09, clothes, { rotY: face, ao: 1 });
+      b.box(x + sx * 0.1 * cs, neck - 1.2, z - sx * 0.1 * sn, 0.13, 0.85, 0.14, 0x2a2a28, { rotY: face, ao: 1 });
+    }
+    // the placard hangs on the chest, facing out
+    this.decals.add('placard', x + sn * 0.13, neck - 0.45, z + cs * 0.13, sn, cs, 0.44, 0.22);
+  }
+
+  _candles(x, z, y = 0.1) {
+    const r = this.rng;
+    const n = r.int(3, 7);
+    for (let i = 0; i < n; i++) {
+      const cx = x + r.range(-0.3, 0.3), cz = z + r.range(-0.3, 0.3), h = r.range(0.06, 0.22);
+      this.batch.cylinder(cx, y + h / 2, cz, 0.025, 0.028, h, 0xd8ccb0, 6);
+      this.glow.box(cx, y + h + 0.025, cz, 0.018, 0.04, 0.018, 0xffa040, { jitter: 0.15, ao: 1 });
+    }
+  }
+
+  // A New Orleans city of the dead: whitewashed tombs above the waterline.
+  _cemetery(x0, z0, x1, z1) {
+    const r = this.rng;
+    this.clear = [];
+    const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+    // wrought-iron fence with two gates
+    const iron = 0x16181a;
+    const fenceSide = (ax, az, bx, bz) => {
+      const len = Math.hypot(bx - ax, bz - az);
+      const alongX = Math.abs(bx - ax) > Math.abs(bz - az);
+      for (let s0 = 0; s0 <= len; s0 += 0.22) {
+        const px = alongX ? Math.min(ax, bx) + s0 : ax, pz = alongX ? az : Math.min(az, bz) + s0;
+        this.batch.box(px, 0.8, pz, 0.03, 1.6, 0.03, iron, { jitter: 0 });
+        this.batch.box(px, 1.64, pz, 0.05, 0.08, 0.05, iron, { jitter: 0 });
+      }
+      const mx = (ax + bx) / 2, mz = (az + bz) / 2;
+      for (const y of [0.25, 1.45]) this.batch.box(mx, y, mz, alongX ? len : 0.04, 0.04, alongX ? 0.04 : len, iron, { jitter: 0 });
+      this.world.addBoxC(mx, 0.8, mz, alongX ? len : 0.12, 1.6, alongX ? 0.12 : len, { occlude: false, kind: 'fence' });
+    };
+    const m = 0.4;
+    fenceSide(x0 + m, z0 + m, cx - 1.4, z0 + m);
+    fenceSide(cx + 1.4, z0 + m, x1 - m, z0 + m);
+    fenceSide(x0 + m, z1 - m, cx - 1.4, z1 - m);
+    fenceSide(cx + 1.4, z1 - m, x1 - m, z1 - m);
+    fenceSide(x0 + m, z0 + m, x0 + m, z1 - m);
+    fenceSide(x1 - m, z0 + m, x1 - m, z1 - m);
+    // two mausoleums at the far corners, each with a burial vault inside
+    const mausos = [[x0 + 3.2, z1 - 6.2, 's'], [x1 - 6.8, z0 + 2.2, 'n']];
+    for (const [mx, mz, face] of mausos) {
+      const ops = {};
+      ops[face] = [{ c: mx + 1.8, w: 1.1, kind: 'door' }];
+      const inner = this._building({ x0: mx, z0: mz, x1: mx + 3.6, z1: mz + 4, h: 3.1, wall: 0xa8a498, inner: 0x5a5850, roof: 0x6a6660, floor: 0x4a4844, openings: ops, kind: 'crypt', surface: 'ground' });
+      this._crateAt((inner.x0 + inner.x1) / 2, (inner.z0 + inner.z1) / 2 + (face === 's' ? -0.4 : 0.4), 'crypt', 0);
+      this._candles(inner.x0 + 0.5, face === 's' ? inner.z1 - 0.5 : inner.z0 + 0.5, 0.08);
+      this.batch.box(mx + 1.8, 3.6, face === 's' ? mz + 4.05 : mz - 0.05, 0.12, 0.8, 0.12, 0x8a8680);
+      this.batch.box(mx + 1.8, 3.7, face === 's' ? mz + 4.05 : mz - 0.05, 0.5, 0.12, 0.12, 0x8a8680);
+      this.candidates.dormant.push({ x: (inner.x0 + inner.x1) / 2, z: (inner.z0 + inner.z1) / 2 });
+    }
+    const inMauso = (x, z) => mausos.some(([mx, mz]) => x > mx - 1.2 && x < mx + 4.8 && z > mz - 1.8 && z < mz + 5.8);
+    // rows of tombs, with an aisle down the middle
+    for (let z = z0 + 3; z < z1 - 3; z += 3.4) {
+      for (let x = x0 + 2.4; x < x1 - 2.2; x += 2.2) {
+        if (Math.abs(x - cx) < 1.6 || inMauso(x, z) || r.chance(0.22)) continue;
+        const col = r.pick([0xbab6aa, 0xa8a498, 0xc4c0b4, 0x9a968a]);
+        this.batch.box(x, 0.12, z, 1.3, 0.24, 2.4, 0x7a766c, { ao: 1 });
+        this.batch.box(x, 0.8, z, 1.05, 1.15, 2.1, col, { jitter: 0.12 });
+        this.batch.box(x, 1.45, z, 1.2, 0.16, 2.25, col, { jitter: 0.08 });
+        this.batch.box(x, 1.6, z, 0.5, 0.14, 2.15, col, { jitter: 0.08 });
+        if (r.chance(0.4)) {
+          this.batch.box(x, 2.05, z - 0.9, 0.08, 0.75, 0.08, col);
+          this.batch.box(x, 2.18, z - 0.9, 0.42, 0.08, 0.08, col);
+        }
+        this.world.addBoxC(x, 0.8, z, 1.3, 1.6, 2.4, { occlude: true, kind: 'tomb' });
+        if (r.chance(0.16)) this._candles(x, z - 1.4, 0.02);
+        if (r.chance(0.08)) this.loot.spawnItem(rollItem(r, 'crypt', this.zone.lootTier), new THREE.Vector3(x + r.range(-0.2, 0.2), 1.53, z + r.range(-0.6, 0.6)), r.range(0, 6));
+        if (r.chance(0.18)) this.candidates.dormant.push({ x: x + 1.1, z: z + r.range(-0.8, 0.8) });
+      }
+      for (let k = 0; k < 2; k++) this.candidates.street.push({ x: cx + r.range(-1, 1), z });
+    }
+    // a weeping angel over the aisle
+    this.batch.box(cx, 0.6, cz, 0.9, 1.2, 0.9, 0x8a8a84);
+    this.batch.box(cx, 1.75, cz, 0.36, 1.1, 0.3, 0x9a9a92);
+    this.batch.box(cx, 2.45, cz + 0.02, 0.22, 0.26, 0.24, 0x9a9a92);
+    this.batch.box(cx - 0.32, 1.9, cz - 0.12, 0.5, 0.9, 0.06, 0x8e8e86, { rotY: -0.5 });
+    this.batch.box(cx + 0.32, 1.9, cz - 0.12, 0.5, 0.9, 0.06, 0x8e8e86, { rotY: 0.5 });
+    this.world.addBoxC(cx, 1.2, cz, 0.95, 2.4, 0.95, { occlude: true, kind: 'statue' });
+    this._candles(cx, cz + 0.8, 0.02);
+    for (let i = 0; i < 3; i++) this._tree(r.chance(0.5) ? x0 + 1.5 : x1 - 1.5, r.range(z0 + 2, z1 - 2));
+  }
+
+  _hesco(x, z, alongX, len) {
+    const col = 0x8f8262;
+    for (let s0 = 0; s0 < len; s0 += 1.1) {
+      const px = alongX ? x - len / 2 + s0 + 0.55 : x, pz = alongX ? z : z - len / 2 + s0 + 0.55;
+      this.batch.box(px, 0.95, pz, 1.08, 1.9, 1.08, col, { jitter: 0.07, top: 0x6a5e44 });
+    }
+    this.world.addBoxC(x, 0.95, z, alongX ? len : 1.1, 1.9, alongX ? 1.1 : len, { occlude: true, kind: 'hesco' });
+  }
+
+  _apc(x, z, ang) {
+    const at = (lx, lz) => [x + lx * Math.cos(ang) + lz * Math.sin(ang), z - lx * Math.sin(ang) + lz * Math.cos(ang)];
+    this.batch.box(x, 1.2, z, 2.6, 1.6, 6.0, 0x2e343a, { rotY: ang, ao: 1 });
+    const [tx, tz] = at(0, -0.6);
+    this.batch.box(tx, 2.25, tz, 1.4, 0.5, 1.8, 0x262b30, { rotY: ang, ao: 1 });
+    const [bx, bz] = at(0, -1.8);
+    this.batch.box(bx, 2.3, bz, 0.12, 0.12, 1.8, 0x1a1d20, { rotY: ang });
+    for (const lz of [-2.1, 0, 2.1]) for (const lx of [-1.35, 1.35]) {
+      const [wx, wz] = at(lx, lz);
+      this.batch.box(wx, 0.5, wz, 0.3, 1.0, 1.0, 0x121212, { rotY: ang, ao: 1 });
+    }
+    const [sx, sz] = at(1.31, 0);
+    this.batch.box(sx, 1.5, sz, 0.02, 0.18, 5.2, 0x9a1e18, { rotY: ang });
+    const ca = Math.abs(Math.cos(ang)), sa = Math.abs(Math.sin(ang));
+    this.world.addBoxC(x, 1.2, z, 2.6 * ca + 6 * sa, 2.4, 2.6 * sa + 6 * ca, { occlude: true, kind: 'car' });
+    this.map.props.push({ x, z, w: 2.6 * ca + 6 * sa, d: 2.6 * sa + 6 * ca });
+  }
+
+  // An active Living Guard compound: Hesco walls, barracks, a comms mast, soldiers.
+  _compound(x0, z0, x1, z1) {
+    const r = this.rng;
+    this.clear = [];
+    const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+    const m = 1.2;
+    const gate = 4.5;
+    // walls with a gate on the north and south faces
+    this._hesco((x0 + m + cx - gate / 2) / 2, z0 + m, true, cx - gate / 2 - x0 - m);
+    this._hesco((cx + gate / 2 + x1 - m) / 2, z0 + m, true, x1 - m - cx - gate / 2);
+    this._hesco((x0 + m + cx - gate / 2) / 2, z1 - m, true, cx - gate / 2 - x0 - m);
+    this._hesco((cx + gate / 2 + x1 - m) / 2, z1 - m, true, x1 - m - cx - gate / 2);
+    this._hesco(x0 + m, cz, false, z1 - z0 - 2 * m - 1.1);
+    this._hesco(x1 - m, cz, false, z1 - z0 - 2 * m - 1.1);
+    this.decals.add('guardsign', cx - gate / 2 - 1.6, 1.2, z0 + m - 0.56, 0, -1, 1.6, 0.8, 0);
+    this.decals.add('guardsign', cx + gate / 2 + 1.6, 1.2, z1 - m + 0.56, 0, 1, 1.6, 0.8, 1);
+    // soldiers on both gates
+    for (const [gz, face] of [[z0 + m - 1.4, Math.PI], [z1 - m + 1.4, 0]]) {
+      this.candidates.guardPost.push({ x: cx - 1.4, z: gz, facing: face });
+      this.candidates.guardPost.push({ x: cx + 1.4, z: gz, facing: face });
+    }
+    // two barracks
+    for (const side of [-1, 1]) {
+      const bw = 8, bd = 5.2;
+      const bx0 = cx + side * 5.2 - bw / 2, bz0 = cz - bd / 2 + side * 3.6;
+      const face = side < 0 ? 's' : 'n';
+      const ops = { e: [], w: [] };
+      ops[face] = [{ c: bx0 + bw / 2, w: 1.2, kind: 'door' }, { c: bx0 + 1.6, w: 1.0, kind: 'window' }, { c: bx0 + bw - 1.6, w: 1.0, kind: 'window' }];
+      const inner = this._building({ x0: bx0, z0: bz0, x1: bx0 + bw, z1: bz0 + bd, h: 3.0, wall: 0x3a4046, inner: 0x5a6068, roof: 0x2a2e33, floor: 0x3a3a38, trim: 0x9a1e18, openings: ops, kind: 'barracks', surface: 'metal' });
+      const rm = this._room(inner.x0, inner.z0, inner.x1, inner.z1, 'barracks');
+      const back = face === 's' ? 'n' : 's';
+      this._prop('bed', rm, [back]);
+      this._prop('bed', rm, [back]);
+      this._container('guardlocker', rm, 'guard', ['e', 'w']);
+      if (r.chance(0.7)) this._container('military', rm, 'guard', [back, 'e', 'w']);
+      this._container('desk', rm, 'desk', ['e', 'w', back]);
+      this._markInterior(rm, 0.05);
+      this.candidates.guardPost.push({ x: bx0 + bw / 2 + r.range(-2, 2), z: face === 's' ? bz0 + bd + 1.6 : bz0 - 1.6, facing: face === 's' ? 0 : Math.PI });
+    }
+    // comms mast with its red light
+    const mx = x0 + m + 3.2, mz = z0 + m + 3.2;
+    for (let i = 0; i < 6; i++) {
+      const w = 1.6 - i * 0.22, y = i * 2.4 + 1.2;
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) this.batch.box(mx + (sx * w) / 2, y, mz + (sz * w) / 2, 0.08, 2.4, 0.08, 0x2a2e33);
+      this.batch.box(mx, y + 1.2, mz, w + 0.1, 0.06, w + 0.1, 0x2a2e33);
+    }
+    this.glow.box(mx, 14.7, mz, 0.25, 0.25, 0.25, 0xff2a18, { jitter: 0 });
+    this.world.addBoxC(mx, 7, mz, 1.8, 14, 1.8, { occlude: false, kind: 'mast' });
+    // floodlights, an APC, a generator, supplies
+    for (const [fx, fz] of [[x1 - m - 1.6, z0 + m + 1.6], [x0 + m + 1.6, z1 - m - 1.6]]) {
+      this.batch.cylinder(fx, 3, fz, 0.1, 0.14, 6, 0x2a2e33, 6);
+      this.batch.box(fx, 6.1, fz, 1.2, 0.5, 0.3, 0x1e2226, { rotY: Math.atan2(cx - fx, cz - fz) });
+      this.glow.box(fx + Math.sign(cx - fx) * 0.12, 6.1, fz + Math.sign(cz - fz) * 0.12, 1.0, 0.36, 0.34, 0xfff2d8, { rotY: Math.atan2(cx - fx, cz - fz), jitter: 0 });
+      this.world.addBoxC(fx, 3, fz, 0.3, 6, 0.3, { occlude: false, kind: 'pole' });
+      this.floods.push({ pos: new THREE.Vector3(fx, 5.9, fz), target: new THREE.Vector3(cx, 0, cz) });
+    }
+    this._apc(x1 - m - 2.3, cz - 3.2, r.chance(0.5) ? 0 : Math.PI);
+    this.batch.box(x0 + m + 2.2, 0.7, cz + 4.5, 1.6, 1.4, 1.0, 0x3d444a, { ao: 1 });
+    this.glow.box(x0 + m + 2.2, 1.1, cz + 5.01, 0.12, 0.08, 0.02, 0x40ff60, { jitter: 0 });
+    this.world.addBoxC(x0 + m + 2.2, 0.7, cz + 4.5, 1.6, 1.4, 1.0, { occlude: false, kind: 'junk' });
+    this._crateAt(cx + r.range(-2, 2), cz, 'military', 0);
+    this._crateAt(x0 + m + 2.2, cz - 3.5, 'military', Math.PI / 2);
+    this._crateAt(cx + 5, z0 + m + 1.3, 'guardlocker', 0);
+    for (let i = 0; i < 3; i++) this.batch.box(x0 + m + 5 + i * 1.3, 0.45, z1 - m - 2.2, 1.1, 0.9, 1.1, 0x4d5233, { rotY: r.range(-0.2, 0.2) });
+    for (let i = 0; i < 4; i++) this.candidates.patrol.push({ x: r.range(x0 + 4, x1 - 4), z: r.range(z0 + 4, z1 - 4) });
   }
 
   _fireBarrel(x, z) {
@@ -1023,6 +1398,14 @@ export class CityGen {
       const c = (a0 + a1) / 2, len = a1 - a0;
       if (axis === 'x') this._solid(fixed, wallH / 2, c, 0.7, wallH, len, leveeCol, { occlude: false, kind: 'levee', ao: 1 });
       else this._solid(c, wallH / 2, fixed, len, wallH, 0.7, leveeCol, { occlude: false, kind: 'levee', ao: 1 });
+      // paint on the city side of the levee
+      for (let a = a0 + 3; a < a1 - 3; a += r.range(14, 30)) {
+        if (!r.chance(0.55)) continue;
+        const inward = -Math.sign(fixed);
+        const kind = r.chance(0.8) ? 'graffiti' : 'guardsign';
+        if (axis === 'x') this.decals.add(kind, fixed + inward * 0.36, 0.55, a, inward, 0, 1.5, 0.75);
+        else this.decals.add(kind, a, 0.55, fixed + inward * 0.36, 0, inward, 1.5, 0.75);
+      }
     };
     for (const axis of ['x', 'z']) {
       for (const sign of [-1, 1]) {
@@ -1109,7 +1492,7 @@ export class CityGen {
     };
   }
 
-  // Silhouettes beyond the levee: drowned rooftops, poles, and the bell tower.
+  // Silhouettes beyond the levee: drowned rooftops, poles and dead trees.
   _horizon() {
     const r = this.rng;
     const cityBatch = this.batch;
@@ -1133,18 +1516,3 @@ export class CityGen {
     this.batch = cityBatch;
   }
 }
-
-// Container catalogue: size, color, label, door style.
-export const CONTAINER_SPECS = {
-  dresser: { w: 1.05, d: 0.5, h: 0.92, color: 0x5a4030, label: 'Dresser', door: 'drawer' },
-  kitchen: { w: 1.7, d: 0.62, h: 0.92, color: 0xa89e88, top: 0x4a4440, label: 'Kitchen Cabinets', door: 'hinge' },
-  fridge: { w: 0.76, d: 0.7, h: 1.8, color: 0xc9c5b8, label: 'Refrigerator', door: 'hinge', sound: 'metal' },
-  medcab: { w: 0.55, d: 0.18, h: 0.62, color: 0xc8c6be, label: 'Medicine Cabinet', door: 'hinge', mount: 1.3, sound: 'metal' },
-  toolbox: { w: 0.85, d: 0.5, h: 1.0, color: 0x8a2a1e, label: 'Tool Chest', door: 'drawer', sound: 'metal' },
-  desk: { w: 1.2, d: 0.6, h: 0.76, color: 0x6a4a34, label: 'Desk', door: 'drawer' },
-  locker: { w: 0.62, d: 0.5, h: 1.9, color: 0x5a6468, label: 'Locker', door: 'hinge', sound: 'metal' },
-  crate: { w: 0.95, d: 0.95, h: 0.8, color: 0x7a5c40, top: 0x6a4c34, label: 'Crate', door: 'lid' },
-  military: { w: 1.1, d: 0.6, h: 0.55, color: 0x4d5233, top: 0x444a2c, label: 'Military Crate', door: 'lid', sound: 'metal' },
-  trunk: { w: 1.5, d: 0.2, h: 0.45, color: 0x2a2a2a, label: 'Car Trunk', door: 'lid', sound: 'metal' },
-  shelf: { w: 2.4, d: 0.6, h: 1.7, color: 0x5a5e62, label: 'Store Shelf', door: 'none' },
-};

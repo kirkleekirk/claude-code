@@ -1,6 +1,6 @@
 import { CITY_HALF, WORLD_HALF } from '../world/CityGen.js';
 
-// Hand-drawn style map of the raid area: streets, buildings, docks, you.
+// Hand-drawn style map of the raid area: streets or boardwalks, buildings, docks, you.
 
 export class MapUI {
   constructor(root) {
@@ -9,7 +9,7 @@ export class MapUI {
     o.style.display = 'none';
     o.style.pointerEvents = 'none';
     o.innerHTML = `<div class="mapwrap"><canvas width="900" height="900" aria-label="Map of the area"></canvas>
-      <div class="legend"><span><i style="background:#c9a24a"></i>Skiff / extraction</span><span><i style="background:#e4ddc9"></i>You</span><span><i style="background:#4a4f48"></i>Buildings</span><span><i style="background:#d58a5a"></i>Bell tower</span><span class="key">M</span></div></div>`;
+      <div class="legend"><span><i style="background:#c9a24a"></i>Skiff / extraction</span><span><i style="background:#e4ddc9"></i>You</span><span><i style="background:#4a4f48"></i>Buildings</span><span><i style="background:#e2402e"></i>Guard mast</span><span class="key">M</span></div></div>`;
     root.appendChild(o);
     this.el = o;
     this.canvas = o.querySelector('canvas');
@@ -19,10 +19,10 @@ export class MapUI {
 
   get open() { return this.el.style.display !== 'none'; }
 
-  setData(map, name, towerPos) {
+  setData(map, name, mastPos) {
     this.map = map;
     this.name = name;
-    this.towerPos = towerPos;
+    this.mastPos = mastPos;
     this.base = null;
   }
 
@@ -50,14 +50,18 @@ export class MapUI {
       for (let x = 0; x <= S; x += 20) g.lineTo(x, y + Math.sin(x * 0.03 + i) * 3);
       g.stroke();
     }
-    const [lx0, lz0] = this._w2c(-CITY_HALF - 0.6, -CITY_HALF - 0.6);
-    const [lx1, lz1] = this._w2c(CITY_HALF + 0.6, CITY_HALF + 0.6);
-    g.fillStyle = '#2a2c24';
-    g.fillRect(lx0, lz0, lx1 - lx0, lz1 - lz0);
-    g.strokeStyle = '#6a675e';
-    g.lineWidth = 3;
-    g.strokeRect(lx0, lz0, lx1 - lx0, lz1 - lz0);
-    g.fillStyle = '#3a3b37';
+    if (!this.map.stilts) {
+      // the levee around the city
+      const [lx0, lz0] = this._w2c(-CITY_HALF - 0.6, -CITY_HALF - 0.6);
+      const [lx1, lz1] = this._w2c(CITY_HALF + 0.6, CITY_HALF + 0.6);
+      g.fillStyle = '#2a2c24';
+      g.fillRect(lx0, lz0, lx1 - lx0, lz1 - lz0);
+      g.strokeStyle = '#6a675e';
+      g.lineWidth = 3;
+      g.strokeRect(lx0, lz0, lx1 - lx0, lz1 - lz0);
+    }
+    // streets, or boardwalk over the water
+    g.fillStyle = this.map.stilts ? '#5a4632' : '#3a3b37';
     for (const r of this.map.roads) {
       const [x0, z0] = this._w2c(r.x0, r.z0);
       const [x1, z1] = this._w2c(r.x1, r.z1);
@@ -107,16 +111,16 @@ export class MapUI {
       const tx = Math.min(S - g.measureText(label).width - 8, Math.max(8, x + 12));
       g.fillText(label, tx, z - 12);
     }
-    // bell tower direction
-    if (this.towerPos) {
-      const a = Math.atan2(this.towerPos.z, this.towerPos.x);
+    // direction of the Guard's herder mast
+    if (this.mastPos) {
+      const a = Math.atan2(this.mastPos.z, this.mastPos.x);
       const [cx, cz] = [S / 2 + Math.cos(a) * S * 0.46, S / 2 + Math.sin(a) * S * 0.46];
-      g.fillStyle = '#d58a5a';
+      g.fillStyle = '#e2402e';
       g.beginPath();
       g.arc(cx, cz, 7, 0, Math.PI * 2);
       g.fill();
       g.font = '600 16px "Barlow Condensed", sans-serif';
-      g.fillText('Bell tower', Math.min(S - 80, cx + 10), Math.max(20, cz + 5));
+      g.fillText('Guard mast', Math.min(S - 90, Math.max(8, cx + 10)), Math.max(20, Math.min(S - 8, cz + 5)));
     }
     // player arrow
     const [x, z] = this._w2c(px, pz);

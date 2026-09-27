@@ -33,6 +33,10 @@ export const ITEMS = {
   fertilizer: junk('Fertilizer', { chemicals: 2, gunpowder: 1 }, 'Ammonium nitrate, damp.'),
   fireworks: junk('Fireworks', { gunpowder: 2 }, 'Left over from a Fourth nobody got to have.'),
   phone: junk('Dead Phone', { electronics: 1, chemicals: 1 }, '47 missed calls.'),
+  keycard: { name: 'Guard Keycard', cat: 'junk', stack: 3, yields: { electronics: 2 }, desc: 'Opens a Living Guard weapons locker. Or scrap it for the chip.' },
+  dogtags: junk('Guard Dog Tags', { steel: 1, fasteners: 1 }, 'LIVING GUARD — 9TH GARRISON. Someone\'s son.'),
+  rosary: junk('Rosary', { fasteners: 1, cloth: 1 }, 'Wooden beads worn smooth.'),
+  candles: junk('Church Candles', { chemicals: 1, cloth: 1 }, 'Tallow. They burn a long time.'),
   blanket: junk('Wool Blanket', { cloth: 3 }, 'Smells like mildew.'),
 
   // ---- Food
@@ -44,6 +48,8 @@ export const ITEMS = {
   rice: { name: 'Bag of Rice', cat: 'food', stack: 3, nourish: 0, desc: 'Needs cooking. Pairs with beans.', raw: true },
   beansrice: { name: 'Red Beans & Rice', cat: 'food', stack: 2, nourish: 50, heal: 15, desc: 'Monday supper, any day now.' },
   gumbo: { name: 'Gumbo', cat: 'food', stack: 2, nourish: 75, heal: 30, desc: 'Dark roux, whatever else was on hand.' },
+  tlg_ration: { name: 'Guard Ration', cat: 'food', stack: 3, nourish: 45, heal: 10, desc: 'Grey bar stamped "COMPLETE NUTRITION — PROPERTY OF THE LIVING GUARD".' },
+  catfish: { name: 'Smoked Catfish', cat: 'food', stack: 3, nourish: 30, heal: 5, desc: 'Somebody out in the stilts was still eating well.' },
 
   // ---- Medicine
   bandage: { name: 'Bandage', cat: 'med', stack: 4, heal: 25, useTime: 1.4, desc: 'Wrap it tight. Restores 25 health.' },
@@ -51,6 +57,7 @@ export const ITEMS = {
   pills: { name: 'Painkillers', cat: 'med', stack: 4, heal: 10, useTime: 0.6, regenBoost: 60, desc: 'Doubles stamina recovery for a minute.' },
   medkit: { name: 'Medkit', cat: 'med', stack: 2, heal: 65, useTime: 2.4, desc: 'Sutures and gauze. Restores 65 health.' },
   adrenaline: { name: 'Adrenaline', cat: 'med', stack: 2, heal: 0, useTime: 0.5, adrenaline: 30, desc: 'Full stamina, no drain for 30 seconds.' },
+  nano_injector: { name: 'Guard Injector', cat: 'med', stack: 2, heal: 50, useTime: 0.5, desc: 'Guard field medicine. Restores 50 health in seconds.' },
 
   // ---- Ammo
   ammo_9mm: { name: '9mm Rounds', cat: 'ammo', stack: 36, desc: 'For the pistol.' },
@@ -58,6 +65,7 @@ export const ITEMS = {
   ammo_12g: { name: '12 Gauge Shells', cat: 'ammo', stack: 16, desc: 'For the pump shotgun.' },
   ammo_308: { name: '.308 Rounds', cat: 'ammo', stack: 15, desc: 'For the bolt-action rifle.' },
   bolt: { name: 'Crossbow Bolts', cat: 'ammo', stack: 10, desc: 'Silent. Pull them back out of the dead.' },
+  ecell: { name: 'Energy Cell', cat: 'ammo', stack: 6, desc: 'Guard power cell. One cell charges a laser weapon; an ejected cell is spent.' },
 
   // ---- Utility
   battery: { name: 'Battery', cat: 'util', stack: 5, desc: 'Refills your flashlight.' },
@@ -75,6 +83,7 @@ export const ITEMS = {
   bat: { name: 'Baseball Bat', cat: 'weapon', slot: 'melee', kind: 'melee', type: 'blunt', pierce: 0, head: 50, body: 20, reach: 1.8, speed: 1.15, stamina: 14, dur: 40, stick: 0, knock: 1.0, desc: 'Long reach. Knocks them flat.' },
   crowbar: { name: 'Crowbar', cat: 'weapon', slot: 'melee', kind: 'melee', type: 'blunt', pierce: 0, head: 54, body: 16, reach: 1.65, speed: 1.1, stamina: 13, dur: 90, stick: 0, knock: 0.7, desc: 'Nearly indestructible.' },
   machete: { name: 'Machete', cat: 'weapon', slot: 'melee', kind: 'melee', type: 'chop', pierce: 0, head: 70, body: 22, reach: 1.7, speed: 0.95, stamina: 12, dur: 55, stick: 0.2, knock: 0.45, sever: 0.8, desc: 'Takes heads when you commit to the swing.' },
+  shock_baton: { name: 'Shock Baton', cat: 'weapon', slot: 'melee', kind: 'melee', type: 'blunt', pierce: 0, head: 34, body: 14, reach: 1.5, speed: 0.9, stamina: 9, dur: 80, stick: 0, knock: 1.35, shock: true, desc: 'Guard issue. A crack of current drops the dead where they stand.' },
   axe: { name: 'Fire Axe', cat: 'weapon', slot: 'melee', kind: 'melee', type: 'chop', pierce: 0, head: 110, body: 30, reach: 1.85, speed: 1.35, stamina: 19, dur: 70, stick: 0.3, knock: 0.9, sever: 0.65, heavy: true, desc: 'Slow, brutal. Splits riot helmets.' },
 
   // ---- Firearms
@@ -83,6 +92,8 @@ export const ITEMS = {
   revolver: { name: '.38 Revolver', cat: 'weapon', slot: 'sidearm', kind: 'gun', action: 'cyl', ammo: 'ammo_38', cap: 6, headDmg: 160, bodyDmg: 35, legDmg: 45, pellets: 1, spreadHip: 2.2, spreadAds: 0.4, recoil: 3.4, rate: 0.35, noise: 55, dur: 220, desc: 'Six shots. Load them one at a time.' },
   shotgun: { name: 'Pump Shotgun', cat: 'weapon', slot: 'long', kind: 'gun', action: 'pump', ammo: 'ammo_12g', cap: 5, headDmg: 42, bodyDmg: 16, legDmg: 22, pellets: 9, pelletSpread: 3.8, spreadHip: 2.0, spreadAds: 0.6, recoil: 6.5, rate: 0.3, noise: 64, dur: 120, twoHanded: true, desc: 'Nine pellets. Pump after every shot.' },
   rifle: { name: 'Hunting Rifle', cat: 'weapon', slot: 'long', kind: 'gun', action: 'bolt', ammo: 'ammo_308', cap: 5, headDmg: 400, bodyDmg: 60, legDmg: 100, pellets: 1, spreadHip: 4.5, spreadAds: 0.06, recoil: 5.5, rate: 0.5, noise: 85, dur: 140, zoom: 30, penetrate: 2, armorPierce: true, twoHanded: true, desc: 'Bolt action with a 4x scope. Punches through two skulls.' },
+  photon_pistol: { name: 'Guard Photon Pistol', cat: 'weapon', slot: 'sidearm', kind: 'gun', action: 'mag', energy: true, laser: true, ammo: 'ecell', cap: 10, headDmg: 140, bodyDmg: 38, legDmg: 55, pellets: 1, spreadHip: 1.6, spreadAds: 0.25, recoil: 0.9, rate: 0.28, noise: 20, dur: 150, armorPierce: true, desc: 'Experimental. Ten bolts of light per cell, barely louder than a cough.' },
+  arc_carbine: { name: 'Guard Arc Carbine', cat: 'weapon', slot: 'long', kind: 'gun', action: 'mag', energy: true, laser: true, ammo: 'ecell', cap: 18, headDmg: 240, bodyDmg: 60, legDmg: 90, pellets: 1, spreadHip: 1.8, spreadAds: 0.1, recoil: 1.3, rate: 0.2, noise: 28, dur: 150, armorPierce: true, penetrate: 2, twoHanded: true, desc: 'The Living Guard\'s service weapon. Burns through helmets and the head behind them.' },
   crossbow: { name: 'Crossbow', cat: 'weapon', slot: 'long', kind: 'gun', action: 'xbow', ammo: 'bolt', cap: 1, headDmg: 400, bodyDmg: 45, legDmg: 60, pellets: 1, spreadHip: 2.8, spreadAds: 0.15, recoil: 1.2, rate: 0.4, noise: 3, dur: 160, armorPierce: true, twoHanded: true, retrievable: true, desc: 'Nearly silent. Recover your bolts from the bodies.' },
 };
 

@@ -30,6 +30,7 @@ export class HUD {
     this.lowEl = el(r, 'lowhp');
     this.grabEl = el(r, 'grabfx');
     this.gutsEl = el(r, 'gutsfx');
+    this.spotEl = el(r, 'spotted', '<i></i><span>Guard has eyes on you</span>');
     this.scopeEl = el(r, 'scope');
     this.xhair = el(r, 'xhair');
     this.charge = el(r, 'charge', '<svg viewBox="0 0 30 30"><circle cx="15" cy="15" r="14"/></svg>');
@@ -63,14 +64,14 @@ export class HUD {
 
     const w = el(r, 'wrist');
     w.innerHTML = `
-      <div class="clock"><span class="time num">5:00 PM</span><span class="toll">Toll in 0:00</span></div>
+      <div class="clock"><span class="time num">5:00 PM</span><span class="sweep">Sweep in 0:00</span></div>
       <div class="row"><span class="label">Health</span><div class="bar hp"><em></em><span></span></div><span class="v hpv">100</span></div>
       <div class="row"><span class="label">Stamina</span><div class="bar st"><span></span></div><span class="v stv">100</span></div>
       <div class="row"><span class="label">Light</span><div class="bar bat"><span></span></div><span class="v batv">OFF</span></div>
       <div class="status"></div>`;
     this.statusEl = w.querySelector('.status');
     this.timeEl = w.querySelector('.time');
-    this.tollEl = w.querySelector('.toll');
+    this.sweepEl = w.querySelector('.sweep');
     this.hpBar = w.querySelector('.bar.hp > span');
     this.hpCap = w.querySelector('.bar.hp > em');
     this.hpV = w.querySelector('.hpv');
@@ -172,16 +173,17 @@ export class HUD {
       while (rel < -Math.PI) rel += Math.PI * 2;
       me.style.left = `${(heading + rel) * this.pxPerRad}px`;
       me.className = 'mk ' + (mk.kind || '');
-      const txt = mk.kind === 'bell' ? '' : `${Math.round(Math.hypot(dx, dz))}m`;
+      const txt = mk.kind === 'mast' ? '' : `${Math.round(Math.hypot(dx, dz))}m`;
       const sp = me.lastElementChild;
       if (sp.textContent !== txt) sp.textContent = txt;
     }
 
     // wrist
     this._set('time', this.timeEl, 'text', fmtClock(s.clock));
-    const tollTxt = s.tolled ? (s.overrun ? 'Overrun' : 'Tolled') : `Toll in ${fmtSec(s.tollIn)}`;
-    this._set('toll', this.tollEl, 'text', tollTxt);
-    this._set('tollc', this.tollEl, 'class', 'toll' + (s.tolled || s.tollIn < 45 ? ' now' : ''));
+    const sweepTxt = s.swept ? (s.overrun ? 'Overrun' : 'Sweep on') : `Sweep in ${fmtSec(s.sweepIn)}`;
+    this._set('sweep', this.sweepEl, 'text', sweepTxt);
+    this._set('sweepc', this.sweepEl, 'class', 'sweep' + (s.swept || s.sweepIn < 60 ? ' now' : ''));
+    this._set('spot', this.spotEl, 'opacity', s.spotted ? '1' : '0');
     this._set('hp', this.hpBar, 'width', `${(s.health / 100) * 100}%`);
     this.hpCap.style.left = `${s.maxHealth}%`;
     this.hpCap.style.right = '0';
@@ -237,7 +239,9 @@ export class HUD {
 
     // screen fx
     this.hurtEl.style.opacity = String(Math.min(1, s.hurt));
-    this.lowEl.style.opacity = s.health < s.maxHealth * 0.3 ? String(0.3 + (1 - s.health / (s.maxHealth * 0.3)) * 0.6) : '0';
+    const low = s.health < s.maxHealth * 0.3;
+    this.lowEl.style.opacity = low ? String(0.3 + (1 - s.health / (s.maxHealth * 0.3)) * 0.6) : '0';
+    this._set('low', this.lowEl, 'class', low ? 'lowhp on' : 'lowhp');
     this.grabEl.style.opacity = s.grab ? '0.9' : '0';
     this.scopeEl.style.opacity = s.scope ? '1' : '0';
   }

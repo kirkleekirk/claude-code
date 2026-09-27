@@ -118,7 +118,7 @@ class App {
     const o = this._overlay(`
       <div id="title">
         <h1><span>the</span>Last Toll</h1>
-        <p class="tag">A flooded parish. A bell that wakes the dead. Scavenge what you can and get back to the water before it rings.</p>
+        <p class="tag">A flooded parish, the dead, and the Living Guard: an army rebuilt on the old government's secrets that turned on everyone outside its walls. Every night it sweeps the parish, and whoever is still out there pays the toll.</p>
         <div class="acts">
           ${this.hasSave ? `<button class="btn primary go" data-t="continue">Continue · Day ${p.day}</button><button class="btn go" data-t="new">New game</button>` : '<button class="btn primary go" data-t="new">Begin</button>'}
           <button class="btn go" data-t="howto">How to play</button>
@@ -176,14 +176,14 @@ class App {
 
   // ---- raid -----------------------------------------------------------------------
 
-  startRaid(zoneId) {
+  startRaid(zoneId, seed) {
     const zone = zoneById(zoneId);
     if (this.hubUI) { this.hubUI.dispose(); this.hubUI = null; }
     this._overlay(`<div class="sheet pause-card"><h2>${esc(zone.name)}</h2><p class="sub">The skiff noses into the flood line…</p></div>`);
     // let the loading card paint before the (synchronous) world build
     setTimeout(() => {
       this.profile.stats.raids++;
-      this.raid = new Raid(this, { zone, profile: this.profile });
+      this.raid = new Raid(this, { zone, profile: this.profile, seed });
       this.raid.start();
       this.state = 'raid';
       this.raid.setPaused(true);
@@ -211,7 +211,7 @@ class App {
     const o = this._overlay(`
       <div class="sheet pause-card">
         <h2>${first ? esc(raid.zone.name) : 'Paused'}</h2>
-        <p class="sub">${first ? `The bell tolls in ${fmtSec(raid.zone.tollMinutes * 60)}. Skiffs are marked on your compass.` : 'The dead are waiting.'}</p>
+        <p class="sub">${first ? `The Guard sweeps this sector in ${fmtSec(raid.zone.sweepMinutes * 60)}. Skiffs are marked on your compass; the red mark is their mast.` : 'The dead are waiting.'}</p>
         <div class="keys">
           <span class="key">Mouse L</span><span>Swing / stab — hold to wind up · fire</span>
           <span class="key">Q</span><span>Grab by the collar, then stab · <span class="key">V</span> shove</span>
@@ -297,6 +297,9 @@ class App {
           <div><span class="label">Blade kills</span><b>${out.stabKills}</b></div>
           <div><span class="label">Searched</span><b>${out.searched}</b></div>
           <div><span class="label">Bites</span><b>${out.bites}</b></div>
+          ${out.guardKills ? `<div><span class="label">Guardsmen</span><b>${out.guardKills}</b></div>` : ''}
+          ${out.drones ? `<div><span class="label">Drones downed</span><b>${out.drones}</b></div>` : ''}
+          ${out.drowned ? `<div><span class="label">Drowned</span><b>${out.drowned}</b></div>` : ''}
         </div>
         <h3>${survived ? 'Brought home' : 'Lost'}</h3>
         <div class="haul">${haul}</div>

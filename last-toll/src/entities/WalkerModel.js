@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import { Batcher } from '../world/Batcher.js';
+import { weaponModel } from '../world/Models.js';
 
 // Articulated low-poly walker built from boxes sharing one geometry.
 // Local forward is +Z. Bones are plain Groups so the AI can pose them directly,
 // and hit volumes are read from marker objects in world space.
 
 const WALKER_MAT = new THREE.MeshLambertMaterial({ vertexColors: true });
+const VISOR_MAT = new THREE.MeshBasicMaterial({ color: 0xff2a18 });
 
 const SKIN = [0x8a9078, 0x7a8470, 0x9a9484, 0x6f7a66, 0x8a8070, 0x5f5a4e, 0x7c7462];
 const SHIRT = [0x5a4a3a, 0x3a4a5a, 0x6a3a3a, 0x7a7a6a, 0x4a5a3a, 0x2a2a2a, 0x8a7a5a, 0x5a3a5a, 0x9a9a8a, 0x3a5a5a];
@@ -17,10 +19,11 @@ const _p = new THREE.Vector3();
 // Each walker is a single skinned mesh: every box is rigidly bound to one bone,
 // so the whole body costs one draw call. Parts are hidden by scaling their bone to zero.
 export class WalkerModel {
-  constructor(rng, { riot = false, fresh = false } = {}) {
-    const skin = rng.pick(SKIN);
-    const shirt = riot ? 0x22262a : rng.pick(SHIRT);
-    const pants = riot ? 0x1e2226 : rng.pick(PANTS);
+  constructor(rng, { riot = false, fresh = false, soldier = false } = {}) {
+    const skin = soldier ? rng.pick([0xb08a70, 0x8a6a50, 0x6a4a38, 0xc8a080]) : rng.pick(SKIN);
+    const shirt = soldier ? 0x2e343a : riot ? 0x22262a : rng.pick(SHIRT);
+    const pants = soldier ? 0x282c31 : riot ? 0x1e2226 : rng.pick(PANTS);
+    this.soldier = soldier;
     const dark = 0x151210;
     const eye = 0xd2d0b6;
     const armor = 0x0f1114;
@@ -44,8 +47,14 @@ export class WalkerModel {
     this.torso = bone(this.hips, 0, 0.06, 0);
     const girth = rng.range(0.92, 1.12);
     const tp = [[0, 0.28, 0, 0.4 * girth, 0.56, 0.22 * girth, shirt]];
-    if (rng.chance(0.8)) tp.push([rng.range(-0.1, 0.1), rng.range(0.15, 0.45), 0.112 * girth, rng.range(0.1, 0.24), rng.range(0.1, 0.3), 0.01, BLOOD]);
-    if (rng.chance(0.5)) tp.push([rng.range(-0.12, 0.12), rng.range(0.1, 0.4), 0.113 * girth, 0.08, 0.12, 0.012, skin]);
+    if (soldier) {
+      // Living Guard plate carrier with the garrison's red bar
+      tp.push([0, 0.3, 0, 0.46 * girth, 0.48, 0.28 * girth, 0x3d444a]);
+      tp.push([0, 0.42, 0.145 * girth, 0.1, 0.09, 0.012, 0xd0c8b8]);
+      tp.push([0, 0.33, 0.146 * girth, 0.2, 0.028, 0.012, 0x9a1e18]);
+      tp.push([-0.12, 0.12, 0.15 * girth, 0.08, 0.1, 0.04, 0x2a2f34], [0.12, 0.12, 0.15 * girth, 0.08, 0.1, 0.04, 0x2a2f34]);
+    } else if (rng.chance(0.8)) tp.push([rng.range(-0.1, 0.1), rng.range(0.15, 0.45), 0.112 * girth, rng.range(0.1, 0.24), rng.range(0.1, 0.3), 0.01, BLOOD]);
+    if (!soldier && rng.chance(0.5)) tp.push([rng.range(-0.12, 0.12), rng.range(0.1, 0.4), 0.113 * girth, 0.08, 0.12, 0.012, skin]);
     if (riot) {
       tp.push([0, 0.3, 0, 0.44 * girth, 0.46, 0.27 * girth, armor]);
       tp.push([0, 0.36, 0.14 * girth, 0.2, 0.12, 0.01, 0xa8a8a0]);
@@ -62,12 +71,15 @@ export class WalkerModel {
       [0.05, 0.16, 0.122, 0.022, 0.014, 0.01, eye],
       [0, 0.26, -0.01, 0.21, 0.04, 0.23, rng.pick([0x2a2218, 0x4a3a2a, 0x6a6a60, 0x1a1a1a])],
     ];
-    if (rng.chance(0.6)) hp.push([0, 0.02, 0.118, 0.1, 0.08, 0.01, BLOOD]);
+    if (!soldier && rng.chance(0.6)) hp.push([0, 0.02, 0.118, 0.1, 0.08, 0.01, BLOOD]);
     add(this.headGroup, hp);
     this.jaw = bone(this.headGroup, 0, 0.04, 0.02);
     add(this.jaw, [[0, -0.02, 0.03, 0.16, 0.05, 0.14, skin], [0, -0.005, 0.1, 0.12, 0.015, 0.012, 0x2a0404]]);
     this.helmetBone = null;
-    if (riot) {
+    if (soldier) {
+      this.helmetBone = bone(this.headGroup, 0, 0, 0);
+      add(this.helmetBone, [[0, 0.17, -0.01, 0.25, 0.28, 0.27, 0x1f2328], [0, 0.14, 0.13, 0.215, 0.075, 0.02, 0x2a0806], [0, 0.03, 0.1, 0.18, 0.06, 0.08, 0x1f2328]]);
+    } else if (riot) {
       this.helmetBone = bone(this.headGroup, 0, 0, 0);
       add(this.helmetBone, [[0, 0.16, -0.01, 0.26, 0.3, 0.27, 0x16181b], [0, 0.12, 0.13, 0.22, 0.16, 0.02, 0x8a9aa0]]);
     }
@@ -80,7 +92,8 @@ export class WalkerModel {
 
     const arm = (side) => {
       const sh = bone(this.torso, side * 0.25 * girth, 0.5, 0);
-      add(sh, [[0, -0.15, 0, 0.09, 0.32, 0.1, rng.chance(0.4) ? skin : shirt]]);
+      add(sh, [[0, -0.15, 0, 0.09, 0.32, 0.1, !soldier && rng.chance(0.4) ? skin : shirt]]);
+      if (soldier && side < 0) add(sh, [[0, -0.08, 0, 0.1, 0.05, 0.11, 0x9a1e18]]);
       const el = bone(sh, 0, -0.31, 0);
       add(el, [[0, -0.14, 0, 0.08, 0.29, 0.08, skin], [0, -0.34, 0.01, 0.07, 0.1, 0.045, skin]]);
       const hand = new THREE.Object3D();
@@ -138,6 +151,20 @@ export class WalkerModel {
     mesh.bind(new THREE.Skeleton(bones));
     this.mesh = mesh;
 
+    if (soldier) {
+      this.visor = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.035, 0.012), VISOR_MAT);
+      this.visor.position.set(0, 0.145, 0.142);
+      this.headGroup.add(this.visor);
+      this.rifle = weaponModel('arc_carbine');
+      this.rifle.scale.setScalar(1.15);
+      this.rifle.rotation.y = Math.PI;
+      this.rifle.position.set(0.1, 0.34, 0.3);
+      this.torso.add(this.rifle);
+      this.muzzle = this.rifle.getObjectByName('muzzle');
+      this.chargeGlow = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff3a24, transparent: true, opacity: 0, fog: false }));
+      this.muzzle.add(this.chargeGlow);
+      this.limp = 0;
+    }
     this.stump.scale.setScalar(HIDDEN);
     this.legL.stump.scale.setScalar(HIDDEN);
     this.legR.stump.scale.setScalar(HIDDEN);
@@ -151,6 +178,7 @@ export class WalkerModel {
     this.jawT = rng.range(0, 10);
     this.fresh = fresh;
 
+    if (soldier) { this.limp = 0; this.hunch = 0.02; this.tilt = 0; }
     this.fall = 0; // 0 standing .. 1 lying
     this.fallDir = 1;
     this.crawler = false;
@@ -248,6 +276,21 @@ export class WalkerModel {
     R.knee.rotation.x = Math.max(0, Math.sin(ph + 1.2 + Math.PI)) * (0.3 + s * 0.6) + limp * 0.3;
     this.hips.position.y = 0.95 - Math.abs(Math.cos(ph)) * 0.04 * s - limp * 0.04 * Math.max(0, sw);
     this.hips.rotation.z = sw * 0.06 * s + limp * 0.05 * sw;
+
+    if (this.soldier) {
+      // rifle held at the ready, raised when aiming
+      const aim = p.aim || 0;
+      const lean = 0.04 + s * 0.06;
+      this.torso.rotation.set(lean - aim * 0.04, Math.sin(ph) * 0.05 * (1 - aim), 0);
+      this.headGroup.rotation.set(-lean * 0.5 + (p.lookPitch || 0) * 0.6, p.lookYaw || 0, 0);
+      AR.sh.rotation.set(-1.0 - aim * 0.4 - lean - swR * 0.05, 0.3, 0.12);
+      AR.el.rotation.x = -1.0 + aim * 0.35;
+      AL.sh.rotation.set(-1.25 - aim * 0.35 - lean, -0.35, -0.5);
+      AL.el.rotation.x = -0.45;
+      this.rifle.rotation.x = (p.lookPitch || 0) * 0.6;
+      this.jaw.rotation.x = 0;
+      return;
+    }
 
     let lean = this.hunch + s * 0.15;
     let armFwd = 0.2 + this.armLazy * 0.3;

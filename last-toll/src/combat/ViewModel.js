@@ -117,12 +117,24 @@ export class ViewModel {
     if (this.parts.sup) this.parts.sup.visible = !!(item && item.sup);
   }
 
-  muzzle(intensity = 1) {
+  muzzle(intensity = 1, laser = false) {
+    this.flash.material.color.setHex(laser ? 0xff5a3a : 0xffffff);
     this.flash.visible = true;
     this.flash.rotation.z = Math.random() * Math.PI;
     this.flash.scale.setScalar(0.7 + Math.random() * 0.6 * intensity);
     this.flashT = 0.05;
     this.flashL.intensity = 4 * intensity;
+    this.flashL.color.setHex(laser ? 0xff4a2a : 0xffb060);
+  }
+
+  // Where the muzzle is in the world, for drawing beams from the gun.
+  muzzleWorld(camera) {
+    const m = this.parts.muzzle;
+    if (!m) return null;
+    const v = m.getWorldPosition(new THREE.Vector3());
+    // view-model space -> world: the view model camera sits at the world camera
+    v.applyMatrix4(camera.matrixWorld);
+    return v;
   }
 
   kick(amount) {

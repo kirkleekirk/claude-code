@@ -23,12 +23,14 @@ export const RECIPES = [
   { id: 'r_38', bench: 'ammo', level: 2, out: ['ammo_38', 6], cost: { gunpowder: 1, scrap: 1, fasteners: 1 } },
   { id: 'r_12g', bench: 'ammo', level: 2, out: ['ammo_12g', 4], cost: { gunpowder: 2, cloth: 1, scrap: 1 } },
   { id: 'r_308', bench: 'ammo', level: 3, out: ['ammo_308', 5], cost: { gunpowder: 2, steel: 1, scrap: 1 } },
+  { id: 'r_ecell', bench: 'ammo', level: 3, out: ['ecell', 1], cost: { electronics: 2, chemicals: 1, scrap: 1 } },
   // Infirmary
   { id: 'r_bandage', bench: 'med', level: 1, out: ['bandage', 2], cost: { cloth: 3 } },
   { id: 'r_antiseptic', bench: 'med', level: 1, out: ['antiseptic', 1], cost: { chemicals: 2 } },
   { id: 'r_medkit', bench: 'med', level: 2, out: ['medkit', 1], cost: { bandage: 2, antiseptic: 1, tape: 1 } },
   { id: 'r_pills', bench: 'med', level: 2, out: ['pills', 2], cost: { chemicals: 2, glue: 1 } },
   { id: 'r_adrenaline', bench: 'med', level: 3, out: ['adrenaline', 1], cost: { chemicals: 3, pills: 1 } },
+  { id: 'r_injector', bench: 'med', level: 3, out: ['nano_injector', 1], cost: { medkit: 1, electronics: 1 } },
   // Galley
   { id: 'r_beansrice', bench: 'kitchen', level: 1, out: ['beansrice', 1], cost: { beans: 1, rice: 1 } },
   { id: 'r_gumbo', bench: 'kitchen', level: 2, out: ['gumbo', 1], cost: { beans: 2, rice: 1, crackers: 1 } },

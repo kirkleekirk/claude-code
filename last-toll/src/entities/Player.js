@@ -187,10 +187,12 @@ export class Player {
     const accel = len > 0.05 ? 12 : 10;
     this.vel.x = damp(this.vel.x, wx, accel, dt);
     this.vel.z = damp(this.vel.z, wz, accel, dt);
+    const px = this.pos.x, pz = this.pos.z;
     this.pos.x += (this.vel.x + this.nudgeV.x * 6) * dt;
     this.pos.z += (this.vel.z + this.nudgeV.y * 6) * dt;
     this.nudgeV.multiplyScalar(Math.exp(-dt * 12));
     this.world.resolveCircle(this.pos, this.radius, 0.35, this.crouched ? 1.1 : 1.7);
+    this.world.constrain(this.pos, px, pz, this.radius * 0.8);
 
     // stamina
     if (this.adrenaline > 0) {

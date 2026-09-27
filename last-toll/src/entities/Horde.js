@@ -77,7 +77,9 @@ export class Walker {
   get isDown() { return this.state === 'down' || this.state === 'dormant' || this.state === 'getup'; }
   get canAct() { return !this.dead && this.state !== 'dormant' && this.state !== 'down' && this.state !== 'getup'; }
 
-  setState(s) {
+  setState(s, force = false) {
+    // climbing out of the water or going under: nothing interrupts that but death
+    if (!force && (this.state === 'emerge' || this.state === 'drown') && s !== 'dead') return;
     this.state = s;
     this.t = 0;
   }
@@ -231,6 +233,10 @@ export class Horde {
         this._updateDead(w, dt);
         continue;
       }
+      if (w.state === 'emerge' || w.state === 'drown') {
+        this._updateWater(w, dt);
+        continue;
+      }
       if (far) {
         w.lod = (w.lod + 1) % 4;
         if (w.lod !== 0 && w.state !== 'chase') continue;
@@ -278,11 +284,84 @@ export class Horde {
     }
 
     this._separate();
+    if (this.removed) {
+      this.walkers = this.walkers.filter((w) => !w.gone);
+      this.removed = false;
+    }
+  }
+
+  // Climbing out of the swamp, or going under it.
+  _updateWater(w, dt) {
+    w.t += dt;
+    if (w.state === 'emerge') {
+      const k = Math.min(1, w.t / 1.9);
+      const e = k * k * (3 - 2 * k);
+      w.pos.x = w.emergeFrom.x + (w.emergeTo.x - w.emergeFrom.x) * e;
+      w.pos.z = w.emergeFrom.z + (w.emergeTo.z - w.emergeFrom.z) * e;
+      w.pos.y = -1.8 * (1 - e);
+      w.facing = Math.atan2(w.emergeTo.x - w.emergeFrom.x, w.emergeTo.z - w.emergeFrom.z);
+      w.root.rotation.y = w.facing;
+      w.root.visible = true;
+      w.model.animate(dt, { speed: 0.4, lunge: 1, chase: true });
+      if (k >= 1) {
+        w.pos.y = 0;
+        w.setState('chase', true);
+        w.hunting = true;
+      }
+      return;
+    }
+    // drowning: over the edge, then down
+    w.vy = (w.vy || 0) - 9.8 * dt;
+    const floorY = w.pos.y > this.env.waterY + 0.2 ? w.vy * dt : -0.5 * dt;
+    if (w.pos.y > this.env.waterY && w.pos.y + floorY <= this.env.waterY) {
+      this.audio.splash(w.pos, 1);
+      this.fx.splash(new THREE.Vector3(w.pos.x, this.env.waterY + 0.05, w.pos.z));
+    }
+    w.pos.y += floorY;
+    w.pos.x += w.push.x * dt;
+    w.pos.z += w.push.z * dt;
+    w.push.multiplyScalar(Math.exp(-dt * 2));
+    w.model.animate(dt, { speed: 0, stagger: 1 });
+    if (w.t > 3.5) {
+      w.gone = true;
+      this.removed = true;
+      this.group.remove(w.root);
+      this.events?.onDrown?.(w);
+    }
+  }
+
+  drown(w) {
+    if (w.state === 'grab') this.player.releaseGrabber(w);
+    if (w.state === 'held') this.player.onHeldDied?.(w);
+    w.setState('drown', true);
+    w.vy = 1.5;
+    this.audio.snarl(w.pos);
+  }
+
+  // A walker climbs up onto the boardwalk at `to` from the water at `from`.
+  emerge(from, to, opts = {}) {
+    const w = this.spawn(from, { ...opts, state: 'emerge' });
+    w.emergeFrom = new THREE.Vector3(from.x, 0, from.z);
+    w.emergeTo = new THREE.Vector3(to.x, 0, to.z);
+    w.pos.y = -1.8;
+    this.audio.splash(new THREE.Vector3(from.x, this.env.waterY, from.z), 0.7);
+    return w;
   }
 
   _sense(w, dx, dz, dist, sight) {
     const player = this.player;
     w.seesPlayer = false;
+    // a Guard soldier closer than the player draws them off
+    w.tgtSoldier = null;
+    if (this.guards && w.state !== 'held' && w.state !== 'grab' && w.state !== 'dormant') {
+      let best = Math.min(11, dist * 0.8);
+      for (const s of this.guards.soldiers) {
+        if (s.dead) continue;
+        const d = Math.hypot(s.pos.x - w.pos.x, s.pos.z - w.pos.z);
+        if (d < best && this.world.lineOfSight(w.pos.x, 1.6, w.pos.z, s.pos.x, 1.6, s.pos.z)) { best = d; w.tgtSoldier = s; }
+      }
+      if (w.tgtSoldier && !w.isDown && w.state !== 'stagger' && w.state !== 'chase' && w.state !== 'lunge') w.setState('chase');
+    }
     if (w.state === 'held' || w.state === 'grab') { w.seesPlayer = true; return; }
     if (w.state === 'dormant') {
       const wake = player.crouched ? 1.8 : 3.4;
@@ -352,6 +431,19 @@ export class Horde {
         break;
       }
       case 'chase': {
+        if (w.tgtSoldier) {
+          const s = w.tgtSoldier;
+          if (s.dead) { w.tgtSoldier = null; break; }
+          w.desired = w.chaseSpeed;
+          const sd = Math.hypot(s.pos.x - w.pos.x, s.pos.z - w.pos.z);
+          if (sd < 1.25 && w.attackCd <= 0) {
+            w.attackCd = 1.8;
+            this.guards.bite(s, w);
+            w.headPos(_v);
+            this.audio.snarl(_v);
+          }
+          break;
+        }
         if (player.dead) { w.setState('wander'); break; }
         w.desired = w.chaseSpeed;
         if (!w.seesPlayer && !w.hunting) {
@@ -450,7 +542,13 @@ export class Horde {
       world.resolveCircle(w.pos, 0.28);
       return;
     }
-    if (speed > 0.01) {
+    const px = w.pos.x, pz = w.pos.z;
+    if (speed > 0.01 && w.tgtSoldier && w.state === 'chase') {
+      const dx = w.tgtSoldier.pos.x - w.pos.x, dz = w.tgtSoldier.pos.z - w.pos.z;
+      const d = Math.hypot(dx, dz) || 1;
+      dirX = dx / d;
+      dirZ = dz / d;
+    } else if (speed > 0.01) {
       if (w.state === 'chase' || w.state === 'lunge') {
         const dx = player.pos.x - w.pos.x, dz = player.pos.z - w.pos.z;
         const d = Math.hypot(dx, dz) || 1;
@@ -490,12 +588,18 @@ export class Horde {
     w.pos.x += (w.vel.x + w.push.x) * dt;
     w.pos.z += (w.vel.z + w.push.z) * dt;
     const decay = Math.exp(-dt * 5);
+    const shoved = Math.hypot(w.push.x, w.push.z) > 0.6;
+    world.resolveCircle(w.pos, 0.28);
+    if (world.floorMode && !world.floorOK(w.pos.x, w.pos.z, 0.2)) {
+      // shoved at the edge of the boardwalk, and the shove carries it over: into the swamp
+      if (shoved && !world.onFloor(w.pos.x + w.push.x * 0.25, w.pos.z + w.push.z * 0.25)) { this.drown(w); return; }
+      world.constrain(w.pos, px, pz, 0.2);
+    }
     w.push.x *= decay;
     w.push.z *= decay;
-    world.resolveCircle(w.pos, 0.28);
     // face movement (or player when close/chasing)
     let faceX = w.vel.x, faceZ = w.vel.z;
-    if ((w.state === 'chase' || w.state === 'lunge') && dist < 4) {
+    if ((w.state === 'chase' || w.state === 'lunge') && dist < 4 && !w.tgtSoldier) {
       faceX = player.pos.x - w.pos.x;
       faceZ = player.pos.z - w.pos.z;
     }

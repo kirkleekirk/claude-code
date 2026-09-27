@@ -3,19 +3,53 @@ import { itemModel } from '../world/Models.js';
 import { def } from '../data/items.js';
 import { radialTexture } from '../world/Textures.js';
 import { boxesGeometry, flattenToGeometry, ChunkedBatcher } from '../world/Batcher.js';
+import { shellParts, leafParts, slotList, containerHeight } from './containers.js';
+
+// World loot: hollow containers with animated doors, lids and drawers, and
+// physical items the player picks up by looking at them.
+//
+// Items resting in the world from the start are baked into static batches (one
+// draw call per chunk) and hidden in place when taken. Items that appear later
+// (container contents, drops) are individual meshes.
 
 const DOOR_MAT = new THREE.MeshLambertMaterial({ vertexColors: true });
 const ITEM_MAT = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x161616 });
-const ITEM_GEO = {};
-function itemGeometry(id) {
-  if (!ITEM_GEO[id]) ITEM_GEO[id] = flattenToGeometry(itemModel(id));
-  return ITEM_GEO[id];
+
+// Loot geometry, normalised so it rests on y=0 and is centred in x/z.
+const SHAPES = {};
+export function itemShape(id) {
+  if (!SHAPES[id]) {
+    const geo = flattenToGeometry(itemModel(id));
+    geo.computeBoundingBox();
+    const b = geo.boundingBox;
+    geo.translate(-(b.min.x + b.max.x) / 2, -b.min.y, -(b.min.z + b.max.z) / 2);
+    geo.computeBoundingBox();
+    geo.computeBoundingSphere();
+    const size = new THREE.Vector3();
+    geo.boundingBox.getSize(size);
+    SHAPES[id] = { geo, size, scale: def(id).cat === 'weapon' ? 1 : 1.35 };
+  }
+  return SHAPES[id];
 }
 
-// World loot: searchable containers with animated doors, and physical items
-// lying in the world that the player picks up by looking at them.
-
 const _v = new THREE.Vector3();
+const _m = new THREE.Matrix4();
+const _q = new THREE.Quaternion();
+const _s = new THREE.Vector3();
+const UP = new THREE.Vector3(0, 1, 0);
+
+// Hide a baked range of vertices by folding it into a degenerate point far below the floor.
+function collapse(mesh, ref) {
+  const pos = mesh.geometry.attributes.position;
+  const a = pos.array, s0 = ref.start * 3;
+  const x = a[s0], z = a[s0 + 2];
+  for (let v = 0; v < ref.count; v++) {
+    a[s0 + v * 3] = x;
+    a[s0 + v * 3 + 1] = -50;
+    a[s0 + v * 3 + 2] = z;
+  }
+  pos.needsUpdate = true;
+}
 
 export class Loot {
   constructor(scene, audio) {
@@ -23,8 +57,12 @@ export class Loot {
     this.audio = audio;
     this.containers = [];
     this.items = [];
-    this.doorBatch = new ChunkedBatcher(36);
+    this.pending = [];
     this.extras = [];
+    this.doorBatch = new ChunkedBatcher(36);
+    this.itemBatch = new ChunkedBatcher(36);
+    this.finalized = false;
+    this.batch = null; // the city's static batch, set by the generator
     this.group = new THREE.Group();
     scene.add(this.group);
     const ringMat = new THREE.MeshBasicMaterial({ map: radialTexture('rgba(255,236,190,0.9)', 'rgba(255,236,190,0)'), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
@@ -34,150 +72,172 @@ export class Loot {
     scene.add(this.ring);
   }
 
-  addContainer({ kind, spec, x, z, y0 = 0, rotY = 0, fx = 0, fz = 1, items, label, noDoor = false }) {
+  // Container space -> world space.
+  _toWorld(c, lx, ly, lz, out) {
+    const cr = Math.cos(c.rotY), sr = Math.sin(c.rotY);
+    return out.set(c.x + lx * cr + lz * sr, c.y0 + ly, c.z - lx * sr + lz * cr);
+  }
+
+  addContainer({ kind, spec, x, z, y0 = 0, rotY = 0, items, label, locked = null }) {
+    const c = {
+      type: 'container', kind, spec, label: label || spec.label, items: items || [],
+      opened: false, x, z, y0, rotY, anim: 0, leaves: [], slots: slotList(spec),
+      locked: locked ?? spec.locked ?? null,
+    };
+    // body shell goes into the city's static mesh
+    if (this.batch) {
+      for (const pt of shellParts(spec)) {
+        this._toWorld(c, pt[0], pt[1], pt[2], _v);
+        this.batch.box(_v.x, _v.y, _v.z, pt[3], pt[4], pt[5], pt[6], { rotY, jitter: 0, ao: 1 });
+      }
+    }
+    // closed doors/lids/drawers live in a static batch until opened
+    c.leafSpec = leafParts(spec);
+    const bb = this.doorBatch._get(x, z);
+    const start = bb.vcount;
+    for (const leaf of c.leafSpec) {
+      for (const pt of leaf.parts) {
+        this._toWorld(c, leaf.pivot[0] + pt[0], leaf.pivot[1] + pt[1], leaf.pivot[2] + pt[2], _v);
+        bb.box(_v.x, _v.y, _v.z, pt[3], pt[4], pt[5], pt[6], { rotY, jitter: 0, ao: 1 });
+      }
+    }
+    c.doorRef = { key: this.doorBatch.key(x, z), start, count: bb.vcount - start };
     const g = new THREE.Group();
     g.position.set(x, y0, z);
     g.rotation.y = rotY;
-    const style = noDoor ? 'none' : spec.door;
-    const door = doorParts(spec, style);
-    let doorRef = null;
-    if (door) {
-      // closed doors live in a static batch; opening swaps in an animated mesh
-      const cr = Math.cos(rotY), sr = Math.sin(rotY);
-      const key = this.doorBatch.key(x, z);
-      const bb = this.doorBatch._get(x, z);
-      const start = bb.vcount;
-      for (const pt of door.parts) {
-        const lx = door.pivot[0] + pt[0], ly = door.pivot[1] + pt[1], lz = door.pivot[2] + pt[2];
-        bb.box(x + lx * cr + lz * sr, y0 + ly, z - lx * sr + lz * cr, pt[3], pt[4], pt[5], pt[6], { rotY, jitter: 0, ao: 1 });
-      }
-      doorRef = { key, start, count: bb.vcount - start };
-      // lower drawer fronts never move: bake them into the city mesh
-      if (style === 'drawer' && this.batch) {
-        const w = spec.w, h = spec.h, d = spec.d;
-        const doorCol = new THREE.Color(spec.color).multiplyScalar(0.82).getHex();
-        for (let i = 0; i < 2; i++) {
-          const ly = h * (0.4 - i * 0.28), lz = d / 2 + 0.015;
-          for (const pt of [[0, ly, lz, w * 0.9, h * 0.26, 0.03, doorCol], [0, ly, lz + 0.025, 0.16, 0.025, 0.03, 0x222222]]) {
-            this.batch.box(x + pt[0] * cr + pt[2] * sr, y0 + pt[1], z - pt[0] * sr + pt[2] * cr, pt[3], pt[4], pt[5], pt[6], { rotY, jitter: 0, ao: 1 });
-          }
-        }
-      }
-    }
     this.group.add(g);
-    // AABB in world space
+    c.group = g;
     const ca = Math.abs(Math.cos(rotY)), sa = Math.abs(Math.sin(rotY));
-    const ex = (spec.w * ca + spec.d * sa) / 2 + 0.05, ez = (spec.w * sa + spec.d * ca) / 2 + 0.05;
-    const c = {
-      type: 'container',
-      kind,
-      label: label || spec.label,
-      spec,
-      style,
-      items,
-      opened: false,
-      searched: false,
-      group: g,
-      pivot: null,
-      door,
-      doorRef,
-      anim: 0,
-      x, z, y0, rotY, fx, fz,
-      aabb: { x0: x - ex, x1: x + ex, y0, y1: y0 + spec.h + 0.05, z0: z - ez, z1: z + ez },
-      center: new THREE.Vector3(x, y0 + spec.h / 2, z),
-    };
+    const ex = (spec.w * ca + spec.d * sa) / 2 + 0.04, ez = (spec.w * sa + spec.d * ca) / 2 + 0.04;
+    c.aabb = { x0: x - ex, x1: x + ex, y0, y1: y0 + containerHeight(spec) + 0.04, z0: z - ez, z1: z + ez };
+    c.center = new THREE.Vector3(x, y0 + spec.h / 2, z);
     this.containers.push(c);
     return c;
   }
 
-  // Build meshes for all closed doors once the city is generated.
+  // Build the static meshes once the level is generated.
   finalize() {
     this.doorGroup = this.doorBatch.build(DOOR_MAT);
+    this.doorGroup.traverse((o) => { o.castShadow = false; });
     this.scene.add(this.doorGroup);
+    this.itemGroup = this.itemBatch.build(ITEM_MAT);
+    this.itemGroup.traverse((o) => { o.castShadow = false; });
+    this.scene.add(this.itemGroup);
+    this.finalized = true;
   }
 
   open(c) {
     if (c.opened) return;
     c.opened = true;
-    if (c.door) {
-      // collapse the static copy and animate a real one
-      const m = this.doorBatch.meshes && this.doorBatch.meshes.get(c.doorRef.key);
-      if (m) {
-        const pos = m.geometry.attributes.position;
-        const a = pos.array, s0 = c.doorRef.start * 3;
-        for (let v = 0; v < c.doorRef.count; v++) {
-          a[s0 + v * 3] = a[s0];
-          a[s0 + v * 3 + 1] = a[s0 + 1];
-          a[s0 + v * 3 + 2] = a[s0 + 2];
-        }
-        pos.needsUpdate = true;
-      }
+    const m = this.doorBatch.meshes && this.doorBatch.meshes.get(c.doorRef.key);
+    if (m && c.doorRef.count) collapse(m, c.doorRef);
+    for (const leaf of c.leafSpec) {
       const pivot = new THREE.Group();
-      pivot.position.set(c.door.pivot[0], c.door.pivot[1], c.door.pivot[2]);
-      pivot.add(new THREE.Mesh(boxesGeometry(c.door.parts), DOOR_MAT));
+      pivot.position.set(leaf.pivot[0], leaf.pivot[1], leaf.pivot[2]);
+      const mesh = new THREE.Mesh(boxesGeometry(leaf.parts), DOOR_MAT);
+      pivot.add(mesh);
       c.group.add(pivot);
-      c.pivot = pivot;
+      c.leaves.push({ pivot, motion: leaf.motion, open: leaf.open, z0: leaf.pivot[2] });
     }
+    this._placeItems(c);
     this.audio.open(c.center, c.spec.sound || 'wood');
-    c.spawnAt = 0.3;
   }
 
-  _spillItems(c) {
-    const spec = c.spec;
+  // Choose a scale and heading so an item fits the slot it rests in.
+  _fit(id, slot) {
+    const sh = itemShape(id);
+    const sx = sh.size.x, sy = sh.size.y, sz = sh.size.z;
+    const slotLong = Math.max(slot.max[0], slot.max[2]), slotShort = Math.min(slot.max[0], slot.max[2]);
+    const long = Math.max(sx, sz), short = Math.min(sx, sz);
+    let rot = (sx >= sz) === (slot.max[0] >= slot.max[2]) ? 0 : Math.PI / 2;
+    const scale = Math.max(0.3, Math.min(sh.scale, slotLong / long, slotShort / Math.max(short, 0.01), slot.max[1] / Math.max(sy, 0.01)));
+    // a little disorder when there is room for it
+    if (long * scale < slotShort * 0.8) rot += (Math.random() - 0.5) * 0.9;
+    return { scale, rot };
+  }
+
+  _placeItems(c) {
     const n = c.items.length;
-    const lowTop = spec.h < 1.1 && !spec.mount && c.style !== 'drawer';
     for (let i = 0; i < n; i++) {
       const it = c.items[i];
-      const t = n === 1 ? 0 : i / (n - 1) - 0.5;
-      const along = t * Math.min(spec.w * 0.7, 0.9);
-      const rx = Math.cos(c.rotY), rz = -Math.sin(c.rotY); // local +x in world
-      let p;
-      if (c.kind === 'shelf') {
-        const lvl = 1 + (i % 2);
-        p = new THREE.Vector3(c.x + (Math.random() - 0.5) * 0.8 * (c.fx ? 0 : 1), 0.17 + lvl * 0.48, c.z + (Math.random() - 0.5) * 0.8 * (c.fz ? 0 : 1));
-        p.x += c.fx * 0.05 * (i % 2 ? 1 : -1);
-        p.z += c.fz * 0.05 * (i % 2 ? 1 : -1);
-      } else if (c.style === 'drawer') {
-        // inside the pulled-out drawer
-        p = new THREE.Vector3(c.x + rx * along * 0.8 + c.fx * (spec.d / 2 + 0.05), c.y0 + spec.h * 0.72, c.z + rz * along * 0.8 + c.fz * (spec.d / 2 + 0.05));
-      } else if (lowTop) {
-        p = new THREE.Vector3(c.x + rx * along, c.y0 + spec.h + 0.06, c.z + rz * along);
-      } else if (spec.mount) {
-        p = new THREE.Vector3(c.x + rx * along * 0.6 + c.fx * 0.25, c.y0 + 0.05, c.z + rz * along * 0.6 + c.fz * 0.25);
-        p.y = 0.08;
-        p.x += c.fx * 0.3;
-        p.z += c.fz * 0.3;
+      const slot = c.slots[i % c.slots.length];
+      const stackY = Math.floor(i / c.slots.length) * 0.05;
+      const { scale, rot } = this._fit(it.id, slot);
+      const mesh = new THREE.Mesh(itemShape(it.id).geo, ITEM_MAT);
+      mesh.scale.setScalar(scale);
+      if (slot.leaf != null && c.leaves[slot.leaf]) {
+        // rides out with the drawer, becomes a free item when the drawer stops
+        mesh.position.set(slot.p[0], slot.p[1] + stackY, slot.p[2]);
+        mesh.rotation.y = rot;
+        c.leaves[slot.leaf].pivot.add(mesh);
+        this.pending.push({ c, mesh, item: it });
       } else {
-        p = new THREE.Vector3(c.x + rx * along + c.fx * (spec.d / 2 + 0.3), 0.08, c.z + rz * along + c.fz * (spec.d / 2 + 0.3));
+        this._toWorld(c, slot.p[0], slot.p[1] + stackY, slot.p[2], mesh.position);
+        mesh.rotation.y = c.rotY + rot;
+        this.group.add(mesh);
+        this._register(it, mesh);
       }
-      this.spawnItem(it, p, c.rotY + (Math.random() - 0.5) * 0.8);
     }
     c.items = [];
-    c.searched = true;
   }
 
-  spawnItem(item, pos, rotY = 0) {
-    const mesh = new THREE.Mesh(itemGeometry(item.id), ITEM_MAT);
-    mesh.position.copy(pos);
-    mesh.rotation.y = rotY;
-    this.group.add(mesh);
+  _register(item, mesh, extra = {}) {
     const d = def(item.id);
-    const entry = { type: 'item', item, mesh, pos: mesh.position, radius: d.cat === 'weapon' ? 0.3 : 0.2, label: d.name };
+    const sh = itemShape(item.id);
+    const entry = {
+      type: 'item', item, mesh, pos: mesh.position, label: d.name,
+      radius: Math.max(0.12, Math.min(0.35, Math.max(sh.size.x, sh.size.z) * mesh.scale.x * 0.55)),
+      height: sh.size.y * mesh.scale.x,
+      ...extra,
+    };
     this.items.push(entry);
     return entry;
   }
 
-  // Drop with a small toss (used when the player drops items / walkers drop loot).
-  dropItem(item, pos) {
+  // Place an item in the world. Items created while the level is being built are
+  // baked into a static batch; anything later gets its own mesh.
+  spawnItem(item, pos, rotY = 0, opts = {}) {
+    const sh = itemShape(item.id);
+    const scale = opts.scale ?? sh.scale;
+    if (!this.finalized && opts.static !== false) {
+      const bb = this.itemBatch._get(pos.x, pos.z);
+      const start = bb.vcount;
+      _q.setFromAxisAngle(UP, rotY);
+      _s.setScalar(scale);
+      _m.compose(pos, _q, _s);
+      bb.geoColored(sh.geo, _m);
+      const ref = { key: this.itemBatch.key(pos.x, pos.z), start, count: bb.vcount - start };
+      const d = def(item.id);
+      const entry = {
+        type: 'item', item, pos: pos.clone(), label: d.name, batchRef: ref,
+        radius: Math.max(0.12, Math.min(0.35, Math.max(sh.size.x, sh.size.z) * scale * 0.55)),
+        height: sh.size.y * scale,
+      };
+      this.items.push(entry);
+      return entry;
+    }
+    const mesh = new THREE.Mesh(sh.geo, ITEM_MAT);
+    mesh.scale.setScalar(scale);
+    mesh.position.copy(pos);
+    mesh.rotation.y = rotY;
+    this.group.add(mesh);
+    return this._register(item, mesh);
+  }
+
+  // Drops (from the player's pack or a dead walker) land on the floor.
+  dropItem(item, pos, floorY = 0.08) {
     const p = pos.clone();
-    p.y = 0.08;
-    return this.spawnItem(item, p, Math.random() * Math.PI * 2);
+    p.y = floorY;
+    return this.spawnItem(item, p, Math.random() * Math.PI * 2, { static: false });
   }
 
   removeItem(entry) {
     const i = this.items.indexOf(entry);
     if (i >= 0) this.items.splice(i, 1);
-    this.group.remove(entry.mesh);
+    if (entry.batchRef) {
+      const m = this.itemBatch.meshes && this.itemBatch.meshes.get(entry.batchRef.key);
+      if (m) collapse(m, entry.batchRef);
+    } else if (entry.mesh) this.group.remove(entry.mesh);
   }
 
   addExtra(extra) {
@@ -189,7 +249,6 @@ export class Loot {
   removeExtra(extra) {
     const i = this.extras.indexOf(extra);
     if (i >= 0) this.extras.splice(i, 1);
-    if (extra.mesh && extra.mesh.parent && extra.ownMesh) extra.mesh.parent.remove(extra.mesh);
   }
 
   // Find what the player is looking at within reach.
@@ -200,8 +259,7 @@ export class Loot {
       const tca = lx * d.x + ly * d.y + lz * d.z;
       if (tca < 0 || tca > bestT + radius) return;
       const d2 = lx * lx + ly * ly + lz * lz - tca * tca;
-      // generous cone: radius grows slightly with distance
-      const rr = radius + tca * 0.06;
+      const rr = radius + tca * 0.05;
       if (d2 > rr * rr) return;
       const t = Math.max(0, tca - radius * 0.5);
       if (t < bestT) { bestT = t; best = entry; }
@@ -209,7 +267,7 @@ export class Loot {
     for (const it of this.items) {
       const p = it.pos;
       if (Math.abs(p.x - o.x) > 3 || Math.abs(p.z - o.z) > 3) continue;
-      _v.set(p.x, p.y + 0.06, p.z);
+      _v.set(p.x, p.y + Math.min(0.2, it.height * 0.5), p.z);
       consider(it, _v, it.radius);
     }
     for (const ex of this.extras) {
@@ -234,48 +292,56 @@ export class Loot {
     }
     const p = entry.getPos ? entry.getPos(_v) : entry.pos;
     this.ring.visible = true;
-    this.ring.position.set(p.x, (entry.type === 'item' ? p.y : 0.02) + 0.01, p.z);
+    this.ring.position.set(p.x, p.y + 0.012, p.z);
+    const r = entry.type === 'item' ? Math.max(0.35, entry.radius * 2.6) : 0.7;
+    this.ring.scale.setScalar(r / 0.7);
   }
 
   update(dt, time, camPos = null, drawDist = 80) {
-    // distance culling: fogged-out loot is not worth a draw call
     this.cullT = (this.cullT || 0) - dt;
     if (camPos && this.cullT <= 0) {
       this.cullT = 0.4;
       const d2 = (drawDist + 5) * (drawDist + 5);
       for (const c of this.containers) {
-        if (!c.pivot) continue;
+        if (!c.leaves.length) continue;
         const dx = c.x - camPos.x, dz = c.z - camPos.z;
         c.group.visible = dx * dx + dz * dz < d2;
       }
       for (const it of this.items) {
+        if (!it.mesh) continue;
         const dx = it.pos.x - camPos.x, dz = it.pos.z - camPos.z;
         it.mesh.visible = dx * dx + dz * dz < d2;
       }
     }
     for (const c of this.containers) {
-      if (!c.opened) continue;
-      if (c.anim < 1) {
-        c.anim = Math.min(1, c.anim + dt * 2.8);
-        const e = 1 - Math.pow(1 - c.anim, 3);
-        if (c.pivot) {
-          if (c.style === 'hinge') c.pivot.rotation.y = -1.75 * e;
-          else if (c.style === 'drawer') c.pivot.position.z = c.spec.d / 2 + 0.015 + 0.36 * e;
-          else if (c.style === 'lid') c.pivot.rotation.x = -1.85 * e;
-        }
+      if (!c.opened || c.anim >= 1) continue;
+      c.anim = Math.min(1, c.anim + dt * 2.6);
+      const e = 1 - Math.pow(1 - c.anim, 3);
+      for (const l of c.leaves) {
+        if (l.motion === 'hingeY') l.pivot.rotation.y = l.open * e;
+        else if (l.motion === 'hingeX') l.pivot.rotation.x = l.open * e;
+        else l.pivot.position.z = l.z0 + l.open * e;
       }
-      if (!c.searched) {
-        c.spawnAt -= dt;
-        if (c.spawnAt <= 0) this._spillItems(c);
+      if (c.anim >= 1) {
+        // drawer contents become ordinary items where the drawer stopped
+        c.group.updateMatrixWorld(true);
+        for (let i = this.pending.length - 1; i >= 0; i--) {
+          const pd = this.pending[i];
+          if (pd.c !== c) continue;
+          this.group.attach(pd.mesh);
+          this._register(pd.item, pd.mesh);
+          this.pending.splice(i, 1);
+        }
       }
     }
     if (this.ring.visible) this.ring.material.opacity = 0.55 + Math.sin(time * 6) * 0.25;
   }
 
   dispose() {
-    if (this.doorGroup) {
-      this.scene.remove(this.doorGroup);
-      this.doorGroup.traverse((o) => o.geometry && o.geometry.dispose());
+    for (const g of [this.doorGroup, this.itemGroup]) {
+      if (!g) continue;
+      this.scene.remove(g);
+      g.traverse((o) => o.geometry && o.geometry.dispose());
     }
     this.scene.remove(this.group);
     this.scene.remove(this.ring);
@@ -296,20 +362,4 @@ function rayAabb(o, d, b, maxT) {
     }
   }
   return tmin;
-}
-
-// Moving part of a container, in container-local space: pivot + boxes relative to it.
-function doorParts(spec, style) {
-  const w = spec.w, h = spec.h, d = spec.d;
-  const col = new THREE.Color(spec.color).multiplyScalar(0.82).getHex();
-  if (style === 'hinge') {
-    return { pivot: [-w / 2 + 0.02, 0, d / 2 + 0.015], parts: [[w * 0.48, h / 2, 0, w * 0.96, h * 0.94, 0.03, col], [w * 0.88, h * 0.55, 0.03, 0.03, 0.12, 0.03, 0x222222]] };
-  }
-  if (style === 'drawer') {
-    return { pivot: [0, h * 0.7, d / 2 + 0.015], parts: [[0, 0, 0, w * 0.9, h * 0.26, 0.03, col], [0, -0.01, -d * 0.4, w * 0.84, h * 0.2, d * 0.8, 0x3a2a1e], [0, 0, 0.025, 0.16, 0.025, 0.03, 0x222222]] };
-  }
-  if (style === 'lid') {
-    return { pivot: [0, h, -d / 2], parts: [[0, 0.025, d / 2, w * 1.02, 0.05, d * 1.02, col]] };
-  }
-  return null;
 }

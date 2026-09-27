@@ -262,6 +262,36 @@ export class Combat {
     const wall = world.raycast(o.x, o.y, o.z, dir.x, dir.y, dir.z, reach, true);
     if (hit && wall && wall.t < hit.t - 0.1 && !this.held) hit = null;
 
+    // a Guard soldier in reach takes the blow instead, if nearer
+    const guards = this.g.guards;
+    if (guards && !this.held) {
+      let gh = guards.raycast(o, dir, reach + 0.1);
+      if (gh && !gh.soldier) gh = null;
+      if (!gh && d.type !== 'stab') {
+        const sd = guards.nearestInFront(o, dir, reach + 0.1);
+        if (sd) {
+          const v = sd.volumes();
+          const pt = v.neck.clone().lerp(v.hips, 0.3);
+          gh = { soldier: sd, part: rayPointDistance(o, dir, v.head).dist < 0.28 ? 'head' : 'body', point: pt, t: pt.distanceTo(o) };
+        }
+      }
+      if (gh && (!hit || gh.t < hit.t) && !(wall && wall.t < gh.t - 0.1)) {
+        this.g.noise(player.pos, 3.5);
+        const sd = gh.soldier;
+        const f = this._flatToward(sd);
+        const part = gh.part === 'limb' ? 'body' : gh.part;
+        const res = guards.damage(sd, { part, damage: part === 'head' ? d.head * power : d.body * power, kind: d.type, power, melee: true, dirX: f.x, dirZ: f.z, point: gh.point });
+        if (res.result === 'deflect') { audio.meleeHit('deflect', gh.point, power); hud.toast('The visor turns it — hit them from behind, or from range'); }
+        else if (res.result === 'kill') { audio.meleeHit(d.type === 'stab' ? 'stab' : d.type === 'chop' ? 'slash' : 'crack', gh.point, power); if (res.how === 'takedown') hud.toast('Silent takedown'); }
+        else audio.meleeHit(d.type === 'chop' ? 'slash' : 'thud', gh.point, power);
+        if (d.shock && !sd.dead) { sd.stagger = 1.3; this.g.fx.sparks(gh.point, 10); audio.burn(gh.point); }
+        hud.hit(res.result === 'kill');
+        player.shake = Math.max(player.shake, 0.18 + power * 0.1);
+        this._wear(res.result === 'deflect' ? 2 : 1);
+        return;
+      }
+    }
+
     this.g.noise(player.pos, 3.5);
     if (hit) {
       const w = hit.walker;
@@ -284,11 +314,17 @@ export class Combat {
       const res = horde.damage(w, info);
       const r = res.result;
       this.g.onAggro?.();
-      if (r === 'deflect') { audio.meleeHit('deflect', hit.point, power); hud.toast('The helmet turns the blow — grab and stab under the chin'); }
+      if (r === 'deflect') { audio.meleeHit('deflect', hit.point, power); hud.toast('The Guard helmet turns the blow — grab it and stab up under the chin'); }
       else if (r === 'glance') { audio.meleeHit('deflect', hit.point, 0.4); hud.toast('Not enough force — wind up the stab'); }
       else if (r === 'kill' || r === 'decap') audio.meleeHit(d.type === 'stab' ? 'stab' : d.type === 'chop' ? 'slash' : 'crack', hit.point, power);
       else if (r === 'helmetOff') { audio.meleeHit('deflect', hit.point, 1); hud.toast('Helmet knocked loose'); }
       else audio.meleeHit(d.type === 'chop' ? 'slash' : 'thud', hit.point, power);
+      if (d.shock && !w.dead) {
+        // the baton drops them whatever it hits
+        w.knockDown(f.x, f.z, 1.1);
+        fx.sparks(hit.point, 10);
+        audio.burn(hit.point);
+      }
       if (r === 'kill' || r === 'decap') hud.hit(true);
       else hud.hit(false);
       player.shake = Math.max(player.shake, 0.18 + power * 0.1);
@@ -414,9 +450,11 @@ export class Combat {
     // hold them at arm's length
     const f = { x: -Math.sin(player.yaw), z: -Math.cos(player.yaw) };
     const tx = player.pos.x + f.x * 0.95, tz = player.pos.z + f.z * 0.95;
+    const wpx = w.pos.x, wpz = w.pos.z;
     w.pos.x += (tx - w.pos.x) * Math.min(1, dt * 12);
     w.pos.z += (tz - w.pos.z) * Math.min(1, dt * 12);
     this.g.world.resolveCircle(w.pos, 0.26);
+    this.g.world.constrain(w.pos, wpx, wpz, 0.2);
     w.facing = Math.atan2(player.pos.x - w.pos.x, player.pos.z - w.pos.z);
     player.spendStamina((w.riot ? 13 : 9.5) * dt);
     player.speedMul = 0.5;
@@ -524,6 +562,12 @@ export class Combat {
     if (g.chamber === 'jam') return 'Jammed — R to clear';
     switch (d.action) {
       case 'mag':
+        if (d.energy) {
+          if (!g.magIn) return 'R — seat a fresh cell';
+          if (g.chamber !== 'live' && g.loaded > 0) return 'R — prime the coil';
+          if (g.chamber !== 'live' && this.inv.count(d.ammo) > 0) return 'R — eject the dead cell';
+          return '';
+        }
         if (!g.magIn) return 'R — insert magazine';
         if (g.chamber !== 'live' && g.loaded > 0) return 'R — rack the slide';
         if (g.chamber !== 'live' && this.inv.count(d.ammo) > 0) return 'R — drop the magazine';
@@ -556,6 +600,12 @@ export class Combat {
         if (g.chamber === 'jam') return 'clear';
         if (!g.magIn) return 'magIn';
         if (g.chamber !== 'live' && g.loaded > 0) return 'rack';
+        if (d.energy) {
+          if (g.loaded === 0 && g.chamber !== 'live' && avail > 0) return 'magOut';
+          if (explicit && g.loaded < d.cap && avail > 0) return 'magOut';
+          if (explicit && avail === 0) hud.toast('No energy cells in your pack');
+          return null;
+        }
         if (g.loaded < d.cap && avail > 0) return 'magOut';
         if (explicit && avail === 0 && g.loaded < d.cap) hud.toast(`No ${ammoName} in your pack`);
         return null;
@@ -623,10 +673,15 @@ export class Combat {
     switch (name) {
       case 'magOut':
         g.magIn = false;
+        if (d.energy) g.loaded = 0; // an ejected cell is spent
         break;
       case 'magIn': {
-        const got = this.inv.take(d.ammo, d.cap - g.loaded);
-        g.loaded += got;
+        if (d.energy) {
+          if (this.inv.take(d.ammo, 1)) g.loaded = d.cap;
+        } else {
+          const got = this.inv.take(d.ammo, d.cap - g.loaded);
+          g.loaded += got;
+        }
         g.magIn = true;
         audio.mech('magIn');
         break;
@@ -634,7 +689,8 @@ export class Combat {
       case 'rack':
       case 'clear':
         if (g.loaded > 0 && g.magIn) { g.loaded--; g.chamber = 'live'; } else g.chamber = 'empty';
-        audio.mech('rack');
+        if (d.energy) audio.laserCharge(null, 0.35);
+        else audio.mech('rack');
         break;
       case 'open':
         if (g.spent > 0) audio.mech('eject');
@@ -704,7 +760,7 @@ export class Combat {
     // cycle the action
     if (d.action === 'mag') {
       if (g.loaded > 0) { g.loaded--; g.chamber = 'live'; } else g.chamber = 'empty';
-      this._ejectBrass();
+      if (!d.energy) this._ejectBrass();
     } else if (d.action === 'pump' || d.action === 'bolt') g.chamber = 'spent';
     else if (d.action === 'cyl') { g.loaded--; g.spent++; }
     else if (d.action === 'xbow') g.loaded = 0;
@@ -748,43 +804,62 @@ export class Combat {
     vm.kick(d.recoil * 0.35);
     if (d.action === 'xbow') audio.crossbow(origin);
     else {
-      audio.gunshot(d.id || it.id, origin, suppressed);
-      vm.muzzle(suppressed ? 0.35 : 1);
-      fx.muzzleFlash(_t.copy(origin).addScaledVector(_d, 0.8), suppressed ? 0.25 : 1);
+      if (d.laser) audio.laser(origin, true);
+      else audio.gunshot(d.id || it.id, origin, suppressed);
+      vm.muzzle(suppressed ? 0.35 : 1, d.laser);
+      fx.muzzleFlash(_t.copy(origin).addScaledVector(_d, 0.8), suppressed ? 0.25 : d.laser ? 0.6 : 1, d.laser ? 0xff4a2a : 0xffc27a);
     }
     this.g.noise(player.pos, suppressed ? 9 : d.noise, { alarm: !suppressed && d.noise > 40 });
     if (!suppressed && d.action !== 'xbow') this.g.onAggro?.();
   }
 
   _shot(o, dir, primary) {
-    const { world, horde, fx, audio, hud, loot } = this.g;
+    const { world, horde, fx, audio, hud, loot, guards } = this.g;
     const d = this.d;
     const wh = world.raycast(o.x, o.y, o.z, dir.x, dir.y, dir.z, 160, true);
-    const maxT = wh ? wh.t : 160;
+    let maxT = wh ? wh.t : 160;
     const pen = d.penetrate || 1;
     const exclude = new Set();
     let hitAny = false;
+    let endT = maxT;
+    const len = Math.hypot(dir.x, dir.z) || 1;
+    // the Living Guard and their drones stand in front of whatever else is there
+    const gh = guards ? guards.raycast(o, dir, maxT) : null;
+    if (gh) maxT = gh.t;
     for (let k = 0; k < pen; k++) {
       const h = horde.raycast(o, dir, maxT, { exclude });
       if (!h) break;
       exclude.add(h.walker);
       hitAny = true;
+      endT = h.t;
       const w = h.walker;
       const part = h.part === 'arm' ? 'body' : h.part;
       let dmg = part === 'head' ? d.headDmg : part === 'leg' ? d.legDmg : d.bodyDmg;
       if (d.pellets > 1) dmg *= clamp(1.25 - h.t / 16, 0.3, 1);
-      const len = Math.hypot(dir.x, dir.z) || 1;
       const res = horde.damage(w, {
         part, damage: dmg, kind: 'bullet', power: 1, pierce: 0, knock: 0.3,
         dirX: dir.x / len, dirZ: dir.z / len, armorPierce: d.armorPierce, point: h.point,
       });
       if (res.result === 'deflect') {
         audio.meleeHit('deflect', h.point, 0.6);
-        if (primary) hud.toast('Rounds glance off the riot helmet');
+        if (primary) hud.toast('Rounds glance off the Guard helmet');
       } else audio.impact(h.point, 'flesh');
+      if (d.laser) audio.burn(h.point);
       hud.hit(res.result === 'kill' || res.result === 'decap');
       if (d.retrievable) this._lodgeBolt(w, h.point);
       if (res.result === 'deflect') break;
+    }
+    if (gh && !hitAny) {
+      hitAny = true;
+      endT = gh.t;
+      const target = gh.soldier || gh;
+      const part = gh.part === 'limb' ? 'body' : gh.part;
+      let dmg = part === 'head' ? d.headDmg : part === 'drone' ? d.bodyDmg * 1.5 : d.bodyDmg;
+      if (d.pellets > 1) dmg *= clamp(1.25 - gh.t / 16, 0.3, 1);
+      const res = guards.damage(target, { part, damage: dmg, kind: 'bullet', power: 1, dirX: dir.x / len, dirZ: dir.z / len, armorPierce: d.armorPierce, point: gh.point });
+      if (res.result === 'deflect') audio.meleeHit('deflect', gh.point, 0.6);
+      else if (gh.soldier) audio.impact(gh.point, 'flesh');
+      hud.hit(res.result === 'kill');
     }
     if (!hitAny && wh) {
       const p = new THREE.Vector3(o.x + dir.x * wh.t, o.y + dir.y * wh.t, o.z + dir.z * wh.t);
@@ -792,9 +867,13 @@ export class Combat {
       if (d.retrievable) {
         loot.spawnItem(makeItem('bolt', 1), p.clone().addScaledVector(n, 0.05), Math.atan2(dir.x, dir.z));
       } else {
-        fx.impact(p, n, 'hard');
+        fx.impact(p, n, d.laser ? 'burn' : 'hard');
         if (primary) audio.impact(p, 'hard');
       }
+    }
+    if (d.laser) {
+      const from = this.g.vmMuzzleWorld ? this.g.vmMuzzleWorld() : o.clone().addScaledVector(dir, 0.5);
+      fx.beam(from, new THREE.Vector3(o.x + dir.x * Math.min(endT, 120), o.y + dir.y * Math.min(endT, 120), o.z + dir.z * Math.min(endT, 120)), 0xff3a24);
     }
   }
 

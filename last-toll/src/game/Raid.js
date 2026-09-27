@@ -1,28 +1,42 @@
 import * as THREE from 'three';
 import { CityGen } from '../world/CityGen.js';
+import { StiltGen } from '../world/StiltGen.js';
 import { Environment } from '../world/Environment.js';
 import { Loot } from './Loot.js';
 import { Effects } from '../fx/Effects.js';
 import { Player } from '../entities/Player.js';
 import { Horde } from '../entities/Horde.js';
+import { GuardForce } from '../entities/Guard.js';
 import { ViewModel } from '../combat/ViewModel.js';
 import { Combat, SLOTS } from '../combat/Combat.js';
 import { Inventory } from './Inventory.js';
 import { HUD } from '../ui/HUD.js';
 import { InventoryUI } from '../ui/InventoryUI.js';
 import { MapUI } from '../ui/MapUI.js';
-import { RNG } from '../core/rng.js';
+import { RNG, noise1 } from '../core/rng.js';
 import { def, makeItem } from '../data/items.js';
+import { zoneClock } from '../data/zones.js';
 import { packCapacity, maxHealthFor } from './Profile.js';
 import { clamp } from '../core/math.js';
 
-// One trip into the flooded parish: from the skiff at dusk, until you make it
-// back to the water or the dead take you.
+// One trip into the flooded parish: from the skiff until you make it back to the
+// water, or the dead (or the Living Guard) take you. At curfew the Guard runs its
+// Sweep: the herder mast's horns drive every dead thing in the sector ahead of
+// soldiers and searchlight drones, and anyone still outside the walls is fair game.
 
-const START_HOUR = 17.0;
-const TOLL_HOUR = 19.5;
-const OVERRUN_HOUR = 20.75;
 const EXTRACT_TIME = 4;
+
+// What the Guard says over the loudspeakers.
+const BROADCASTS = {
+  early: [
+    'This is the Living Guard, Ninth Garrison. Curfew begins at nightfall. Report the infected.',
+    'Citizens. The Living Guard is your future. Remain indoors. Do not approach the walls.',
+    'Attention. Unregistered persons in this sector will be detained. Or purged.',
+  ],
+  warn: 'Curfew in one minute. The sector will be swept. Anyone outside the walls will be treated as infected.',
+  sweep: 'Curfew is in effect. Sweep teams are in the sector. Lethal force is authorized.',
+  overrun: 'Sector lost. Sweep teams, fall back. Seal the gates.',
+};
 
 const clone = (x) => (x ? JSON.parse(JSON.stringify(x)) : x);
 
@@ -35,7 +49,7 @@ export class Raid {
     this.rng = new RNG(this.seed ^ 0x5bd1e995);
     this.paused = false;
     this.ended = false;
-    this.stats = { kills: 0, stabKills: 0, headKills: 0, searched: 0, shots: 0, bites: 0 };
+    this.stats = { kills: 0, stabKills: 0, headKills: 0, searched: 0, shots: 0, bites: 0, guardKills: 0, drones: 0, drowned: 0 };
     this.time = 0;
     this.nourishGain = 0;
   }
@@ -52,9 +66,20 @@ export class Raid {
     this.baseFov = profile.settings.fov;
     scene.add(camera);
 
-    this.env = new Environment(scene, { fogTint: zone.palette.fog });
+    const stilts = zone.layout === 'stilts';
+    const mastA = this.rng.range(0, Math.PI * 2);
+    this.env = new Environment(scene, {
+      mastDir: new THREE.Vector3(Math.cos(mastA), 0, Math.sin(mastA)),
+      fogTint: zone.palette.fog,
+      mood: zone.mood || 'dusk',
+      storm: !!zone.storm,
+      fireflies: !!zone.fireflies,
+      waterY: stilts ? -1.6 : undefined,
+    });
+    this.env.onThunder = (delay) => audio.thunder(delay);
     this.loot = new Loot(scene, audio);
-    const gen = new CityGen({ zone, seed: this.seed, scene, loot: this.loot });
+    const Gen = stilts ? StiltGen : CityGen;
+    const gen = new Gen({ zone, seed: this.seed, scene, loot: this.loot });
     this.city = gen.build();
     this.world = this.city.world;
     this.docks = this.city.docks;
@@ -82,12 +107,13 @@ export class Raid {
       }
       if (player.using) this._cancelUse();
     };
-    player.onDeath = () => this._onDeath();
+    player.onDeath = (kind) => this._onDeath(kind);
 
     this.horde = new Horde({
       scene, world: this.world, player, audio, fx: this.fx, env: this.env, loot: this.loot, rng: this.rng,
       events: {
         onKill: (w, info) => this._onKill(w, info),
+        onDrown: () => { this.stats.drowned++; this.stats.kills++; },
       },
     });
 
@@ -100,10 +126,20 @@ export class Raid {
       onClick: () => audio.ui(),
     });
     this.mapUI = new MapUI(uiRoot);
-    this.mapUI.setData(this.city.map, zone.name, this.env.towerPos);
+    this.mapUI.setData(this.city.map, zone.name, this.env.mastPos);
+
+    // the Living Guard: soldiers on post and patrol, drones overhead
+    this.guards = new GuardForce({
+      scene, world: this.world, player, audio, fx: this.fx, env: this.env, loot: this.loot, rng: this.rng, hud: this.hud, horde: this.horde,
+      noise: (p, r, o) => this.horde.noise(p, r, o),
+      onKill: (s, info) => this._onGuardKill(s, info),
+    });
+    this.horde.guards = this.guards;
+    this._spawnGuards();
 
     this.combat = new Combat({
       player, horde: this.horde, world: this.world, audio, fx: this.fx, vm: this.vm, loot: this.loot,
+      guards: this.guards, vmMuzzleWorld: () => this.vm.muzzleWorld(camera),
       inv: this.inv, camera, hud: this.hud, noise: (p, r, o) => this.noise(p, r, o),
       onAggro: () => {
         if (player.disguise > 0) {
@@ -146,20 +182,41 @@ export class Raid {
       scene.add(glow);
       this.lanterns.push(l);
     }
+    // Guard floodlights: two real lights follow whichever floods are nearest
+    this.floodLights = [];
+    if (this.city.floods.length) {
+      for (let i = 0; i < Math.min(2, this.city.floods.length); i++) {
+        const l = new THREE.SpotLight(0xfff0d8, 0, 34, 0.62, 0.45, 1.3);
+        scene.add(l);
+        scene.add(l.target);
+        this.floodLights.push(l);
+      }
+      this.floodT = 0;
+    }
 
     this._spawnWalkers();
 
-    this.clock = START_HOUR;
-    this.rate = (TOLL_HOUR - START_HOUR) / (zone.tollMinutes * 60);
-    this.tolled = false;
+    const clk = zoneClock(zone);
+    this.clk = clk;
+    this.clock = clk.start;
+    this.rate = (clk.sweep - clk.start) / (zone.sweepMinutes * 60);
+    this.swept = false;
     this.overrun = false;
+    this.warned = false;
     this.spawnT = 0;
     this.extractT = 0;
     this.deathT = 0;
+    this.ambT = 8;
+    this.broadcastT = 25 + this.rng.range(0, 20);
+    this.broadcasts = 0;
+    this.pulseT = 0;
     this.env.setTime(this.clock);
     audio.startAmbience();
     audio.setAmbience({ wind: 0.16, insects: 0, drone: 0 });
-    this.hud.big(zone.name, 'Scavenge. Get back to the water before the bell tolls.', '', 5);
+    const lede = stilts
+      ? 'Scavenge the village. The dead climb out of the water here. Get back to your skiff before the Sweep.'
+      : 'Scavenge. Get back to the water before the Living Guard sweeps the sector.';
+    this.hud.big(zone.name, lede, '', 5);
     if (this.gaveScrewdriver) setTimeout(() => this.hud.toast('You found a rusty screwdriver in the skiff'), 1500);
     this.hud.toast('Tab: backpack · M: map · F: flashlight');
   }
@@ -188,21 +245,76 @@ export class Raid {
     while (made < n && street.length) {
       const p = street[i % street.length];
       const jitter = i >= street.length ? 1.5 : 0;
-      this.horde.spawn({ x: p.x + rng.range(-jitter, jitter), z: p.z + rng.range(-jitter, jitter) }, { ...kind(), state: 'wander' });
+      this.horde.spawn(this._near(p, jitter), { ...kind(), state: 'wander' });
       made++;
       i++;
     }
     this.initialWalkers = made;
   }
 
+  // A walkable spot within `jitter` of p (on the stilts, open water is never walkable).
+  _near(p, jitter) {
+    for (let k = 0; jitter > 0 && k < 4; k++) {
+      const x = p.x + this.rng.range(-jitter, jitter), z = p.z + this.rng.range(-jitter, jitter);
+      if (this.world.isWalkable(x, z)) return { x, z };
+    }
+    return { x: p.x, z: p.z };
+  }
+
+  // Soldiers on their posts and walking patrol routes, plus any drones already up.
+  _spawnGuards() {
+    const zone = this.zone, rng = this.rng, sp = this.city.spawns, P = this.player.pos;
+    const g = zone.guards || { posts: 0, patrols: 0 };
+    const far = (p, d) => Math.hypot(p.x - P.x, p.z - P.z) > d;
+    const posts = rng.shuffle(sp.guardPost.filter((p) => far(p, 35)));
+    for (let i = 0; i < Math.min(g.posts, posts.length); i++) {
+      const p = posts[i];
+      this.guards.spawnSoldier(p, { post: true, facing: p.facing });
+    }
+    const pts = sp.patrol.filter((p) => far(p, 40));
+    for (let i = 0; i < g.patrols && pts.length >= 2; i++) {
+      // a loop through a few nearby points
+      const a = rng.pick(pts);
+      const near = pts.filter((q) => q !== a && Math.hypot(q.x - a.x, q.z - a.z) < 50);
+      const route = [a, ...rng.shuffle(near).slice(0, rng.int(1, 3))].map((q) => new THREE.Vector3(q.x, 0, q.z));
+      const n = rng.int(2, 3);
+      for (let k = 0; k < n; k++) {
+        const s = this.guards.spawnSoldier(this._near(a, 1.2), { route });
+        s.routeI = 1 % route.length;
+      }
+    }
+    for (let i = 0; i < (zone.dronesBeforeSweep || 0); i++) this._launchDrone(60);
+  }
+
+  // A drone comes in from the mast's side of the sky.
+  _launchDrone(dist = 55) {
+    const P = this.player.pos, m = this.env.mastPos;
+    const a = Math.atan2(m.z - P.z, m.x - P.x) + this.rng.range(-0.8, 0.8);
+    this.guards.spawnDrone(new THREE.Vector3(P.x + Math.cos(a) * dist, 10.5, P.z + Math.sin(a) * dist));
+  }
+
   noise(pos, radius, opts = {}) {
     this.horde.noise(pos, radius, opts);
+    // the Guard only comes running for real noise: shots, alarms, breaking things
+    if (radius >= 10) this.guards.onNoise(pos, radius);
   }
 
   _onKill(w, info) {
     this.stats.kills++;
     if (info.part === 'head') this.stats.headKills++;
     if (info.how === 'stab' || (info.kind === 'stab')) this.stats.stabKills++;
+  }
+
+  _onGuardKill(s, info) {
+    if (info.drone) {
+      this.stats.drones++;
+      this.hud.toast('Drone down');
+      return;
+    }
+    // soldiers the dead drag down don't count as yours
+    if (info.how === 'eaten') return;
+    this.stats.guardKills++;
+    if (info.how === 'takedown') this.hud.toast('Silent takedown');
   }
 
   // ---- input / UI -------------------------------------------------------------
@@ -381,6 +493,17 @@ export class Raid {
         hud.toast('Backpack full', true);
       }
     } else if (target.type === 'container') {
+      if (target.locked === 'keycard' && !target.opened) {
+        if (!this.inv.count('keycard')) {
+          audio.ui('error');
+          hud.toast('Locked — it takes a Guard keycard', true);
+          return;
+        }
+        this.inv.take('keycard', 1);
+        target.locked = null;
+        audio.ui('craft');
+        hud.toast('Keycard accepted');
+      }
       this.loot.open(target);
       this.stats.searched++;
       this.noise(this.player.pos, 3);
@@ -404,13 +527,7 @@ export class Raid {
     this.env.setTime(this.clock);
 
     // raid events
-    if (!this.tolled && this.clock >= TOLL_HOUR) this._toll();
-    if (this.tolled && !this.overrun && this.clock >= OVERRUN_HOUR) {
-      this.overrun = true;
-      this.hud.big('Overrun', 'They are everywhere. Get to a skiff.', 'toll', 4);
-      audio.bell(0.6, 2);
-    }
-    if (this.tolled) this._hordeSpawns(dt);
+    this._events(dt);
 
     // input
     const look = input.consumeLook();
@@ -448,6 +565,7 @@ export class Raid {
     }
 
     this.horde.update(dt, this.time);
+    this.guards.update(dt, this.time);
     this.loot.update(dt, this.time, this.player.pos, this.env.drawDistance);
     this.fx.update(dt);
 
@@ -475,6 +593,9 @@ export class Raid {
       l.intensity = 12 * f;
       l.userData.glow.scale.setScalar(0.8 + f * 0.4);
     }
+    // candles and lanterns gutter together
+    if (this.city.glowMat) this.city.glowMat.color.setScalar(0.82 + noise1(this.time * 3.1) * 0.12 + noise1(this.time * 11.7) * 0.06);
+    if (this.floodLights.length) this._updateFloods(dt);
 
     // interaction
     let prompt = null, promptKey = 'E';
@@ -514,9 +635,11 @@ export class Raid {
       } else this.extractT = 0;
     }
 
-    // ambience follows the dusk
+    // ambience follows the dark
     const dark = this.env.darkness;
-    audio.setAmbience({ wind: 0.12 + dark * 0.08, insects: clamp((dark - 0.3) * 2, 0, 1), drone: this.tolled ? (this.overrun ? 1 : 0.6) : 0 });
+    const swamp = this.zone.mood === 'swamp';
+    audio.setAmbience({ wind: (swamp ? 0.07 : 0.12) + dark * 0.08, insects: clamp((dark - 0.3) * 2, 0, 1) * (swamp ? 1.3 : 1), drone: this.swept ? (this.overrun ? 1 : 0.6) : 0 });
+    this._ambientScares(dt);
     audio.updateListener(this.camera.position, fwd, new THREE.Vector3(0, 1, 0));
 
     // HUD
@@ -528,7 +651,7 @@ export class Raid {
       const g = it.gun;
       const chamber = g.chamber === 'live' ? '+1' : '';
       const mag = d.action === 'mag' ? (g.magIn ? `${g.loaded}${chamber}` : '—') : `${g.loaded}${chamber}`;
-      const state = g.chamber === 'jam' ? 'Jammed' : d.action === 'mag' && !g.magIn ? 'Mag out' : g.chamber === 'spent' ? (d.action === 'pump' ? 'Pump it' : 'Work the bolt') : d.action === 'cyl' && g.open ? 'Cylinder open' : it.sup ? `Suppressed · ${it.sup}` : '';
+      const state = g.chamber === 'jam' ? 'Jammed' : d.energy && !g.magIn ? 'No cell' : d.energy && g.chamber !== 'live' ? 'Coil cold' : d.action === 'mag' && !g.magIn ? 'Mag out' : g.chamber === 'spent' ? (d.action === 'pump' ? 'Pump it' : 'Work the bolt') : d.action === 'cyl' && g.open ? 'Cylinder open' : it.sup ? `Suppressed · ${it.sup}` : '';
       weapon = { name: d.name, ammo: `${mag} <small>/ ${this.inv.count(d.ammo)}</small>`, state, durK: it.dur / d.dur };
     } else weapon = { name: d.name, ammo: '', state: c.melee && c.melee.phase === 'windup' ? (c.melee.charge >= 1 ? 'Full swing' : 'Winding up') : '', durK: it.dur / d.dur };
     const grabbers = player.grabbers;
@@ -539,10 +662,10 @@ export class Raid {
       grab = { free: player.struggle, bite };
     }
     const markers = this.docks.map((dk) => ({ x: dk.center.x, z: dk.center.z, kind: '' }));
-    markers.push({ x: this.env.towerPos.x, z: this.env.towerPos.z, kind: 'bell' });
+    markers.push({ x: this.env.mastPos.x, z: this.env.mastPos.z, kind: 'mast' });
     this.hud.update(dt, {
       yaw: player.yaw, px: player.pos.x, pz: player.pos.z, markers,
-      clock: this.clock, tollIn: (TOLL_HOUR - this.clock) / this.rate, tolled: this.tolled, overrun: this.overrun,
+      clock: this.clock, sweepIn: (this.clk.sweep - this.clock) / this.rate, swept: this.swept, overrun: this.overrun, spotted: this.guards.spotted,
       health: player.health, maxHealth: player.maxHealth, stamina: player.stamina, battery: player.battery, flashlight: player.flashlightOn,
       weapon, slots: SLOTS.map((s) => !!this.inv.loadout[s]), slotIndex: SLOTS.indexOf(c.slot),
       ads: c.ads, hideCross: c.isGun && c.ads > 0.6, charge: c.melee && c.melee.phase === 'windup' ? c.melee.charge : null,
@@ -561,6 +684,7 @@ export class Raid {
     if (p.adrenaline > 0) out.push(`Adrenaline ${Math.ceil(p.adrenaline)}s`);
     if (p.regenBoost > 0) out.push('Painkillers');
     if (p.crouched) out.push('Crouched');
+    if (this.guards.spotted) out.push('Spotted by the Guard');
     return out.join(' · ');
   }
 
@@ -582,19 +706,84 @@ export class Raid {
     return best;
   }
 
-  _toll() {
-    this.tolled = true;
-    const audio = this.app.audio;
-    audio.bell(0.9, 3);
-    this.env.ringBell();
-    this.hud.big('The bell tolls', 'Every dead thing in the parish heard it. Get to a skiff.', 'toll', 6);
+  // Curfew warning, the Sweep, and the overrun after it.
+  _events(dt) {
+    const audio = this.app.audio, clk = this.clk;
+    const toSweep = (clk.sweep - this.clock) / this.rate;
+    // the Guard talks to the parish before curfew
+    if (!this.swept) {
+      this.broadcastT -= dt;
+      if (this.broadcastT <= 0 && this.broadcasts < 2 && toSweep > 90) {
+        this.broadcastT = 150 + this.rng.range(0, 90);
+        audio.broadcast(BROADCASTS.early[this.broadcasts % BROADCASTS.early.length]);
+        this.hud.toast('A Guard loudspeaker crackles somewhere out in the dark');
+        this.broadcasts++;
+      }
+    }
+    if (!this.warned && toSweep <= 60) {
+      this.warned = true;
+      audio.broadcast(BROADCASTS.warn);
+      audio.herderPulse(4, 0.4);
+      this.hud.toast('Curfew in one minute — the Sweep is coming', true);
+    }
+    if (!this.swept && this.clock >= clk.sweep) this._sweep();
+    if (this.swept && !this.overrun && this.clock >= clk.overrun) {
+      this.overrun = true;
+      this.hud.big('Overrun', 'The Guard has lost the sector. Everything dead is out here with you. Get to a skiff.', 'sweep', 4);
+      audio.siren(7);
+      audio.herderPulse(8, 1);
+      setTimeout(() => audio.broadcast(BROADCASTS.overrun), 2500);
+      // the sweep team pulls back toward the mast; the dead follow them
+      for (const s of this.guards.soldiers) {
+        if (s.dead || s.inCombat) continue;
+        s.investigate.set(this.env.mastPos.x * 0.35, 0, this.env.mastPos.z * 0.35);
+        s.state = 'alert';
+        s.t = 0;
+      }
+    }
+    if (this.swept) {
+      this._hordeSpawns(dt);
+      // the horns keep pushing the dead through the sector
+      this.pulseT -= dt;
+      if (this.pulseT <= 0) {
+        this.pulseT = this.overrun ? 26 : 38;
+        audio.herderPulse(6, this.overrun ? 1 : 0.7);
+      }
+    }
+  }
+
+  _sweep() {
+    this.swept = true;
+    const audio = this.app.audio, zone = this.zone, rng = this.rng, P = this.player.pos;
+    audio.siren(10);
+    audio.herderPulse(8, 1);
+    this.env.startSweep();
+    setTimeout(() => audio.broadcast(BROADCASTS.sweep), 3500);
+    this.hud.big('The Sweep', 'The Guard\'s horns are driving every dead thing in the sector toward the water. Get to a skiff.', 'sweep', 6);
     this.spawnT = 3;
-    // the toll stirs the sleepers
+    this.pulseT = 30;
+    // the horns stir the sleepers and set the wanderers moving
     for (const w of this.horde.walkers) {
-      if (w.state === 'dormant' && this.rng.chance(0.6)) w.setState('getup');
-      else if (!w.dead && (w.state === 'wander' || w.state === 'investigate') && this.rng.chance(0.35)) {
+      if (w.dead) continue;
+      if (w.state === 'dormant' && rng.chance(0.6)) w.setState('getup');
+      else if ((w.state === 'wander' || w.state === 'investigate') && rng.chance(0.35)) {
         w.hunting = true;
         w.setState('chase');
+      }
+    }
+    // drones up, and a sweep team comes in from the far side of the sector
+    const up = this.guards.drones.filter((d) => !d.dead).length;
+    for (let i = up; i < (zone.drones || 0); i++) this._launchDrone(50 + i * 12);
+    const cands = this.city.spawns.patrol.concat(this.city.spawns.street).filter((p) => {
+      const d = Math.hypot(p.x - P.x, p.z - P.z);
+      return d > 45 && d < 95;
+    });
+    if (cands.length && zone.sweepTeam) {
+      const a = rng.pick(cands);
+      for (let i = 0; i < zone.sweepTeam; i++) {
+        const s = this.guards.spawnSoldier(this._near(a, 1.5));
+        s.state = 'alert';
+        s.investigate.set(P.x + rng.range(-14, 14), 0, P.z + rng.range(-14, 14));
       }
     }
   }
@@ -602,29 +791,82 @@ export class Raid {
   _hordeSpawns(dt) {
     this.spawnT -= dt;
     if (this.spawnT > 0) return;
-    const late = clamp((this.clock - TOLL_HOUR) / (OVERRUN_HOUR - TOLL_HOUR), 0, 1);
+    const clk = this.clk;
+    const late = clamp((this.clock - clk.sweep) / (clk.overrun - clk.sweep), 0, 1);
     this.spawnT = 7 - late * 4.5;
     const alive = this.horde.aliveCount;
     const cap = this.zone.maxWalkers + 30 + Math.round(late * 30);
     if (alive >= cap) return;
-    const P = this.player.pos;
+    const P = this.player.pos, rng = this.rng;
+    const n = 1 + Math.floor(rng.next() * (2 + late * 2));
+    const opts = () => ({ riot: rng.chance(this.zone.riot), fresh: rng.chance(this.zone.fresh + late * 0.15), hunting: true });
+    // out on the stilts, most of them come up out of the water
+    const emerge = this.city.spawns.emerge.filter((e) => {
+      const d = Math.hypot(e.to.x - P.x, e.to.z - P.z);
+      return d > 14 && d < 55;
+    });
     const edges = this.city.spawns.edge.concat(this.city.spawns.street).filter((p) => {
       const d = Math.hypot(p.x - P.x, p.z - P.z);
       return d > 32 && d < 75;
     });
-    if (!edges.length) return;
-    const n = 1 + Math.floor(this.rng.next() * (2 + late * 2));
     for (let i = 0; i < n; i++) {
-      const p = this.rng.pick(edges);
-      const w = this.horde.spawn({ x: p.x + this.rng.range(-1.5, 1.5), z: p.z + this.rng.range(-1.5, 1.5) }, {
-        riot: this.rng.chance(this.zone.riot), fresh: this.rng.chance(this.zone.fresh + late * 0.15), state: 'chase', hunting: true,
-      });
-      w.lastSeen.copy(P);
+      let w;
+      if (emerge.length && (rng.chance(0.75) || !edges.length)) {
+        const e = rng.pick(emerge);
+        w = this.horde.emerge(e.from, e.to, opts());
+      } else if (edges.length) {
+        w = this.horde.spawn(this._near(rng.pick(edges), 1.5), { ...opts(), state: 'chase' });
+      }
+      if (w) w.lastSeen.copy(P);
     }
   }
 
-  _onDeath() {
-    this.hud.big('You died', 'The parish keeps what you carried.', '', 6);
+  // Sounds out in the dark that have nothing to do with you. Mostly.
+  _ambientScares(dt) {
+    this.ambT -= dt;
+    if (this.ambT > 0) return;
+    const audio = this.app.audio, rng = this.rng;
+    this.ambT = rng.range(10, 24);
+    const swamp = this.zone.mood === 'swamp';
+    const P = this.player.pos;
+    const far = (d) => {
+      const a = rng.range(0, Math.PI * 2);
+      return new THREE.Vector3(P.x + Math.cos(a) * d, 1.2, P.z + Math.sin(a) * d);
+    };
+    const pick = rng.weighted(swamp
+      ? [['frogs', 4], ['gator', 1.2], ['creak', 2], ['chime', 1.2], ['splash', 2], ['groan', 1.5], ['scream', 0.5], ['shots', 0.5]]
+      : [['creak', 2], ['chime', 1], ['groan', 2.5], ['scream', 0.8], ['shots', 1.2], ['dog', 0.8]]);
+    if (pick === 'frogs') { audio.frogs(); audio.frogs(); }
+    else if (pick === 'gator') audio.gatorBellow();
+    else if (pick === 'creak') audio.creak();
+    else if (pick === 'chime') audio.chime();
+    else if (pick === 'splash') audio.splash(far(rng.range(12, 30)).setY(this.env.waterY), rng.range(0.5, 1.2));
+    else if (pick === 'groan') audio.groan(far(rng.range(18, 34)), rng.range(0.7, 1.1), 0.7, 1.8);
+    else if (pick === 'scream') audio.scream();
+    else if (pick === 'shots') audio.distantShots();
+    else if (pick === 'dog') audio.groan(far(rng.range(40, 60)), 1.8, 0.4, 1.2);
+  }
+
+  // Point the two real floodlights at the Guard floods nearest the player.
+  _updateFloods(dt) {
+    this.floodT -= dt;
+    if (this.floodT > 0) return;
+    this.floodT = 1;
+    const P = this.player.pos;
+    const near = this.city.floods.slice().sort((a, b) => a.pos.distanceToSquared(P) - b.pos.distanceToSquared(P));
+    this.floodLights.forEach((l, i) => {
+      const f = near[i];
+      if (!f) { l.intensity = 0; return; }
+      l.position.copy(f.pos);
+      l.target.position.copy(f.target);
+      l.target.updateMatrixWorld();
+      l.intensity = f.pos.distanceTo(P) < 70 ? 70 : 0;
+    });
+  }
+
+  _onDeath(kind) {
+    const byGuard = kind === 'laser';
+    this.hud.big('You died', byGuard ? 'The Living Guard doesn\'t take prisoners after curfew.' : 'The parish keeps what you carried.', '', 6);
     this.combat.held = null;
   }
 
@@ -657,6 +899,9 @@ export class Raid {
       headKills: this.stats.headKills,
       searched: this.stats.searched,
       bites: this.stats.bites,
+      guardKills: this.stats.guardKills,
+      drones: this.stats.drones,
+      drowned: this.stats.drowned,
       time: this.time,
       clock: this.clock,
       health: player.health,
@@ -674,6 +919,8 @@ export class Raid {
     this.hud.root.remove();
     this.invUI.el.remove();
     this.mapUI.el.remove();
+    this.guards.dispose();
+    try { window.speechSynthesis?.cancel(); } catch (_) { /* optional */ }
     this.city.mesh.traverse((o) => o.geometry && o.geometry.dispose());
   }
 }

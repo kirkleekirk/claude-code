@@ -12,12 +12,16 @@ export const LOOT = {
   trunk: [['scrap', 4], ['tape', 3], ['toolkit', 2], ['fasteners', 3], ['ammo_9mm', 2], ['jerky', 2], ['bandage', 2], ['pipe', 1], ['bat', 0.8], ['battery', 2], ['ammo_12g', 1], ['crowbar', 0.4]],
   desk: [['electronics', 3], ['battery', 3], ['phone', 3], ['clock', 2], ['pills', 1], ['ammo_9mm', 1], ['tape', 2], ['glue', 2], ['radio', 1], ['watch', 1]],
   shelf: [['beans', 4], ['crackers', 4], ['soda', 3], ['jerky', 3], ['battery', 3], ['tape', 3], ['glue', 3], ['cloth', 2], ['chemicals', 2], ['rice', 2], ['bandage', 1.5]],
-  military: [['ammo_308', 4], ['ammo_12g', 4], ['ammo_9mm', 5], ['mre', 4], ['medkit', 2], ['adrenaline', 1.5], ['gunpowder', 3], ['rifle', 0.8], ['shotgun', 1], ['pistol', 1.2], ['suppressor', 0.7], ['combat_knife', 1.2], ['machete', 1], ['bolt', 2], ['crossbow', 0.45], ['axe', 0.5]],
+  guard: [['ecell', 5], ['nano_injector', 3], ['tlg_ration', 3], ['keycard', 1], ['ammo_308', 2], ['ammo_9mm', 2], ['arc_carbine', 0.45], ['photon_pistol', 0.7], ['shock_baton', 1], ['electronics', 3], ['medkit', 1.2], ['dogtags', 1.5], ['suppressor', 0.5]],
+  guardDrop: [['ecell', 5], ['tlg_ration', 2.5], ['nano_injector', 1.6], ['keycard', 2], ['dogtags', 3], ['electronics', 1.5], ['shock_baton', 0.4], ['photon_pistol', 0.3]],
+  crypt: [['jewelry', 3], ['watch', 2], ['rosary', 3], ['candles', 3], ['cloth', 2], ['whiskey', 1], ['ammo_38', 1], ['revolver', 0.25], ['bandage', 1]],
+  stilt: [['catfish', 4], ['whiskey', 2], ['chemicals', 3], ['leather', 3], ['fasteners', 2], ['cloth', 2], ['lighter', 2], ['ammo_12g', 1.5], ['bolt', 1.5], ['candles', 2], ['rosary', 1], ['machete', 0.5], ['shotgun', 0.3], ['bandage', 1.5]],
+  military: [['ecell', 1], ['nano_injector', 0.8], ['shock_baton', 0.5], ['ammo_308', 4], ['ammo_12g', 4], ['ammo_9mm', 5], ['mre', 4], ['medkit', 2], ['adrenaline', 1.5], ['gunpowder', 3], ['rifle', 0.8], ['shotgun', 1], ['pistol', 1.2], ['suppressor', 0.7], ['combat_knife', 1.2], ['machete', 1], ['bolt', 2], ['crossbow', 0.45], ['axe', 0.5]],
   floor: [['cloth', 3], ['scrap', 3], ['beans', 2], ['bandage', 1.5], ['battery', 1.5], ['tape', 1.5], ['ammo_9mm', 1], ['soda', 2], ['clock', 1], ['phone', 1.5], ['lighter', 1], ['screwdriver', 0.6], ['pipe', 0.4], ['kitchen_knife', 0.6], ['hammer', 0.4]],
   walker: [['cloth', 3], ['phone', 2], ['watch', 1], ['lighter', 1.5], ['bandage', 1], ['ammo_9mm', 0.8], ['pills', 0.8], ['jerky', 0.8], ['belt', 1], ['battery', 0.8]],
 };
 
-const AMMO_QTY = { ammo_9mm: [5, 14], ammo_38: [3, 8], ammo_12g: [2, 6], ammo_308: [2, 5], bolt: [2, 4] };
+const AMMO_QTY = { ammo_9mm: [5, 14], ammo_38: [3, 8], ammo_12g: [2, 6], ammo_308: [2, 5], bolt: [2, 4], ecell: [1, 2] };
 
 export function rollItem(rng, table, tier = 1) {
   const entries = LOOT[table] || LOOT.floor;
@@ -32,7 +36,7 @@ export function rollItem(rng, table, tier = 1) {
   if (d.cat === 'weapon') {
     opts.dur = Math.round(d.dur * rng.range(0.35, 0.9));
     if (d.kind === 'gun') {
-      opts.loaded = rng.int(0, Math.max(1, Math.floor(d.cap / 2)));
+      opts.loaded = d.energy ? rng.int(0, d.cap) : rng.int(0, Math.max(1, Math.floor(d.cap / 2)));
       opts.chambered = false;
     }
   }
@@ -42,7 +46,7 @@ export function rollItem(rng, table, tier = 1) {
 export function rollContainer(rng, table, tier = 1) {
   const r = rng.next();
   let n = r < 0.14 ? 0 : r < 0.62 ? 1 : r < 0.9 ? 2 : 3;
-  if (table === 'military') n += 1;
+  if (table === 'military' || table === 'guard') n += 1;
   const out = [];
   for (let i = 0; i < n; i++) out.push(rollItem(rng, table, tier));
   return out;

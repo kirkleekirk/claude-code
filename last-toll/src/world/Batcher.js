@@ -101,6 +101,26 @@ export class Batcher {
     this.vcount += p.count;
   }
 
+  // Append a geometry that already carries vertex colors (e.g. a flattened loot model).
+  geoColored(geometry, matrix) {
+    const p = geometry.attributes.position;
+    const n = geometry.attributes.normal;
+    const c = geometry.attributes.color;
+    _nm.getNormalMatrix(matrix);
+    const base = this.vcount;
+    for (let i = 0; i < p.count; i++) {
+      _v.fromBufferAttribute(p, i).applyMatrix4(matrix);
+      this.pos.push(_v.x, _v.y, _v.z);
+      _n.fromBufferAttribute(n, i).applyMatrix3(_nm).normalize();
+      this.nor.push(_n.x, _n.y, _n.z);
+      this.col.push(c.getX(i), c.getY(i), c.getZ(i));
+      this.uv.push(0, 0);
+    }
+    const ix = geometry.index.array;
+    for (let i = 0; i < ix.length; i++) this.idx.push(base + ix[i]);
+    this.vcount += p.count;
+  }
+
   cylinder(cx, cy, cz, rTop, rBot, h, hex, segs = 8, opts = {}) {
     const key = `c${rTop}_${rBot}_${h}_${segs}`;
     const g = Batcher._cache[key] || (Batcher._cache[key] = new THREE.CylinderGeometry(rTop, rBot, h, segs, 1));

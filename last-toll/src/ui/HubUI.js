@@ -90,13 +90,13 @@ export class HubUI {
     for (const a of ammoFor) if (countIn([p.backpack], a) === 0) warn.push(`No spare ${def(a).name} in your pack.`);
     return `
       <h2>Where to tonight?</h2>
-      <p class="lede">The skiff drops you at the edge of the flood at five o'clock. When the bell in the old tower tolls, every dead thing in the parish starts walking. Be back on the water before then.</p>
+      <p class="lede">The skiff drops you at the edge of the flood. At curfew the Living Guard sweeps the sector: the horns on their mast drive every dead thing ahead of the soldiers, and anyone still outside their walls is treated as infected. Be back on the water before then.</p>
       <div class="zones">${ZONES.map((zz) => `
         <button class="zone ${zz.id === this.zone ? 'on' : ''}" data-zone="${zz.id}">
           <span class="zn">${zz.name}</span>
-          <span class="threat" aria-label="Threat ${zz.threat} of 3">${[1, 2, 3].map((i) => `<i class="${i <= zz.threat ? 'on' : ''}"></i>`).join('')}<span class="label" style="margin-left:6px">Threat</span></span>
+          <span class="threat" aria-label="Threat ${zz.threat} of 4">${[1, 2, 3, 4].map((i) => `<i class="${i <= zz.threat ? 'on' : ''}"></i>`).join('')}<span class="label" style="margin-left:6px">Threat</span></span>
           <p>${zz.blurb}</p>
-          <span class="meta"><span>${zz.focus}</span><span class="num">Toll in ${zz.tollMinutes}:00</span></span>
+          <span class="meta"><span>${zz.focus}</span><span class="num">${zz.night ? 'Lands after dark' : 'Lands at dusk'} · Sweep in ${zz.sweepMinutes}:00</span></span>
         </button>`).join('')}</div>
       <div class="deploy-foot">
         <div>
@@ -523,13 +523,16 @@ export class HubUI {
 
 export const HOWTO = `<div class="howto">
   <section><h3>The trip</h3>
-    <p>You land at dusk with what's on your back. Search cabinets, lockers, car trunks and shelves. Carry it back to a skiff before the bell tolls, or fight through the dead who come when it does.</p>
+    <p>You land with what's on your back. Search cabinets, lockers, car trunks and shelves. Carry it back to a skiff before the Living Guard's Sweep, or fight through the dead their horns drive ahead of them.</p>
     <p>Die and everything you carried stays in the parish. Your stash on the boat is safe.</p></section>
   <section><h3>Killing the dead</h3>
     <p>Only the brain stops them. Hold the mouse to wind up a swing; a weak stab glances off the skull. Blades sometimes stick — hold click and drag the mouse down to wrench them free.</p>
     <p>Grab one by the collar with <span class="key">Q</span> and stab up under its chin. That's the only way through a riot helmet short of a rifle or an axe.</p></section>
   <section><h3>Guns</h3>
     <p>Every gunshot is heard for fifty meters or more. Reload by hand with <span class="key">R</span>, one step at a time: drop the mag, seat a new one, rack the slide. Hold <span class="key">R</span> to run the whole sequence.</p></section>
+  <section><h3>The Living Guard</h3>
+    <p>What's left of a rebuilding army's local garrison, cut off from its command and running the parish like an occupation. Their tech came out of government vaults: laser rifles, searchlight drones, the herder mast. Soldiers shoot on sight after curfew. They'll burn the dead too, if the dead get close.</p>
+    <p>Stay out of their sightlines, crouch in the dark, kill the flashlight. A drone that catches you in its light calls the dead and every soldier nearby, so break line of sight. Dead Guardsmen carry energy cells and keycards; keycards open their weapons lockers.</p></section>
   <section><h3>Controls</h3>
     <div class="keys-list">
       <span class="key">WASD</span><span>Move · <span class="key">Shift</span> sprint · <span class="key">C</span> crouch</span>

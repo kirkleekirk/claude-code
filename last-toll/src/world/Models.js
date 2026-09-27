@@ -61,6 +61,11 @@ export const MAT = {
   get black() { return mat('black', 0x121212); },
   get olive() { return mat('olive', 0x4d5233); },
   get string() { return mat('string', 0xcfc6a8); },
+  get guard() { return mat('guard', 0x2b3035); },
+  get guardDark() { return mat('guardDark', 0x181b1f); },
+  get glow() { return mat('glow', 0xff3a24, { emissive: 0xff2a14, emissiveIntensity: 1.4 }); },
+  get cellGlow() { return mat('cellGlow', 0xff6a3a, { emissive: 0xff4a1a, emissiveIntensity: 1.1 }); },
+  get arc() { return mat('arc', 0x9ad8ff, { emissive: 0x5ab8ff, emissiveIntensity: 1.6 }); },
 };
 
 // ---- Weapons -----------------------------------------------------------------
@@ -245,6 +250,48 @@ const BUILDERS = {
   },
 };
 
+// Living Guard tech: slate bodies, red coils.
+BUILDERS.photon_pistol = (g) => {
+  const grip = box(g, 0, -0.05, 0.03, 0.03, 0.1, 0.045, MAT.guardDark);
+  grip.rotation.x = -0.2;
+  const slide = box(g, 0, 0.035, -0.04, 0.034, 0.04, 0.2, MAT.guard, 'slide');
+  box(slide, 0, 0.55, 0.2, 0.3, 0.2, 0.25, MAT.guardDark);
+  for (let i = 0; i < 3; i++) box(g, 0, 0.035, -0.06 - i * 0.035, 0.036, 0.012, 0.012, MAT.glow);
+  const mag = box(g, 0, -0.06, 0.03, 0.024, 0.08, 0.036, MAT.cellGlow, 'mag');
+  mag.rotation.x = -0.2;
+  cyl(g, 0, 0.035, -0.15, 0.012, 0.03, 'z', MAT.glow);
+  const muzzle = new THREE.Object3D();
+  muzzle.position.set(0, 0.035, -0.17);
+  muzzle.name = 'muzzle';
+  g.add(muzzle);
+  g.userData.sightY = 0.062;
+};
+BUILDERS.arc_carbine = (g) => {
+  box(g, 0, -0.01, 0.2, 0.04, 0.07, 0.24, MAT.guardDark).rotation.x = 0.08;
+  box(g, 0, 0.02, -0.08, 0.05, 0.06, 0.42, MAT.guard);
+  box(g, 0, -0.035, 0.05, 0.024, 0.07, 0.03, MAT.guardDark).rotation.x = -0.3;
+  const mag = box(g, 0, -0.03, -0.06, 0.03, 0.07, 0.05, MAT.cellGlow, 'mag');
+  mag.userData.cell = true;
+  for (let i = 0; i < 5; i++) box(g, 0, 0.02, -0.18 - i * 0.045, 0.056, 0.018, 0.014, MAT.glow);
+  cyl(g, 0, 0.022, -0.44, 0.016, 0.2, 'z', MAT.guardDark);
+  box(g, 0, 0.06, -0.05, 0.02, 0.018, 0.16, MAT.guardDark);
+  box(g, 0, 0.074, -0.1, 0.012, 0.012, 0.012, MAT.glow);
+  const slide = box(g, 0.03, 0.035, 0.02, 0.012, 0.018, 0.05, MAT.steel, 'slide');
+  slide.userData.charge = true;
+  const muzzle = new THREE.Object3D();
+  muzzle.position.set(0, 0.022, -0.55);
+  muzzle.name = 'muzzle';
+  g.add(muzzle);
+  g.userData.sightY = 0.08;
+};
+BUILDERS.shock_baton = (g) => {
+  cyl(g, 0, 0.05, 0, 0.018, 0.16, 'y', MAT.rubber);
+  cyl(g, 0, 0.3, 0, 0.014, 0.36, 'y', MAT.guardDark);
+  cyl(g, 0, 0.5, 0, 0.018, 0.05, 'y', MAT.arc);
+  box(g, 0, 0.13, 0.02, 0.024, 0.03, 0.01, MAT.glow);
+  g.userData.tip = new THREE.Vector3(0, 0.52, 0);
+};
+
 export function weaponModel(id) {
   const g = new THREE.Group();
   const b = BUILDERS[id];
@@ -268,6 +315,8 @@ const SHAPES = {
   bandage: ['roll', 0xe8e4da], antiseptic: ['bottle', 0x6a4a2a], pills: ['pills', 0xd0741f], medkit: ['medkit', 0xb02a2a], adrenaline: ['syringe', 0xd8d4c8],
   ammo_9mm: ['ammo', 0x9a7a2a], ammo_38: ['ammo', 0x6a5a3a], ammo_12g: ['ammo', 0xa02a20], ammo_308: ['ammo', 0x4d5233], bolt: ['bolts', 0x9a9ea3],
   battery: ['battery', 0x2a2a2a], suppressor: ['suppressor', 0x151515],
+  ecell: ['cell', 0xd8542e], tlg_ration: ['flat', 0x7a7c78], catfish: ['fish', 0x6a4a2a], nano_injector: ['syringe', 0xc02a20],
+  keycard: ['card', 0x2b3035], dogtags: ['disc', 0x9aa0a4], rosary: ['smallbox', 0x5a3a24], candles: ['bundle', 0xd8ccb0],
 };
 
 const ITEM_MATS = {};
@@ -321,9 +370,11 @@ export function itemModel(id) {
     case 'bolts': for (let i = 0; i < 3; i++) cyl(g, 0, 0.01 + i * 0.012, (i - 1) * 0.015, 0.005, 0.36, 'x', m); break;
     case 'battery': cyl(g, 0, 0.03, 0, 0.016, 0.06, 'y', m); cyl(g, 0, 0.062, 0, 0.006, 0.006, 'y', MAT.brass); break;
     case 'suppressor': cyl(g, 0, 0.02, 0, 0.02, 0.16, 'x', m); break;
+    case 'cell': box(g, 0, 0.04, 0, 0.05, 0.08, 0.035, MAT.guardDark); box(g, 0, 0.04, 0.018, 0.04, 0.05, 0.004, m); break;
+    case 'fish': box(g, 0, 0.02, 0, 0.26, 0.04, 0.08, m); box(g, 0.14, 0.02, 0, 0.05, 0.03, 0.1, m).rotation.y = 0.5; break;
+    case 'card': box(g, 0, 0.003, 0, 0.085, 0.005, 0.055, m); box(g, 0.02, 0.006, 0, 0.02, 0.002, 0.02, MAT.glow); break;
     default: box(g, 0, 0.05, 0, 0.1, 0.1, 0.1, m);
   }
-  g.scale.setScalar(1.35);
   return g;
 }
 

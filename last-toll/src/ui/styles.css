@@ -99,7 +99,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--brass)
 #hud .big h2 { font-family: var(--display); font-weight: 400; font-size: clamp(34px, 6vw, 76px); margin: 0; letter-spacing: 0.04em; color: var(--bone); }
 #hud .big p { margin: 6px 0 0; font-size: 20px; color: var(--bone-dim); letter-spacing: 0.08em; text-transform: uppercase; }
 #hud .big.show { opacity: 1; }
-#hud .big.toll h2 { color: #e8c07a; }
+#hud .big.sweep h2 { color: #e8604a; letter-spacing: 0.12em; }
 
 /* compass */
 #hud .compass {
@@ -113,8 +113,8 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--brass)
 #hud .compass .card { position: absolute; top: 11px; transform: translateX(-50%); font-size: 15px; font-weight: 600; color: var(--bone); letter-spacing: 0.08em; }
 #hud .compass .mk { position: absolute; top: 0; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; font-size: 11px; color: var(--brass); font-family: var(--mono); }
 #hud .compass .mk i { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 7px solid var(--brass); }
-#hud .compass .mk.bell { color: #d58a5a; }
-#hud .compass .mk.bell i { border-top-color: #d58a5a; }
+#hud .compass .mk.mast { color: #e2402e; }
+#hud .compass .mk.mast i { border-top-color: #e2402e; }
 #hud .compass .center { position: absolute; left: 50%; top: 0; width: 1px; height: 9px; background: var(--bone); }
 
 /* wrist panel */
@@ -125,8 +125,8 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--brass)
 }
 #hud .wrist .clock { display: flex; justify-content: space-between; align-items: baseline; }
 #hud .wrist .time { font-family: var(--mono); font-size: 22px; color: var(--bone); white-space: nowrap; }
-#hud .wrist .toll { white-space: nowrap; font-size: 14px; color: var(--brass); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; }
-#hud .wrist .toll.now { color: #e27a5a; animation: pulse 1s infinite; }
+#hud .wrist .sweep { white-space: nowrap; font-size: 14px; color: var(--brass); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; }
+#hud .wrist .sweep.now { color: #e27a5a; animation: pulse 1s infinite; }
 @keyframes pulse { 50% { opacity: 0.55; } }
 .bar { position: relative; height: 7px; background: rgba(255, 255, 255, 0.07); border-radius: 2px; overflow: hidden; }
 .bar > span { position: absolute; inset: 0 auto 0 0; background: var(--bone); transition: width 0.12s linear; }
@@ -171,9 +171,17 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--brass)
 /* screen effects */
 #hud .vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.55) 100%); }
 #hud .hurt { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse at center, transparent 35%, rgba(120, 10, 8, 0.75) 100%); }
-#hud .lowhp { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse at center, transparent 45%, rgba(40, 0, 0, 0.8) 100%); animation: pulse 1.2s infinite; }
+#hud .lowhp { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse at center, transparent 45%, rgba(40, 0, 0, 0.8) 100%); }
+/* only pulse while actually hurt: a running animation would override the inline opacity */
+#hud .lowhp.on { animation: pulse 1.2s infinite; }
 #hud .wrist .status { font-size: 13px; color: var(--moss); letter-spacing: 0.04em; min-height: 0; }
 #hud .wrist .status:empty { display: none; }
+#hud .spotted {
+  position: absolute; left: 50%; top: 58px; transform: translateX(-50%); opacity: 0; transition: opacity 0.25s;
+  display: flex; align-items: center; gap: 8px; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: #ff6a52;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+}
+#hud .spotted i { width: 10px; height: 10px; border-radius: 50%; background: #ff3a24; box-shadow: 0 0 10px #ff3a24; animation: pulse 0.6s infinite; }
 #hud .gutsfx { position: absolute; inset: 0; opacity: 0; transition: opacity 1s; background: radial-gradient(ellipse at center, transparent 50%, rgba(40, 44, 16, 0.55) 100%); }
 #hud .grabfx { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse at center, transparent 30%, rgba(30, 10, 5, 0.85) 100%); }
 #hud .scope { position: absolute; inset: 0; opacity: 0; background: radial-gradient(circle at center, transparent 0, transparent min(34vh, 34vw), #000 calc(min(34vh, 34vw) + 2px)); }
