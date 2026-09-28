@@ -3,6 +3,7 @@ import { WalkerModel, makeVolumes } from './WalkerModel.js';
 import { RNG } from '../core/rng.js';
 import { rayCapsule, raySphere, wrapAngle } from '../core/math.js';
 import { rollItem } from '../data/loot.js';
+import { makeItem } from '../data/items.js';
 
 // Walkers: perception, pathing (flow fields), grabbing, crippling, dying.
 // The dead only die when the brain is destroyed. Body damage staggers,
@@ -766,6 +767,8 @@ export class Horde {
     }
     if (!w.lootRolled) {
       w.lootRolled = true;
+      // a dead Guardsman still wears his tags
+      if (w.riot && this.rng.chance(0.4)) this.loot.dropItem(makeItem('dogtags'), _v.set(w.pos.x + this.rng.range(-0.3, 0.3), 0, w.pos.z + this.rng.range(-0.3, 0.3)));
       if (this.rng.chance(0.14)) {
         this.loot.dropItem(rollItem(this.rng, 'walker', 1), _v.set(w.pos.x + this.rng.range(-0.4, 0.4), 0, w.pos.z + this.rng.range(-0.4, 0.4)));
       }

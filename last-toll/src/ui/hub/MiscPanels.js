@@ -3,6 +3,7 @@ import { zoneById } from '../../data/zones.js';
 import { countIn, maxHealthFor, saveProfile } from '../../game/Profile.js';
 import { HOWTO } from '../howto.js';
 import { esc, frame } from './common.js';
+import { objective } from '../../data/story.js';
 
 // The smaller stations: the recycler, the captain's log, and the skiff.
 
@@ -83,7 +84,12 @@ export class JournalPanel {
 
   render() {
     const p = this.p, s = p.stats, st = p.settings;
+    const o = objective(p);
+    const log = (p.story.log || []).slice().reverse();
     this.el.querySelector('.st-body').innerHTML = `
+      <h4>The story so far</h4>
+      ${o ? `<div class="lead now"><span>${esc(o.chapter)}</span><b>${esc(o.text)}</b>${o.sub ? `<small>${esc(o.sub)}</small>` : ''}</div>` : '<div class="lead now"><span>Deaf and Angry</span><b>The relay is down and Command is on its way. The parish is yours to work.</b></div>'}
+      ${log.length ? `<ol class="storylog">${log.map((l) => `<li><span class="num">Day ${l.day}</span><p>${esc(l.text)}</p></li>`).join('')}</ol>` : '<p class="fine">Nothing written yet. There\'s a man on the aft deck in a Guard coat.</p>'}
       <div class="summary"><div class="facts">
         <div><span class="label">Days</span><b>${p.day}</b></div>
         <div><span class="label">Trips</span><b>${s.raids}</b></div>
@@ -97,6 +103,7 @@ export class JournalPanel {
         <label for="set-sens">Mouse sensitivity<input id="set-sens" type="range" min="0.3" max="2.5" step="0.05" value="${st.sens}" data-set="sens"><span class="num">${st.sens.toFixed(2)}</span></label>
         <label for="set-vol">Volume<input id="set-vol" type="range" min="0" max="1" step="0.05" value="${st.volume}" data-set="volume"><span class="num">${Math.round(st.volume * 100)}</span></label>
         <label for="set-fov">Field of view<input id="set-fov" type="range" min="60" max="100" step="1" value="${st.fov}" data-set="fov"><span class="num">${st.fov}</span></label>
+        <label for="set-voices">Crew voices<input id="set-voices" type="checkbox" ${st.voices !== false ? 'checked' : ''} data-set="voices"><span class="fine">Read lines aloud</span></label>
       </div>
       <h4>How it works</h4>
       ${HOWTO}
@@ -110,6 +117,12 @@ export class JournalPanel {
   _input(e) {
     const k = e.target.dataset.set;
     if (!k) return;
+    if (e.target.type === 'checkbox') {
+      this.p.settings[k] = e.target.checked;
+      if (!e.target.checked) this.hub.audio.hush();
+      saveProfile(this.p);
+      return;
+    }
     const v = parseFloat(e.target.value);
     this.p.settings[k] = v;
     this.hub.app.applySettings();

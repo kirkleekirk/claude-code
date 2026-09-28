@@ -486,7 +486,7 @@ export class StiltGen extends CityGen {
     // the offering chest beside the altar
     const chest = { ...CONTAINER_SPECS.crate, label: 'Offering Chest', color: 0x4a3426, inner: 0x3a2a1e };
     const items = [rollItem(r, 'crypt', 2), rollItem(r, 'stilt', 2), rollItem(r, 'crypt', 2)];
-    this.loot.addContainer({ kind: 'crate', spec: chest, x: cx + 2.15, z: altarZ, y0: 0, rotY: dir > 0 ? Math.PI : 0, items });
+    this.story.offering = this.loot.addContainer({ kind: 'crate', spec: chest, x: cx + 2.15, z: altarZ, y0: 0, rotY: dir > 0 ? Math.PI : 0, items });
     this.world.addBoxC(cx + 2.15, 0.39, altarZ, 0.95, 0.78, 0.95, { occlude: false, kind: 'furniture' });
     this._markInterior(room, 0);
     const wz = fz + out * (T / 2);

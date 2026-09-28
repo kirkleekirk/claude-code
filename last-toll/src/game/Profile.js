@@ -6,6 +6,7 @@ import { makeItem, def, MATS, ITEMS } from '../data/items.js';
 import { PACK_BASE, PACK_STEP } from '../data/recipes.js';
 import { ZONES } from '../data/zones.js';
 import { RNG } from '../core/rng.js';
+import { newStory } from '../data/story.js';
 
 const SAVE_KEY = 'lasttoll.save.v1';
 export const STASH_CAP = 60;
@@ -38,7 +39,8 @@ export function newProfile() {
     contractDay: 0,
     lastZone: 'cypress',
     lastResult: null,
-    settings: { sens: 1, volume: 0.8, fov: 68, invertY: false },
+    story: newStory(),
+    settings: { sens: 1, volume: 0.8, fov: 68, invertY: false, voices: true },
   };
 }
 
@@ -85,6 +87,7 @@ export function loadProfile() {
     p.settings = { ...base.settings, ...(p.settings || {}) };
     p.stats = { ...base.stats, ...(p.stats || {}) };
     p.stations = { ...base.stations, ...(p.stations || {}) };
+    p.story = { ...base.story, ...(p.story || {}) };
     return p;
   } catch (_) {
     return null;
@@ -184,7 +187,8 @@ export function planCost(lists, cost) {
   const scrap = {}, short = {}, fromSalvage = {};
   // things asked for by name (including salvage) are set aside first
   const entries = Object.entries(cost).sort(([a], [b]) => (MATS.includes(a) ? 1 : 0) - (MATS.includes(b) ? 1 : 0));
-  const junk = Object.keys(ITEMS).filter((id) => ITEMS[id].yields);
+  // keycards open lockers; the bench never breaks one down on its own
+  const junk = Object.keys(ITEMS).filter((id) => ITEMS[id].yields && !ITEMS[id].keep);
   for (const [id, q] of entries) {
     let need = q;
     const take = Math.min(cnt[id] || 0, need);

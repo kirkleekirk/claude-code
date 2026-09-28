@@ -32,7 +32,7 @@ export class CraftPanel {
 
   _entries() {
     const lvl = this.p.stations[this.id] || 1;
-    const out = RECIPES.filter((r) => r.bench === this.id).map((r) => ({ kind: 'recipe', r, cat: r.cat, locked: r.level > lvl, level: r.level }));
+    const out = RECIPES.filter((r) => r.bench === this.id && (!r.story || this.hub.p.story.step === r.story)).map((r) => ({ kind: 'recipe', r, cat: r.cat, locked: r.level > lvl, level: r.level }));
     // gear: the backpack is sewn at the workshop
     if (this.id === 'workshop') {
       const pl = this.p.packLevel || 0;
@@ -48,6 +48,8 @@ export class CraftPanel {
     const lvl = p.stations[this.id] || 1;
     const all = this._entries();
     const cats = [...new Set(all.map((e) => e.cat))];
+    // Hale's plans open first while the story needs them
+    if (!this.cat && cats.includes('Demolition')) this.cat = 'Demolition';
     if (!this.cat || !cats.includes(this.cat)) this.cat = cats[0];
     const entries = all.filter((e) => e.cat === this.cat);
     this.entries = entries;

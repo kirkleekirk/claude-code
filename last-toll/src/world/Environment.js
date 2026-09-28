@@ -361,7 +361,12 @@ export class Environment {
     }
 
     // mast: slow red blink; during the Sweep it strobes and the searchlights move
-    const blink = this.sweep > 0 ? (Math.sin(time * 9) > 0 ? 1 : 0.15) : (Math.sin(time * 2.2) > 0.6 ? 1 : 0.2);
+    let blink = this.sweep > 0 ? (Math.sin(time * 9) > 0 ? 1 : 0.15) : (Math.sin(time * 2.2) > 0.6 ? 1 : 0.2);
+    // a dead mast: the lights die in a few last stutters, then stay dark
+    if (this.mastDead) {
+      this.deadT = (this.deadT || 0) + dt;
+      blink = this.deadT < 1.6 && Math.random() < 0.3 ? 0.6 : 0;
+    }
     this.redMat.opacity = blink;
     this.beamMat.opacity = this.sweep > 0 ? 0.35 : 0;
     for (let i = 0; i < this.beams.length; i++) {
@@ -373,6 +378,12 @@ export class Environment {
 
   startSweep() {
     this.sweep = 1;
+  }
+
+  // The relay at Outpost 9 is down: every herder mast in the parish goes dark.
+  mastOff(now = false) {
+    this.mastDead = true;
+    if (now) this.deadT = 10;
   }
 
   dispose() {

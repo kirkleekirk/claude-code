@@ -16,7 +16,7 @@ import { MapUI } from '../ui/MapUI.js';
 import { RNG, noise1 } from '../core/rng.js';
 import { def, makeItem } from '../data/items.js';
 import { zoneClock } from '../data/zones.js';
-import { packCapacity, maxHealthFor } from './Profile.js';
+import { packCapacity, maxHealthFor, countIn } from './Profile.js';
 import { clamp } from '../core/math.js';
 
 // One trip into the flooded parish: from the skiff until you make it back to the
@@ -38,13 +38,36 @@ const BROADCASTS = {
   overrun: 'Sector lost. Sweep teams, fall back. Seal the gates.',
 };
 
+// After the relay at Outpost 9 comes down, the horns are silent and the 9th
+// Garrison takes it out on the parish by hand.
+const ANGRY = {
+  early: [
+    'This is the Living Guard, Ninth Garrison. An act of sabotage has been committed against this garrison. Anyone sheltering the saboteur will be treated as infected.',
+    'Citizens. Report any stranger to your nearest Guard post. The reward is water.',
+    'By order of Colonel Merritt, patrols are doubled. Curfew will be enforced by hand.',
+  ],
+  sweep: 'Curfew is in effect. Sweep teams are clearing the sector by hand. Shoot anything that moves.',
+};
+
+function angryZone(z) {
+  const g = z.guards || { posts: 0, patrols: 0 };
+  return {
+    ...z,
+    guards: { posts: g.posts, patrols: g.patrols + (z.threat >= 2 ? 1 : 0) },
+    sweepTeam: (z.sweepTeam || 0) + 2,
+    drones: (z.drones || 0) + 1,
+  };
+}
+
 const clone = (x) => (x ? JSON.parse(JSON.stringify(x)) : x);
 
 export class Raid {
   constructor(app, { zone, profile, seed }) {
     this.app = app;
-    this.zone = zone;
     this.profile = profile;
+    this.hornsDead = !!(profile.story && profile.story.mastDown);
+    this.zone = this.hornsDead ? angryZone(zone) : zone;
+    this.storyEvents = [];
     this.seed = seed ?? (Math.random() * 1e9) >>> 0;
     this.rng = new RNG(this.seed ^ 0x5bd1e995);
     this.paused = false;
@@ -79,7 +102,7 @@ export class Raid {
     this.env.onThunder = (delay) => audio.thunder(delay);
     this.loot = new Loot(scene, audio);
     const Gen = stilts ? StiltGen : CityGen;
-    const gen = new Gen({ zone, seed: this.seed, scene, loot: this.loot });
+    const gen = new Gen({ zone, seed: this.seed, scene, loot: this.loot, force: this._storyForce() });
     this.city = gen.build();
     this.world = this.city.world;
     this.docks = this.city.docks;
@@ -195,6 +218,7 @@ export class Raid {
       this.floodT = 0;
     }
 
+    this._setupStory();
     this._spawnWalkers();
 
     const clk = zoneClock(zone);
@@ -220,6 +244,156 @@ export class Raid {
     this.hud.big(zone.name, lede, '', 5);
     if (this.gaveScrewdriver) setTimeout(() => this.hud.toast('You found a rusty screwdriver in the skiff'), 1500);
     this.hud.toast('Tab: backpack · M: map · F: flashlight');
+    for (const n of this.app.raidNotes || []) setTimeout(() => this.hud.toast(n), 2600);
+    this.app.raidNotes = null;
+  }
+
+  // ---- the story ashore -------------------------------------------------------------
+
+  // Lots the story needs this trip: the Quarter's checkpoint, Outpost 9's relay compound.
+  _storyForce() {
+    const s = this.profile.story;
+    if (!s) return [];
+    if (s.step === 'codebook' && this.zone.id === 'quarter') return ['checkpoint'];
+    if (s.step === 'mast' && this.zone.id === 'outpost' && !s.mastDown) return ['compound'];
+    return [];
+  }
+
+  _owned(id) {
+    return countIn([this.profile.stash], id) + this.inv.count(id);
+  }
+
+  // Put what the story needs where the story says it is, and mark it.
+  _setupStory() {
+    const s = this.profile.story, z = this.zone.id, S = this.city.story || {};
+    this.storyGoal = null;
+    if (this.hornsDead) this.env.mastOff(true);
+    if (!s) return;
+    const plant = (c, id, text) => {
+      if (!c) c = this.rng.pick(this.loot.containers.filter((k) => !k.opened));
+      if (!c) return;
+      c.items.unshift(makeItem(id));
+      this.storyGoal = { kind: 'item', item: id, c, pos: c.center, text };
+    };
+    if (s.step === 'codebook' && z === 'quarter' && !this._owned('codebook')) plant(S.signals && S.signals[0], 'codebook', 'Find the signals locker in the checkpoint\'s command tent');
+    if (s.step === 'ledger' && z === 'marais' && !this._owned('ledger')) plant(S.offering, 'ledger', 'Search the offering chest beside the chapel altar');
+    if (s.step === 'mast' && z === 'outpost' && !s.mastDown && S.relays && S.relays.length) {
+      // the relay deepest in the base, farthest from where the skiff put you ashore
+      const P = this.player.pos;
+      const rl = S.relays.slice().sort((a, b) => Math.hypot(b.x - P.x, b.z - P.z) - Math.hypot(a.x - P.x, a.z - P.z))[0];
+      this.relay = rl;
+      const pos = new THREE.Vector3(rl.x, 1.1, rl.z);
+      this.storyGoal = { kind: 'relay', pos };
+      const raid = this;
+      this.relayUse = this.loot.addExtra({
+        pos, radius: 1.1,
+        get label() { return raid.inv.count('demo_charge') ? 'Plant the demolition charge' : 'The relay mast — you need a demolition charge'; },
+        onUse: () => this._plant(),
+      });
+    }
+  }
+
+  _plant() {
+    const audio = this.app.audio, P = this.player.pos, rl = this.relay;
+    if (this.charge || this.storyEvents.includes('mastDown')) return;
+    if (!this.inv.count('demo_charge')) {
+      audio.ui('error');
+      this.hud.toast('You need a demolition charge. Hale\'s plans are on the workshop bench.', true);
+      return;
+    }
+    this.inv.take('demo_charge', 1);
+    this.loot.removeExtra(this.relayUse);
+    // taped to the leg of the tower nearest you
+    const a = Math.atan2(P.x - rl.x, P.z - rl.z);
+    const pos = new THREE.Vector3(rl.x + Math.sin(a) * 0.62, 0.95, rl.z + Math.cos(a) * 0.62);
+    const g = new THREE.Group();
+    const can = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.2, 10), new THREE.MeshLambertMaterial({ color: 0x6a5a3a }));
+    g.add(can);
+    const led = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.03), new THREE.MeshBasicMaterial({ color: 0xff2010 }));
+    led.position.set(0, 0.05, 0.08);
+    g.add(led);
+    g.position.copy(pos);
+    g.rotation.y = a;
+    this.scene.add(g);
+    this.charge = { t: 25, pos, mesh: g, led, beep: 0 };
+    audio.mech('bench');
+    this.noise(P, 4);
+    this.hud.big('Charge set', '25 seconds. Get clear of the mast.', 'sweep', 3);
+  }
+
+  _updateCharge(dt) {
+    const c = this.charge;
+    c.t -= dt;
+    c.beep -= dt;
+    const every = c.t > 10 ? 1 : c.t > 4 ? 0.5 : 0.2;
+    if (c.beep <= 0) {
+      c.beep = every;
+      this.app.audio.beep(c.pos, c.t < 4);
+      c.led.visible = true;
+    } else if (c.beep < every - 0.08) c.led.visible = false;
+    if (c.t <= 0) this._detonate();
+  }
+
+  // The relay goes: the tower falls, every herder mast in the parish goes dark,
+  // and the 9th Garrison comes looking for whoever did it.
+  _detonate() {
+    const c = this.charge, rl = this.relay, audio = this.app.audio, P = this.player.pos;
+    this.charge = null;
+    this.scene.remove(c.mesh);
+    this.explode(c.pos, 5.5);
+    this.fx.explosion(new THREE.Vector3(rl.x, 4, rl.z), 1.2);
+    this.player.shake = Math.max(this.player.shake, 1.4);
+    this.storyEvents.push('mastDown');
+    this.hornsDead = true;
+    this.env.mastOff();
+    rl.lamp.visible = false;
+    this.toppling = { t: 0, a: Math.atan2(rl.x - P.x, rl.z - P.z) || 0, landed: false };
+    this.storyGoal = { kind: 'escape' };
+    this.hud.big('The relay is down', 'Every horn in the parish just went quiet. Now get out.', 'sweep', 5);
+    setTimeout(() => { if (!this.ended) audio.broadcast('Relay failure at Outpost Nine. All units, converge on the compound. Find the saboteur.'); }, 2600);
+    audio.siren(8);
+    // everyone comes running
+    for (const s of this.guards.soldiers) {
+      if (s.dead) continue;
+      s.investigate.set(rl.x + this.rng.range(-8, 8), 0, rl.z + this.rng.range(-8, 8));
+      if (!s.inCombat) { s.state = 'alert'; s.t = 0; }
+    }
+    if (!this.swept) this._sweep();
+    else for (let i = 0; i < 2; i++) this._launchDrone(55);
+  }
+
+  _updateTopple(dt) {
+    const tp = this.toppling, rl = this.relay;
+    tp.t += dt;
+    const k = Math.max(0, tp.t - 0.6);
+    const ang = Math.min(Math.PI / 2 - 0.03, 0.02 * k + 0.55 * k * k);
+    rl.group.rotation.set(ang, tp.a, 0, 'YXZ');
+    if (!tp.landed && ang >= Math.PI / 2 - 0.03) {
+      tp.landed = true;
+      const at = new THREE.Vector3(rl.x + Math.sin(tp.a) * 9, 0.4, rl.z + Math.cos(tp.a) * 9);
+      this.fx.explosion(at, 0.6);
+      this.app.audio.gunshot('explosion', at);
+      this.app.audio.impact(at, 'hard');
+      this.horde.blast(at, 2.4);
+      const d = at.distanceTo(this.player.pos);
+      this.player.shake = Math.max(this.player.shake, Math.max(0, 1.1 - d / 30));
+      this.noise(at, 60, { alarm: true });
+    }
+    if (tp.landed && tp.t > 6) this.toppling = null;
+  }
+
+  // What the story wants of you here, for the HUD.
+  _storyHud() {
+    const g = this.storyGoal, s = this.profile.story;
+    if (this.charge) return { text: `Get clear of the mast — ${Math.ceil(this.charge.t)}`, urgent: true };
+    if (g && g.kind === 'escape') return { text: 'The relay is down. Get to a skiff.' };
+    if (g && g.kind === 'item') return this.inv.count(g.item) ? { text: `${def(g.item).name} is in your pack. Get it home.` } : { text: g.text, mark: g.pos };
+    if (g && g.kind === 'relay') return { text: this.inv.count('demo_charge') ? 'Plant the charge on the relay mast' : 'The relay mast. You didn\'t bring a charge.', mark: g.pos };
+    if (s && s.step === 'tags') {
+      const n = this._owned('dogtags');
+      return { text: n >= 3 ? 'Three dog tags. Bring them to Hale.' : `Guard dog tags ${n}/3 — dead Guardsmen carry them` };
+    }
+    return null;
   }
 
   _spawnWalkers() {
@@ -535,6 +709,12 @@ export class Raid {
 
     // raid events
     this._events(dt);
+    if (this.charge) this._updateCharge(dt);
+    if (this.toppling) this._updateTopple(dt);
+    if (this.city.story && this.city.story.relays.length) {
+      const on = !this.hornsDead && Math.sin(this.time * 2.2) > 0.6;
+      for (const rl of this.city.story.relays) rl.lamp.visible = on;
+    }
 
     // input
     const look = input.consumeLook();
@@ -672,7 +852,9 @@ export class Raid {
       grab = { free: player.struggle, bite };
     }
     const markers = this.docks.map((dk) => ({ x: dk.center.x, z: dk.center.z, kind: '' }));
-    markers.push({ x: this.env.mastPos.x, z: this.env.mastPos.z, kind: 'mast' });
+    if (!this.hornsDead) markers.push({ x: this.env.mastPos.x, z: this.env.mastPos.z, kind: 'mast' });
+    const story = this._storyHud();
+    if (story && story.mark) markers.push({ x: story.mark.x, z: story.mark.z, kind: 'story' });
     this.hud.update(dt, {
       yaw: player.yaw, px: player.pos.x, pz: player.pos.z, markers,
       clock: this.clock, sweepIn: (this.clk.sweep - this.clock) / this.rate, swept: this.swept, overrun: this.overrun, spotted: this.guards.spotted,
@@ -682,6 +864,7 @@ export class Raid {
       prompt, promptKey, hint: player.using ? (player.using.kind === 'guts' ? 'Smearing guts…' : `Using ${def(player.using.item.id).name}…`) : c.hint,
       status: this._status(),
       grab, extract: extractK, hurt: player.hurtT, scope: c.isGun && c.d.scope && c.ads > 0.92,
+      objective: story,
     });
     if (this.mapUI.open) this.mapUI.draw(player.pos.x, player.pos.z, player.yaw, this.docks);
     this.vm.update(dt, this.combat.vmState(), this.env);
@@ -725,7 +908,8 @@ export class Raid {
       this.broadcastT -= dt;
       if (this.broadcastT <= 0 && this.broadcasts < 2 && toSweep > 90) {
         this.broadcastT = 150 + this.rng.range(0, 90);
-        audio.broadcast(BROADCASTS.early[this.broadcasts % BROADCASTS.early.length]);
+        const early = this.hornsDead ? ANGRY.early : BROADCASTS.early;
+        audio.broadcast(early[this.broadcasts % early.length]);
         this.hud.toast('A Guard loudspeaker crackles somewhere out in the dark');
         this.broadcasts++;
       }
@@ -733,7 +917,7 @@ export class Raid {
     if (!this.warned && toSweep <= 60) {
       this.warned = true;
       audio.broadcast(BROADCASTS.warn);
-      audio.herderPulse(4, 0.4);
+      if (!this.hornsDead) audio.herderPulse(4, 0.4);
       this.hud.toast('Curfew in one minute — the Sweep is coming', true);
     }
     if (!this.swept && this.clock >= clk.sweep) this._sweep();
@@ -741,7 +925,7 @@ export class Raid {
       this.overrun = true;
       this.hud.big('Overrun', 'The Guard has lost the sector. Everything dead is out here with you. Get to a skiff.', 'sweep', 4);
       audio.siren(7);
-      audio.herderPulse(8, 1);
+      if (!this.hornsDead) audio.herderPulse(8, 1);
       setTimeout(() => audio.broadcast(BROADCASTS.overrun), 2500);
       // the sweep team pulls back toward the mast; the dead follow them
       for (const s of this.guards.soldiers) {
@@ -755,7 +939,7 @@ export class Raid {
       this._hordeSpawns(dt);
       // the horns keep pushing the dead through the sector
       this.pulseT -= dt;
-      if (this.pulseT <= 0) {
+      if (this.pulseT <= 0 && !this.hornsDead) {
         this.pulseT = this.overrun ? 26 : 38;
         audio.herderPulse(6, this.overrun ? 1 : 0.7);
       }
@@ -765,18 +949,20 @@ export class Raid {
   _sweep() {
     this.swept = true;
     const audio = this.app.audio, zone = this.zone, rng = this.rng, P = this.player.pos;
+    const horns = !this.hornsDead;
     audio.siren(10);
-    audio.herderPulse(8, 1);
+    if (horns) audio.herderPulse(8, 1);
     this.env.startSweep();
-    setTimeout(() => audio.broadcast(BROADCASTS.sweep), 3500);
-    this.hud.big('The Sweep', 'The Guard\'s horns are driving every dead thing in the sector toward the water. Get to a skiff.', 'sweep', 6);
+    if (!this.storyEvents.includes('mastDown')) setTimeout(() => audio.broadcast(horns ? BROADCASTS.sweep : ANGRY.sweep), 3500);
+    if (horns) this.hud.big('The Sweep', 'The Guard\'s horns are driving every dead thing in the sector toward the water. Get to a skiff.', 'sweep', 6);
+    else if (!this.storyEvents.includes('mastDown')) this.hud.big('The Sweep', 'No horns tonight. Just soldiers, and more of them. Get to a skiff.', 'sweep', 6);
     this.spawnT = 3;
     this.pulseT = 30;
-    // the horns stir the sleepers and set the wanderers moving
+    // the horns stir the sleepers and set the wanderers moving; without them, only the noise does
     for (const w of this.horde.walkers) {
       if (w.dead) continue;
-      if (w.state === 'dormant' && rng.chance(0.6)) w.setState('getup');
-      else if ((w.state === 'wander' || w.state === 'investigate') && rng.chance(0.35)) {
+      if (w.state === 'dormant' && rng.chance(horns ? 0.6 : 0.15)) w.setState('getup');
+      else if ((w.state === 'wander' || w.state === 'investigate') && rng.chance(horns ? 0.35 : 0.08)) {
         w.hunting = true;
         w.setState('chase');
       }
@@ -803,9 +989,10 @@ export class Raid {
     if (this.spawnT > 0) return;
     const clk = this.clk;
     const late = clamp((this.clock - clk.sweep) / (clk.overrun - clk.sweep), 0, 1);
-    this.spawnT = 7 - late * 4.5;
+    // with the horns dead nothing drives the dead in from the edges; they only drift
+    this.spawnT = (7 - late * 4.5) * (this.hornsDead ? 2 : 1);
     const alive = this.horde.aliveCount;
-    const cap = this.zone.maxWalkers + 30 + Math.round(late * 30);
+    const cap = this.zone.maxWalkers + (this.hornsDead ? 8 : 30) + Math.round(late * (this.hornsDead ? 10 : 30));
     if (alive >= cap) return;
     const P = this.player.pos, rng = this.rng;
     const n = 1 + Math.floor(rng.next() * (2 + late * 2));
@@ -920,6 +1107,7 @@ export class Raid {
       loadout: this.inv.loadout,
       backpack: this.inv.backpack,
       carried: this.inv.all(),
+      storyEvents: this.storyEvents.slice(),
     };
     this.app.onRaidEnd(out);
   }

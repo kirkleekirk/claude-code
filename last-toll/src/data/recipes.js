@@ -24,6 +24,8 @@ export const RECIPES = [
   { id: 'r_machete', bench: 'workshop', cat: 'Blades', level: 2, out: ['machete', 1], cost: { steel: 2, leather: 1, tape: 1 } },
   { id: 'r_combat_knife', bench: 'workshop', cat: 'Blades', level: 3, out: ['combat_knife', 1], cost: { steel: 2, leather: 1, glue: 1 } },
   { id: 'r_axe', bench: 'workshop', cat: 'Blades', level: 3, out: ['axe', 1], cost: { steel: 3, leather: 1, fasteners: 2 } },
+  // Hale's plans, only while the relay at Outpost 9 still stands
+  { id: 'r_charge', bench: 'workshop', cat: 'Demolition', level: 1, out: ['demo_charge', 1], cost: { gunpowder: 4, chemicals: 3, electronics: 2, tape: 2, fasteners: 2 }, story: 'mast' },
   // Reloading bench
   { id: 'r_arrow', bench: 'reloading', cat: 'Arrows & bolts', level: 1, out: ['arrow', 4], cost: { scrap: 1, cloth: 1, glue: 1 } },
   { id: 'r_bolt', bench: 'reloading', cat: 'Arrows & bolts', level: 1, out: ['bolt', 3], cost: { scrap: 1, fasteners: 1, cloth: 1 } },

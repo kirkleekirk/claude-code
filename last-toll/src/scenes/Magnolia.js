@@ -3,6 +3,7 @@ import { Environment } from '../world/Environment.js';
 import { Batcher } from '../world/Batcher.js';
 import { World } from '../world/World.js';
 import { grimeTexture } from '../world/Textures.js';
+import { Crew } from '../entities/Crew.js';
 
 // The Magnolia: a beached sternwheeler at the edge of the flood, and home.
 // Built as a small walkable level: the open work deck under an awning at the
@@ -52,6 +53,7 @@ export class Magnolia {
     this._lights();
     this.spawn = { pos: new THREE.Vector3(0, 0, -2.6), yaw: 0 };
     this.t = 0;
+    this.crew = new Crew(this);
   }
 
   // ---- helpers -----------------------------------------------------------------------
@@ -561,6 +563,7 @@ export class Magnolia {
     this.stoveLight.l.intensity = this.stoveLight.base * (0.7 + Math.random() * 0.4);
     this.glowMat.color.setScalar(0.9 + Math.sin(t * 2.3) * 0.04 + Math.random() * 0.03);
     this.env.update(dt, camPos || this.camera.position, t);
+    this.crew.update(dt, camPos || this.camera.position);
   }
 
   render(renderer) {

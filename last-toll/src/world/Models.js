@@ -739,6 +739,7 @@ const SHAPES = {
   clock: ['clock', 0xb0402a], radio: ['radio', 0x6b4a2b], whiskey: ['bottle', 0x8a5a22], jewelry: ['smallbox', 0x6a1e3a],
   watch: ['disc', 0xc9a227], toolkit: ['toolbox', 0x9a2a1e], lighter: ['smallbox', 0xc8c8c8], cutlery: ['bar', 0xb8bcc0],
   belt: ['strip', 0x4a2e1a], fertilizer: ['sack', 0xa89a6a], fireworks: ['bundle', 0xb03030], phone: ['phone', 0x151515], blanket: ['folded', 0x5a6a7a],
+  codebook: ['book', 0x2b3035], ledger: ['book', 0x4a2a1a], demo_charge: ['charge', 0x6a5a3a],
   beans: ['can', 0x9a3a22], crackers: ['box', 0xd0b070], jerky: ['flat', 0x6a3a1a], soda: ['can', 0xb02a2a], mre: ['flat', 0x7a6a4a],
   rice: ['sack', 0xe0dcc8], beansrice: ['bowl', 0x7a2a1a], gumbo: ['bowl', 0x5a3a1a],
   bandage: ['roll', 0xe8e4da], antiseptic: ['bottle', 0x6a4a2a], pills: ['pills', 0xd0741f], medkit: ['medkit', 0xb02a2a], adrenaline: ['syringe', 0xd8d4c8],
@@ -772,6 +773,8 @@ export function itemModel(id) {
   switch (shape) {
     case 'can': cyl(g, 0, 0.055, 0, 0.04, 0.11, 'y', m); cyl(g, 0, 0.112, 0, 0.038, 0.004, 'y', MAT.steel); break;
     case 'box': box(g, 0, 0.07, 0, 0.12, 0.14, 0.05, m); break;
+    case 'book': box(g, 0, 0.02, 0, 0.17, 0.04, 0.23, m); box(g, 0.004, 0.02, 0, 0.16, 0.034, 0.222, MAT.white); box(g, -0.08, 0.02, 0, 0.012, 0.042, 0.232, m); if (id === 'codebook') box(g, 0.02, 0.041, 0.05, 0.1, 0.002, 0.02, MAT.red); break;
+    case 'charge': cyl(g, 0, 0.08, 0, 0.065, 0.16, 'y', m); box(g, 0, 0.11, 0.07, 0.07, 0.05, 0.03, MAT.white); box(g, 0, 0.1, 0.086, 0.02, 0.012, 0.004, MAT.red); for (const a of [-0.03, 0.03]) cyl(g, a, 0.18, 0.02, 0.004, 0.06, 'y', MAT.red); box(g, 0, 0.08, 0, 0.14, 0.03, 0.14, itemMat(0x8a8a84)); break;
     case 'flat': box(g, 0, 0.02, 0, 0.16, 0.04, 0.1, m); break;
     case 'folded': box(g, 0, 0.04, 0, 0.22, 0.08, 0.16, m); break;
     case 'scrap': box(g, 0, 0.02, 0, 0.2, 0.02, 0.14, m).rotation.z = 0.2; box(g, 0.04, 0.05, 0.02, 0.12, 0.02, 0.1, m).rotation.x = 0.5; break;

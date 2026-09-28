@@ -12,6 +12,7 @@ import {
   newProfile, loadProfile, saveProfile, clearSave, maxHealthFor, applyRaidToContracts,
 } from './game/Profile.js';
 import { fmtSec } from './ui/HUD.js';
+import { objective, LOG } from './data/story.js';
 
 // App shell: title → aboard the Magnolia → raid → summary → back aboard.
 // Everything renders into one WebGL canvas with DOM overlays for UI.
@@ -317,6 +318,21 @@ class App {
       p.battery = 100;
     }
     p.nourishment = Math.max(0, Math.min(100, p.nourishment + out.nourishGain));
+    // what happened out there happened, whether or not you made it back
+    let storyLine = '';
+    if ((out.storyEvents || []).includes('mastDown') && !p.story.mastDown) {
+      p.story.mastDown = true;
+      if (p.story.step === 'mast') {
+        p.story.step = 'report';
+        p.story.log.push({ day: p.day, step: 'report', text: LOG.report });
+      }
+      storyLine = survived
+        ? 'The relay at Outpost 9 is down. Every herder horn in the parish has gone quiet. Hale will want to hear it from you.'
+        : 'The relay at Outpost 9 came down behind you. Every herder horn in the parish has gone quiet. Somebody fished you out of the water; Hale will want to hear it from you.';
+    } else if (survived) {
+      const o = objective(p);
+      if (o && o.where && p.story.step !== 'hale') storyLine = `${o.chapter}: ${o.text}.`;
+    }
     // the night passes aboard the Magnolia
     p.day++;
     p.nourishment = Math.max(0, p.nourishment - 15);
@@ -335,6 +351,7 @@ class App {
         <p class="label">${esc(out.zoneName)} · Day ${before.day}</p>
         <h2 class="verdict ${survived ? 'ok' : 'dead'}">${verdict}</h2>
         <p class="sub">${line}</p>
+        ${storyLine ? `<p class="storyline"><span>Story</span> ${esc(storyLine)}</p>` : ''}
         <div class="facts">
           <div><span class="label">Time out</span><b>${fmtSec(out.time)}</b></div>
           <div><span class="label">Put down</span><b>${out.kills}</b></div>

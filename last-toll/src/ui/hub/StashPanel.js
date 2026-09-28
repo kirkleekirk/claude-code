@@ -139,7 +139,7 @@ export class StashPanel {
       this.hub.audio.ui();
       this.hub.save();
     } else if (ds.act === 'sortStash') {
-      const order = ['weapon', 'ammo', 'med', 'food', 'mat', 'junk', 'util'];
+      const order = ['story', 'weapon', 'ammo', 'med', 'food', 'mat', 'junk', 'util'];
       p.stash.sort((a, b) => order.indexOf(def(a.id).cat) - order.indexOf(def(b.id).cat) || def(a.id).name.localeCompare(def(b.id).name));
       this.sel = null;
       this.hub.audio.ui();

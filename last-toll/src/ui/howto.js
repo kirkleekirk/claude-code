@@ -15,6 +15,9 @@ export const HOWTO = `<div class="howto">
     <p>Mods you take off go in the parts drawer and cost nothing to fit again. Short on components? The bench breaks down salvage from your trunk to cover them.</p></section>
   <section><h3>The Living Guard</h3>
     <p>What's left of a rebuilding army's local garrison, cut off from its command and running the parish like an occupation. Soldiers shoot on sight after curfew. A drone that catches you in its light calls the dead and every soldier nearby, so break line of sight. Dead Guardsmen carry energy cells and keycards; keycards open their weapons lockers.</p></section>
+  <section><h3>The crew</h3>
+    <p>Remy, the Magnolia's captain, keeps the board. Odile runs the infirmary and will patch you up once a day. A Guard deserter named Hale lives on the aft deck, and he has work for you. Walk up to any of them and press <span class="key">E</span> to talk; pick a reply with <span class="key">1</span>–<span class="key">4</span>.</p>
+    <p>Your current objective is at the top left, aboard and ashore. A gold marker shows where it points; a yellow note on the board marks the place to go. The captain's log keeps the story so far.</p></section>
   <section><h3>Controls</h3>
     <div class="keys-list">
       <span class="key">WASD</span><span>Move · <span class="key">Shift</span> sprint · <span class="key">C</span> crouch</span>
@@ -23,7 +26,7 @@ export const HOWTO = `<div class="howto">
       <span class="key">Q</span><span>Grab a walker · release to shove away</span>
       <span class="key">V</span><span>Shove · break free when grabbed</span>
       <span class="key">R</span><span>Reload step · pump · rack · break open</span>
-      <span class="key">E</span><span>Take · search · use a station</span>
+      <span class="key">E</span><span>Take · search · use a station · talk</span>
       <span class="key">1-4</span><span>Sheath · hip · holster · shoulder</span>
       <span class="key">F</span><span>Flashlight · <span class="key">H</span> quick heal</span>
       <span class="key">Tab</span><span>Backpack (the stash, aboard) · <span class="key">M</span> map · <span class="key">Esc</span> pause</span>

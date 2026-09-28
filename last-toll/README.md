@@ -47,8 +47,31 @@ Needs a desktop browser with WebGL2, a mouse and a keyboard. Headphones help: wa
 | F / H | Flashlight / quick heal |
 | Tab / M / Esc | Backpack / map / pause |
 
-Aboard the Magnolia: WASD to walk, E to use a station, Tab for the stash, Esc for the menu. At a bench,
-W/S browse, A/D switch categories or mod slots, Enter builds, Esc leaves.
+Aboard the Magnolia: WASD to walk, E to use a station or talk to the crew, Tab for the stash, Esc for the
+menu. At a bench, W/S browse, A/D switch categories or mod slots, Enter builds, Esc leaves. In a
+conversation, 1–4 pick a reply, Space skips a line, Esc walks away.
+
+## The story
+
+Three people live aboard the Magnolia with you:
+
+- **Remy Theriot**, her captain, who ran her up the bayou when the levees went and keeps the board.
+- **Odile Marchand**, a nurse from Marais Noir, who runs the infirmary and will patch you up once a day.
+- **Staff Sergeant Isaac Hale**, a signals NCO who deserted the Living Guard's 9th Garrison and is
+  living on the aft deck.
+
+Hale believes the 9th's Sweeps were never ordered by the Guard's command, and he wants proof. The questline
+runs through the existing places: dog tags off dead Guardsmen, a radio codebook from a keycard locker at the
+St. Aubin Quarter checkpoint, a priest's ledger hidden in the chapel at Marais Noir, and finally a
+demolition charge (built at the workshop from Hale's plans) planted on the relay mast inside Guard Outpost 9.
+
+The relay drives every herder horn in the parish. When it falls, it stays down: the herder mast on the skyline
+goes dark, the Sweep has no horns to drive the dead in from the edges, and the 9th Garrison makes up for it
+with more soldiers and more drones.
+
+The current objective sits at the top left, aboard and ashore; a gold marker points at the person or bench
+it names, a compass marker points at the locker, chest or mast in a raid, and a yellow note on the bulletin
+board marks where to go. The captain's log keeps the story so far.
 
 ## How it plays
 
@@ -109,10 +132,11 @@ them by hand in VR.
 src/
   main.js              app shell: title → hub → raid → summary
   core/                input, procedural audio, seeded RNG, math
-  data/                items, loot tables, recipes, zones
+  data/                items, loot tables, recipes, zones, the story and crew dialogue
   world/               city and stilt-town generators, decals, collision + nav/flow fields,
                        sky/fog/water/mist, models, batching
-  entities/            player, walkers (skinned single-mesh bodies), horde AI, Living Guard soldiers and drones
+  entities/            player, walkers (skinned single-mesh bodies), horde AI, Living Guard soldiers and drones,
+                       the Magnolia's crew
   combat/              combat rules and the first-person view model
   game/                raid and hub orchestration, weapon stats and mods, container specs, loot,
                        inventory, profile/saves

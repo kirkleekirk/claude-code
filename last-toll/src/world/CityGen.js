@@ -35,8 +35,11 @@ const LOT_SCALE = { house: 'quarter', yard: 'quarter', shop: 'half', clinic: 'ha
 export { C, T, ROADS };
 
 export class CityGen {
-  constructor({ zone, seed, scene, loot }) {
+  // force: lot types that must appear (the story needs a checkpoint or a compound)
+  constructor({ zone, seed, scene, loot, force = [] }) {
     this.zone = zone;
+    this.force = force.slice();
+    this.story = { signals: [], offering: null, relays: [] };
     this.rng = new RNG(seed);
     this.scene = scene;
     this.loot = loot;
@@ -62,11 +65,19 @@ export class CityGen {
   _layout() {
     this._ground();
     this._streets();
+    // forced lots go in the middle of town, away from the levee and the skiffs
+    const forced = {};
+    for (const t of this.force) {
+      for (let k = 0; k < 8; k++) {
+        const key = `${this.rng.int(1, 2)},${this.rng.int(1, 2)}`;
+        if (!forced[key]) { forced[key] = t; break; }
+      }
+    }
     for (let bi = 0; bi < 4; bi++) {
       for (let bj = 0; bj < 4; bj++) {
         const x0 = ROADS[bi] + ROAD_HW, x1 = ROADS[bi + 1] - ROAD_HW;
         const z0 = ROADS[bj] + ROAD_HW, z1 = ROADS[bj + 1] - ROAD_HW;
-        this._block(x0, z0, x1, z1);
+        this._block(x0, z0, x1, z1, forced[`${bi},${bj}`]);
       }
     }
     this._levee();
@@ -82,6 +93,18 @@ export class CityGen {
     const far = this.horizon.build(mat);
     far.castShadow = false;
     mesh.add(far);
+    for (const rl of this.story.relays) {
+      rl.group = new THREE.Group();
+      rl.group.position.set(rl.x, 0, rl.z);
+      const rm = rl.b.build(mat);
+      rm.castShadow = true;
+      rl.group.add(rm);
+      rl.lamp = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), new THREE.MeshBasicMaterial({ color: 0xff2a18 }));
+      rl.lamp.position.set(0, 14.7, 0);
+      rl.group.add(rl.lamp);
+      delete rl.b;
+      mesh.add(rl.group);
+    }
     this.scene.add(mesh);
     this.loot.finalize();
     this.world.buildNav(0.5);
@@ -98,7 +121,7 @@ export class CityGen {
       patrol: filt(this.candidates.patrol),
       emerge: (this.candidates.emerge || []).filter((e) => w.isWalkable(e.to.x, e.to.z)),
     };
-    return { world: this.world, mesh, docks: this.docks, spawns, map: this.map, fires: this.fires, floods: this.floods, glowMat: this.glowMat };
+    return { world: this.world, mesh, docks: this.docks, spawns, map: this.map, fires: this.fires, floods: this.floods, glowMat: this.glowMat, story: this.story };
   }
 
   // ---- helpers ---------------------------------------------------------------
@@ -299,7 +322,7 @@ export class CityGen {
 
   // ---- furniture -------------------------------------------------------------
 
-  _container(kind, room, table, sides) {
+  _container(kind, room, table, sides, label) {
     const spec = CONTAINER_SPECS[kind];
     const fw = spec.footW || spec.w;
     const spot = this._againstWall(room, fw, spec.d, sides, 0, !!spec.mount || spec.h > 1.2);
@@ -311,7 +334,7 @@ export class CityGen {
       this.world.addBoxC(s.cx, containerHeight(spec) / 2, s.cz, ex ? spec.d : fw, containerHeight(spec), ex ? fw : spec.d, { occlude: spec.h > 1.2, kind: 'furniture' });
     }
     const loot = rollContainer(this.rng, table, this.zone.lootTier);
-    this.loot.addContainer({ kind, spec, x: s.cx, z: s.cz, y0, rotY: s.rotY, items: loot });
+    s.c = this.loot.addContainer({ kind, spec, x: s.cx, z: s.cz, y0, rotY: s.rotY, items: loot, label });
     return s;
   }
 
@@ -523,10 +546,10 @@ export class CityGen {
     }
   }
 
-  _block(x0, z0, x1, z1) {
+  _block(x0, z0, x1, z1, forced = null) {
     this._sidewalks(x0, z0, x1, z1);
     const ix0 = x0 + SIDEWALK, iz0 = z0 + SIDEWALK, ix1 = x1 - SIDEWALK, iz1 = z1 - SIDEWALK;
-    const type = this.rng.weighted(this.zone.lots);
+    const type = forced || this.rng.weighted(this.zone.lots);
     const scale = LOT_SCALE[type];
     if (scale === 'whole') {
       this._lot(type, ix0, iz0, ix1, iz1, 'n', true);
@@ -1137,6 +1160,15 @@ export class CityGen {
       const inner = this._building({ x0: tx0, z0: tz0, x1: tx0 + 6, z1: tz0 + 4, h: 2.4, wall: 0x3e454c, inner: 0x4a5058, roof: 0x353b41, floor: 0x3a3a2e, trim: 0x9a1e18, openings: ops, kind: 'tent', surface: 'ground' });
       this.decals.add('guardsign', tx0 + 1.4, 1.3, s < 0 ? tz0 - T / 2 : tz0 + 4 + T / 2, 0, s < 0 ? -1 : 1, 1.2, 0.6);
       const rm = this._room(inner.x0, inner.z0, inner.x1, inner.z1, 'tent');
+      // the command tent keeps the radio and a keycard locker for signals gear
+      if (s < 0) {
+        const sig = this._container('guardlocker', rm, 'guard', ['e', 'w'], 'Guard Signals Locker');
+        if (sig) this.story.signals.push(sig.c);
+        this.batch.box(inner.x0 + 1.4, 0.4, (inner.z0 + inner.z1) / 2, 1.0, 0.8, 0.6, 0x3d444a, { ao: 1 });
+        this.batch.box(inner.x0 + 1.4, 0.95, (inner.z0 + inner.z1) / 2, 0.5, 0.3, 0.35, 0x2a2e33);
+        this.glow.box(inner.x0 + 1.4, 0.98, (inner.z0 + inner.z1) / 2 + 0.18, 0.2, 0.06, 0.01, 0x70ff90, { jitter: 0 });
+        this.world.addBoxC(inner.x0 + 1.4, 0.55, (inner.z0 + inner.z1) / 2, 1.0, 1.1, 0.6, { occlude: false, kind: 'furniture' });
+      }
       this._container('military', rm, 'military', ['e', 'w']);
       if (r.chance(0.7)) this._container('military', rm, 'military', ['e', 'w']);
       this._prop('bed', rm, ['e', 'w']);
@@ -1345,15 +1377,25 @@ export class CityGen {
       this._markInterior(rm, 0.05);
       this.candidates.guardPost.push({ x: bx0 + bw / 2 + r.range(-2, 2), z: face === 's' ? bz0 + bd + 1.6 : bz0 - 1.6, facing: face === 's' ? 0 : Math.PI });
     }
-    // comms mast with its red light
+    // the relay mast: a lattice tower of dishes and horn drivers with a red light.
+    // It's built as its own piece, local to its foot, so it can be brought down.
     const mx = x0 + m + 3.2, mz = z0 + m + 3.2;
+    const mb = new Batcher();
     for (let i = 0; i < 6; i++) {
       const w = 1.6 - i * 0.22, y = i * 2.4 + 1.2;
-      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) this.batch.box(mx + (sx * w) / 2, y, mz + (sz * w) / 2, 0.08, 2.4, 0.08, 0x2a2e33);
-      this.batch.box(mx, y + 1.2, mz, w + 0.1, 0.06, w + 0.1, 0x2a2e33);
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) mb.box((sx * w) / 2, y, (sz * w) / 2, 0.08, 2.4, 0.08, 0x2a2e33);
+      mb.box(0, y + 1.2, 0, w + 0.1, 0.06, w + 0.1, 0x2a2e33);
+      mb.box(0, y, 0, w + 0.08, 0.05, 0.05, 0x2a2e33);
+      mb.box(0, y, 0, 0.05, 0.05, w + 0.08, 0x2a2e33);
     }
-    this.glow.box(mx, 14.7, mz, 0.25, 0.25, 0.25, 0xff2a18, { jitter: 0 });
-    this.world.addBoxC(mx, 7, mz, 1.8, 14, 1.8, { occlude: false, kind: 'mast' });
+    mb.cylinder(0.55, 10.6, 0, 0.5, 0.2, 0.2, 0x5a5e62, 10, { rz: Math.PI / 2 });
+    mb.cylinder(-0.5, 12.8, 0.2, 0.36, 0.16, 0.45, 0x3a3e42, 8, { rz: -Math.PI / 2 });
+    mb.box(0, 0.6, 0.85, 0.7, 1.2, 0.3, 0x3d444a);
+    mb.box(0, 0.9, 1.01, 0.3, 0.12, 0.02, 0x9a1e18);
+    this.story.relays.push({ x: mx, z: mz, b: mb, compound: { x0, z0, x1, z1 } });
+    // the stump stays when the tower goes
+    this.batch.box(mx, 0.08, mz, 1.9, 0.16, 1.9, 0x5a5852, { ao: 1 });
+    this.world.addBoxC(mx, 1.2, mz, 1.8, 2.4, 1.8, { occlude: false, kind: 'mast' });
     // floodlights, an APC, a generator, supplies
     for (const [fx, fz] of [[x1 - m - 1.6, z0 + m + 1.6], [x0 + m + 1.6, z1 - m - 1.6]]) {
       this.batch.cylinder(fx, 3, fz, 0.1, 0.14, 6, 0x2a2e33, 6);

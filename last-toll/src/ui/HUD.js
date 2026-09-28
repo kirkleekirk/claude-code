@@ -41,6 +41,7 @@ export class HUD {
     this.toastsEl = el(r, 'toasts');
     this.bigEl = el(r, 'big', '<h2></h2><p></p>');
 
+    this.objEl = el(r, 'objective');
     const comp = el(r, 'compass');
     this.track = el(comp, 'track');
     el(comp, 'center');
@@ -174,9 +175,15 @@ export class HUD {
       me.style.left = `${(heading + rel) * this.pxPerRad}px`;
       me.className = 'mk ' + (mk.kind || '');
       const txt = mk.kind === 'mast' ? '' : `${Math.round(Math.hypot(dx, dz))}m`;
+      if (mk.kind === 'story') me.style.zIndex = '2';
       const sp = me.lastElementChild;
       if (sp.textContent !== txt) sp.textContent = txt;
     }
+
+    // the story's objective, when there's one here
+    const o = s.objective;
+    this._set('obj', this.objEl, 'html', o ? `<i></i><span>${o.text.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))}</span>` : '');
+    this._set('objc', this.objEl, 'class', 'objective' + (o ? ' on' : '') + (o && o.urgent ? ' urgent' : ''));
 
     // wrist
     this._set('time', this.timeEl, 'text', fmtClock(s.clock));

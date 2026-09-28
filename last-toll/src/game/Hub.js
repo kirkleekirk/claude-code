@@ -2,7 +2,11 @@ import * as THREE from 'three';
 import { Magnolia } from '../scenes/Magnolia.js';
 import { Player } from '../entities/Player.js';
 import { zoneById } from '../data/zones.js';
-import { STASH_CAP, packCapacity, maxHealthFor, addToList, saveProfile, refreshContracts } from './Profile.js';
+import { STASH_CAP, packCapacity, maxHealthFor, addToList, saveProfile, refreshContracts, removeFrom, countIn, canFit } from './Profile.js';
+import { makeItem, def } from '../data/items.js';
+import { objective, LOG, countOwned, atLeast, CREW } from '../data/story.js';
+import { DialoguePanel } from '../ui/hub/DialoguePanel.js';
+import { esc } from '../ui/hub/common.js';
 import { easeInOut } from '../core/math.js';
 import { CraftPanel } from '../ui/hub/CraftPanel.js';
 import { GunsmithPanel } from '../ui/hub/GunsmithPanel.js';
@@ -65,6 +69,75 @@ export class Hub {
     return left === 0;
   }
 
+  // Things the crew hands you go straight in your pack, so you have them ashore.
+  givePack(item) {
+    const p = this.p;
+    let left = addToList(p.backpack, packCapacity(p), item);
+    if (left > 0) left = addToList(p.stash, STASH_CAP, { ...item, qty: left });
+    return left === 0;
+  }
+
+  // ---- story ---------------------------------------------------------------------------
+
+  advanceStory(step) {
+    const p = this.p, s = p.story;
+    if (s.step === step) return;
+    s.step = step;
+    if (LOG[step]) s.log.push({ day: p.day, step, text: LOG[step] });
+    this.save();
+    this._objFlash = true;
+  }
+
+  // What a conversation can see and do. `note` reports what changed hands.
+  storyCtx(note = () => {}) {
+    const hub = this, p = this.p;
+    return {
+      p,
+      get step() { return p.story.step; },
+      get maxHealth() { return maxHealthFor(p.nourishment); },
+      at: (id) => atLeast(p, id),
+      have: (id) => countOwned(p, id),
+      take: (id, n = 1) => {
+        removeFrom([p.backpack, p.stash], id, n);
+        note({ html: `Handed over ${n > 1 ? n + '× ' : ''}${esc(def(id).name)}`, kind: 'give' });
+      },
+      give: (id, qty = 1, opts = {}) => {
+        hub.givePack(makeItem(id, qty, opts));
+        note({ html: `Received ${esc(def(id).name)}${qty > 1 ? ' ×' + qty : ''} <small>in your pack</small>`, kind: 'get' });
+      },
+      advance: (step) => {
+        hub.advanceStory(step);
+        const o = objective(p);
+        note({ html: o ? `<span>Journal</span> <b>${esc(o.chapter)}</b> — ${esc(o.text)}` : '<span>Journal</span> <b>The story so far is over.</b> The parish goes on.', kind: 'obj' });
+      },
+      heal: () => {
+        p.health = maxHealthFor(p.nourishment);
+        p.story.healedDay = p.day;
+        hub.save();
+        note({ html: 'Health restored', kind: 'get' });
+      },
+      radio: () => hub.audio.radio(),
+    };
+  }
+
+  // Before a trip: pack what the story needs there if it's sitting in the stash.
+  _packFor(zoneId) {
+    const p = this.p, s = p.story, notes = [];
+    const move = (id) => {
+      if (countIn([p.backpack], id) > 0) return;
+      const i = p.stash.findIndex((it) => it.id === id);
+      if (i < 0) return;
+      const it = { ...p.stash[i], qty: 1 };
+      if (!canFit(p.backpack, packCapacity(p), it)) { notes.push(`No room in your pack for the ${def(id).name}`); return; }
+      removeFrom([p.stash], id, 1);
+      addToList(p.backpack, packCapacity(p), it);
+      notes.push(`You packed the ${def(id).name}`);
+    };
+    if (s.step === 'codebook' && zoneId === 'quarter') move('keycard');
+    if (s.step === 'mast' && zoneId === 'outpost') move('demo_charge');
+    return notes;
+  }
+
   // ---- modes ---------------------------------------------------------------------------
 
   showTitle() {
@@ -78,6 +151,9 @@ export class Hub {
   board(fromRaid = false) {
     const p = this.p;
     refreshContracts(p);
+    // with the relay down the herder mast on the skyline stays dark
+    if (p.story && p.story.mastDown) this.boat.env.mastOff(true);
+    else this.boat.env.mastDead = false;
     this.save();
     this.hud.root.style.display = '';
     drawBoard(this.boat, p);
@@ -110,18 +186,19 @@ export class Hub {
   }
 
   openStation(st) {
-    const P = PANELS[st.id];
+    const P = st.npc ? DialoguePanel : PANELS[st.id];
     if (!P) return;
     this.mode = 'station';
     this.station = st;
     this.app.input.exitLock();
     this.hud.prompt.innerHTML = '';
     this.hud.root.style.display = 'none';
-    this.audio.mech('bench');
+    if (!st.npc) this.audio.mech('bench');
     if (st.id === 'stash') this.lidOpen = 1;
+    const from = this.camera.position.clone();
     this.panel = new P(this, st);
     // frame the station in the part of the screen its panel leaves open
-    const view = this._frame(st, this.panel.el);
+    const view = st.npc ? this.boat.crew.talkView(st.id, from) : this._frame(st, this.panel.el);
     this._tweenTo(view.pos, lookQuat(view.pos, view.look, new THREE.Quaternion()), 0.55, null);
   }
 
@@ -176,6 +253,7 @@ export class Hub {
   deploy(zoneId) {
     this.leave();
     this.p.lastZone = zoneId;
+    this.app.raidNotes = this._packFor(zoneId);
     this.save();
     this.app.startRaid(zoneId);
   }
@@ -239,6 +317,9 @@ export class Hub {
       if (tw.t >= tw.dur) { this.tween = null; tw.done?.(); }
     }
     if (this.mode === 'walk') {
+      this._barks(dt);
+      this.objT = (this.objT || 0) - dt;
+      if (this.objT <= 0) { this.objT = 1; this._objective(); }
       const look = input.consumeLook();
       if (input.locked) this.player.lookInput(look.x, look.y);
       this.player.update(dt, {
@@ -256,6 +337,7 @@ export class Hub {
       }
     } else input.consumeLook();
     if (this.panel) this.panel.update?.(dt);
+    this._marker();
     // the stash lid
     const lid = this.boat.stashLid;
     if (lid) lid.rotation.x += ((this.lidOpen ? -1.2 : 0) - lid.rotation.x) * Math.min(1, dt * 6);
@@ -323,13 +405,19 @@ export class Hub {
     root.style.display = 'none';
     root.innerHTML = `
       <div class="hh-where"><span class="hh-boat">The Magnolia</span><span class="hh-day"></span></div>
+      <div class="hh-obj"></div>
+      <div class="hh-mark"><i></i><span></span></div>
+      <div class="hh-bark"></div>
       <div class="hh-dot"></div>
       <div class="hh-prompt"></div>
       <div class="hh-lock">Click to look around</div>
       <div class="hh-status"></div>
       <div class="hh-keys"><span class="key">WASD</span> walk <span class="key">E</span> use <span class="key">Tab</span> stash <span class="key">Esc</span> menu</div>`;
     this.app.uiRoot.appendChild(root);
-    return { root, prompt: root.querySelector('.hh-prompt'), lock: root.querySelector('.hh-lock'), status: root.querySelector('.hh-status'), day: root.querySelector('.hh-day') };
+    return {
+      root, prompt: root.querySelector('.hh-prompt'), lock: root.querySelector('.hh-lock'), status: root.querySelector('.hh-status'), day: root.querySelector('.hh-day'),
+      obj: root.querySelector('.hh-obj'), mark: root.querySelector('.hh-mark'), markTxt: root.querySelector('.hh-mark span'), bark: root.querySelector('.hh-bark'),
+    };
   }
 
   _status() {
@@ -341,9 +429,72 @@ export class Hub {
       <div class="row"><span class="label">Health</span><div class="bar hp"><em style="left:${maxH}%;right:0"></em><span style="width:${p.health}%"></span></div><span class="v num">${Math.ceil(p.health)}</span></div>
       <div class="row"><span class="label">Fed</span><div class="bar st"><span style="width:${p.nourishment}%"></span></div><span class="v num">${Math.round(p.nourishment)}</span></div>
       <div class="hh-next"><span class="label">Next trip</span> ${z.name}</div>`;
+    this._objective();
   }
 
   refreshStatus() { this._status(); }
+
+  // The story objective, top left, and a marker over whatever it points at aboard.
+  _objective() {
+    const o = objective(this.p);
+    this.obj = o;
+    const el = this.hud.obj;
+    if (!o) { el.innerHTML = ''; el.dataset.h = ''; this.objWhere = null; return; }
+    const away = o.zone || o.zones;
+    const html = `<span class="hh-ch">${esc(o.chapter)}</span><b>${esc(o.text)}</b>${o.sub ? `<small>${esc(o.sub)}</small>` : ''}${away && !o.where ? '<small class="go">Plan the trip at the bulletin board</small>' : ''}`;
+    if (el.dataset.h !== html) { el.innerHTML = html; el.dataset.h = html; }
+    if (this._objFlash) {
+      el.classList.remove('flash');
+      void el.offsetWidth;
+      el.classList.add('flash');
+      this._objFlash = false;
+    }
+    this.objWhere = o.where || (away ? 'board' : null);
+  }
+
+  _marker() {
+    const m = this.hud.mark;
+    const st = this.mode === 'walk' && this.objWhere && this.boat.stations.find((s) => s.id === this.objWhere);
+    if (!st) { m.style.display = 'none'; return; }
+    const pos = st.npc ? _v.copy(this.boat.crew.get(st.id).head).setY(2.05) : _v.set((st.hit.x0 + st.hit.x1) / 2, st.hit.y1 + 0.15, (st.hit.z0 + st.hit.z1) / 2);
+    const dist = Math.hypot(pos.x - this.camera.position.x, pos.z - this.camera.position.z);
+    const local = pos.clone().applyMatrix4(this.camera.matrixWorldInverse);
+    let x, y;
+    if (local.z < -0.1) {
+      pos.project(this.camera);
+      x = pos.x; y = pos.y;
+    } else {
+      // behind you: pin it to the side you'd turn toward
+      x = local.x >= 0 ? 1 : -1; y = 0;
+    }
+    const edge = Math.abs(x) > 0.92 || Math.abs(y) > 0.85;
+    x = Math.max(-0.92, Math.min(0.92, x));
+    y = Math.max(-0.85, Math.min(0.85, y));
+    m.style.display = '';
+    m.style.left = `${(x * 0.5 + 0.5) * 100}%`;
+    m.style.top = `${(-y * 0.5 + 0.5) * 100}%`;
+    m.classList.toggle('edge', edge);
+    const name = st.npc ? CREW[st.id].name.split(' ')[0] : st.label;
+    const txt = dist < 2.2 ? name : `${name} · ${Math.round(dist)}m`;
+    if (this.hud.markTxt.textContent !== txt) this.hud.markTxt.textContent = txt;
+  }
+
+  // Something said in passing when you walk up to one of the crew.
+  _barks(dt) {
+    this.barkT = Math.max(0, (this.barkT || 0) - dt);
+    if (this.barkT <= 0) this.hud.bark.classList.remove('show');
+    for (const m of this.boat.crew.members) {
+      if (!m.near) { if (m.barked && m.distFar) m.barked = false; continue; }
+      if (m.barked || this.barkT > 0) continue;
+      m.barked = true;
+      const line = m.c.barks[Math.floor(Math.random() * m.c.barks.length)];
+      this.hud.bark.innerHTML = `<b>${esc(m.c.name.split(' ')[0])}</b> ${esc(line)}`;
+      this.hud.bark.classList.add('show');
+      this.barkT = 3.2;
+      m.talk = true;
+      setTimeout(() => { m.talk = false; }, 900);
+    }
+  }
 
   dispose() {
     this._closePanel();

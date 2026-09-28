@@ -7,6 +7,7 @@ const P = {
   med: '<rect x="4" y="4" width="16" height="16" rx="3" /><path d="M12 8v8M8 12h8" />',
   mat: '<circle cx="12" cy="12" r="3" /><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />',
   junk: '<path d="M4 8l8-4 8 4v8l-8 4-8-4z" /><path d="M4 8l8 4 8-4M12 12v8" />',
+  story: '<path d="M6 3h11a1 1 0 0 1 1 1v16l-3-2-3 2-3-2-3 2V4a1 1 0 0 1 1-1z" /><path d="M9 8h6M9 12h6" />',
   util: '<rect x="8" y="4" width="8" height="17" rx="2" /><path d="M10 2h4M10 9h4" />',
 };
 

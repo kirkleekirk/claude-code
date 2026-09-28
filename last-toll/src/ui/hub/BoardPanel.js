@@ -2,6 +2,7 @@ import { ZONES, zoneById } from '../../data/zones.js';
 import { def, makeItem, SLOT_ORDER, TIERS } from '../../data/items.js';
 import { countIn, payCost, maxHealthFor } from '../../game/Profile.js';
 import { esc, frame } from './common.js';
+import { objective } from '../../data/story.js';
 
 // The bulletin board on wheels. Photos of the places the skiff can reach are
 // pinned to cork with their dangers written on; Remy's contract slips hang down
@@ -83,6 +84,8 @@ export function drawBoard(boat, p, state = {}) {
   pin(g, W * 0.36 + 200, 34, '#c9a24a');
 
   const regions = [];
+  const o = objective(p);
+  const leads = o ? (o.zone ? [o.zone] : o.zones || []) : [];
   const cw = 196, ch = 190;
   const spots = [[40, 110], [258, 100], [476, 112], [120, 380], [360, 372]];
   const sel = state.sel || p.lastZone || 'cypress';
@@ -110,8 +113,43 @@ export function drawBoard(boat, p, state = {}) {
       g.fillStyle = k < z.threat ? '#a8302a' : 'rgba(90,70,50,0.35)';
       g.beginPath(); g.arc(cw - 60 + k * 14, 166, 5, 0, Math.PI * 2); g.fill();
     }
+    // the relay is down: somebody's crossed out the red light
+    if (z.id === 'outpost' && p.story && p.story.mastDown) {
+      g.strokeStyle = 'rgba(20,20,20,0.85)';
+      g.lineWidth = 5;
+      g.beginPath(); g.moveTo(cw / 2 - 22, 8); g.lineTo(cw / 2 + 22, 50); g.moveTo(cw / 2 + 22, 8); g.lineTo(cw / 2 - 22, 50); g.stroke();
+      g.save();
+      g.translate(cw / 2, 84);
+      g.rotate(-0.18);
+      g.strokeStyle = 'rgba(170,30,25,0.9)';
+      g.lineWidth = 3;
+      g.strokeRect(-62, -16, 124, 32);
+      g.fillStyle = 'rgba(170,30,25,0.9)';
+      g.font = '700 20px "Barlow Condensed", sans-serif';
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText('RELAY DOWN', 0, 1);
+      g.restore();
+    }
     g.restore();
     pin(g, x + cw / 2, y + 6);
+    // Hale's lead, on a yellow scrap tucked in the corner of the photo
+    if (leads.includes(z.id)) {
+      g.save();
+      g.translate(x + 48, y + ch + 4);
+      g.rotate(-0.1);
+      g.fillStyle = 'rgba(0,0,0,0.3)';
+      g.fillRect(-58, -20, 120, 40);
+      g.fillStyle = '#f0d66a';
+      g.fillRect(-62, -24, 120, 40);
+      g.fillStyle = '#2a2420';
+      g.font = 'italic 600 17px Georgia, serif';
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText(o.chapter, -2, -3);
+      g.restore();
+      pin(g, x + 46, y + ch - 16, '#c9a24a');
+    }
     if (z.id === sel) {
       // circled in red grease pencil
       g.strokeStyle = 'rgba(190,40,30,0.9)';
@@ -226,6 +264,10 @@ export class BoardPanel {
     this._draw();
     const p = this.p, z = zoneById(this.sel);
     const warn = [];
+    const o = objective(p);
+    const lead = o && (o.zone === z.id || (o.zones || []).includes(z.id)) ? o : null;
+    if (lead && o.zone === 'quarter' && !countIn([p.backpack, p.stash], 'keycard')) warn.push('The signals locker takes a Guard keycard, and you don\'t have one.');
+    if (lead && o.zone === 'outpost' && !countIn([p.backpack, p.stash], 'demo_charge')) warn.push('You have no demolition charge. Build one at the workshop bench first.');
     if (!p.loadout.knife && !p.loadout.melee) warn.push('No blade or melee weapon. You\'ll scrounge a rusty screwdriver from the skiff.');
     if (p.nourishment < 30) warn.push('You are starving. Your health is capped low; eat something at the galley.');
     if (p.health < maxHealthFor(p.nourishment) * 0.5) warn.push('You are badly hurt. See the infirmary first.');
@@ -255,6 +297,8 @@ export class BoardPanel {
         <h3>${esc(z.name)}</h3>
         <div class="zp-meta"><span class="threat">${[1, 2, 3, 4].map((k) => `<i class="${k <= z.threat ? 'on' : ''}"></i>`).join('')}</span><span>${z.night ? 'Lands after dark' : 'Lands at dusk'}</span><span class="num">Sweep in ${z.sweepMinutes}:00</span></div>
         <p class="dd">${esc(z.blurb)}</p>
+        ${lead ? `<p class="lead"><span>${esc(lead.chapter)}</span> ${esc(lead.text)}${lead.sub ? `<small>${esc(lead.sub)}</small>` : ''}</p>` : ''}
+        ${p.story && p.story.mastDown ? '<p class="zp-focus"><span class="label">Since the relay fell</span> No horns on the Sweep, and fewer dead driven in. More soldiers on it, and more drones.</p>' : ''}
         <p class="zp-focus"><span class="label">Salvage</span> ${esc(z.focus)}</p>
         <p class="zp-focus"><span class="label">Weapons found</span> <span style="color:${TIERS[best].color}">up to ${TIERS[best].name}${crates && best > z.lootTier ? ' in military crates' : ''}</span>${guard ? ` · <span style="color:${TIERS[4].color}">Experimental on the Guard</span>` : ''}</p>
         <div class="kit"><span class="label">Carrying</span>${kit}</div>

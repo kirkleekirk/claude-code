@@ -699,6 +699,34 @@ export class Audio {
     } catch (_) { /* speech is optional */ }
   }
 
+  // A crew member's line, read aloud if the browser has a voice for it.
+  speak(text, voice = {}, enabled = true) {
+    if (!this.enabled || !enabled) return;
+    try {
+      const synth = window.speechSynthesis;
+      if (!synth) return;
+      const u = new SpeechSynthesisUtterance(text.replace(/\.\.\./g, ','));
+      u.rate = voice.rate ?? 0.95;
+      u.pitch = voice.pitch ?? 1;
+      u.lang = voice.lang || 'en-US';
+      u.volume = Math.min(1, this.volume * 0.95);
+      synth.cancel();
+      synth.speak(u);
+    } catch (_) { /* speech is optional */ }
+  }
+
+  hush() {
+    try { window.speechSynthesis?.cancel(); } catch (_) { /* optional */ }
+  }
+
+  // The demolition charge's timer.
+  beep(pos, urgent = false) {
+    if (!this.enabled) return;
+    const t = this.now;
+    const out = this._out(pos, { ref: 3, rolloff: 1.1 });
+    this._tone(out, t, 0.07, { type: 'square', freq: urgent ? 1760 : 1320, gain: 0.07 });
+  }
+
   // ---- Distant horror, placed around the listener -----------------------------
 
   _around(dist) {

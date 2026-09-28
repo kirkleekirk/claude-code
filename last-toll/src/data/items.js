@@ -33,7 +33,7 @@ export const ITEMS = {
   fertilizer: junk('Fertilizer', { chemicals: 2, gunpowder: 1 }, 'Ammonium nitrate, damp.'),
   fireworks: junk('Fireworks', { gunpowder: 2 }, 'Left over from a Fourth nobody got to have.'),
   phone: junk('Dead Phone', { electronics: 1, chemicals: 1 }, '47 missed calls.'),
-  keycard: { name: 'Guard Keycard', cat: 'junk', stack: 3, yields: { electronics: 2 }, desc: 'Opens a Living Guard weapons locker. Or scrap it for the chip.' },
+  keycard: { name: 'Guard Keycard', cat: 'junk', stack: 3, keep: true, yields: { electronics: 2 }, desc: 'Opens a Living Guard weapons locker. Or scrap it for the chip.' },
   dogtags: junk('Guard Dog Tags', { steel: 1, fasteners: 1 }, 'LIVING GUARD — 9TH GARRISON. Someone\'s son.'),
   rosary: junk('Rosary', { fasteners: 1, cloth: 1 }, 'Wooden beads worn smooth.'),
   candles: junk('Church Candles', { chemicals: 1, cloth: 1 }, 'Tallow. They burn a long time.'),
@@ -69,6 +69,11 @@ export const ITEMS = {
   ammo_556: { name: '5.56 Rounds', cat: 'ammo', stack: 30, desc: 'Military rifle rounds. AR-15 and M4.' },
   ammo_308: { name: '.308 Rounds', cat: 'ammo', stack: 15, desc: 'Big rifle rounds. Bolt guns and the marksman rifle.' },
   ecell: { name: 'Energy Cell', cat: 'ammo', stack: 6, desc: 'Guard power cell. One cell charges a laser weapon; an ejected cell is spent.' },
+
+  // ---- Story: things people aboard the Magnolia asked you to find
+  codebook: { name: 'Guard Codebook', cat: 'story', stack: 1, desc: 'LIVING GUARD — 9TH GARRISON — SIGNALS. Frequencies, call signs, and the tables Command uses to know a voice is really the Guard. Hale wants it.' },
+  ledger: { name: 'Chapel Ledger', cat: 'story', stack: 1, desc: 'Father Anselme\'s parish book from Marais Noir: births, burials, who owes who for bait. The last pages are in a hurried hand. For Odile.' },
+  demo_charge: { name: 'Demolition Charge', cat: 'story', stack: 1, desc: 'Powder and fertilizer packed in a coffee can, a kitchen timer wired to a blasting cap. Hale\'s design. Plant it on the relay mast at Outpost 9.' },
 
   // ---- Utility
   battery: { name: 'Battery', cat: 'util', stack: 5, desc: 'Refills your flashlight.' },

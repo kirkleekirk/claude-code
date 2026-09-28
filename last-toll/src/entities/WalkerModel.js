@@ -19,11 +19,14 @@ const _p = new THREE.Vector3();
 // Each walker is a single skinned mesh: every box is rigidly bound to one bone,
 // so the whole body costs one draw call. Parts are hidden by scaling their bone to zero.
 export class WalkerModel {
-  constructor(rng, { riot = false, fresh = false, soldier = false } = {}) {
-    const skin = soldier ? rng.pick([0xb08a70, 0x8a6a50, 0x6a4a38, 0xc8a080]) : rng.pick(SKIN);
-    const shirt = soldier ? 0x2e343a : riot ? 0x22262a : rng.pick(SHIRT);
-    const pants = soldier ? 0x282c31 : riot ? 0x1e2226 : rng.pick(PANTS);
+  // living: the Magnolia's crew. { skin, shirt, pants, hair, hat, beard, coat, vest, scarf }
+  constructor(rng, { riot = false, fresh = false, soldier = false, living = null } = {}) {
+    const L = living;
+    const skin = L ? L.skin : soldier ? rng.pick([0xb08a70, 0x8a6a50, 0x6a4a38, 0xc8a080]) : rng.pick(SKIN);
+    const shirt = L ? L.shirt : soldier ? 0x2e343a : riot ? 0x22262a : rng.pick(SHIRT);
+    const pants = L ? L.pants : soldier ? 0x282c31 : riot ? 0x1e2226 : rng.pick(PANTS);
     this.soldier = soldier;
+    this.living = !!L;
     const dark = 0x151210;
     const eye = 0xd2d0b6;
     const armor = 0x0f1114;
@@ -43,6 +46,7 @@ export class WalkerModel {
     this.root.add(this.body);
     this.hips = bone(this.body, 0, 0.95, 0);
     add(this.hips, [[0, 0, 0, 0.36, 0.16, 0.2, pants]]);
+    if (L && L.coat && L.long) add(this.hips, [[0, -0.18, -0.02, 0.42, 0.34, 0.24, L.coat]]);
 
     this.torso = bone(this.hips, 0, 0.06, 0);
     const girth = rng.range(0.92, 1.12);
@@ -53,8 +57,13 @@ export class WalkerModel {
       tp.push([0, 0.42, 0.145 * girth, 0.1, 0.09, 0.012, 0xd0c8b8]);
       tp.push([0, 0.33, 0.146 * girth, 0.2, 0.028, 0.012, 0x9a1e18]);
       tp.push([-0.12, 0.12, 0.15 * girth, 0.08, 0.1, 0.04, 0x2a2f34], [0.12, 0.12, 0.15 * girth, 0.08, 0.1, 0.04, 0x2a2f34]);
+    } else if (L) {
+      if (L.vest) tp.push([0, 0.3, 0, 0.42 * girth, 0.44, 0.24 * girth, L.vest], [0, 0.33, 0.121 * girth, 0.06, 0.4, 0.004, shirt]);
+      if (L.coat) tp.push([0, 0.27, 0, 0.43 * girth, 0.58, 0.25 * girth, L.coat], [-0.07, 0.3, 0.126 * girth, 0.07, 0.5, 0.004, shirt], [0.07, 0.3, 0.126 * girth, 0.07, 0.5, 0.004, shirt]);
+      if (L.scarf) tp.push([0, 0.55, 0.02, 0.26, 0.07, 0.24, L.scarf]);
+      if (L.patch) tp.push([-0.1, 0.44, 0.118 * girth, 0.07, 0.05, 0.006, L.patch]);
     } else if (rng.chance(0.8)) tp.push([rng.range(-0.1, 0.1), rng.range(0.15, 0.45), 0.112 * girth, rng.range(0.1, 0.24), rng.range(0.1, 0.3), 0.01, BLOOD]);
-    if (!soldier && rng.chance(0.5)) tp.push([rng.range(-0.12, 0.12), rng.range(0.1, 0.4), 0.113 * girth, 0.08, 0.12, 0.012, skin]);
+    if (!soldier && !L && rng.chance(0.5)) tp.push([rng.range(-0.12, 0.12), rng.range(0.1, 0.4), 0.113 * girth, 0.08, 0.12, 0.012, skin]);
     if (riot) {
       tp.push([0, 0.3, 0, 0.44 * girth, 0.46, 0.27 * girth, armor]);
       tp.push([0, 0.36, 0.14 * girth, 0.2, 0.12, 0.01, 0xa8a8a0]);
@@ -63,7 +72,18 @@ export class WalkerModel {
 
     this.neck = bone(this.torso, 0, 0.58, 0);
     this.headGroup = bone(this.neck, 0, 0, 0);
-    const hp = [
+    const hp = L ? [
+      [0, 0.13, 0.01, 0.2, 0.25, 0.22, skin],
+      [-0.05, 0.16, 0.112, 0.04, 0.022, 0.012, 0xe8e2d4],
+      [0.05, 0.16, 0.112, 0.04, 0.022, 0.012, 0xe8e2d4],
+      [-0.05, 0.16, 0.119, 0.016, 0.018, 0.006, 0x2a2018],
+      [0.05, 0.16, 0.119, 0.016, 0.018, 0.006, 0x2a2018],
+      [-0.05, 0.188, 0.115, 0.05, 0.012, 0.01, L.hair],
+      [0.05, 0.188, 0.115, 0.05, 0.012, 0.01, L.hair],
+      [0, 0.11, 0.122, 0.035, 0.05, 0.03, skin],
+      [0, 0.265, -0.01, 0.22, 0.05, 0.235, L.hair],
+      [0, 0.18, -0.105, 0.21, 0.18, 0.04, L.hair],
+    ] : [
       [0, 0.13, 0.01, 0.2, 0.25, 0.22, skin],
       [-0.05, 0.16, 0.115, 0.045, 0.03, 0.02, dark],
       [0.05, 0.16, 0.115, 0.045, 0.03, 0.02, dark],
@@ -71,10 +91,15 @@ export class WalkerModel {
       [0.05, 0.16, 0.122, 0.022, 0.014, 0.01, eye],
       [0, 0.26, -0.01, 0.21, 0.04, 0.23, rng.pick([0x2a2218, 0x4a3a2a, 0x6a6a60, 0x1a1a1a])],
     ];
-    if (!soldier && rng.chance(0.6)) hp.push([0, 0.02, 0.118, 0.1, 0.08, 0.01, BLOOD]);
+    if (L && L.long) hp.push([0, 0.08, -0.1, 0.22, 0.26, 0.05, L.hair]);
+    if (L && L.hat === 'cap') hp.push([0, 0.3, 0.0, 0.24, 0.07, 0.25, 0x1e2230], [0, 0.275, 0.14, 0.22, 0.02, 0.09, 0x121418], [0, 0.315, 0.126, 0.06, 0.03, 0.005, 0xc9a24a]);
+    if (L && L.hat === 'wrap') hp.push([0, 0.27, -0.01, 0.23, 0.08, 0.245, L.hatColor || 0x8a2a2a], [0, 0.24, -0.13, 0.08, 0.1, 0.04, L.hatColor || 0x8a2a2a]);
+    if (L && L.hat === 'beanie') hp.push([0, 0.27, -0.01, 0.225, 0.09, 0.24, L.hatColor || 0x3a3f34]);
+    if (L && L.beard) hp.push([0, 0.04, 0.1, 0.19, 0.12, 0.06, L.beard], [-0.09, 0.1, 0.07, 0.03, 0.12, 0.08, L.beard], [0.09, 0.1, 0.07, 0.03, 0.12, 0.08, L.beard]);
+    if (!soldier && !L && rng.chance(0.6)) hp.push([0, 0.02, 0.118, 0.1, 0.08, 0.01, BLOOD]);
     add(this.headGroup, hp);
     this.jaw = bone(this.headGroup, 0, 0.04, 0.02);
-    add(this.jaw, [[0, -0.02, 0.03, 0.16, 0.05, 0.14, skin], [0, -0.005, 0.1, 0.12, 0.015, 0.012, 0x2a0404]]);
+    add(this.jaw, L ? [[0, -0.02, 0.03, 0.16, 0.05, 0.14, L.beard || skin], [0, 0.005, 0.1, 0.07, 0.008, 0.012, 0x6a3a34]] : [[0, -0.02, 0.03, 0.16, 0.05, 0.14, skin], [0, -0.005, 0.1, 0.12, 0.015, 0.012, 0x2a0404]]);
     this.helmetBone = null;
     if (soldier) {
       this.helmetBone = bone(this.headGroup, 0, 0, 0);
@@ -92,10 +117,11 @@ export class WalkerModel {
 
     const arm = (side) => {
       const sh = bone(this.torso, side * 0.25 * girth, 0.5, 0);
-      add(sh, [[0, -0.15, 0, 0.09, 0.32, 0.1, !soldier && rng.chance(0.4) ? skin : shirt]]);
+      add(sh, [[0, -0.15, 0, 0.09, 0.32, 0.1, L ? L.coat || shirt : !soldier && rng.chance(0.4) ? skin : shirt]]);
+      if (L && L.arm && side > 0) add(sh, [[0, -0.2, 0, 0.1, 0.08, 0.11, L.arm]]);
       if (soldier && side < 0) add(sh, [[0, -0.08, 0, 0.1, 0.05, 0.11, 0x9a1e18]]);
       const el = bone(sh, 0, -0.31, 0);
-      add(el, [[0, -0.14, 0, 0.08, 0.29, 0.08, skin], [0, -0.34, 0.01, 0.07, 0.1, 0.045, skin]]);
+      add(el, L && L.sleeves ? [[0, -0.1, 0, 0.085, 0.22, 0.085, L.coat || shirt], [0, -0.25, 0, 0.07, 0.09, 0.07, skin], [0, -0.34, 0.01, 0.07, 0.1, 0.045, skin]] : [[0, -0.14, 0, 0.08, 0.29, 0.08, skin], [0, -0.34, 0.01, 0.07, 0.1, 0.045, skin]]);
       const hand = new THREE.Object3D();
       hand.position.y = -0.3;
       el.add(hand);
@@ -179,6 +205,7 @@ export class WalkerModel {
     this.fresh = fresh;
 
     if (soldier) { this.limp = 0; this.hunch = 0.02; this.tilt = 0; }
+    if (L) { this.limp = 0; this.hunch = L.hunch ?? 0.04; this.tilt = 0; }
     this.fall = 0; // 0 standing .. 1 lying
     this.fallDir = 1;
     this.crawler = false;
@@ -265,6 +292,8 @@ export class WalkerModel {
       if (f > 0.98) return;
     }
 
+    if (this.living) { this._alive(dt, p, t); return; }
+
     // --- upright locomotion ---
     const amp = 0.25 + s * 0.45;
     const sw = Math.sin(ph);
@@ -326,6 +355,71 @@ export class WalkerModel {
     AL.el.rotation.x = -0.25 - (p.grab ? 0.5 : 0) + Math.sin(t * 2 + 1) * 0.05;
     AR.el.rotation.x = -0.35 - (p.grab ? 0.5 : 0) + Math.sin(t * 2.2) * 0.05;
     this.jaw.rotation.x = jaw;
+  }
+
+  // The crew: breathing, a pose, turning to look at you, talking with their hands.
+  //   p: { pose: 'stand'|'lean'|'work'|'arms', lookYaw, lookPitch, talk }
+  _alive(dt, p, t) {
+    const L = this.legL, R = this.legR, AL = this.armL, AR = this.armR;
+    const br = Math.sin(t * 1.5 + this.phase) * 0.012;
+    const talk = p.talk ? 1 : 0;
+    this.body.rotation.set(0, 0, 0);
+    this.body.position.set(0, 0, 0);
+    this.hips.position.y = 0.95;
+    this.hips.rotation.set(0, 0, 0);
+    L.hip.rotation.set(0, 0, 0.03);
+    R.hip.rotation.set(0, 0, -0.03);
+    L.knee.rotation.x = 0;
+    R.knee.rotation.x = 0;
+    let lean = this.hunch + br;
+    const pose = p.pose || 'stand';
+    if (pose === 'lean') {
+      // weight on one leg, hip cocked
+      this.hips.rotation.z = 0.06;
+      this.hips.position.y = 0.93;
+      L.hip.rotation.set(-0.05, 0, 0.1);
+      R.knee.rotation.x = 0.22;
+      R.hip.rotation.set(-0.15, 0, -0.05);
+      lean -= 0.04;
+    }
+    this.torso.rotation.set(lean, 0, pose === 'lean' ? -0.04 : 0);
+    // arms
+    const g = talk ? Math.sin(t * 3.1) : 0;
+    if (pose === 'arms') {
+      // arms folded
+      AL.sh.rotation.set(-0.55, 0.3, -0.25);
+      AR.sh.rotation.set(-0.5, -0.3, 0.25);
+      AL.el.rotation.x = -1.9;
+      AR.el.rotation.x = -1.95;
+    } else if (pose === 'work') {
+      // hands out in front, busy
+      AL.sh.rotation.set(-0.7 + Math.sin(t * 2.2) * 0.08, 0.1, -0.1);
+      AR.sh.rotation.set(-0.75 + Math.sin(t * 2.7 + 1) * 0.1, -0.1, 0.1);
+      AL.el.rotation.x = -0.9;
+      AR.el.rotation.x = -0.8;
+      this.torso.rotation.x = lean + 0.18;
+    } else if (pose === 'smoke') {
+      AL.sh.rotation.set(-0.1, 0, -0.12);
+      AL.el.rotation.x = -0.15;
+      const puff = Math.max(0, Math.sin(t * 0.5 + this.phase)) ** 6;
+      AR.sh.rotation.set(-0.35 - puff * 0.5, -0.2, 0.2);
+      AR.el.rotation.x = -1.6 - puff * 0.5;
+    } else {
+      AL.sh.rotation.set(-0.08 + br, 0, -0.1);
+      AR.sh.rotation.set(-0.08 - br, 0, 0.1);
+      AL.el.rotation.x = -0.15;
+      AR.el.rotation.x = -0.15;
+    }
+    if (talk && pose !== 'work') {
+      AR.sh.rotation.set(-0.45 + g * 0.15, -0.2, 0.15);
+      AR.el.rotation.x = -1.1 + Math.sin(t * 4.3) * 0.25;
+    }
+    // look at whoever they're talking to
+    const yaw = Math.max(-1.1, Math.min(1.1, p.lookYaw || 0));
+    const pitch = Math.max(-0.5, Math.min(0.4, p.lookPitch || 0));
+    this.neck.rotation.set(0, yaw * 0.35, 0);
+    this.headGroup.rotation.set(-lean * 0.6 - pitch + (p.pose === 'work' && !talk ? 0.35 : 0), yaw * 0.65, 0);
+    this.jaw.rotation.x = talk ? 0.02 + Math.abs(Math.sin(t * 9.5)) * Math.abs(Math.sin(t * 2.3)) * 0.16 : 0.01;
   }
 
   // World-space hit volumes. Writes into the provided vectors.
