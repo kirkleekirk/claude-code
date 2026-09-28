@@ -3,6 +3,7 @@ import { def, makeItem } from '../data/items.js';
 import { noise1 } from '../core/rng.js';
 import { clamp, damp, rayPointDistance } from '../core/math.js';
 import { weaponModel } from '../world/Models.js';
+import { weaponStats } from '../game/weapons.js';
 
 // Combat in the spirit of Saints & Sinners:
 //  - Melee power comes from how hard you swing (hold to wind up), scaled by stamina.
@@ -15,6 +16,8 @@ import { weaponModel } from '../world/Models.js';
 
 export const SLOTS = ['knife', 'melee', 'sidearm', 'long'];
 const ACTION_TIME = { magOut: 0.36, magIn: 0.58, rack: 0.32, clear: 0.5, open: 0.42, load1: 0.3, close: 0.28, pump: 0.4, bolt: 0.5, crank: 1.1, helmet: 0.9 };
+// Guns that open to load by hand: revolvers swing out a cylinder, break-actions hinge open.
+const OPENS = new Set(['cyl', 'break']);
 const FISTS = { name: 'Fists', kind: 'melee', type: 'blunt', pierce: 0, head: 12, body: 6, reach: 1.2, speed: 0.7, stamina: 6, knock: 0.5, stick: 0 };
 
 const _o = new THREE.Vector3();
@@ -59,7 +62,7 @@ export class Combat {
     const first = ['melee', 'knife', 'sidearm', 'long'].find((s) => lo[s]);
     this.slot = first || 'knife';
     this.item = lo[this.slot] || null;
-    this.d = this.item ? def(this.item.id) : null;
+    this.d = this.item ? weaponStats(this.item) : null;
     this.g.vm.setWeapon(this.item);
   }
 
@@ -70,8 +73,11 @@ export class Combat {
   refresh() {
     const cur = this.inv.loadout[this.slot] || null;
     if (cur !== this.item) {
+      this._unnock();
       this.item = cur;
-      this.d = cur ? def(cur.id) : null;
+      this.d = cur ? weaponStats(cur) : null;
+      this.bow = null;
+      this.charging = null;
       this.melee = null;
       this.action = null;
       this.g.vm.setWeapon(cur);
@@ -92,11 +98,20 @@ export class Combat {
     this.holsterT = 0.001;
   }
 
+  // A nocked arrow goes back in the quiver when the bow is put away.
+  _unnock() {
+    if (this.bow && this.bow.nocked && this.d && this.d.ammo) this.inv.add(makeItem(this.d.ammo, 1));
+    this.bow = null;
+  }
+
   _finishEquip() {
+    this._unnock();
     this.slot = this.pendingSlot;
     this.pendingSlot = null;
     this.item = this.inv.loadout[this.slot] || null;
-    this.d = this.item ? def(this.item.id) : null;
+    this.d = this.item ? weaponStats(this.item) : null;
+    this.bow = null;
+    this.charging = null;
     this.g.vm.setWeapon(this.item);
     this.g.audio.mech('holster');
     this.ads = 0;
@@ -325,6 +340,7 @@ export class Combat {
         fx.sparks(hit.point, 10);
         audio.burn(hit.point);
       }
+      if (d.incendiary && r !== 'deflect') horde.ignite(w);
       if (r === 'kill' || r === 'decap') hud.hit(true);
       else hud.hit(false);
       player.shake = Math.max(player.shake, 0.18 + power * 0.1);
@@ -548,12 +564,120 @@ export class Combat {
     this.swayX = noise1(t * 0.9) * amp + Math.sin(t * 1.3) * amp * 0.4;
     this.swayY = noise1(t * 0.7 + 50) * amp * 0.8 + Math.sin(t * 2.6) * amp * 0.35;
 
-    if (input.btnPressed[0] && this.shotCd <= 0 && !this.action) this._fire();
+    if (d.action === 'bow') { this._updateBow(dt, input); return; }
+    if (this.charging) {
+      this.charging.t += dt;
+      this.swayX *= 0.5;
+      this.swayY *= 0.5;
+      if (this.charging.t >= d.chargeTime) { this.charging = null; this._fire(true); }
+    } else {
+      const trigger = input.btnPressed[0] || (d.auto && input.buttons[0] && this.autoHeld);
+      if (input.btnPressed[0]) this.autoHeld = true;
+      if (!input.buttons[0]) this.autoHeld = false;
+      if (trigger && this.shotCd <= 0 && !this.action) this._fire(false, !input.btnPressed[0]);
+    }
     if ((input.wasPressed('KeyR') || (input.isDown('KeyR') && !this.action)) && !this.action) {
       const next = this._nextReload(input.wasPressed('KeyR'));
       if (next) this._startAction(next);
     }
     this.hint = this.hint || this._gunHint();
+  }
+
+  // Bows: hold to draw (an arrow nocks itself), release to loose. A full draw
+  // hits hardest; holding it there costs stamina and starts to shake.
+  _updateBow(dt, input) {
+    const { player, audio, hud } = this.g;
+    const d = this.d, g = this.item.gun;
+    const b = this.bow || (this.bow = { draw: 0, held: 0 });
+    g.loaded = b.nocked ? 1 : 0;
+    if (input.btnPressed[0] && !b.nocked && this.shotCd <= 0) {
+      if (this.inv.take(d.ammo, 1)) {
+        b.nocked = true;
+        audio.mech('round');
+      } else {
+        audio.dryFire();
+        hud.toast('No arrows in your pack');
+      }
+    }
+    if (b.nocked && input.buttons[0]) {
+      const before = b.draw;
+      b.draw = Math.min(1, b.draw + dt / (d.draw || 0.8));
+      if (before < 0.1 && b.draw >= 0.1) audio.mech('crank');
+      if (b.draw >= 1) {
+        b.held += dt;
+        player.spendStamina(5 * dt);
+        const shake = Math.max(0, b.held - 2.5) * 0.004 + (player.stamina < 15 ? 0.006 : 0);
+        this.swayX += (Math.random() - 0.5) * shake;
+        this.swayY += (Math.random() - 0.5) * shake;
+      }
+    } else if (b.nocked && b.draw > 0) {
+      if (b.draw >= 0.3) {
+        const power = b.draw;
+        b.nocked = false;
+        b.draw = 0;
+        b.held = 0;
+        g.loaded = 0;
+        this._loose(power);
+      } else b.draw = Math.max(0, b.draw - dt * 3);
+    }
+    this.hint = b.nocked ? (b.draw >= 1 ? 'Release to loose' : 'Hold to draw') : this.inv.count(d.ammo) > 0 ? 'Click and hold to nock and draw' : 'No arrows';
+  }
+
+  _loose(power) {
+    const { player, audio, vm } = this.g;
+    const d = this.d, it = this.item;
+    this.shotCd = d.rate;
+    it.dur = Math.max(0, it.dur - 1);
+    const cam = this.g.camera;
+    cam.getWorldPosition(_o);
+    cam.getWorldDirection(_d);
+    _r.set(-_d.z, 0, _d.x).normalize();
+    _u.crossVectors(_r, _d).normalize();
+    const base = this.ads > 0.6 ? d.spreadAds : d.spreadHip;
+    const spreadDeg = base * (1.6 - power * 0.6) + Math.hypot(player.vel.x, player.vel.z) * 0.4;
+    const dir = _d.clone().addScaledVector(_r, this.swayX).addScaledVector(_u, -this.swayY);
+    const sp = THREE.MathUtils.degToRad(spreadDeg) * Math.sqrt(Math.random()), a = Math.random() * Math.PI * 2;
+    dir.addScaledVector(_r, Math.cos(a) * sp).addScaledVector(_u, Math.sin(a) * sp).normalize();
+    this._shot(_o.clone(), dir, true, 0.35 + 0.65 * power);
+    this._landKnocks();
+    audio.crossbow(_o);
+    vm.kick(0.3);
+    this.g.noise(player.pos, d.noise);
+  }
+
+  // The herder horn: a blast of sound that knocks down everything in a cone.
+  _sonic() {
+    const { player, horde, audio, fx, hud } = this.g;
+    const d = this.d;
+    const fx0 = -Math.sin(player.yaw), fz0 = -Math.cos(player.yaw);
+    let n = 0;
+    for (const w of horde.walkers) {
+      if (w.dead || w.state === 'emerge') continue;
+      const dx = w.pos.x - player.pos.x, dz = w.pos.z - player.pos.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist > d.sonicRange || dist < 0.01) continue;
+      if ((dx * fx0 + dz * fz0) / dist < d.sonicArc) continue;
+      w.knockDown(dx / dist, dz / dist, 1.6 * (1 - dist / d.sonicRange) + 0.5);
+      n++;
+    }
+    const guards = this.g.guards;
+    if (guards) {
+      for (const sd of guards.soldiers) {
+        if (sd.dead) continue;
+        const dx = sd.pos.x - player.pos.x, dz = sd.pos.z - player.pos.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist < d.sonicRange && (dx * fx0 + dz * fz0) / (dist || 1) > d.sonicArc) sd.stagger = 1.5;
+      }
+    }
+    audio.herderPulse(1.2, 0.8);
+    player.shake = Math.max(player.shake, 0.4);
+    this.g.vm.kick(1.2);
+    const cam = this.g.camera;
+    cam.getWorldPosition(_o);
+    cam.getWorldDirection(_d);
+    for (let i = 0; i < 20; i++) fx.dust(_t.copy(_o).addScaledVector(_d, 1.5 + i * 0.35).setY(0.2), _q.set(0, 1, 0), 1);
+    if (n) hud.toast(n > 1 ? `${n} of them knocked flat` : 'Knocked it flat');
+    this.g.noise(player.pos, d.noise, { alarm: true });
   }
 
   _gunHint() {
@@ -576,8 +700,12 @@ export class Combat {
         if (g.open) return this.inv.count(d.ammo) > 0 && g.loaded < d.cap ? 'R — load a round · click to close' : 'R — close cylinder';
         if (g.loaded === 0 && this.inv.count(d.ammo) > 0) return 'R — swing out the cylinder';
         return '';
+      case 'break':
+        if (g.open) return this.inv.count(d.ammo) > 0 && g.loaded < d.cap ? `R — load a ${d.ammo === 'ammo_12g' ? 'shell' : 'round'} · click to close` : 'R — snap it shut';
+        if (g.loaded === 0 && this.inv.count(d.ammo) > 0) return 'R — break it open';
+        return '';
       case 'pump':
-        if (g.chamber === 'spent' || (g.chamber === 'empty' && g.loaded > 0)) return 'R — pump';
+        if (g.chamber === 'spent' || (g.chamber === 'empty' && g.loaded > 0)) return d.lever ? 'R — work the lever' : 'R — pump';
         if (g.chamber === 'empty' && this.inv.count(d.ammo) > 0) return 'R — load a shell';
         return '';
       case 'bolt':
@@ -610,6 +738,7 @@ export class Combat {
         if (explicit && avail === 0 && g.loaded < d.cap) hud.toast(`No ${ammoName} in your pack`);
         return null;
       case 'cyl':
+      case 'break':
         if (!g.open) {
           if (g.spent > 0 || (g.loaded < d.cap && avail > 0)) return 'open';
           if (explicit && avail === 0 && g.loaded < d.cap) hud.toast(`No ${ammoName} in your pack`);
@@ -634,11 +763,12 @@ export class Combat {
   _startAction(name) {
     let dur = ACTION_TIME[name] || 0.4;
     if (name === 'load1' && this.d && this.d.action === 'pump') dur = 0.42;
+    if (this.d && this.d.reloadMul && name !== 'helmet') dur *= this.d.reloadMul;
     this.action = { name, t: 0, dur, k: 0 };
     const a = this.g.audio;
     if (name === 'magOut') a.mech('magOut');
     if (name === 'crank') a.mech('crank');
-    if (name === 'open') a.mech('cylOpen');
+    if (name === 'open') a.mech(this.d && this.d.action === 'break' ? 'breakOpen' : 'cylOpen');
   }
 
   _updateAction(dt, input) {
@@ -705,13 +835,13 @@ export class Combat {
         break;
       case 'close':
         g.open = false;
-        audio.mech('cylClose');
+        audio.mech(d.action === 'break' ? 'breakClose' : 'cylClose');
         break;
       case 'pump':
       case 'bolt': {
         const wasSpent = g.chamber === 'spent' || g.chamber === 'jam';
         if (g.loaded > 0) { g.loaded--; g.chamber = 'live'; } else g.chamber = 'empty';
-        audio.mech(name);
+        audio.mech(name === 'pump' && d.lever ? 'lever' : name);
         if (wasSpent) this._ejectBrass(d.action === 'pump' ? 0xa02a20 : 0xb08d3a);
         break;
       }
@@ -731,26 +861,33 @@ export class Combat {
     this.g.fx.brass(_t, _r.clone().multiplyScalar(2 + Math.random()).add(new THREE.Vector3(0, 2, 0)));
   }
 
-  _fire() {
+  _fire(charged = false, held = false) {
     const { player, audio, fx, hud, vm } = this.g;
     const d = this.d, it = this.item, g = it.gun;
     let ready = false;
     if (d.action === 'mag') ready = g.magIn && g.chamber === 'live';
     else if (d.action === 'pump' || d.action === 'bolt') ready = g.chamber === 'live';
-    else if (d.action === 'cyl') {
-      if (g.open) { this._startAction('close'); return; }
+    else if (OPENS.has(d.action)) {
+      if (g.open) { if (!held) this._startAction('close'); return; }
       ready = g.loaded > 0;
     } else if (d.action === 'xbow') ready = g.loaded > 0;
     if (!ready) {
+      if (held) return;
       audio.dryFire();
       this.shotCd = 0.2;
       const h = this._gunHint();
       if (h) hud.toast(h);
       return;
     }
+    // charged weapons hum for a moment before they fire
+    if (d.chargeTime && !charged) {
+      this.charging = { t: 0 };
+      audio.laserCharge(null, d.chargeTime);
+      return;
+    }
     // worn guns jam
     const durK = it.dur / d.dur;
-    if (d.action !== 'xbow' && d.action !== 'cyl' && (it.dur <= 0 || (durK < 0.35 && Math.random() < (0.35 - durK) * 0.35))) {
+    if (d.action !== 'xbow' && !OPENS.has(d.action) && (it.dur <= 0 || (durK < 0.35 && Math.random() < (0.35 - durK) * 0.35))) {
       g.chamber = 'jam';
       audio.mech('jam');
       hud.toast(it.dur <= 0 ? 'The action is shot — repair it at the workbench' : 'Jammed! R to clear it');
@@ -761,21 +898,18 @@ export class Combat {
     if (d.action === 'mag') {
       if (g.loaded > 0) { g.loaded--; g.chamber = 'live'; } else g.chamber = 'empty';
       if (!d.energy) this._ejectBrass();
-    } else if (d.action === 'pump' || d.action === 'bolt') g.chamber = 'spent';
-    else if (d.action === 'cyl') { g.loaded--; g.spent++; }
-    else if (d.action === 'xbow') g.loaded = 0;
-    it.dur = Math.max(0, it.dur - 1);
-    let suppressed = false;
-    if (it.sup) {
-      suppressed = true;
-      it.sup -= 1;
-      if (it.sup <= 0) {
-        delete it.sup;
-        hud.toast('The suppressor is spent');
-        vm.updateSuppressor(it);
-      }
     }
+    let barrels = 1;
+    if (d.action === 'pump' || d.action === 'bolt') g.chamber = 'spent';
+    else if (OPENS.has(d.action)) {
+      barrels = d.dual ? g.loaded : 1;
+      g.loaded -= barrels;
+      g.spent += barrels;
+    } else if (d.action === 'xbow') g.loaded = 0;
+    it.dur = Math.max(0, it.dur - 1);
+    const suppressed = d.noise <= 24 && !d.laser && !d.sonic && d.action !== 'xbow';
     this.shotCd = d.rate;
+    if (d.sonic) { this._sonic(); return; }
 
     // shoot
     const cam = this.g.camera;
@@ -785,18 +919,21 @@ export class Combat {
     _u.crossVectors(_r, _d).normalize();
     const moving = Math.hypot(player.vel.x, player.vel.z) / 3;
     const base = this.ads > 0.6 ? d.spreadAds : d.spreadHip;
-    const spreadDeg = base + moving * (this.ads > 0.6 ? 0.6 : 1.6) + (1 - player.staminaFactor) * 1.2;
+    // full-auto climbs the longer you hold it
+    this.burst = held && d.auto ? (this.burst || 0) + 1 : 0;
+    const spreadDeg = base + moving * (this.ads > 0.6 ? 0.6 : 1.6) + (1 - player.staminaFactor) * 1.2 + Math.min(2.5, this.burst * 0.12);
     const origin = _o.clone();
-    for (let i = 0; i < d.pellets; i++) {
+    for (let i = 0; i < d.pellets * barrels; i++) {
       const dir = _d.clone().addScaledVector(_r, this.swayX).addScaledVector(_u, -this.swayY);
       const s = THREE.MathUtils.degToRad(spreadDeg + (d.pelletSpread || 0)) * Math.sqrt(Math.random());
       const a = Math.random() * Math.PI * 2;
       dir.addScaledVector(_r, Math.cos(a) * s).addScaledVector(_u, Math.sin(a) * s).normalize();
       this._shot(origin, dir, i === 0);
     }
+    this._landKnocks();
 
     // feedback
-    const recoil = THREE.MathUtils.degToRad(d.recoil) * (this.ads > 0.6 ? 0.75 : 1);
+    const recoil = THREE.MathUtils.degToRad(d.recoil) * (this.ads > 0.6 ? 0.75 : 1) * (barrels > 1 ? 1.6 : 1);
     player.kick.pitch += recoil;
     player.kick.yaw += (Math.random() - 0.5) * recoil * 0.5;
     player.pitch += recoil * 0.35;
@@ -805,17 +942,18 @@ export class Combat {
     if (d.action === 'xbow') audio.crossbow(origin);
     else {
       if (d.laser) audio.laser(origin, true);
-      else audio.gunshot(d.id || it.id, origin, suppressed);
-      vm.muzzle(suppressed ? 0.35 : 1, d.laser);
+      else audio.gunshot(d.id || it.id, origin, suppressed, d.noise);
+      vm.muzzle(suppressed ? 0.35 : barrels > 1 ? 1.6 : 1, d.laser);
       fx.muzzleFlash(_t.copy(origin).addScaledVector(_d, 0.8), suppressed ? 0.25 : d.laser ? 0.6 : 1, d.laser ? 0xff4a2a : 0xffc27a);
     }
-    this.g.noise(player.pos, suppressed ? 9 : d.noise, { alarm: !suppressed && d.noise > 40 });
+    this.g.noise(player.pos, d.noise, { alarm: !suppressed && d.noise > 40 });
     if (!suppressed && d.action !== 'xbow') this.g.onAggro?.();
   }
 
-  _shot(o, dir, primary) {
+  _shot(o, dir, primary, power = 1) {
     const { world, horde, fx, audio, hud, loot, guards } = this.g;
     const d = this.d;
+    const scale = power;
     const wh = world.raycast(o.x, o.y, o.z, dir.x, dir.y, dir.z, 160, true);
     let maxT = wh ? wh.t : 160;
     const pen = d.penetrate || 1;
@@ -834,8 +972,9 @@ export class Combat {
       endT = h.t;
       const w = h.walker;
       const part = h.part === 'arm' ? 'body' : h.part;
-      let dmg = part === 'head' ? d.headDmg : part === 'leg' ? d.legDmg : d.bodyDmg;
+      let dmg = (part === 'head' ? d.headDmg : part === 'leg' ? d.legDmg : d.bodyDmg) * scale;
       if (d.pellets > 1) dmg *= clamp(1.25 - h.t / 16, 0.3, 1);
+      if (d.explosive) { endT = h.t; break; }
       const res = horde.damage(w, {
         part, damage: dmg, kind: 'bullet', power: 1, pierce: 0, knock: 0.3,
         dirX: dir.x / len, dirZ: dir.z / len, armorPierce: d.armorPierce, point: h.point,
@@ -846,26 +985,37 @@ export class Combat {
       } else audio.impact(h.point, 'flesh');
       if (d.laser) audio.burn(h.point);
       hud.hit(res.result === 'kill' || res.result === 'decap');
-      if (d.retrievable) this._lodgeBolt(w, h.point);
+      if (d.incendiary) horde.ignite(w);
+      // knockdowns land once every pellet of the shot has done its damage
+      if (d.knockdown && res.result !== 'deflect') (this.knocks || (this.knocks = new Map())).set(w, { x: dir.x / len, z: dir.z / len });
+      if (d.retrievable) this._lodgeBolt(w, h.point, d.ammo);
       if (res.result === 'deflect') break;
     }
-    if (gh && !hitAny) {
+    if (gh && !hitAny && !d.explosive) {
       hitAny = true;
       endT = gh.t;
       const target = gh.soldier || gh;
       const part = gh.part === 'limb' ? 'body' : gh.part;
-      let dmg = part === 'head' ? d.headDmg : part === 'drone' ? d.bodyDmg * 1.5 : d.bodyDmg;
+      let dmg = (part === 'head' ? d.headDmg : part === 'drone' ? d.bodyDmg * 1.5 : d.bodyDmg) * scale * (d.incendiary ? 1.25 : 1);
       if (d.pellets > 1) dmg *= clamp(1.25 - gh.t / 16, 0.3, 1);
       const res = guards.damage(target, { part, damage: dmg, kind: 'bullet', power: 1, dirX: dir.x / len, dirZ: dir.z / len, armorPierce: d.armorPierce, point: gh.point });
       if (res.result === 'deflect') audio.meleeHit('deflect', gh.point, 0.6);
       else if (gh.soldier) audio.impact(gh.point, 'flesh');
       hud.hit(res.result === 'kill');
     }
+    if (d.explosive) {
+      // the round goes off on whatever it hits first
+      const t = Math.min(hitAny ? endT : Infinity, gh ? gh.t : Infinity, wh ? wh.t : Infinity, 60);
+      const p = new THREE.Vector3(o.x + dir.x * t, o.y + dir.y * t, o.z + dir.z * t);
+      if (wh && t >= wh.t - 0.01) p.addScaledVector(new THREE.Vector3(wh.nx, wh.ny, wh.nz), 0.2);
+      if (primary) this.g.explode?.(p, 3.4);
+      return;
+    }
     if (!hitAny && wh) {
       const p = new THREE.Vector3(o.x + dir.x * wh.t, o.y + dir.y * wh.t, o.z + dir.z * wh.t);
       const n = new THREE.Vector3(wh.nx, wh.ny, wh.nz);
       if (d.retrievable) {
-        loot.spawnItem(makeItem('bolt', 1), p.clone().addScaledVector(n, 0.05), Math.atan2(dir.x, dir.z));
+        loot.spawnItem(makeItem(d.ammo, 1), p.clone().addScaledVector(n, 0.05), Math.atan2(dir.x, dir.z));
       } else {
         fx.impact(p, n, d.laser ? 'burn' : 'hard');
         if (primary) audio.impact(p, 'hard');
@@ -877,19 +1027,25 @@ export class Combat {
     }
   }
 
-  _lodgeBolt(w, point) {
+  _landKnocks() {
+    if (!this.knocks) return;
+    for (const [w, dir] of this.knocks) if (!w.dead) w.knockDown(dir.x, dir.z, 1.3);
+    this.knocks.clear();
+  }
+
+  _lodgeBolt(w, point, ammo = 'bolt') {
     const L = this.g.loot;
     const local = w.root.worldToLocal(point.clone());
     const holder = new THREE.Object3D();
     holder.position.copy(local);
     w.root.add(holder);
     const extra = L.addExtra({
-      label: 'Recover crossbow bolt',
+      label: ammo === 'arrow' ? 'Pull the arrow out' : 'Recover crossbow bolt',
       radius: 0.35,
       getPos: (v) => holder.getWorldPosition(v),
       onUse: () => {
-        const left = this.inv.add(makeItem('bolt', 1));
-        if (left) { this.g.hud.toast('No room for the bolt'); return false; }
+        const left = this.inv.add(makeItem(ammo, 1));
+        if (left) { this.g.hud.toast(ammo === 'arrow' ? 'No room for the arrow' : 'No room for the bolt'); return false; }
         L.removeExtra(extra);
         w.root.remove(holder);
         this.g.audio.pullOut(w.pos);
@@ -922,6 +1078,8 @@ export class Combat {
       swayX: this.isGun ? this.swayX : 0,
       swayY: this.isGun ? this.swayY : 0,
       loaded: g ? g.loaded : 0,
+      draw: this.bow ? this.bow.draw : 0,
+      charging: this.charging ? Math.min(1, this.charging.t / (this.d.chargeTime || 1)) : 0,
       magIn: g ? g.magIn : true,
       slideBack: !!(g && this.d.action === 'mag' && g.chamber === 'empty'),
       cylOpen: !!(g && g.open),

@@ -9,7 +9,9 @@ country, running colonies coast to coast on technology seized from sealed govern
 garrison out here was cut off from its command long ago. Its soldiers still wear the insignia, but
 they treat everyone outside their walls as infected.
 
-Each trip starts on a skiff. You scavenge the drowned streets, fight the dead up close, and get back
+Between trips you walk the Magnolia's deck: pick a destination on the rolling bulletin board, build
+and mod your weapons at the benches, cook, patch yourself up, and cast off from the skiff at the port
+gangway. Each trip starts on that skiff. You scavenge the drowned streets, fight the dead up close, and get back
 to the water before curfew. At curfew the Guard runs its **Sweep**: the horns on their herder mast
 drive every dead thing in the sector ahead of laser-armed soldiers and searchlight drones. Die out
 there and everything you carried stays behind.
@@ -45,6 +47,9 @@ Needs a desktop browser with WebGL2, a mouse and a keyboard. Headphones help: wa
 | F / H | Flashlight / quick heal |
 | Tab / M / Esc | Backpack / map / pause |
 
+Aboard the Magnolia: WASD to walk, E to use a station, Tab for the stash, Esc for the menu. At a bench,
+W/S browse, A/D switch categories or mod slots, Enter builds, Esc leaves.
+
 ## How it plays
 
 - **The dead only die when the brain goes.** Body hits stagger, knock down, or take legs (crawlers).
@@ -66,8 +71,23 @@ Needs a desktop browser with WebGL2, a mouse and a keyboard. Headphones help: wa
   from behind with a blade, or knock them down with a shock baton. They carry energy cells, and keycards
   that open their weapons lockers. Their guns reload by ejecting a spent cell, seating a fresh one and
   priming the coil.
-- **The hub.** Stash, workbenches you upgrade (weapons, ammo, infirmary, galley), a recycler for salvage,
-  backpack upgrades, and contracts that only pay if you make it back.
+- **Weapon tiers.** Tier 0 guns are scrap-built (pipe shotgun, zip pistol, scrap bow, makeshift crossbow).
+  Tier 1 are good handmade or worn commercial guns (rusty .38, sawed-off double, an old bolt rifle, a hunting
+  bow). Tier 2 are store-bought (9mm, .45 1911, pump shotgun, lever carbine, scoped rifle, SMG). Tier 3 are
+  military (M17, AR-15, M4, combat shotgun, marksman rifle). Experimental weapons are Living Guard tech (photon
+  pistol, arc carbine, scatter emitter, beam lance, herder horn, thermal knife). Loot follows the zone: the
+  better tiers turn up in harder places and in military crates, and Experimental only on the Guard.
+- **The weapon workbench.** Every gun has mod slots (sights, muzzle, barrel, magazine, stock, grip, special).
+  Point at a part of the gun on the bench to see what fits there; hover a mod to bolt it on and compare the
+  numbers before you build it. Scrap guns take shoddy parts with real drawbacks, but also the expensive,
+  overpowered specials: a Dragon's Breath cylinder that sets the dead alight (and the fire spreads from one to
+  the next), a tungsten rechamber that punches through armour, rebar slugs, pipe-bomb bolts, a twin trigger.
+  Military guns take clean, dependable attachments, with a few exceptions like a drop-in auto sear or Frag-12
+  rounds. Mods you remove go in the parts drawer and cost nothing to refit.
+- **The Magnolia.** A walkable riverboat hub. The workshop builds hand-made weapons and gear, the reloading
+  bench makes ammunition, the infirmary and galley make medicine and food, the recycler breaks down salvage,
+  and the trunk in the salon is your stash. Benches work like Fallout's: pick a recipe, see what it needs, and
+  if you're short on a component the bench breaks your salvage down to cover it.
 
 Five areas, each generated fresh every trip:
 
@@ -94,9 +114,10 @@ src/
                        sky/fog/water/mist, models, batching
   entities/            player, walkers (skinned single-mesh bodies), horde AI, Living Guard soldiers and drones
   combat/              combat rules and the first-person view model
-  game/                raid orchestration, container specs, loot, inventory, profile/saves
-  scenes/HubScene.js   the Magnolia backdrop
-  ui/                  HUD, backpack, map, hub menus, styles
+  game/                raid and hub orchestration, weapon stats and mods, container specs, loot,
+                       inventory, profile/saves
+  scenes/Magnolia.js   the walkable riverboat: deck, salon, stations and their camera framings
+  ui/                  HUD, backpack, map, styles; ui/hub/ holds the station panels
 ```
 
 Saves live in `localStorage` (`lasttoll.save.v1`).
@@ -110,6 +131,9 @@ The desktop build is structured so WebXR can slot in without rewriting the game 
 - **Input is read as intents** (`core/Input.js`), so an XR controller backend can feed the same actions.
 - **The view model is isolated** (`combat/ViewModel.js`). In VR it gets replaced by tracked hands, with the
   same weapon models attached to the controller grips.
+- **Stations are physical.** Every bench on the Magnolia is an object with a camera framing and a spot on the
+  bench where the item sits. The weapon workbench marks each mod slot on the gun itself, so in VR you can
+  point at (or touch) the barrel to see barrels.
 
 Next steps for the VR build:
 

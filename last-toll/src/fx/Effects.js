@@ -10,6 +10,7 @@ const _s = new THREE.Vector3();
 const _p = new THREE.Vector3();
 const _c = new THREE.Color();
 const _e = new THREE.Euler();
+const _fv = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 
 export class Effects {
@@ -76,6 +77,63 @@ export class Effects {
     this.flash = new THREE.PointLight(0xffc27a, 0, 14, 1.6);
     scene.add(this.flash);
     this.flashT = 0;
+
+    // fire: one additive point cloud shared by every flame, so burning crowds cost one draw call
+    const FN = 480;
+    this.FN = FN;
+    const fg = new THREE.BufferGeometry();
+    fg.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(FN * 3).fill(-999), 3));
+    fg.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(FN * 3), 3));
+    this.flames = new THREE.Points(fg, new THREE.PointsMaterial({
+      size: 0.5, map: radialTexture('rgba(255,255,255,1)', 'rgba(255,255,255,0)'), vertexColors: true, transparent: true,
+      depthWrite: false, blending: THREE.AdditiveBlending,
+    }));
+    this.flames.frustumCulled = false;
+    scene.add(this.flames);
+    this.F = [];
+    for (let i = 0; i < FN; i++) this.F.push({ alive: false, pos: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0, max: 1, heat: 1 });
+    this.nextF = 0;
+    this.burners = [];
+  }
+
+  flame(pos, vel, life = 0.6, heat = 1) {
+    const f = this.F[this.nextF];
+    this.nextF = (this.nextF + 1) % this.FN;
+    f.alive = true;
+    f.pos.copy(pos);
+    f.vel.copy(vel);
+    f.life = f.max = life;
+    f.heat = heat;
+  }
+
+  // Keep something burning: getPos(out) fills in where the fire is and returns
+  // false once there's nothing left to burn. Returns a handle with .alive.
+  addBurner(getPos, rate = 26, spread = [0.22, 0.55]) {
+    const h = { getPos, rate, spread, acc: 0, alive: true };
+    this.burners.push(h);
+    return h;
+  }
+
+  // A blast: fireball, sparks, smoke and a flash.
+  explosion(point, size = 1) {
+    this.flash.color.setHex(0xffa050);
+    this.flash.position.copy(point).setY(point.y + 0.6);
+    this.flash.intensity = 180 * size;
+    this.flashT = 0.2;
+    for (let i = 0; i < 70 * size; i++) {
+      const a = Math.random() * Math.PI * 2, u = Math.random() * 2 - 1, r = Math.sqrt(1 - u * u);
+      const sp = (2 + Math.random() * 6) * size;
+      this.flame(point, _p.set(Math.cos(a) * r * sp, Math.abs(u) * sp * 0.8 + 1, Math.sin(a) * r * sp), 0.35 + Math.random() * 0.45, 1.2);
+    }
+    this.sparks(point, 26);
+    for (let i = 0; i < 24; i++) {
+      const v = new THREE.Vector3((Math.random() - 0.5) * 3, 1 + Math.random() * 2.5, (Math.random() - 0.5) * 3);
+      this._emit(point, v, { life: 1.4 + Math.random(), size: 0.18 + Math.random() * 0.2, color: 0x2a2826, g: -0.6, bounce: 0, spin: 2 });
+    }
+    for (let i = 0; i < 16; i++) {
+      const v = new THREE.Vector3((Math.random() - 0.5) * 9, 2 + Math.random() * 5, (Math.random() - 0.5) * 9);
+      this._emit(point, v, { life: 2, size: 0.05 + Math.random() * 0.06, color: 0x3a3430, g: 9.8, bounce: 0.3 });
+    }
   }
 
   _emit(pos, vel, { life = 1, size = 0.03, color = 0x5a0606, g = 9.8, bounce = 0.2, spin = 8 } = {}) {
@@ -291,10 +349,40 @@ export class Effects {
       if (this.flashT <= 0) this.flash.intensity = 0;
       else this.flash.intensity *= 0.6;
     }
+
+    // burning things shed flames
+    for (let i = this.burners.length - 1; i >= 0; i--) {
+      const b = this.burners[i];
+      if (!b.alive || b.getPos(_p) === false) { this.burners.splice(i, 1); continue; }
+      b.acc += dt * b.rate;
+      while (b.acc >= 1) {
+        b.acc -= 1;
+        const x = _p.x + (Math.random() - 0.5) * b.spread[0] * 2, z = _p.z + (Math.random() - 0.5) * b.spread[0] * 2;
+        const y = _p.y + (Math.random() - 0.5) * b.spread[1] * 2;
+        this.flame(_s.set(x, y, z), _fv.set((Math.random() - 0.5) * 0.3, 0.9 + Math.random() * 0.8, (Math.random() - 0.5) * 0.3), 0.35 + Math.random() * 0.35, 1);
+      }
+    }
+    const fp = this.flames.geometry.attributes.position, fc = this.flames.geometry.attributes.color;
+    for (let i = 0; i < this.FN; i++) {
+      const f = this.F[i];
+      if (!f.alive) { if (fp.getY(i) !== -999) { fp.setXYZ(i, 0, -999, 0); fc.setXYZ(i, 0, 0, 0); } continue; }
+      f.life -= dt;
+      if (f.life <= 0) { f.alive = false; fp.setXYZ(i, 0, -999, 0); fc.setXYZ(i, 0, 0, 0); continue; }
+      f.vel.multiplyScalar(Math.exp(-dt * 2.5));
+      f.vel.y += dt * 1.5;
+      f.pos.addScaledVector(f.vel, dt);
+      const k = f.life / f.max;
+      fp.setXYZ(i, f.pos.x, f.pos.y, f.pos.z);
+      // white-yellow when fresh, cooling to deep red, fading out
+      const fade = Math.min(1, k * 1.8) * f.heat;
+      fc.setXYZ(i, 1.0 * fade, (0.25 + 0.6 * k) * fade, (0.05 + 0.3 * k * k) * fade);
+    }
+    fp.needsUpdate = true;
+    fc.needsUpdate = true;
   }
 
   dispose() {
-    for (const o of [this.parts, this.sparks_, this.pools, this.holes, this.flash]) this.scene.remove(o);
+    for (const o of [this.parts, this.sparks_, this.pools, this.holes, this.flash, this.flames]) this.scene.remove(o);
     for (const b of this.beams) this.scene.remove(b.core, b.glow);
   }
 }

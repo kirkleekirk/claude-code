@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { weaponModel, handModel } from '../world/Models.js';
 import { def } from '../data/items.js';
+import { weaponStats } from '../game/weapons.js';
 import { damp, clamp, easeOutCubic, easeInOut } from '../core/math.js';
 import { radialTexture } from '../world/Textures.js';
 
@@ -12,6 +13,7 @@ const HIP = {
   blunt: { p: [0.3, -0.27, -0.46], r: [-0.4, 0.15, -0.55] },
   pistol: { p: [0.15, -0.13, -0.36], r: [0.02, 0.03, 0] },
   long: { p: [0.14, -0.14, -0.32], r: [0.02, 0.03, 0] },
+  bow: { p: [0.02, -0.07, -0.44], r: [0.0, 0.06, 0.2] },
   fists: { p: [0.2, -0.2, -0.38], r: [0.3, 0, 0] },
 };
 
@@ -81,7 +83,9 @@ export class ViewModel {
       return;
     }
     const d = def(item.id);
-    const m = weaponModel(item.id);
+    const stats = d.kind === 'gun' ? weaponStats(item) : d;
+    this.stats = stats;
+    const m = weaponModel(item.id, item.mods);
     m.traverse((o) => {
       if (o.isMesh) o.frustumCulled = false;
       if (o.name) this.parts[o.name] = o;
@@ -91,8 +95,9 @@ export class ViewModel {
     if (this.parts.sup) this.parts.sup.visible = !!item.sup;
     this.weapon = m;
     this.holder.add(m);
-    this.sightY = m.userData.sightY || 0.05;
-    if (d.kind === 'gun') this.cls = d.slot === 'sidearm' ? 'pistol' : 'long';
+    this.sightY = (m.userData.sightY ?? 0.05) + (stats.sightY || 0);
+    this.setDraw = m.userData.setDraw || null;
+    if (d.kind === 'gun') this.cls = d.action === 'bow' ? 'bow' : d.hold || (d.slot === 'sidearm' ? 'pistol' : 'long');
     else this.cls = d.slot === 'knife' ? 'knife' : 'blunt';
     this.def = d;
     this.drawT = 0;
@@ -103,9 +108,10 @@ export class ViewModel {
     this.stringBase = this.parts.string ? this.parts.string.position.clone() : null;
     // what the off hand carries during reloads
     while (this.prop.children.length) this.prop.remove(this.prop.children[0]);
-    if (d.kind === 'gun') {
-      const col = { mag: 0x26282a, cyl: 0xb08d3a, pump: 0xa02a20, bolt: 0xb08d3a, xbow: 0x9a9ea3 }[d.action];
-      const size = d.action === 'mag' ? [0.022, 0.1, 0.035] : d.action === 'pump' ? [0.022, 0.022, 0.065] : d.action === 'xbow' ? [0.01, 0.01, 0.3] : [0.01, 0.01, 0.04];
+    if (d.kind === 'gun' && d.action !== 'bow') {
+      const shell = d.ammo === 'ammo_12g';
+      const col = d.energy ? 0xd8542e : { mag: 0x26282a, cyl: 0xb08d3a, pump: 0xa02a20, bolt: 0xb08d3a, xbow: 0x9a9ea3, break: shell ? 0xa02a20 : 0xb08d3a }[d.action];
+      const size = d.action === 'mag' ? [0.022, 0.1, 0.035] : shell ? [0.022, 0.022, 0.065] : d.action === 'xbow' ? [0.01, 0.01, 0.3] : [0.01, 0.01, 0.04];
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), new THREE.MeshLambertMaterial({ color: col }));
       mesh.position.set(0, 0.02, -0.07);
       mesh.frustumCulled = false;
@@ -165,9 +171,10 @@ export class ViewModel {
     const r = new THREE.Vector3(...base.r);
 
     // ADS
-    if ((this.cls === 'pistol' || this.cls === 'long') && s.ads > 0) {
+    if ((this.cls === 'pistol' || this.cls === 'long' || this.cls === 'bow') && s.ads > 0) {
       const ads = easeInOut(s.ads);
-      const z = this.cls === 'pistol' ? -0.42 : this.id === 'rifle' ? -0.2 : -0.28;
+      const scoped = this.stats && this.stats.scope;
+      const z = this.cls === 'pistol' ? -0.42 : this.cls === 'bow' ? -0.4 : scoped ? -0.2 : -0.28;
       p.lerp(new THREE.Vector3(0, -this.sightY, z), ads);
       r.multiplyScalar(1 - ads);
     }
@@ -269,6 +276,11 @@ export class ViewModel {
     if (this.cylBase && parts.cylinder) { parts.cylinder.position.copy(this.cylBase); parts.cylinder.rotation.set(0, 0, 0); }
     if (this.stringBase && parts.string) parts.string.position.copy(this.stringBase);
     if (parts.bolt) parts.bolt.rotation.set(0, 0, 0);
+    if (parts.barrels) parts.barrels.rotation.x = s.cylOpen ? -0.55 : 0;
+    if (parts.lever) parts.lever.rotation.x = 0;
+    if (this.setDraw) this.setDraw(s.draw || 0);
+    if (parts.arrowNock) parts.arrowNock.visible = s.loaded > 0;
+    if (parts.coil) parts.coil.scale.setScalar(1 + (s.charging || 0) * 1.5);
     if (parts.bolt) parts.bolt.position.z = 0.05;
     if (parts.boltAmmo) parts.boltAmmo.visible = s.loaded > 0;
     if (parts.mag && s.magIn === false) parts.mag.visible = false;
@@ -301,6 +313,7 @@ export class ViewModel {
         if (parts.slide) parts.slide.position.z = this.slideBase.z + 0.05 * bump;
         if (parts.bolt) { parts.bolt.rotation.z = -1.2 * bump; parts.bolt.position.z = 0.05 + 0.07 * bump; }
       } else if (a.name === 'pump') {
+        if (parts.lever) parts.lever.rotation.x = 0.9 * bump;
         if (parts.pump) parts.pump.position.z = this.pumpBase.z + 0.1 * bump;
         L.p.z += 0.1 * bump;
         p.z += 0.02 * bump;
@@ -316,7 +329,11 @@ export class ViewModel {
         propVis = a.name === 'load1' && k < 0.8;
         r.z += (this.cls === 'long' ? -0.5 : 0.5) * Math.min(1, bump * 1.8);
         r.x += 0.3 * Math.min(1, bump * 1.8);
-        if (this.cls === 'pistol') {
+        if (parts.barrels) {
+          // break-action: the barrels hinge down to load
+          parts.barrels.rotation.x = -0.55 * (a.name === 'open' ? k : a.name === 'close' ? 1 - k : 1);
+        }
+        if (this.cls === 'pistol' && parts.cylinder) {
           // revolver
           L.p.set(p.x - 0.06, p.y - 0.02 - 0.08 * (1 - k), p.z + 0.02);
           if (parts.cylinder && (a.name !== 'close' || k < 0.8)) {
@@ -403,7 +420,7 @@ export class ViewModel {
     this.prop.visible = propVis;
 
     // scope view hides the model
-    this.root.visible = !(this.id === 'rifle' && s.ads > 0.92);
+    this.root.visible = !(this.stats && this.stats.scope && s.ads > 0.92);
     if (this.cls === 'fists') {
       this.rHand.rotation.x = 0.3;
     }

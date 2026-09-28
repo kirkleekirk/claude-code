@@ -140,6 +140,7 @@ export class Raid {
     this.combat = new Combat({
       player, horde: this.horde, world: this.world, audio, fx: this.fx, vm: this.vm, loot: this.loot,
       guards: this.guards, vmMuzzleWorld: () => this.vm.muzzleWorld(camera),
+      explode: (p, r) => this.explode(p, r),
       inv: this.inv, camera, hud: this.hud, noise: (p, r, o) => this.noise(p, r, o),
       onAggro: () => {
         if (player.disguise > 0) {
@@ -293,6 +294,27 @@ export class Raid {
     this.guards.spawnDrone(new THREE.Vector3(P.x + Math.cos(a) * dist, 10.5, P.z + Math.sin(a) * dist));
   }
 
+  // Something goes off: walkers close by die, the rest go down; soldiers, and you, get hurt.
+  explode(point, radius = 3.4) {
+    const audio = this.app.audio, P = this.player.pos;
+    this.fx.explosion(point, 1);
+    audio.gunshot('explosion', point);
+    audio.impact(point, 'hard');
+    const res = this.horde.blast(point, radius);
+    for (const s of this.guards.soldiers) {
+      if (s.dead) continue;
+      const d = Math.hypot(s.pos.x - point.x, s.pos.z - point.z);
+      if (d > radius) continue;
+      const l = d || 1;
+      this.guards.damage(s, { part: 'body', damage: 260 * (1 - d / radius) + 20, kind: 'bullet', power: 1, dirX: (s.pos.x - point.x) / l, dirZ: (s.pos.z - point.z) / l, point: s.pos.clone().setY(1.1) });
+    }
+    const pd = Math.hypot(P.x - point.x, P.z - point.z);
+    if (pd < radius * 1.1) this.player.damage(Math.round(55 * (1 - pd / (radius * 1.1)) + 5), 'blast');
+    this.player.shake = Math.max(this.player.shake, Math.max(0, 1.2 - pd / 12));
+    this.noise(point, 70, { alarm: true });
+    if (res.kills > 1) this.hud.toast(`${res.kills} of them blown apart`);
+  }
+
   noise(pos, radius, opts = {}) {
     this.horde.noise(pos, radius, opts);
     // the Guard only comes running for real noise: shots, alarms, breaking things
@@ -341,10 +363,6 @@ export class Raid {
       if (d.cat === 'food' && !d.raw) acts.push({ id: 'use', label: 'Eat', primary: true });
       if (d.cat === 'med') acts.push({ id: 'use', label: 'Use', primary: true });
       if (it.id === 'battery') acts.push({ id: 'use', label: 'Swap flashlight battery', primary: true });
-      if (it.id === 'suppressor') {
-        const pistol = this.inv.loadout.sidearm;
-        acts.push({ id: 'attach', label: 'Fit to pistol', primary: true, disabled: !(pistol && pistol.id === 'pistol' && !pistol.sup) });
-      }
       if (d.cat === 'weapon') acts.push({ id: 'equip', label: `Holster (${{ knife: 'sheath', melee: 'hip', sidearm: 'holster', long: 'shoulder' }[d.slot]})`, primary: true });
     } else {
       acts.push({ id: 'unequip', label: 'Put in pack', disabled: this.inv.full });
@@ -388,17 +406,6 @@ export class Raid {
       inv.backpack.push(it);
       inv.changed();
       this.invUI.sel = null;
-    } else if (act === 'attach') {
-      const pistol = inv.loadout.sidearm;
-      if (pistol && pistol.id === 'pistol' && !pistol.sup) {
-        pistol.sup = it.dur ?? 40;
-        inv.backpack.splice(+key, 1);
-        inv.changed();
-        this.vm.updateSuppressor(pistol);
-        audio.mech('magIn');
-        this.hud.toast('Suppressor fitted');
-        this.invUI.sel = 'L:sidearm';
-      }
     } else if (act === 'unload') {
       const g = it.gun;
       const n = g.loaded + (g.chamber === 'live' ? 1 : 0);
@@ -647,11 +654,14 @@ export class Raid {
     const it = c.item, d = c.d;
     let weapon;
     if (!it) weapon = { name: 'Bare hands', ammo: '', state: c.hint ? '' : 'V shove · Q grab', durK: -1 };
-    else if (d.kind === 'gun') {
+    else if (d.kind === 'gun' && d.action === 'bow') {
+      const b = c.bow;
+      weapon = { name: d.name, ammo: `${b && b.nocked ? 1 : 0} <small>/ ${this.inv.count(d.ammo)}</small>`, state: b && b.nocked ? (b.draw >= 1 ? 'Full draw' : b.draw > 0 ? 'Drawing' : 'Nocked') : '', durK: it.dur / d.dur };
+    } else if (d.kind === 'gun') {
       const g = it.gun;
       const chamber = g.chamber === 'live' ? '+1' : '';
       const mag = d.action === 'mag' ? (g.magIn ? `${g.loaded}${chamber}` : '—') : `${g.loaded}${chamber}`;
-      const state = g.chamber === 'jam' ? 'Jammed' : d.energy && !g.magIn ? 'No cell' : d.energy && g.chamber !== 'live' ? 'Coil cold' : d.action === 'mag' && !g.magIn ? 'Mag out' : g.chamber === 'spent' ? (d.action === 'pump' ? 'Pump it' : 'Work the bolt') : d.action === 'cyl' && g.open ? 'Cylinder open' : it.sup ? `Suppressed · ${it.sup}` : '';
+      const state = g.chamber === 'jam' ? 'Jammed' : d.energy && !g.magIn ? 'No cell' : d.energy && g.chamber !== 'live' ? 'Coil cold' : d.action === 'mag' && !g.magIn ? 'Mag out' : g.chamber === 'spent' ? (d.action === 'pump' ? (d.lever ? 'Work the lever' : 'Pump it') : 'Work the bolt') : d.action === 'cyl' && g.open ? 'Cylinder open' : d.action === 'break' && g.open ? 'Broken open' : c.charging ? 'Charging' : d.auto ? 'Full auto' : '';
       weapon = { name: d.name, ammo: `${mag} <small>/ ${this.inv.count(d.ammo)}</small>`, state, durK: it.dur / d.dur };
     } else weapon = { name: d.name, ammo: '', state: c.melee && c.melee.phase === 'windup' ? (c.melee.charge >= 1 ? 'Full swing' : 'Winding up') : '', durK: it.dur / d.dur };
     const grabbers = player.grabbers;
@@ -671,7 +681,7 @@ export class Raid {
       ads: c.ads, hideCross: c.isGun && c.ads > 0.6, charge: c.melee && c.melee.phase === 'windup' ? c.melee.charge : null,
       prompt, promptKey, hint: player.using ? (player.using.kind === 'guts' ? 'Smearing guts…' : `Using ${def(player.using.item.id).name}…`) : c.hint,
       status: this._status(),
-      grab, extract: extractK, hurt: player.hurtT, scope: c.item && c.item.id === 'rifle' && c.ads > 0.92,
+      grab, extract: extractK, hurt: player.hurtT, scope: c.isGun && c.d.scope && c.ads > 0.92,
     });
     if (this.mapUI.open) this.mapUI.draw(player.pos.x, player.pos.z, player.yaw, this.docks);
     this.vm.update(dt, this.combat.vmState(), this.env);

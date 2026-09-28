@@ -226,6 +226,7 @@ export class Horde {
       const dx = P.x - w.pos.x, dz = P.z - w.pos.z;
       const dist = Math.hypot(dx, dz);
       w.distToPlayer = dist;
+      if (w.burn > 0) this._updateBurn(w, dt);
       // LOD: far walkers tick slowly and freeze their skeleton.
       const far = dist > 55;
       w.root.visible = dist < this.env.drawDistance;
@@ -288,6 +289,72 @@ export class Horde {
       this.walkers = this.walkers.filter((w) => !w.gone);
       this.removed = false;
     }
+  }
+
+  // Set a walker alight. Fire burns a walker down in a few seconds and jumps to
+  // any dead that stumble into it.
+  ignite(w, t = 7.5) {
+    if (w.gone || (w.dead && w.deadT > 2) || w.state === 'drown') return;
+    if (!(w.burn > 0)) {
+      w.burnT = 0;
+      w.burnHurtT = 0;
+      w.spreadT = 0.4;
+      w.burner = this.fx.addBurner((out) => {
+        if (!(w.burn > 0) || w.gone) return false;
+        const vol = w.volumes();
+        out.copy(vol.hips).lerp(vol.neck, 0.45);
+        return true;
+      }, 30, [0.22, 0.5]);
+      this.audio.burn(w.pos);
+      if (!w.dead) this.audio.snarl(w.pos);
+    }
+    w.burn = Math.max(w.burn || 0, t);
+  }
+
+  _updateBurn(w, dt) {
+    w.burn -= dt;
+    w.burnT += dt;
+    if (w.dead) {
+      if (w.deadT > 2.5) w.burn = 0;
+      return;
+    }
+    // the fire jumps to anything close
+    w.spreadT -= dt;
+    if (w.spreadT <= 0) {
+      w.spreadT = 0.35;
+      for (const o of this.walkers) {
+        if (o === w || o.dead || o.burn > 0 || o.state === 'emerge') continue;
+        if (Math.abs(o.pos.x - w.pos.x) > 1.4 || Math.abs(o.pos.z - w.pos.z) > 1.4) continue;
+        if (Math.hypot(o.pos.x - w.pos.x, o.pos.z - w.pos.z) < 1.25 && this.rng.chance(0.55)) this.ignite(o);
+      }
+    }
+    // a burning walker with its hands on you burns you too
+    if (w.state === 'grab') {
+      w.burnHurtT -= dt;
+      if (w.burnHurtT <= 0) { w.burnHurtT = 0.6; this.player.damage(3, 'fire', w); }
+    }
+    if (w.burnT > 6.5 && w.burn > 0) this.kill(w, { how: 'burn', part: 'body' });
+  }
+
+  // A blast at `point`: close walkers die, the rest go down.
+  blast(point, radius) {
+    const out = { kills: 0 };
+    for (const w of this.walkers) {
+      if (w.dead || w.gone || w.state === 'emerge') continue;
+      const dx = w.pos.x - point.x, dz = w.pos.z - point.z;
+      const d = Math.hypot(dx, dz);
+      if (d > radius || Math.abs(point.y - 0.9) > radius) continue;
+      const l = d || 1;
+      if (d < radius * 0.38) {
+        this.fx.gib(w.volumes().neck, dx / l, dz / l);
+        this.kill(w, { dirX: dx / l, dirZ: dz / l, how: 'blast', part: 'head' });
+        out.kills++;
+      } else {
+        w.knockDown(dx / l, dz / l, 1.6 * (1 - d / radius) + 0.4);
+        w.legs -= 60 * (1 - d / radius);
+      }
+    }
+    return out;
   }
 
   // Climbing out of the swamp, or going under it.
@@ -682,6 +749,7 @@ export class Horde {
     w.setState('dead');
     w.alive = false;
     w.deadT = 0;
+    if (w.burn > 0) w.burn = Math.min(w.burn, 2.5);
     const fx = Math.sin(w.facing), fz = Math.cos(w.facing);
     if (info.dirX !== undefined) {
       w.model.fallDir = fx * info.dirX + fz * info.dirZ > 0 ? 1 : -1;

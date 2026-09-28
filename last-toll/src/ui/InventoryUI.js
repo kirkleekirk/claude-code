@@ -1,4 +1,5 @@
-import { def, SLOT_NAMES, SLOT_ORDER, CAT_LABEL } from '../data/items.js';
+import { def, SLOT_NAMES, SLOT_ORDER, CAT_LABEL, TIERS } from '../data/items.js';
+import { weaponStats, modList, traits } from '../game/weapons.js';
 import { icon } from './icons.js';
 
 // Item grid + detail panel used both in the field (backpack) and in the hub.
@@ -8,7 +9,10 @@ export function slotHTML(it, { sel = false, slotName = null, idx = '' } = {}) {
     return `<button class="slot empty" data-idx="${idx}" ${slotName ? '' : 'disabled'}>${slotName ? `<span class="slotname">${slotName}</span>` : ''}<span></span><span class="nm" style="color:var(--muted)">${slotName ? 'Empty' : ''}</span></button>`;
   }
   const d = def(it.id);
-  const qty = it.qty > 1 ? `<span class="qty">×${it.qty}</span>` : d.kind === 'gun' && it.gun ? `<span class="qty">${it.gun.loaded + (it.gun.chamber === 'live' ? 1 : 0)}/${d.cap}</span>` : '';
+  const cap = d.kind === 'gun' ? weaponStats(it).cap : 0;
+  const qty = it.qty > 1 ? `<span class="qty">×${it.qty}</span>` : d.kind === 'gun' && it.gun ? `<span class="qty">${it.gun.loaded + (it.gun.chamber === 'live' ? 1 : 0)}/${cap}</span>` : '';
+  const tier = d.tier != null ? `<span class="tierpip" style="--tc:${TIERS[d.tier].color}" title="${TIERS[d.tier].name}">${d.tier === 4 ? 'X' : d.tier}</span>` : '';
+  const nMods = it.mods ? Object.keys(it.mods).length : 0;
   let dur = '';
   if (it.dur !== undefined && d.dur) {
     const k = it.dur / d.dur;
@@ -16,8 +20,8 @@ export function slotHTML(it, { sel = false, slotName = null, idx = '' } = {}) {
   }
   return `<button class="slot${sel ? ' sel' : ''}" data-cat="${d.cat}" data-idx="${idx}" title="${d.name}">
     ${slotName ? `<span class="slotname">${slotName}</span>` : ''}
-    ${icon(d.cat, d.kind)}${qty}
-    <span class="nm">${d.name}${it.sup ? ' · Sup.' : ''}</span>${dur}</button>`;
+    ${tier}${icon(d.cat, d.kind)}${qty}
+    <span class="nm">${d.name}${nMods ? ` <b class="modded">+${nMods}</b>` : ''}</span>${dur}</button>`;
 }
 
 export function detailHTML(it, actions) {
@@ -25,6 +29,7 @@ export function detailHTML(it, actions) {
   const d = def(it.id);
   const rows = [];
   rows.push(['Type', CAT_LABEL[d.cat] || d.cat]);
+  if (d.tier != null) rows.push(['Tier', `<span style="color:${TIERS[d.tier].color}">${TIERS[d.tier].name} · ${TIERS[d.tier].label}</span>`]);
   if (d.cat === 'weapon') {
     rows.push(['Carried on', SLOT_NAMES[d.slot]]);
     if (d.dur) rows.push(['Condition', `${it.dur}/${d.dur}`]);
@@ -33,12 +38,20 @@ export function detailHTML(it, actions) {
       rows.push(['Reach', `${d.reach.toFixed(2)} m`]);
       rows.push(['Stamina / swing', String(d.stamina)]);
     } else {
+      const s = weaponStats(it);
       rows.push(['Ammo', def(d.ammo).name]);
-      rows.push(['Capacity', String(d.cap)]);
-      rows.push(['Heard from', `${it.sup ? 9 : d.noise} m`]);
+      rows.push(['Capacity', String(s.cap)]);
+      rows.push(['Heard from', `${Math.round(s.noise)} m`]);
       if (it.gun) rows.push(['Loaded', `${it.gun.loaded}${it.gun.chamber === 'live' ? ' + 1' : ''}`]);
-      if (it.sup) rows.push(['Suppressor', `${it.sup} shots left`]);
+      const mods = modList(it);
+      if (mods.length) rows.push(['Mods', mods.map((m) => m.mod.name).join(', ')]);
+      const tr = traits(s);
+      if (tr.length) rows.push(['Traits', tr.join(' · ')]);
     }
+  }
+  if (d.cat === 'weapon' && d.kind === 'melee') {
+    if (d.incendiary) rows.push(['Traits', 'Sets the dead on fire']);
+    if (d.shock) rows.push(['Traits', 'Knocks them down']);
   }
   if (d.nourish) rows.push(['Nourishment', `+${d.nourish}`]);
   if (d.heal) rows.push(['Heals', `+${d.heal}`]);

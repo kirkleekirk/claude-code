@@ -2,7 +2,7 @@
 // Saved to localStorage; every access is guarded because storage can be
 // unavailable (private windows, sandboxed frames).
 
-import { makeItem, def, MATS } from '../data/items.js';
+import { makeItem, def, MATS, ITEMS } from '../data/items.js';
 import { PACK_BASE, PACK_STEP } from '../data/recipes.js';
 import { ZONES } from '../data/zones.js';
 import { RNG } from '../core/rng.js';
@@ -11,25 +11,28 @@ const SAVE_KEY = 'lasttoll.save.v1';
 export const STASH_CAP = 60;
 
 export function newProfile() {
-  const pistol = makeItem('pistol', 1, { loaded: 8, chambered: true, dur: 120 });
+  const zip = makeItem('zip_pistol', 1, { loaded: 1, dur: 50 });
   return {
-    version: 1,
+    version: 2,
     day: 1,
     health: 88,
     nourishment: 70,
     stats: { raids: 0, extracted: 0, deaths: 0, kills: 0, headKills: 0, stabKills: 0 },
     stash: [
-      makeItem('ammo_9mm', 10),
+      makeItem('ammo_38', 8),
       makeItem('cloth', 4),
-      makeItem('scrap', 3),
-      makeItem('tape', 1),
+      makeItem('scrap', 5),
+      makeItem('tape', 3),
+      makeItem('fasteners', 2),
+      makeItem('glue', 1),
       makeItem('beans', 2),
       makeItem('rice', 1),
       makeItem('gunpowder', 1),
     ],
-    loadout: { knife: makeItem('screwdriver'), melee: null, sidearm: pistol, long: null },
-    backpack: [makeItem('bandage', 2), makeItem('ammo_9mm', 6), makeItem('soda', 1)],
-    benches: { weapon: 1, ammo: 1, med: 1, kitchen: 1 },
+    loadout: { knife: makeItem('screwdriver'), melee: null, sidearm: zip, long: null },
+    backpack: [makeItem('bandage', 2), makeItem('ammo_38', 6), makeItem('soda', 1)],
+    stations: { workshop: 1, reloading: 1, infirmary: 1, galley: 1, gunsmith: 1 },
+    parts: {}, // removed mods waiting in the gunsmith's drawer: { modId: count }
     packLevel: 0,
     contracts: [],
     contractDay: 0,
@@ -39,16 +42,49 @@ export function newProfile() {
   };
 }
 
+// Bring an older save up to date: benches became stations, guns gained mod slots,
+// and the old screw-on suppressor became a gunsmith mod.
+function migrate(p) {
+  if (p.version === 1) {
+    const b = p.benches || {};
+    p.stations = { workshop: b.weapon || 1, reloading: b.ammo || 1, infirmary: b.med || 1, galley: b.kitchen || 1, gunsmith: 1 };
+    delete p.benches;
+    p.version = 2;
+  }
+  p.parts = p.parts || {};
+  const fix = (it) => {
+    if (!it) return;
+    const d = ITEMS[it.id];
+    if (!d || d.kind !== 'gun') return;
+    it.mods = it.mods || {};
+    if (it.sup) {
+      if (d.family === 'pistol' && !it.mods.muzzle) it.mods.muzzle = 'pistol_sup';
+      else p.stash.push(makeItem('suppressor'));
+      delete it.sup;
+    }
+  };
+  for (const it of p.stash) fix(it);
+  for (const it of p.backpack) fix(it);
+  for (const k of Object.keys(p.loadout)) fix(p.loadout[k]);
+  // drop anything the catalogue no longer knows
+  const known = (it) => it && ITEMS[it.id];
+  p.stash = p.stash.filter(known);
+  p.backpack = p.backpack.filter(known);
+  for (const k of Object.keys(p.loadout)) if (p.loadout[k] && !known(p.loadout[k])) p.loadout[k] = null;
+  return p;
+}
+
 export function loadProfile() {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
     const p = JSON.parse(raw);
-    if (!p || p.version !== 1) return null;
+    if (!p || (p.version !== 1 && p.version !== 2)) return null;
+    migrate(p);
     const base = newProfile();
     p.settings = { ...base.settings, ...(p.settings || {}) };
     p.stats = { ...base.stats, ...(p.stats || {}) };
-    p.benches = { ...base.benches, ...(p.benches || {}) };
+    p.stations = { ...base.stations, ...(p.stations || {}) };
     return p;
   } catch (_) {
     return null;
@@ -140,6 +176,52 @@ export function payCost(lists, cost) {
   for (const [id, q] of Object.entries(cost)) removeFrom(lists, id, q);
 }
 
+// Work out how to pay a cost, breaking salvage down into components where the
+// materials on hand fall short. Returns { ok, scrap: {junkId: n}, short: {id: n}, fromSalvage: {id: n} }.
+export function planCost(lists, cost) {
+  const cnt = {};
+  for (const l of lists) for (const s of l) if (s) cnt[s.id] = (cnt[s.id] || 0) + s.qty;
+  const scrap = {}, short = {}, fromSalvage = {};
+  // things asked for by name (including salvage) are set aside first
+  const entries = Object.entries(cost).sort(([a], [b]) => (MATS.includes(a) ? 1 : 0) - (MATS.includes(b) ? 1 : 0));
+  const junk = Object.keys(ITEMS).filter((id) => ITEMS[id].yields);
+  for (const [id, q] of entries) {
+    let need = q;
+    const take = Math.min(cnt[id] || 0, need);
+    cnt[id] = (cnt[id] || 0) - take;
+    need -= take;
+    if (need > 0 && MATS.includes(id)) {
+      const sources = junk.filter((j) => (cnt[j] || 0) > 0 && ITEMS[j].yields[id]).sort((a, b) => ITEMS[b].yields[id] - ITEMS[a].yields[id]);
+      for (const j of sources) {
+        while (need > 0 && cnt[j] > 0) {
+          cnt[j]--;
+          scrap[j] = (scrap[j] || 0) + 1;
+          for (const [k, v] of Object.entries(ITEMS[j].yields)) cnt[k] = (cnt[k] || 0) + v;
+          const got = Math.min(cnt[id], need);
+          cnt[id] -= got;
+          need -= got;
+          fromSalvage[id] = (fromSalvage[id] || 0) + got;
+        }
+        if (need <= 0) break;
+      }
+    }
+    if (need > 0) short[id] = need;
+  }
+  return { ok: Object.keys(short).length === 0, scrap, short, fromSalvage };
+}
+
+// Pay a cost, scrapping salvage as planned. `give` puts the byproducts somewhere.
+export function payWithSalvage(lists, cost, give) {
+  const plan = planCost(lists, cost);
+  if (!plan.ok) return false;
+  for (const [j, n] of Object.entries(plan.scrap)) {
+    removeFrom(lists, j, n);
+    for (const [k, v] of Object.entries(ITEMS[j].yields)) give(makeItem(k, v * n));
+  }
+  payCost(lists, cost);
+  return true;
+}
+
 // ---- Contracts ------------------------------------------------------------
 
 const CONTRACT_REWARDS = [
@@ -149,8 +231,10 @@ const CONTRACT_REWARDS = [
   { leather: 2, cloth: 3 },
   { chemicals: 2, cloth: 2 },
   { medkit: 1 },
-  { ammo_9mm: 12 },
+  { ammo_38: 12 },
   { ammo_12g: 6 },
+  { arrow: 8 },
+  { steel: 1, electronics: 1, glue: 1 },
   { mre: 1, bandage: 2 },
 ];
 

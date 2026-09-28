@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { def } from '../data/items.js';
+import { modDef } from '../data/mods.js';
 
 // Procedural models for weapons (used both in-hand and dropped in the world)
 // and loot items. Conventions:
@@ -66,9 +67,32 @@ export const MAT = {
   get glow() { return mat('glow', 0xff3a24, { emissive: 0xff2a14, emissiveIntensity: 1.4 }); },
   get cellGlow() { return mat('cellGlow', 0xff6a3a, { emissive: 0xff4a1a, emissiveIntensity: 1.1 }); },
   get arc() { return mat('arc', 0x9ad8ff, { emissive: 0x5ab8ff, emissiveIntensity: 1.6 }); },
+  get pipe() { return mat('pipe', 0x6f6a62); },
+  get galv() { return mat('galv', 0x8d9296); },
+  get walnut() { return mat('walnut', 0x5a3418); },
+  get tan() { return mat('tan', 0x8a7a58); },
+  get polymer() { return mat('polymer', 0x1d1f21); },
+  get bottle() { return mat('bottle', 0x3a7a4a, { transparent: true, opacity: 0.75 }); },
+  get fire() { return mat('fire', 0xff7a2a, { emissive: 0xff5a10, emissiveIntensity: 1.3 }); },
+  get lensGlow() { return mat('lensGlow', 0x7ad0ff, { emissive: 0x3a90ff, emissiveIntensity: 1.2 }); },
+  get dot() { return mat('dot', 0xff3a2a, { emissive: 0xff2a14, emissiveIntensity: 2 }); },
+  get tritium() { return mat('tritium', 0x7aff8a, { emissive: 0x3aff5a, emissiveIntensity: 1.5 }); },
+  get cord() { return mat('cord', 0x3a5a3a); },
 };
 
 // ---- Weapons -----------------------------------------------------------------
+
+function muzzleAt(g, x, y, z) {
+  const m = new THREE.Object3D();
+  m.position.set(x, y, z);
+  m.name = 'muzzle';
+  g.add(m);
+  return m;
+}
+// Where mods attach, in the gun's own space: [x, y, z].
+function anchors(g, a) {
+  g.userData.anchors = a;
+}
 
 const BUILDERS = {
   screwdriver(g) {
@@ -292,12 +316,417 @@ BUILDERS.shock_baton = (g) => {
   g.userData.tip = new THREE.Vector3(0, 0.52, 0);
 };
 
-export function weaponModel(id) {
+
+// ---- Tiered roster --------------------------------------------------------------------
+// Existing guns' mod anchors.
+const BASE_ANCHORS = {
+  pistol: { sights: [0, 0.058, -0.02], muzzle: [0, 0.042, -0.135], mag: [0, -0.07, 0.025], grip: [0, -0.05, 0.02] },
+  revolver: { sights: [0, 0.052, -0.08], muzzle: [0, 0.042, -0.19], barrel: [0, 0.042, -0.12], grip: [0, -0.045, 0.03], special: [0, 0.03, -0.035] },
+  shotgun: { sights: [0, 0.045, -0.12], muzzle: [0, 0.03, -0.64], barrel: [0, 0.03, -0.46], stock: [0, -0.02, 0.3] },
+  rifle: { muzzle: [0, 0.03, -0.74], barrel: [0, 0.03, -0.5], stock: [0, -0.02, 0.32], mag: [0, -0.025, -0.02] },
+  crossbow: { sights: [0, 0.04, -0.05], limbs: [0, 0.012, -0.33], stock: [0, -0.02, 0.27], special: [0, 0.035, -0.54] },
+  photon_pistol: { sights: [0, 0.06, -0.02], emitter: [0, 0.035, -0.16], cell: [0, -0.06, 0.03], special: [0.02, 0.035, -0.07] },
+  arc_carbine: { sights: [0, 0.075, -0.05], emitter: [0, 0.022, -0.5], cell: [0, -0.03, -0.06], special: [0.03, 0.02, -0.2] },
+};
+
+// Tier 0: scrap-built
+BUILDERS.zip_pistol = (g) => {
+  const grip = box(g, 0, -0.045, 0.02, 0.03, 0.1, 0.045, MAT.woodDark);
+  grip.rotation.x = -0.3;
+  box(g, 0, 0.012, -0.01, 0.034, 0.03, 0.07, MAT.woodDark);
+  const barrels = new THREE.Group();
+  barrels.name = 'barrels';
+  barrels.position.set(0, 0.035, 0.0);
+  cyl(barrels, 0, 0, -0.09, 0.013, 0.18, 'z', MAT.pipe);
+  cyl(barrels, 0, 0, 0.012, 0.018, 0.03, 'z', MAT.galv);
+  for (const z of [-0.04, -0.12]) cyl(barrels, 0, 0, z, 0.015, 0.012, 'z', MAT.tape);
+  g.add(barrels);
+  box(g, 0, 0.02, 0.035, 0.006, 0.03, 0.012, MAT.steel).rotation.x = -0.4;
+  box(g, 0, -0.012, -0.012, 0.006, 0.02, 0.006, MAT.steel);
+  muzzleAt(barrels, 0, 0, -0.18);
+  g.userData.sightY = 0.052;
+  anchors(g, { sights: [0, 0.05, -0.08], barrel: [0, 0.035, -0.18], grip: [0, -0.045, 0.02], special: [0.018, 0.035, -0.02], muzzle: [0, 0.035, -0.18] });
+};
+BUILDERS.pipe_shotgun = (g) => {
+  box(g, 0, -0.03, 0.22, 0.034, 0.07, 0.28, MAT.woodDark).rotation.x = 0.12;
+  box(g, 0, -0.04, 0.04, 0.024, 0.07, 0.03, MAT.tape).rotation.x = -0.3;
+  box(g, 0, 0.0, 0.05, 0.03, 0.03, 0.12, MAT.woodDark);
+  const barrels = new THREE.Group();
+  barrels.name = 'barrels';
+  barrels.position.set(0, 0.03, 0.0);
+  cyl(barrels, 0, 0, -0.28, 0.019, 0.56, 'z', MAT.pipe);
+  cyl(barrels, 0, 0, 0.0, 0.026, 0.05, 'z', MAT.galv);
+  cyl(barrels, 0, 0, -0.1, 0.022, 0.03, 'z', MAT.galv);
+  for (const z of [-0.2, -0.36, -0.48]) cyl(barrels, 0, -0.016, z, 0.01, 0.04, 'z', MAT.tape);
+  box(barrels, 0, -0.03, -0.25, 0.02, 0.018, 0.2, MAT.woodDark);
+  g.add(barrels);
+  muzzleAt(barrels, 0, 0, -0.56);
+  g.userData.sightY = 0.05;
+  anchors(g, { sights: [0, 0.052, -0.4], barrel: [0, 0.03, -0.56], stock: [0, -0.03, 0.3], special: [0.024, 0.03, 0.0], muzzle: [0, 0.03, -0.56] });
+};
+function bowBuilder(g, { riser, limb, compound }) {
+  // held vertically: riser at the grip, limbs up and down, string toward the shooter (+Z)
+  box(g, 0, 0, 0, 0.03, 0.2, 0.04, riser);
+  box(g, 0, 0.0, -0.01, 0.034, 0.08, 0.05, MAT.cloth);
+  const tips = [];
+  for (const sgn of [1, -1]) {
+    const l = new THREE.Group();
+    l.position.set(0, sgn * 0.1, 0);
+    const seg1 = box(l, 0, sgn * 0.13, 0.02, 0.022, 0.26, 0.016, limb);
+    seg1.rotation.x = sgn * 0.18;
+    const seg2 = box(l, 0, sgn * 0.33, 0.07, 0.018, 0.18, 0.012, limb);
+    seg2.rotation.x = sgn * -0.25;
+    if (compound) cyl(l, 0, sgn * 0.42, 0.08, 0.028, 0.012, 'x', MAT.gunLight);
+    g.add(l);
+    tips.push(new THREE.Vector3(0, sgn * 0.52, compound ? 0.08 : 0.1));
+  }
+  const nock = new THREE.Vector3(0, 0, 0.1);
+  const strA = box(g, 0, 0, 0, 0.004, 1, 0.004, MAT.string);
+  const strB = box(g, 0, 0, 0, 0.004, 1, 0.004, MAT.string);
+  const arrow = new THREE.Group();
+  arrow.name = 'arrowNock';
+  cyl(arrow, 0, 0, -0.33, 0.004, 0.72, 'z', MAT.woodDark);
+  box(arrow, 0, 0, -0.7, 0.012, 0.012, 0.04, MAT.steel);
+  for (const r of [0, 2.1, 4.2]) {
+    const f = box(arrow, Math.cos(r) * 0.008, Math.sin(r) * 0.008, 0.0, 0.002, 0.018, 0.05, MAT.red);
+    f.rotation.z = r;
+  }
+  g.add(arrow);
+  const set = (k) => {
+    nock.z = 0.1 + k * 0.42;
+    for (const [s, t] of [[strA, tips[0]], [strB, tips[1]]]) {
+      const dy = t.y - nock.y, dz = t.z - nock.z;
+      s.position.set(0, (t.y + nock.y) / 2, (t.z + nock.z) / 2);
+      s.scale.y = Math.hypot(dy, dz);
+      s.rotation.x = Math.atan2(-dz, dy);
+    }
+    arrow.position.set(0, 0, nock.z);
+  };
+  set(0);
+  g.userData.setDraw = set;
+  muzzleAt(arrow, 0, 0, -0.72);
+  g.userData.sightY = 0.0;
+  g.userData.bow = true;
+  anchors(g, { sights: [-0.025, 0.06, -0.01], string: [0, 0.3, 0.09], rest: [-0.02, 0.012, -0.02], special: [0, 0, -0.6] });
+}
+BUILDERS.scrap_bow = (g) => bowBuilder(g, { riser: MAT.woodDark, limb: MAT.galv, compound: false });
+BUILDERS.hunting_bow = (g) => bowBuilder(g, { riser: MAT.olive, limb: MAT.black, compound: true });
+
+// Tier 1
+BUILDERS.sawed_off = (g) => {
+  const grip = box(g, 0, -0.05, 0.05, 0.034, 0.1, 0.05, MAT.walnut);
+  grip.rotation.x = -0.45;
+  box(g, 0, 0.005, 0.02, 0.05, 0.04, 0.09, MAT.gunLight);
+  const barrels = new THREE.Group();
+  barrels.name = 'barrels';
+  barrels.position.set(0, 0.022, -0.02);
+  for (const x of [-0.014, 0.014]) cyl(barrels, x, 0.004, -0.17, 0.014, 0.33, 'z', MAT.gun);
+  box(barrels, 0, -0.016, -0.12, 0.04, 0.02, 0.18, MAT.walnut);
+  g.add(barrels);
+  box(g, 0, 0.028, 0.05, 0.01, 0.02, 0.04, MAT.steel);
+  muzzleAt(barrels, 0, 0.004, -0.34);
+  g.userData.sightY = 0.05;
+  anchors(g, { sights: [0, 0.048, -0.3], barrel: [0, 0.026, -0.36], stock: [0, -0.06, 0.1], special: [0.03, 0.02, 0.02], muzzle: [0, 0.026, -0.36] });
+};
+BUILDERS.old_rifle = (g) => {
+  box(g, 0, -0.02, 0.2, 0.038, 0.075, 0.3, MAT.walnut).rotation.x = 0.1;
+  box(g, 0, 0.0, -0.14, 0.034, 0.04, 0.42, MAT.walnut);
+  box(g, 0, 0.02, 0.02, 0.03, 0.03, 0.14, MAT.rust);
+  cyl(g, 0, 0.03, -0.46, 0.011, 0.58, 'z', MAT.rust);
+  box(g, 0, 0.046, -0.72, 0.004, 0.014, 0.008, MAT.gun);
+  box(g, 0, 0.048, -0.08, 0.016, 0.01, 0.01, MAT.gun);
+  const bolt = new THREE.Group();
+  bolt.name = 'bolt';
+  bolt.position.set(0.025, 0.03, 0.05);
+  cyl(bolt, 0.02, 0, 0, 0.006, 0.04, 'x', MAT.rust);
+  box(bolt, 0.04, 0, 0, 0.014, 0.014, 0.014, MAT.rust);
+  g.add(bolt);
+  muzzleAt(g, 0, 0.03, -0.75);
+  g.userData.sightY = 0.052;
+  anchors(g, { sights: [0, 0.05, -0.06], barrel: [0, 0.03, -0.75], stock: [0, -0.02, 0.34], special: [0.02, 0.02, -0.02], muzzle: [0, 0.03, -0.75] });
+};
+
+// Tier 2
+BUILDERS.m1911 = (g) => {
+  const grip = box(g, 0, -0.05, 0.022, 0.026, 0.1, 0.045, MAT.walnut);
+  grip.rotation.x = -0.22;
+  box(g, 0, 0.02, -0.02, 0.024, 0.02, 0.1, MAT.gun);
+  const slide = box(g, 0, 0.042, -0.04, 0.026, 0.028, 0.2, MAT.steel, 'slide');
+  box(slide, 0, 0.62, 0.4, 0.2, 0.25, 0.04, MAT.black);
+  box(slide, 0, 0.62, -0.44, 0.12, 0.3, 0.03, MAT.black);
+  const mag = box(g, 0, -0.07, 0.027, 0.02, 0.1, 0.034, MAT.gun, 'mag');
+  mag.rotation.x = -0.22;
+  box(g, 0, 0.0, 0.05, 0.02, 0.015, 0.02, MAT.gun);
+  muzzleAt(g, 0, 0.042, -0.14);
+  g.userData.sightY = 0.062;
+  anchors(g, { sights: [0, 0.058, -0.02], muzzle: [0, 0.042, -0.14], mag: [0, -0.07, 0.027], grip: [0, -0.05, 0.022] });
+};
+BUILDERS.lever_rifle = (g) => {
+  box(g, 0, -0.025, 0.2, 0.036, 0.072, 0.28, MAT.walnut).rotation.x = 0.12;
+  box(g, 0, 0.015, 0.02, 0.034, 0.05, 0.14, MAT.brass);
+  box(g, 0, -0.002, -0.2, 0.036, 0.032, 0.24, MAT.walnut);
+  cyl(g, 0, 0.034, -0.38, 0.01, 0.56, 'z', MAT.gun);
+  cyl(g, 0, 0.012, -0.34, 0.008, 0.46, 'z', MAT.gunLight);
+  box(g, 0, 0.048, -0.64, 0.004, 0.012, 0.008, MAT.brass);
+  const lever = new THREE.Group();
+  lever.name = 'lever';
+  lever.position.set(0, -0.012, 0.05);
+  box(lever, 0, -0.03, 0.02, 0.01, 0.012, 0.09, MAT.gun);
+  box(lever, 0, -0.045, 0.06, 0.01, 0.03, 0.012, MAT.gun);
+  g.add(lever);
+  muzzleAt(g, 0, 0.034, -0.66);
+  g.userData.sightY = 0.056;
+  anchors(g, { sights: [0, 0.05, -0.02], muzzle: [0, 0.034, -0.66], barrel: [0, 0.034, -0.5], stock: [0, -0.025, 0.32] });
+};
+BUILDERS.smg = (g) => {
+  const grip = box(g, 0, -0.05, 0.05, 0.028, 0.09, 0.04, MAT.polymer);
+  grip.rotation.x = -0.25;
+  box(g, 0, 0.02, -0.02, 0.042, 0.055, 0.24, MAT.polymer);
+  cyl(g, 0, 0.028, -0.18, 0.011, 0.1, 'z', MAT.gun);
+  const mag = box(g, 0, -0.07, -0.07, 0.022, 0.13, 0.03, MAT.gun, 'mag');
+  mag.rotation.x = 0.1;
+  box(g, 0, 0.058, -0.02, 0.014, 0.012, 0.16, MAT.gun);
+  box(g, 0, 0.02, 0.18, 0.012, 0.03, 0.2, MAT.gun);
+  box(g, 0, -0.01, 0.28, 0.02, 0.07, 0.02, MAT.rubber);
+  box(g, 0.025, 0.04, 0.03, 0.01, 0.012, 0.03, MAT.steel, 'slide');
+  muzzleAt(g, 0, 0.028, -0.23);
+  g.userData.sightY = 0.07;
+  anchors(g, { sights: [0, 0.068, -0.02], muzzle: [0, 0.028, -0.23], mag: [0, -0.07, -0.07], stock: [0, 0.0, 0.26] });
+};
+
+// Tier 3
+BUILDERS.m17 = (g) => {
+  const grip = box(g, 0, -0.05, 0.02, 0.03, 0.1, 0.046, MAT.tan);
+  grip.rotation.x = -0.25;
+  box(g, 0, 0.02, -0.02, 0.028, 0.022, 0.11, MAT.tan);
+  const slide = box(g, 0, 0.044, -0.035, 0.029, 0.03, 0.2, MAT.polymer, 'slide');
+  box(slide, 0, 0.62, 0.4, 0.2, 0.25, 0.04, MAT.tritium);
+  box(slide, 0, 0.62, -0.44, 0.12, 0.3, 0.03, MAT.tritium);
+  const mag = box(g, 0, -0.075, 0.025, 0.024, 0.11, 0.036, MAT.polymer, 'mag');
+  mag.rotation.x = -0.25;
+  muzzleAt(g, 0, 0.044, -0.14);
+  g.userData.sightY = 0.064;
+  anchors(g, { sights: [0, 0.06, -0.02], muzzle: [0, 0.044, -0.14], mag: [0, -0.075, 0.025], grip: [0, -0.05, 0.02] });
+};
+function arBuilder(g, { furniture, handguard, stockLen }) {
+  const grip = box(g, 0, -0.05, 0.06, 0.028, 0.09, 0.036, furniture);
+  grip.rotation.x = -0.35;
+  box(g, 0, 0.018, 0.02, 0.036, 0.05, 0.2, MAT.gun);
+  box(g, 0, 0.052, 0.0, 0.022, 0.012, 0.22, MAT.gunLight);
+  box(g, 0, 0.022, -0.2, 0.044, 0.048, 0.24, handguard);
+  cyl(g, 0, 0.026, -0.42, 0.009, 0.2, 'z', MAT.gun);
+  box(g, 0, 0.044, -0.5, 0.006, 0.03, 0.01, MAT.gun);
+  const mag = box(g, 0, -0.07, -0.04, 0.026, 0.13, 0.05, MAT.gun, 'mag');
+  mag.rotation.x = 0.2;
+  cyl(g, 0, 0.022, 0.18, 0.014, 0.12, 'z', MAT.gun);
+  box(g, 0, -0.005, 0.2 + stockLen / 2, 0.036, 0.075, stockLen, furniture);
+  box(g, 0.022, 0.035, 0.07, 0.012, 0.012, 0.03, MAT.steel, 'slide');
+  muzzleAt(g, 0, 0.026, -0.52);
+  g.userData.sightY = 0.066;
+  anchors(g, { sights: [0, 0.062, -0.02], muzzle: [0, 0.026, -0.52], mag: [0, -0.07, -0.04], stock: [0, -0.005, 0.2 + stockLen], receiver: [0.022, 0.018, 0.02] });
+}
+BUILDERS.ar15 = (g) => arBuilder(g, { furniture: MAT.polymer, handguard: MAT.polymer, stockLen: 0.2 });
+BUILDERS.m4 = (g) => arBuilder(g, { furniture: MAT.olive, handguard: MAT.olive, stockLen: 0.16 });
+BUILDERS.combat_shotgun = (g) => {
+  const grip = box(g, 0, -0.05, 0.08, 0.03, 0.09, 0.036, MAT.polymer);
+  grip.rotation.x = -0.3;
+  box(g, 0, 0.02, -0.02, 0.046, 0.06, 0.28, MAT.polymer);
+  cyl(g, 0, 0.04, -0.34, 0.015, 0.4, 'z', MAT.gun);
+  box(g, 0, 0.012, -0.28, 0.044, 0.04, 0.18, MAT.polymer);
+  const mag = box(g, 0, -0.06, -0.06, 0.034, 0.1, 0.07, MAT.gun, 'mag');
+  mag.rotation.x = 0.05;
+  box(g, 0, 0.0, 0.25, 0.034, 0.07, 0.22, MAT.polymer);
+  box(g, 0, 0.06, -0.02, 0.014, 0.01, 0.2, MAT.gun);
+  box(g, 0.026, 0.035, 0.02, 0.012, 0.014, 0.03, MAT.steel, 'slide');
+  muzzleAt(g, 0, 0.04, -0.54);
+  g.userData.sightY = 0.068;
+  anchors(g, { sights: [0, 0.066, -0.02], muzzle: [0, 0.04, -0.54], mag: [0, -0.06, -0.06], stock: [0, 0.0, 0.37] });
+};
+BUILDERS.dmr = (g) => {
+  const grip = box(g, 0, -0.05, 0.08, 0.028, 0.09, 0.036, MAT.polymer);
+  grip.rotation.x = -0.3;
+  box(g, 0, 0.018, 0.02, 0.038, 0.055, 0.24, MAT.olive);
+  box(g, 0, 0.022, -0.24, 0.046, 0.05, 0.3, MAT.olive);
+  cyl(g, 0, 0.026, -0.56, 0.011, 0.34, 'z', MAT.gun);
+  const mag = box(g, 0, -0.06, -0.03, 0.03, 0.09, 0.07, MAT.gun, 'mag');
+  mag.rotation.x = 0.12;
+  box(g, 0, 0.0, 0.26, 0.038, 0.08, 0.24, MAT.olive);
+  const scope = new THREE.Group();
+  cyl(scope, 0, 0.09, -0.04, 0.018, 0.3, 'z', MAT.black);
+  cyl(scope, 0, 0.09, -0.19, 0.025, 0.05, 'z', MAT.black);
+  cyl(scope, 0, 0.09, 0.13, 0.021, 0.04, 'z', MAT.black);
+  box(scope, 0, 0.065, -0.06, 0.014, 0.03, 0.02, MAT.gun);
+  box(scope, 0, 0.065, 0.04, 0.014, 0.03, 0.02, MAT.gun);
+  g.add(scope);
+  muzzleAt(g, 0, 0.026, -0.73);
+  g.userData.sightY = 0.09;
+  anchors(g, { muzzle: [0, 0.026, -0.73], barrel: [0, 0.026, -0.56], mag: [0, -0.06, -0.03], stock: [0, 0.0, 0.38] });
+};
+
+// Experimental
+BUILDERS.scatter_emitter = (g) => {
+  box(g, 0, -0.01, 0.2, 0.04, 0.07, 0.24, MAT.guardDark).rotation.x = 0.08;
+  box(g, 0, 0.02, -0.08, 0.06, 0.07, 0.36, MAT.guard);
+  box(g, 0, -0.035, 0.05, 0.024, 0.07, 0.03, MAT.guardDark).rotation.x = -0.3;
+  const mag = box(g, 0, -0.035, -0.08, 0.034, 0.07, 0.06, MAT.cellGlow, 'mag');
+  mag.userData.cell = true;
+  box(g, 0, 0.02, -0.3, 0.12, 0.05, 0.08, MAT.guardDark);
+  for (let i = 0; i < 5; i++) box(g, -0.048 + i * 0.024, 0.02, -0.345, 0.014, 0.03, 0.01, MAT.glow);
+  box(g, 0, 0.064, -0.05, 0.02, 0.018, 0.16, MAT.guardDark);
+  muzzleAt(g, 0, 0.02, -0.35);
+  g.userData.sightY = 0.08;
+  anchors(g, { sights: [0, 0.075, -0.05], emitter: [0, 0.02, -0.34], cell: [0, -0.035, -0.08] });
+};
+BUILDERS.beam_lance = (g) => {
+  box(g, 0, -0.01, 0.22, 0.04, 0.07, 0.26, MAT.guardDark).rotation.x = 0.08;
+  box(g, 0, 0.02, -0.12, 0.05, 0.06, 0.5, MAT.guard);
+  box(g, 0, -0.035, 0.05, 0.024, 0.07, 0.03, MAT.guardDark).rotation.x = -0.3;
+  const mag = box(g, 0, -0.035, -0.1, 0.03, 0.07, 0.05, MAT.cellGlow, 'mag');
+  mag.userData.cell = true;
+  cyl(g, 0, 0.022, -0.56, 0.02, 0.4, 'z', MAT.guardDark);
+  for (let i = 0; i < 6; i++) cyl(g, 0, 0.022, -0.42 - i * 0.05, 0.024, 0.012, 'z', MAT.glow);
+  const coil = new THREE.Group();
+  coil.name = 'coil';
+  cyl(coil, 0, 0.022, -0.77, 0.014, 0.03, 'z', MAT.glow);
+  g.add(coil);
+  const scope = new THREE.Group();
+  cyl(scope, 0, 0.09, -0.06, 0.017, 0.26, 'z', MAT.guardDark);
+  cyl(scope, 0, 0.09, -0.19, 0.022, 0.04, 'z', MAT.guardDark);
+  box(scope, 0, 0.065, -0.06, 0.014, 0.03, 0.02, MAT.guard);
+  box(scope, 0, 0.09, -0.21, 0.02, 0.02, 0.004, MAT.glow);
+  g.add(scope);
+  muzzleAt(g, 0, 0.022, -0.78);
+  g.userData.sightY = 0.09;
+  anchors(g, { emitter: [0, 0.022, -0.76], cell: [0, -0.035, -0.1] });
+};
+BUILDERS.herder_horn = (g) => {
+  const grip = box(g, 0, -0.05, 0.03, 0.032, 0.1, 0.045, MAT.guardDark);
+  grip.rotation.x = -0.2;
+  box(g, 0, 0.03, -0.04, 0.05, 0.05, 0.14, MAT.guard);
+  const bell = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.022, 0.14, 12, 1, true), MAT.guardDark);
+  bell.material = bell.material.clone();
+  bell.material.side = THREE.DoubleSide;
+  bell.rotation.x = -Math.PI / 2;
+  bell.position.set(0, 0.03, -0.18);
+  g.add(bell);
+  const mag = box(g, 0, -0.06, 0.03, 0.026, 0.08, 0.036, MAT.cellGlow, 'mag');
+  mag.rotation.x = -0.2;
+  for (let i = 0; i < 3; i++) box(g, 0, 0.058, -0.02 - i * 0.03, 0.03, 0.006, 0.012, MAT.glow);
+  muzzleAt(g, 0, 0.03, -0.25);
+  g.userData.sightY = 0.06;
+  anchors(g, { emitter: [0, 0.03, -0.22], cell: [0, -0.06, 0.03] });
+};
+BUILDERS.tomahawk = (g) => {
+  cyl(g, 0, 0.2, 0, 0.016, 0.52, 'y', MAT.polymer);
+  box(g, 0, 0.44, -0.05, 0.012, 0.07, 0.11, MAT.gun);
+  box(g, 0, 0.44, -0.11, 0.006, 0.1, 0.03, MAT.blade);
+  const spike = box(g, 0, 0.44, 0.05, 0.012, 0.03, 0.08, MAT.gun);
+  spike.rotation.x = -0.25;
+  box(g, 0, 0.02, 0, 0.024, 0.12, 0.028, MAT.rubber);
+  g.userData.tip = new THREE.Vector3(0, 0.44, -0.12);
+};
+BUILDERS.thermal_knife = (g) => {
+  box(g, 0, 0, 0.035, 0.026, 0.032, 0.12, MAT.guardDark);
+  box(g, 0, 0, -0.03, 0.05, 0.012, 0.012, MAT.guard);
+  box(g, 0, 0.004, -0.13, 0.006, 0.036, 0.19, MAT.fire);
+  box(g, 0, 0.0, 0.02, 0.028, 0.008, 0.03, MAT.glow);
+  g.userData.tip = new THREE.Vector3(0, 0, -0.23);
+};
+
+// ---- Mod visuals ----------------------------------------------------------------------
+// Each look builds a small piece of hardware around (0,0,0); it's placed at the
+// gun's anchor for that slot. Muzzle devices push the muzzle point forward.
+const LOOKS = {
+  notch: (m) => box(m, 0, 0.004, 0.0, 0.02, 0.012, 0.006, MAT.rust),
+  scrap_reflex: (m) => { box(m, 0, 0.012, 0, 0.03, 0.004, 0.03, MAT.rust); box(m, 0, 0.03, -0.01, 0.03, 0.034, 0.003, MAT.lensGlow); box(m, 0, 0.03, -0.012, 0.004, 0.004, 0.002, MAT.dot); },
+  long_pipe: (m) => { cyl(m, 0, 0, -0.08, 0.013, 0.16, 'z', MAT.pipe); cyl(m, 0, 0, 0.0, 0.016, 0.02, 'z', MAT.tape); return 0.16; },
+  bottle: (m) => { cyl(m, 0, 0, -0.1, 0.03, 0.18, 'z', MAT.bottle); cyl(m, 0, 0, 0.0, 0.016, 0.03, 'z', MAT.tape); return 0.2; },
+  long_barrel: (m) => { cyl(m, 0, 0, -0.06, 0.011, 0.12, 'z', MAT.gun); return 0.12; },
+  tape_grip: (m) => box(m, 0, 0, 0, 0.034, 0.08, 0.05, MAT.tape),
+  wood_grip: (m) => box(m, 0, 0, 0, 0.034, 0.085, 0.048, MAT.walnut),
+  incendiary: (m) => { cyl(m, 0, 0, 0, 0.025, 0.05, 'z', MAT.fire, true); },
+  rebar: (m) => { cyl(m, 0, 0, 0, 0.012, 0.06, 'z', MAT.rust); box(m, 0.012, 0, 0, 0.008, 0.02, 0.05, MAT.red); },
+  bead: (m) => box(m, 0, 0.004, 0, 0.006, 0.008, 0.006, MAT.brass),
+  choke: (m) => { cyl(m, 0, 0, -0.02, 0.026, 0.04, 'z', MAT.galv); return 0.04; },
+  pipe_stock: (m) => { cyl(m, 0, 0, 0.08, 0.012, 0.18, 'z', MAT.pipe); box(m, 0, -0.02, 0.17, 0.02, 0.08, 0.02, MAT.pipe); },
+  rag_stock: (m) => box(m, 0, 0, 0.02, 0.05, 0.08, 0.08, MAT.cloth),
+  twin: (m) => { box(m, 0, -0.02, 0, 0.02, 0.02, 0.03, MAT.red); box(m, 0.012, -0.03, 0.01, 0.006, 0.03, 0.006, MAT.steel); },
+  peep: (m) => { box(m, 0, 0.012, 0, 0.02, 0.024, 0.004, MAT.gun); box(m, 0, 0.018, 0.0, 0.006, 0.006, 0.006, MAT.black); },
+  pipe_scope: (m) => { cyl(m, 0, 0.035, 0, 0.018, 0.22, 'z', MAT.pipe); for (const z of [-0.06, 0.06]) box(m, 0, 0.015, z, 0.02, 0.03, 0.012, MAT.tape); },
+  oil_filter: (m) => { cyl(m, 0, 0, -0.05, 0.03, 0.1, 'z', MAT.orange); return 0.1; },
+  ap: (m) => { box(m, 0, 0, 0, 0.01, 0.03, 0.06, MAT.brass); box(m, 0.006, 0, 0, 0.002, 0.012, 0.03, MAT.fire); },
+  pin: (m) => { box(m, -0.01, 0, 0, 0.004, 0.06, 0.03, MAT.gun); for (let i = 0; i < 3; i++) box(m, 0, -0.015 + i * 0.015, 0, 0.02, 0.003, 0.003, MAT.tritium); },
+  string: (m) => box(m, 0, 0, 0, 0.012, 0.03, 0.012, MAT.yellow),
+  cable: (m) => box(m, 0, 0, 0, 0.012, 0.03, 0.012, MAT.steel),
+  rest: (m) => box(m, 0, 0, 0, 0.012, 0.02, 0.03, MAT.black),
+  fire_arrow: (m) => { cyl(m, 0, 0, 0, 0.012, 0.04, 'z', MAT.fire); },
+  broadhead: (m) => { box(m, 0, 0, 0, 0.03, 0.03, 0.04, MAT.blade); },
+  limbs: (m) => { box(m, -0.16, 0.012, 0.02, 0.32, 0.03, 0.035, MAT.galv).rotation.y = -0.2; box(m, 0.16, 0.012, 0.02, 0.32, 0.03, 0.035, MAT.galv).rotation.y = 0.2; },
+  bomb_tip: (m) => { cyl(m, 0, 0, 0, 0.016, 0.05, 'z', MAT.red); box(m, 0, 0.012, 0.01, 0.004, 0.012, 0.004, MAT.steel); },
+  night_sights: (m) => { box(m, -0.007, 0.004, 0.04, 0.004, 0.004, 0.004, MAT.tritium); box(m, 0.007, 0.004, 0.04, 0.004, 0.004, 0.004, MAT.tritium); box(m, 0, 0.004, -0.08, 0.004, 0.004, 0.004, MAT.tritium); },
+  mini_dot: (m) => { box(m, 0, 0.008, 0, 0.024, 0.012, 0.03, MAT.black); box(m, 0, 0.022, -0.01, 0.022, 0.018, 0.003, MAT.lensGlow); box(m, 0, 0.022, -0.012, 0.003, 0.003, 0.002, MAT.dot); },
+  suppressor: (m) => { cyl(m, 0, 0, -0.07, 0.017, 0.14, 'z', MAT.black); return 0.14; },
+  suppressor_long: (m) => { cyl(m, 0, 0, -0.1, 0.02, 0.2, 'z', MAT.black); return 0.2; },
+  comp: (m) => { box(m, 0, 0, -0.02, 0.028, 0.028, 0.04, MAT.gunLight); box(m, 0, 0.014, -0.02, 0.012, 0.003, 0.02, MAT.black); return 0.04; },
+  ext_mag: (m) => box(m, 0, -0.06, 0, 0.022, 0.06, 0.032, MAT.gun),
+  rubber_grip: (m) => box(m, 0, 0, 0, 0.032, 0.08, 0.05, MAT.rubber),
+  holo: (m) => { box(m, 0, 0.01, 0, 0.03, 0.02, 0.05, MAT.black); box(m, 0, 0.03, -0.02, 0.03, 0.026, 0.004, MAT.lensGlow); box(m, 0, 0.03, -0.022, 0.006, 0.006, 0.002, MAT.dot); },
+  breacher: (m) => { cyl(m, 0, 0, -0.025, 0.02, 0.05, 'z', MAT.gunLight, true); return 0.05; },
+  recoil_pad: (m) => box(m, 0, 0, 0.0, 0.04, 0.08, 0.03, MAT.rubber),
+  drum: (m) => { cyl(m, 0, -0.07, 0, 0.05, 0.05, 'x', MAT.gun); },
+  frag_mag: (m) => { box(m, 0, -0.06, 0, 0.036, 0.1, 0.07, MAT.olive); box(m, 0.019, -0.06, 0, 0.002, 0.06, 0.05, MAT.yellow); },
+  scout_scope: (m) => { cyl(m, 0, 0.03, -0.05, 0.014, 0.16, 'z', MAT.black); box(m, 0, 0.012, -0.05, 0.012, 0.02, 0.02, MAT.gun); },
+  brake: (m) => { box(m, 0, 0, -0.03, 0.024, 0.024, 0.06, MAT.gunLight); return 0.06; },
+  adj_stock: (m) => { box(m, 0, 0, 0.02, 0.036, 0.075, 0.08, MAT.polymer); box(m, 0, 0.042, 0.0, 0.02, 0.012, 0.06, MAT.polymer); },
+  red_dot: (m) => { cyl(m, 0, 0.022, 0, 0.016, 0.05, 'z', MAT.black); box(m, 0, 0.004, 0, 0.018, 0.01, 0.03, MAT.gun); box(m, 0, 0.022, -0.026, 0.004, 0.004, 0.002, MAT.dot); },
+  acog: (m) => { cyl(m, 0, 0.028, 0, 0.018, 0.13, 'z', MAT.tan); cyl(m, 0, 0.028, -0.07, 0.022, 0.03, 'z', MAT.tan); box(m, 0, 0.008, 0, 0.018, 0.012, 0.05, MAT.gun); },
+  flash: (m) => { cyl(m, 0, 0, -0.025, 0.012, 0.05, 'z', MAT.gun, true); return 0.05; },
+  sear: (m) => box(m, 0, 0, 0, 0.006, 0.02, 0.03, MAT.brass),
+  trigger: (m) => box(m, 0, -0.03, 0.02, 0.006, 0.02, 0.006, MAT.red),
+  guard_optic: (m) => { box(m, 0, 0.014, 0, 0.026, 0.026, 0.07, MAT.guardDark); box(m, 0, 0.018, -0.036, 0.02, 0.016, 0.004, MAT.glow); },
+  lens: (m) => { cyl(m, 0, 0, -0.012, 0.022, 0.024, 'z', MAT.lensGlow); return 0.024; },
+  prism: (m) => { for (const x of [-0.016, 0, 0.016]) cyl(m, x, 0, -0.01, 0.008, 0.02, 'z', MAT.glow); return 0.02; },
+  cap_bank: (m) => { box(m, 0.03, 0, 0, 0.012, 0.05, 0.05, MAT.guardDark); box(m, 0.037, 0, 0, 0.002, 0.03, 0.03, MAT.cellGlow); },
+  overcharge: (m) => { for (let i = 0; i < 3; i++) cyl(m, 0, 0, -i * 0.03, 0.026, 0.01, 'z', MAT.fire); },
+  bell: (m) => { cyl(m, 0, 0, -0.03, 0.08, 0.04, 'z', MAT.guardDark); return 0.03; },
+};
+
+// Hang each installed mod's hardware on the gun. Returns the gun.
+export function applyModLooks(g, id, mods, modDefs) {
+  const a = g.userData.anchors || BASE_ANCHORS[id] || {};
+  g.userData.anchors = a;
+  g.userData.modParts = {};
+  for (const [slot, modId] of Object.entries(mods || {})) {
+    const md = modDefs(modId);
+    if (!md) continue;
+    const look = LOOKS[md.look];
+    const at = a[slot] || a.muzzle || [0, 0, 0];
+    if (!look) continue;
+    const m = new THREE.Group();
+    m.position.set(at[0], at[1], at[2]);
+    m.name = 'mod_' + slot;
+    const extend = look(m);
+    g.add(m);
+    g.userData.modParts[slot] = m;
+    // muzzle devices and longer barrels move the muzzle point to their far end
+    if (typeof extend === 'number' && (slot === 'muzzle' || slot === 'barrel' || slot === 'emitter')) {
+      const mz = g.getObjectByName('muzzle');
+      if (mz) mz.position.z -= extend;
+    }
+    // bigger magazines and swapped grips hide the stock part they replace
+    if (slot === 'mag' && (md.look === 'drum' || md.look === 'frag_mag')) { const mg = g.getObjectByName('mag'); if (mg) mg.visible = false; }
+  }
+  return g;
+}
+
+export function weaponModel(id, mods = null) {
   const g = new THREE.Group();
   const b = BUILDERS[id];
   if (b) b(g);
   else box(g, 0, 0, 0, 0.05, 0.05, 0.2, MAT.gun);
   g.userData.id = id;
+  if (!g.userData.anchors && BASE_ANCHORS[id]) g.userData.anchors = BASE_ANCHORS[id];
+  if (mods && Object.keys(mods).length) applyModLooks(g, id, mods, modDef);
   return g;
 }
 
@@ -317,6 +746,7 @@ const SHAPES = {
   battery: ['battery', 0x2a2a2a], suppressor: ['suppressor', 0x151515],
   ecell: ['cell', 0xd8542e], tlg_ration: ['flat', 0x7a7c78], catfish: ['fish', 0x6a4a2a], nano_injector: ['syringe', 0xc02a20],
   keycard: ['card', 0x2b3035], dogtags: ['disc', 0x9aa0a4], rosary: ['smallbox', 0x5a3a24], candles: ['bundle', 0xd8ccb0],
+  arrow: ['bolts', 0x6b4a2b], ammo_45: ['ammo', 0x5a4a6a], ammo_556: ['ammo', 0x3a5a3a],
 };
 
 const ITEM_MATS = {};

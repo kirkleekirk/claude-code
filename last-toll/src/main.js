@@ -2,17 +2,18 @@ import './ui/styles.css';
 import * as THREE from 'three';
 import { Input } from './core/Input.js';
 import { Audio } from './core/Audio.js';
-import { HubScene } from './scenes/HubScene.js';
-import { HubUI, HOWTO } from './ui/HubUI.js';
+import { Hub } from './game/Hub.js';
+import { HOWTO } from './ui/howto.js';
 import { Raid } from './game/Raid.js';
 import { zoneById } from './data/zones.js';
-import { def } from './data/items.js';
+import { def, makeItem } from './data/items.js';
+import { weaponStats } from './game/weapons.js';
 import {
-  newProfile, loadProfile, saveProfile, clearSave, maxHealthFor, applyRaidToContracts, refreshContracts,
+  newProfile, loadProfile, saveProfile, clearSave, maxHealthFor, applyRaidToContracts,
 } from './game/Profile.js';
 import { fmtSec } from './ui/HUD.js';
 
-// App shell: title → hub (the Magnolia) → raid → summary → hub.
+// App shell: title → aboard the Magnolia → raid → summary → back aboard.
 // Everything renders into one WebGL canvas with DOM overlays for UI.
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -43,13 +44,17 @@ class App {
     if (!this.profile) this.profile = newProfile();
     this.applySettings();
 
-    this.hubScene = new HubScene();
     this.state = 'title';
     this.raid = null;
-    this.hubUI = null;
     this.overlay = null;
+    this.hub = new Hub(this);
+    // handles for the console and for automated tests
+    this.debug = { def, makeItem, weaponStats };
 
-    this.input.onLockChange = (locked) => this._lockChanged(locked);
+    this.input.onLockChange = (locked) => {
+      if (this.state === 'hub') this.hub.onLockChange(locked);
+      else this._lockChanged(locked);
+    };
     window.addEventListener('resize', () => this._resize());
     this.input.onKey = (e) => {
       if (this.state === 'raid' && this.raid && this.raid.uiOpen && e.code === 'Escape') this.raid.toggleInventory(false);
@@ -75,7 +80,7 @@ class App {
   _resize() {
     const w = window.innerWidth, h = window.innerHeight;
     this.renderer.setSize(w, h);
-    this.hubScene.resize(w, h);
+    this.hub.resize(w, h);
     if (this.raid) this.raid.onResize(w, h);
   }
 
@@ -89,8 +94,8 @@ class App {
       this.raid.update(dt);
       if (this.raid) this.raid.render(r);
     } else {
-      this.hubScene.update(dt);
-      this.hubScene.render(r);
+      this.hub.update(dt);
+      this.hub.render(r);
     }
     this.input.endFrame();
   }
@@ -114,17 +119,21 @@ class App {
 
   showTitle() {
     this.state = 'title';
+    this.hub.showTitle();
     const p = this.profile;
     const o = this._overlay(`
       <div id="title">
-        <h1><span>the</span>Last Toll</h1>
-        <p class="tag">A flooded parish, the dead, and the Living Guard: an army rebuilt on the old government's secrets that turned on everyone outside its walls. Every night it sweeps the parish, and whoever is still out there pays the toll.</p>
-        <div class="acts">
-          ${this.hasSave ? `<button class="btn primary go" data-t="continue">Continue · Day ${p.day}</button><button class="btn go" data-t="new">New game</button>` : '<button class="btn primary go" data-t="new">Begin</button>'}
-          <button class="btn go" data-t="howto">How to play</button>
+        <div class="t-block">
+          <p class="t-kicker">A Southern gothic survival game</p>
+          <h1><span>the</span>Last Toll</h1>
+          <p class="tag">A flooded parish, the dead, and the Living Guard: an army rebuilt on the old government's secrets that turned on everyone outside its walls. Every night it sweeps the parish, and whoever is still out there pays the toll.</p>
+          <nav class="t-menu">
+            ${this.hasSave ? `<button class="t-item primary" data-t="continue"><span>Continue</span><small>Day ${p.day} aboard the Magnolia</small></button><button class="t-item" data-t="new"><span>New game</span><small>Start over from the skiff</small></button>` : '<button class="t-item primary" data-t="new"><span>Begin</span><small>Wake up aboard the Magnolia</small></button>'}
+            <button class="t-item" data-t="howto"><span>How to survive</span><small>Weapons, tiers, the workbench, the Guard</small></button>
+          </nav>
         </div>
-        <p class="fine">Desktop build · mouse and keyboard · headphones recommended. Built to move to VR (WebXR) next.</p>
-      </div>`, 'layer interactive');
+        <p class="t-fine">Desktop build · mouse and keyboard · headphones recommended · made to move to VR</p>
+      </div>`, 'layer interactive title-layer');
     o.addEventListener('click', (e) => {
       const b = e.target.closest('[data-t]');
       if (!b) return;
@@ -134,7 +143,8 @@ class App {
       else if (b.dataset.t === 'new') {
         if (this.hasSave && b.dataset.confirm !== '1') {
           b.dataset.confirm = '1';
-          b.textContent = 'Erase your save?';
+          b.querySelector('span').textContent = 'Erase your save?';
+          b.querySelector('small').textContent = 'Click again to start over';
           return;
         }
         clearSave();
@@ -154,16 +164,47 @@ class App {
     });
   }
 
-  // ---- hub ------------------------------------------------------------------------
+  // ---- aboard the Magnolia ----------------------------------------------------------
 
-  startHub() {
+  startHub(fromRaid = false) {
     this._clearOverlay();
     this.state = 'hub';
-    this.input.exitLock();
-    refreshContracts(this.profile);
-    saveProfile(this.profile);
-    if (this.hubUI) this.hubUI.dispose();
-    this.hubUI = new HubUI(this.uiRoot, this);
+    this.hub.board(fromRaid);
+  }
+
+  // Esc while walking the deck.
+  showHubMenu() {
+    const s = this.profile.settings;
+    const o = this._overlay(`
+      <div class="sheet pause-card">
+        <h2>The Magnolia</h2>
+        <p class="sub">Day ${this.profile.day}. The river's quiet tonight.</p>
+        <button class="btn primary go" data-m="resume">Back on deck</button>
+        <div class="settings">
+          <label for="h-sens">Mouse sensitivity<input id="h-sens" type="range" min="0.3" max="2.5" step="0.05" value="${s.sens}" data-set="sens"><span class="num">${s.sens.toFixed(2)}</span></label>
+          <label for="h-vol">Volume<input id="h-vol" type="range" min="0" max="1" step="0.05" value="${s.volume}" data-set="volume"><span class="num">${Math.round(s.volume * 100)}</span></label>
+          <label for="h-fov">Field of view<input id="h-fov" type="range" min="60" max="100" step="1" value="${s.fov}" data-set="fov"><span class="num">${s.fov}</span></label>
+        </div>
+        <div class="pause-row"><button class="btn small" data-m="howto">How to survive</button><button class="btn small" data-m="title">Quit to title</button></div>
+      </div>`);
+    o.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-m]');
+      if (!b) return;
+      this.audio.init();
+      this.audio.ui();
+      if (b.dataset.m === 'resume') { this._clearOverlay(); this.hub.resume(); this.input.requestLock(); }
+      else if (b.dataset.m === 'howto') this._howto(() => this.showHubMenu());
+      else if (b.dataset.m === 'title') { saveProfile(this.profile); this.hasSave = true; this.showTitle(); }
+    });
+    o.addEventListener('input', (e) => {
+      const k = e.target.dataset.set;
+      if (!k) return;
+      const v = parseFloat(e.target.value);
+      this.profile.settings[k] = v;
+      this.applySettings();
+      e.target.nextElementSibling.textContent = k === 'volume' ? Math.round(v * 100) : k === 'sens' ? v.toFixed(2) : String(v);
+      saveProfile(this.profile);
+    });
   }
 
   resetGame() {
@@ -171,6 +212,7 @@ class App {
     this.profile = newProfile();
     saveProfile(this.profile);
     this.applySettings();
+    this.hub._closePanel();
     this.startHub();
   }
 
@@ -178,7 +220,9 @@ class App {
 
   startRaid(zoneId, seed) {
     const zone = zoneById(zoneId);
-    if (this.hubUI) { this.hubUI.dispose(); this.hubUI = null; }
+    this.input.exitLock();
+    this.state = 'loading';
+    this.hub.leave();
     this._overlay(`<div class="sheet pause-card"><h2>${esc(zone.name)}</h2><p class="sub">The skiff noses into the flood line…</p></div>`);
     // let the loading card paint before the (synchronous) world build
     setTimeout(() => {
@@ -283,7 +327,7 @@ class App {
     const haul = out.carried.map((it) => `<span>${esc(def(it.id).name)}${it.qty > 1 ? ' ×' + it.qty : ''}</span>`).join('') || '<span>Nothing</span>';
     const verdict = survived ? 'Made it back' : out.result === 'abandoned' ? 'Lost in the flood' : 'You died';
     const line = survived
-      ? `The skiff pulls away from ${esc(out.dock || 'the dock')} as the dead reach the water's edge.`
+      ? (out.dock && out.dock !== 'Your Skiff' ? `You push off from ${esc(out.dock)} as the dead reach the water's edge.` : 'The skiff pulls away from the landing as the dead reach the water\'s edge.')
       : out.result === 'abandoned' ? 'You dropped everything and swam for it.' : 'Whatever you carried is somewhere on the streets of the parish now.';
     this.state = 'summary';
     const o = this._overlay(`
@@ -310,7 +354,7 @@ class App {
       if (!e.target.closest('[data-s]')) return;
       this.audio.ui();
       this._endRaid();
-      this.startHub();
+      this.startHub(true);
     });
     raid.dispose();
   }

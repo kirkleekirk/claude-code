@@ -179,9 +179,16 @@ export class Audio {
 
   // ---- Weapons -----------------------------------------------------------
 
-  gunshot(kind, pos, suppressed = false) {
+  gunshot(kind, pos, suppressed = false, loudness = 50) {
     if (!this.enabled) return;
     const t = this.now;
+    if (suppressed && loudness > 14) {
+      // a scrap suppressor: quieter, but it still coughs
+      const out = this._out(pos, { ref: 2.5, reverb: 0.15 });
+      this._noise(out, t, 0.2, { type: 'lowpass', freq: 1400, freqEnd: 300, gain: 0.55 });
+      this._tone(out, t, 0.1, { freq: 150, freqEnd: 50, gain: 0.35 });
+      return;
+    }
     if (suppressed) {
       const out = this._out(pos, { ref: 2, reverb: 0.05 });
       this._noise(out, t, 0.12, { type: 'bandpass', freq: 1800, q: 1.2, gain: 0.35, freqEnd: 600 });
@@ -194,6 +201,19 @@ export class Audio {
       revolver: { g: 1.2, body: 1100, tail: 0.5, thump: 120 },
       shotgun: { g: 1.45, body: 800, tail: 0.7, thump: 90 },
       rifle: { g: 1.4, body: 2000, tail: 0.8, thump: 110 },
+      zip_pistol: { g: 1.05, body: 900, tail: 0.45, thump: 110 },
+      pipe_shotgun: { g: 1.6, body: 650, tail: 0.8, thump: 70 },
+      sawed_off: { g: 1.6, body: 700, tail: 0.8, thump: 80 },
+      old_rifle: { g: 1.4, body: 1700, tail: 0.8, thump: 100 },
+      m1911: { g: 1.15, body: 1000, tail: 0.45, thump: 110 },
+      lever_rifle: { g: 1.2, body: 1300, tail: 0.55, thump: 120 },
+      smg: { g: 0.85, body: 1500, tail: 0.25, thump: 150 },
+      m17: { g: 1.0, body: 1450, tail: 0.35, thump: 150 },
+      ar15: { g: 1.25, body: 2400, tail: 0.6, thump: 120 },
+      m4: { g: 1.2, body: 2400, tail: 0.5, thump: 120 },
+      combat_shotgun: { g: 1.4, body: 850, tail: 0.65, thump: 90 },
+      dmr: { g: 1.45, body: 2100, tail: 0.85, thump: 100 },
+      explosion: { g: 2.2, body: 420, tail: 1.6, thump: 45 },
     }[kind] || { g: 1, body: 1200, tail: 0.4, thump: 130 };
     const out = this._out(pos, { ref: 4, rolloff: 0.8, reverb: 0.6 });
     this._noise(out, t, 0.04, { type: 'highpass', freq: 3000, gain: 0.9 * cfg.g });
@@ -232,6 +252,10 @@ export class Audio {
       case 'bolt': click(0, 1100, 0.4, 0.05); click(0.1, 1700, 0.35, 0.05); click(0.22, 2400, 0.4); break;
       case 'cylOpen': click(0, 2000, 0.3); ping(0.02, 2600); break;
       case 'cylClose': click(0, 1500, 0.45); ping(0.01, 2100); break;
+      case 'breakOpen': click(0, 900, 0.45, 0.06); this._noise(out, t + 0.04, 0.08, { type: 'bandpass', freq: 600, q: 2, gain: 0.25 }); break;
+      case 'breakClose': click(0, 800, 0.55, 0.05); ping(0.02, 1500, 0.1); break;
+      case 'lever': this._noise(out, t, 0.07, { type: 'bandpass', freq: 1100, q: 3, gain: 0.4 }); click(0.12, 2200, 0.45); break;
+      case 'bench': click(0, 1400, 0.3, 0.05); click(0.08, 900, 0.35, 0.06); ping(0.14, 2600, 0.06); break;
       case 'eject': for (let i = 0; i < 4; i++) ping(0.05 + i * 0.03 + Math.random() * 0.02, 3500 + Math.random() * 1200, 0.05); break;
       case 'round': click(0, 2800, 0.25, 0.03); break;
       case 'crank': for (let i = 0; i < 5; i++) click(i * 0.09, 900 + i * 60, 0.25, 0.05); break;
