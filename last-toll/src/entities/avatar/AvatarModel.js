@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { avatarAssets } from './AvatarAssets.js';
 import { faceTexture } from './FacePainter.js';
-import { buildGear, buzzPoint } from './AvatarGear.js';
+import { buildGear } from './AvatarGear.js';
 import { rng, rag } from './noise.js';
 import { buildBlocky } from './BlockyBody.js';
 
@@ -73,7 +73,7 @@ export function buildAvatarGeometry(look) {
   const dead = look.dead || null;
   const hairStyle = (look.hair && look.hair.style) || (sex === 'f' ? 'bob' : 'short');
   const list = [[`${sex}_body`, 'body'], [`${sex}_head`, 'head']];
-  if (hairStyle === 'short' || hairStyle === 'buzz') list.push(['m_hair', 'hair']);
+  if (hairStyle === 'short') list.push(['m_hair', 'hair']);
   if (hairStyle === 'bob' || hairStyle === 'pony') list.push(['f_hair', 'hair']);
   if (look.top && look.top.sleeves !== 'none') list.push([`${sex}_top`, 'top']);
   list.push([`${sex}_bottoms`, 'bottoms'], [`${sex}_shoes`, 'shoes']);
@@ -137,14 +137,6 @@ export function buildAvatarGeometry(look) {
     nor.set(p.nor, o * 3);
     si.set(p.idx, o * 4);
     sw.set(p.wt, o * 4);
-    // a buzz cut: the short hair pulled in tight to the scalp
-    if (q.kind === 'hair' && hairStyle === 'buzz') {
-      for (let i = 0; i < p.count; i++) {
-        const k = (o + i) * 3;
-        buzzPoint(sex, _v.set(pos[k], pos[k + 1], pos[k + 2]));
-        pos[k] = _v.x; pos[k + 1] = _v.y; pos[k + 2] = _v.z;
-      }
-    }
     // a heavier or slighter build: push everything below the neck out from the spine
     if (bodyScale !== 1 && q.kind !== 'head' && q.kind !== 'hair') {
       for (let i = 0; i < p.count; i++) {
@@ -192,7 +184,10 @@ export function buildAvatarGeometry(look) {
         const n = rag((p.pos[a] + p.pos[b] + p.pos[c]) / 3, (p.pos[a + 1] + p.pos[b + 1] + p.pos[c + 1]) / 3, (p.pos[a + 2] + p.pos[b + 2] + p.pos[c + 2]) / 3, tearSeed);
         if (n > torn) continue;
       }
-      if (hideHair && [a, b, c].every((v) => gear.hidesHair(p.pos[v], p.pos[v + 1], p.pos[v + 2]))) continue;
+      if (hideHair) {
+        const under = (v) => gear.hidesHair.test(p.pos[v], p.pos[v + 1], p.pos[v + 2]);
+        if (gear.hidesHair.any ? under(a) || under(b) || under(c) : under(a) && under(b) && under(c)) continue;
+      }
       index.push(tri[i] + o, tri[i + 1] + o, tri[i + 2] + o);
     }
     o += p.count;
@@ -223,11 +218,11 @@ function faceMat(map) {
   m.customProgramCacheKey = () => 'avatar-face';
   return m;
 }
-export function avatarMaterials(face) {
-  const key = JSON.stringify(face || {});
+export function avatarMaterials(face, sex = 'm') {
+  const key = `${sex}|${JSON.stringify(face || {})}`;
   let m = matCache.get(key);
   if (!m) {
-    m = [faceMat(faceTexture(face || {})), faceMat(faceTexture(face || {}, true))];
+    m = [faceMat(faceTexture(face || {}, false, sex)), faceMat(faceTexture(face || {}, true, sex))];
     matCache.set(key, m);
   }
   return m;
@@ -269,7 +264,12 @@ export function buildLook(look) {
     if (look.style === 'blocky') {
       const k = buildBlocky(look);
       b = { geo: k.geo, materials: [k.material, k.material] };
-    } else b = { geo: buildAvatarGeometry(look), materials: avatarMaterials(look.face) };
+    } else {
+      // a buzz cut is painted on with the face
+      const buzz = look.hair && look.hair.style === 'buzz' ? `#${(look.hair.color ?? 0x3a2a1e).toString(16).padStart(6, '0')}` : null;
+      const face = buzz ? { ...(look.face || {}), buzz } : look.face;
+      b = { geo: buildAvatarGeometry(look), materials: avatarMaterials(face, look.sex === 'f' ? 'f' : 'm') };
+    }
     builtCache.set(key, b);
   }
   return b;

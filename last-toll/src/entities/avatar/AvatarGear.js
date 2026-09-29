@@ -13,7 +13,6 @@ import { avatarAssets } from './AvatarAssets.js';
 // for one that follows the skin of the part it was grown from.
 
 const C = new THREE.Vector3(0, 1.3, 0); // the middle of the head at eye level
-const BUZZ = 0.93; // a buzz cut: the short hair pulled in toward the head's middle
 
 // ---- where things are, in bind space ----------------------------------------------------------
 
@@ -32,10 +31,6 @@ export function headBox(sex) {
   return boxes[sex];
 }
 
-export function buzzPoint(sex, v) {
-  const c = headBox(sex).getCenter(new THREE.Vector3());
-  return v.sub(c).multiplyScalar(BUZZ).add(c);
-}
 
 // the head (and hair) as a cloud of points; ears can be left out so a band passes over them
 const clouds = new Map();
@@ -45,17 +40,16 @@ function cloud(sex, hair, { ears = true } = {}) {
   const A = avatarAssets();
   const pts = [];
   const v = new THREE.Vector3();
-  const take = (part, buzz) => {
+  const take = (part) => {
     const p = A.parts[part].pos;
     for (let i = 0; i < p.length; i += 3) {
       v.set(p[i], p[i + 1], p[i + 2]);
       if (!ears && Math.abs(v.x) > 0.118 && v.y > 1.19 && v.y < 1.37) continue;
-      if (buzz) buzzPoint(sex, v);
       pts.push(v.x, v.y, v.z);
     }
   };
   take(`${sex}_head`);
-  if (hair === 'short' || hair === 'buzz') take('m_hair', hair === 'buzz');
+  if (hair === 'short') take('m_hair');
   if (hair === 'bob' || hair === 'pony') take('f_hair');
   const out = new Float32Array(pts);
   clouds.set(key, out);
@@ -171,6 +165,15 @@ function slab({ P, rows, cols }, { wrap = false, outward, off, top = true }) {
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setIndex(index);
   geo.computeVertexNormals();
+  // the lining and the cut edges take the outer surface's normals: lit like the cloth
+  // they belong to, rather than a black outline round every rim
+  const nor = geo.attributes.normal;
+  for (let k = 0; k < P.length; k++) nor.setXYZ(q + k, nor.getX(o + k), nor.getY(o + k), nor.getZ(o + k));
+  let e = q + P.length;
+  for (const b of borders) {
+    // each border was pushed twice: its outer points, then its inner ones
+    for (let r = 0; r < 2 * b.length; r++, e++) { const k = o + b[r % b.length][0]; nor.setXYZ(e, nor.getX(k), nor.getY(k), nor.getZ(k)); }
+  }
   return geo;
 }
 
@@ -289,6 +292,15 @@ function chest(sex, regionsOf) {
 
 const at = (x, y, z, sx = 1, sy = 1, sz = 1, rx = 0) => new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, 0, 0)), new THREE.Vector3(sx, sy, sz));
 
+// a thin rod from a to b
+function bar(a, b, r) {
+  const d = b.clone().sub(a);
+  const geo = new THREE.CylinderGeometry(r, r, d.length(), 6);
+  geo.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.clone().normalize()));
+  geo.translate((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+  return geo;
+}
+
 const shellCache = new Map();
 // shells depend only on the body, the hair and the piece: build each once
 function cached(key, make) {
@@ -296,7 +308,8 @@ function cached(key, make) {
   return shellCache.get(key);
 }
 
-// look → { pieces, hidesHair(x, y, z) | null }
+// look → { pieces, hidesHair: { test(x, y, z), any } | null }: the hair a hat covers is cut
+// away; `any` cuts a triangle with any corner under the hat, otherwise all three
 export function buildGear(look, sex, hair, regionsOf, shade) {
   const pieces = [];
   let hidesHair = null;
@@ -309,15 +322,17 @@ export function buildGear(look, sex, hair, regionsOf, shade) {
     if (g === 'helmet') {
       // a steel pot: over the skull, not the hair (the hair under it is cut away)
       const rim = rimLine(1.372, 1.225);
+      // short hair goes under it entirely; long hair hangs out below the rim
+      const long = hair === 'bob' || hair === 'pony';
       const s = cached(K('helmet'), () => {
-        const env = envelope(cloud(sex, 'bald', { ears: false }));
-        const d = dome(env, rim, 0.034, { flare: 0.028, lift: 0.012, thick: 0.014 });
+        const env = envelope(cloud(sex, long ? hair : 'bald', { ears: false }));
+        const d = dome(env, rim, long ? 0.02 : 0.034, { flare: 0.028, lift: 0.012, thick: 0.014 });
         return d.geo;
       });
       const c = col('helmet', 0x2a2e33);
       // on its own bone, so it can be knocked off
       rigid(s, 'X_HELMET', c);
-      hidesHair = (x, y, z) => y > rim(Math.atan2(x, z)) - 0.012;
+      hidesHair = long ? { test: (x, y, z) => y > rim(Math.atan2(x, z)) + 0.004, any: false } : { test: () => true, any: true };
     } else if (g === 'beanie') {
       const rim = rimLine(1.372, 1.3);
       const [shell, cuff] = cached(K('beanie'), () => {
@@ -329,6 +344,7 @@ export function buildGear(look, sex, hair, regionsOf, shade) {
       const c = col('beanie', 0x3a3f34);
       rigid(shell, 'HEAD__Skeleton', c);
       rigid(cuff, 'HEAD__Skeleton', shade(c, -0.18));
+      hidesHair = { test: (x, y, z) => y > rim(Math.atan2(x, z)) + 0.004, any: false };
     } else if (g === 'cap') {
       const rim = rimLine(1.382, 1.315);
       const [shell, bill] = cached(K('cap'), () => {
@@ -340,47 +356,62 @@ export function buildGear(look, sex, hair, regionsOf, shade) {
       const c = col('cap', 0x6a2a24);
       rigid(shell, 'HEAD__Skeleton', c);
       rigid(bill, 'HEAD__Skeleton', shade(c, -0.22));
+      hidesHair = { test: (x, y, z) => y > rim(Math.atan2(x, z)) + 0.004, any: false };
     } else if (g === 'captain') {
+      // a skipper's cap: a clean band round the head, a crown flaring out to a flat white
+      // top, a short black peak. Built on a smoothed outline of the head, not its lumps.
       const rim = rimLine(1.39, 1.35);
-      const [band_, crown, top, bill] = cached(K('captain'), () => {
+      const [band_, crown, top, bill, badgeZ] = cached(K('captain'), () => {
         const env = envelope(cloud(sex, hair));
         const d = dome(env, rim, 0.012, { cols: 40, rows: 7 });
-        // the crown: the rim's outline raised into a wall that flares out to a flat top
         const { P, rows, cols } = d.grid;
-        const ring = P.slice((rows - 1) * cols);
-        const topY = 1.5, wallRows = 5;
-        const W = [];
-        for (let j = 0; j < wallRows; j++) {
-          const f = j / (wallRows - 1);
-          for (const p of ring) {
-            const out = new THREE.Vector3(p.x - C.x, 0, p.z - C.z);
-            const q = new THREE.Vector3(C.x, 0, C.z).addScaledVector(out, 1 + 0.13 * f * f).add(new THREE.Vector3(0, 0, 0.016 * f));
-            q.y = p.y + (topY - p.y) * f;
-            W.push(q);
-          }
+        let hx = 0, zf = 0, zb = 0;
+        for (const p of P.slice((rows - 1) * cols)) { hx = Math.max(hx, Math.abs(p.x - C.x)); zf = Math.max(zf, p.z - C.z); zb = Math.max(zb, C.z - p.z); }
+        // an egg: its half-width, and its depth in front of and behind the middle
+        const outline = (t, grow) => new THREE.Vector3(C.x + Math.sin(t) * (hx + grow), 0, C.z + Math.cos(t) * ((Math.cos(t) > 0 ? zf : zb) + grow));
+        const thetas = around(cols);
+        const topY = 1.5;
+        // rows of [height(theta), grow, forward]
+        const grid = (spec) => {
+          const Q = [];
+          for (const [y, grow, fwd] of spec) for (const t of thetas) { const q = outline(t, grow); q.y = y(t); q.z += fwd; Q.push(q); }
+          return { P: Q, rows: spec.length, cols };
+        };
+        const radial = (p) => new THREE.Vector3(p.x - C.x, 0, p.z - C.z);
+        const inH = (k) => (p) => new THREE.Vector3(C.x - p.x, 0, C.z - p.z).normalize().multiplyScalar(k);
+        const bandG = slab(grid([[(t) => rim(t) - 0.002, 0.006, 0], [(t) => rim(t) + 0.04, 0.006, 0]]), { wrap: true, outward: radial, off: inH(0.006), top: false });
+        const crownSpec = [];
+        for (let j = 0; j <= 4; j++) {
+          const f = j / 4;
+          crownSpec.push([(t) => rim(t) + 0.036 + (topY - rim(t) - 0.036) * f, 0.004 + 0.022 * f * f, 0.012 * f]);
         }
-        const wall = slab({ P: W, rows: wallRows, cols }, { wrap: true, outward: (p) => new THREE.Vector3(p.x - C.x, 0, p.z - C.z), off: (p) => new THREE.Vector3(C.x - p.x, 0, C.z - p.z).normalize().multiplyScalar(0.008), top: false });
-        const last = W.slice((wallRows - 1) * cols);
+        const crownG = slab(grid(crownSpec), { wrap: true, outward: radial, off: inH(0.006), top: false });
+        // the top: rings closing in to the middle
+        const ring = grid([[() => topY + 0.003, 0.026, 0.012]]).P;
+        const mid = new THREE.Vector3(C.x, topY + 0.003, C.z + 0.012);
         const T = [];
-        const mid = last.reduce((a, p) => a.add(p), new THREE.Vector3()).multiplyScalar(1 / last.length);
-        for (let j = 0; j < 3; j++) for (const p of last) T.push(mid.clone().lerp(p, 1 - j * 0.5).setY(topY + 0.004));
-        const lid = slab({ P: T, rows: 3, cols }, { wrap: true, outward: () => new THREE.Vector3(0, 1, 0), off: () => new THREE.Vector3(0, -0.01, 0), top: false });
-        const bnd = band(env, { from: 0, to: Math.PI * 2 - 1e-3, yTop: (t) => rim(t) + 0.04, yBot: (t) => rim(t) - 0.002, pad: 0.018, rows: 2, cols: 41, thick: 0.01 });
-        const b = peak(rimFront(d.grid, -1.1, 1.1), { length: 0.085, drop: 0.03 });
-        return [bnd, wall, lid, b];
+        for (let j = 0; j < 3; j++) for (const q of ring) T.push(mid.clone().lerp(q, 1 - j * 0.5));
+        const lidG = slab({ P: T, rows: 3, cols }, { wrap: true, outward: () => new THREE.Vector3(0, 1, 0), off: () => new THREE.Vector3(0, -0.008, 0), top: false });
+        // the peak, off the front of the band
+        const front = [];
+        for (let i = 0; i <= 12; i++) { const t = -1.1 + (2.2 * i) / 12; const q = outline(t, 0.006); q.y = rim(t) - 0.001; front.push(q); }
+        const peakG = peak(front, { length: 0.085, drop: 0.03 });
+        return [bandG, crownG, lidG, peakG, C.z + zf + 0.006];
       });
       const c = col('captain', 0x1e2230);
       rigid(crown, 'HEAD__Skeleton', c);
       rigid(top, 'HEAD__Skeleton', 0xe8e4d8);
       rigid(band_, 'HEAD__Skeleton', 0x121418);
       rigid(bill, 'HEAD__Skeleton', 0x0e0f12);
-      rigid(new THREE.BoxGeometry(1, 1, 1), 'HEAD__Skeleton', 0xc9a24a, at(0, rim(0) + 0.022, headBox(sex).max.z + 0.028, 0.05, 0.028, 0.008));
+      rigid(new THREE.BoxGeometry(1, 1, 1), 'HEAD__Skeleton', 0xc9a24a, at(0, rim(0) + 0.02, badgeZ + 0.004, 0.05, 0.026, 0.008));
+      hidesHair = { test: (x, y, z) => y > rim(Math.atan2(x, z)) - 0.004, any: false };
     } else if (g === 'wrap') {
       // a headscarf tied at the back
       const rim = rimLine(1.365, 1.19);
       const shell = cached(K('wrap'), () => dome(envelope(cloud(sex, hair)), rim, 0.012, { lift: 0.006 }).geo);
       const c = col('wrap', 0x7a2a3a);
       rigid(shell, 'HEAD__Skeleton', c);
+      hidesHair = { test: (x, y, z) => y > rim(Math.atan2(x, z)) + 0.004, any: false };
       const back = Math.min(headBox(sex).min.z, hair === 'bald' ? 0 : -0.2);
       rigid(new THREE.SphereGeometry(1, 10, 8), 'HEAD__Skeleton', shade(c, -0.12), at(0, 1.3, back - 0.012, 0.045, 0.035, 0.035));
       for (const s of [-1, 1]) rigid(new THREE.ConeGeometry(1, 1, 6), 'HEAD__Skeleton', shade(c, -0.08), at(s * 0.02, 1.25, back - 0.005, 0.02, 0.1, 0.012));
@@ -396,10 +427,15 @@ export function buildGear(look, sex, hair, regionsOf, shade) {
       }));
       rigid(b, 'HEAD__Skeleton', col('bandana', 0x8a2a24));
     } else if (g === 'glasses') {
-      const h = headBox(sex), hs = h.getSize(new THREE.Vector3());
-      const y = h.min.y + hs.y * 0.465, z = h.max.z - 0.012;
-      for (const s of [-1, 1]) rigid(new THREE.TorusGeometry(1, 0.1, 5, 18), 'HEAD__Skeleton', col('glasses', 0x1a1a1a), at(s * hs.x * 0.2, y, z, hs.x * 0.095, hs.x * 0.08, 0.6));
-      rigid(new THREE.BoxGeometry(1, 1, 1), 'HEAD__Skeleton', col('glasses', 0x1a1a1a), at(0, y + hs.y * 0.01, z + 0.004, hs.x * 0.12, 0.005, 0.005));
+      // round frames over the eyes (see FACE in FacePainter), a bridge over the nose,
+      // arms back to the ears
+      const ey = 1.305, ex = 0.068, lz = 0.146;
+      const frame = col('glasses', 0x1a1a1a);
+      for (const sd of [-1, 1]) {
+        rigid(new THREE.TorusGeometry(1, 0.09, 5, 20), 'HEAD__Skeleton', frame, at(sd * ex, ey, lz - 0.004, 0.035, 0.028, 0.05));
+        rigid(bar(new THREE.Vector3(sd * 0.102, ey + 0.004, lz - 0.01), new THREE.Vector3(sd * 0.142, ey + 0.002, 0.0), 0.0028), 'HEAD__Skeleton', frame);
+      }
+      rigid(bar(new THREE.Vector3(-0.034, ey + 0.006, lz + 0.002), new THREE.Vector3(0.034, ey + 0.006, lz + 0.002), 0.0028), 'HEAD__Skeleton', frame);
     } else if (g === 'vest') {
       const v = cached(`${sex}|vest`, () => vestShell(sex, regionsOf, 0.016));
       const c = col('vest', 0x2a2e33);
