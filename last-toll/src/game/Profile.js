@@ -40,7 +40,7 @@ export function newProfile() {
     lastZone: 'cypress',
     lastResult: null,
     story: newStory(),
-    settings: { sens: 1, volume: 0.8, fov: 68, invertY: false, voices: true, walkers: 'blocky' },
+    settings: { sens: 1, volume: 0.8, fov: 68, invertY: false, voices: true, walkers: 'avatar', walkersV: 2 },
   };
 }
 
@@ -84,7 +84,10 @@ export function loadProfile() {
     if (!p || (p.version !== 1 && p.version !== 2)) return null;
     migrate(p);
     const base = newProfile();
+    // the dead used to default to blocky; saves from then switch to the new default once
+    const oldWalkers = !p.settings || p.settings.walkersV !== 2;
     p.settings = { ...base.settings, ...(p.settings || {}) };
+    if (oldWalkers) { p.settings.walkers = 'avatar'; p.settings.walkersV = 2; }
     p.stats = { ...base.stats, ...(p.stats || {}) };
     p.stations = { ...base.stations, ...(p.stations || {}) };
     p.story = { ...base.story, ...(p.story || {}) };

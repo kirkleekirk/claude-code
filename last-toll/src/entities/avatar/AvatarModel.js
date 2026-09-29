@@ -21,8 +21,9 @@ import { buildBlocky } from './BlockyBody.js';
 
 const HEIGHT = 1.2; // the rig is ~1.47 m; scaled, a grown-up avatar stands ~1.77 m
 const _m = new THREE.Matrix4();
-const _v = new THREE.Vector3(), _n = new THREE.Vector3();
+const _v = new THREE.Vector3();
 const _c = new THREE.Color();
+const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 // body regions, by the bone a vertex follows most
 const REGION = (name) => {
@@ -64,8 +65,6 @@ function shadeHex(hex, k) {
 
 // ---- building the merged mesh ------------------------------------------------------------------
 
-
-const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 export function buildAvatarGeometry(look) {
   const A = avatarAssets();
@@ -139,19 +138,20 @@ export function buildAvatarGeometry(look) {
     nor.set(p.nor, o * 3);
     si.set(p.idx, o * 4);
     sw.set(p.wt, o * 4);
-    // the nose, pulled in: the rig's head carries a longer nose than the avatars it's
-    // modelled on, and a hard wedge in the middle of a cartoon face reads as uncanny
+    // the nose keeps its shape but is shaded softly: its underside faces straight down,
+    // where little light reaches, and showed as a dark blob; its sides lit up as a long wedge
     if (q.kind === 'head') {
       for (let i = 0; i < p.count; i++) {
         const k = (o + i) * 3;
         const x = pos[k], y = pos[k + 1], z = pos[k + 2];
-        if (z < 0.137 || Math.abs(x) > 0.045 || y < 1.2 || y > 1.3) continue;
-        const wx = 1 - smooth(0.015, 0.045, Math.abs(x)), wy = smooth(1.2, 1.22, y) * (1 - smooth(1.27, 1.3, y));
-        const wgt = wx * wy;
-        pos[k + 2] = 0.137 + (z - 0.137) * (1 - 0.45 * wgt);
-        // and shaded like the cheeks around it, not as a dark wedge underneath
-        _v.set(nor[k], nor[k + 1], nor[k + 2]).lerp(_n.set(0, 0.2, 1).normalize(), 0.8 * wgt).normalize();
-        nor[k] = _v.x; nor[k + 1] = _v.y; nor[k + 2] = _v.z;
+        if (z < 0.125 || Math.abs(x) > 0.04 || y < 1.205 || y > 1.3) continue;
+        const w = (1 - smooth(0.018, 0.04, Math.abs(x))) * smooth(1.205, 1.215, y) * (1 - smooth(1.285, 1.3, y));
+        if (w <= 0) continue;
+        let nx = nor[k], ny = nor[k + 1], nz = nor[k + 2];
+        if (ny < 0) ny *= 1 - 0.7 * w; // underside: tipped toward the front
+        nx *= 1 - 0.4 * w; // sides: a softer turn
+        const l = Math.hypot(nx, ny, nz);
+        nor[k] = nx / l; nor[k + 1] = ny / l; nor[k + 2] = nz / l;
       }
     }
     // a heavier or slighter build: push everything below the neck out from the spine
@@ -239,7 +239,10 @@ export function avatarMaterials(face, sex = 'm') {
   const key = `${sex}|${JSON.stringify(face || {})}`;
   let m = matCache.get(key);
   if (!m) {
-    m = [faceMat(faceTexture(face || {}, false, sex)), faceMat(faceTexture(face || {}, true, sex))];
+    // the talking face is only painted for someone who talks
+    let open = null;
+    m = [faceMat(faceTexture(face || {}, false, sex))];
+    Object.defineProperty(m, 1, { get: () => open || (open = faceMat(faceTexture(face || {}, true, sex))) });
     matCache.set(key, m);
   }
   return m;

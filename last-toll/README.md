@@ -77,8 +77,8 @@ board marks where to go. The captain's log keeps the story so far.
 ## How it plays
 
 - **Everyone is built on one rig.** The crew, the Guard and the dead share a skeleton and its animations,
-  with painted faces and gear fitted to the body. The dead are blocky by default; the captain's log has a
-  setting to make them look like the living instead.
+  with painted faces and gear fitted to the body. The dead look like the living, rotted; the captain's log
+  has a setting to draw them as blocky, pixel-skinned figures instead.
 - **The dead only die when the brain goes.** Body hits stagger, knock down, or take legs (crawlers).
 - **Physical melee, translated to a mouse.** Hold to wind up; power comes from the swing and your stamina.
   A weak stab glances off the skull. Blades lodge in heads and have to be wrenched out (hold click and drag

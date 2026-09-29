@@ -14,13 +14,13 @@ import { avatarAssets } from './AvatarAssets.js';
 //   eyes:  'round' | 'almond' | 'sleepy' | 'wide' | 'narrow' | 'hooded'
 //   brows: 'soft' | 'straight' | 'arched' | 'thick' | 'heavy' | 'worried' | 'angry' | 'none'
 //   mouth: 'smile' | 'flat' | 'smirk' | 'frown' | 'grin' | 'open' | 'snarl' | 'slack'
-//   nose:  'soft' | 'wide' | 'none'  (the nose is modelled; 'wide' adds nostril shading)
+//   nose:  'soft' | 'wide' | 'none'  (a shadow under the modelled nose; nothing is painted on it)
 //   lashes: true for a couple of lashes at the outer corners
 //   skin:  the skin colour (set by the model), for folds and shading in the skin's own shade
 //   buzz:  a hair colour: a buzz cut painted on the scalp (set by the model for buzz cuts)
 //   marks: 'freckles' | 'stubble' | 'beard' | 'moustache' | 'scar' | 'blush' | 'bags' | 'wrinkles' | 'blood' | 'veins' | 'rot'
 
-const S = 256; // the head texture
+const S = 512; // the head texture: about a texel per millimetre across the face
 
 // The front canvas: across, the angle round the head's vertical axis, laid out as arc
 // length on a nominal head radius so shapes keep their proportions; down, the height in
@@ -28,21 +28,34 @@ const S = 256; // the head texture
 const R0 = 0.13; // nominal radius at the eyes
 const ANG = Math.PI; // all the way round: the face, and a buzz cut's scalp
 const Y_TOP = 1.52, Y_BOT = 1.1;
-const PPM = 1400; // canvas pixels per unit
+const PPM = 2000; // canvas pixels per unit
 const FW = Math.round(2 * ANG * R0 * PPM), FH = Math.round((Y_TOP - Y_BOT) * PPM);
 
-// Where the features sit, in (arc across, height), measured on the head mesh against
-// the proportions of Xbox-style avatar faces: the eyes a little below the middle of the
-// head and set wide, the mouth tucked just under the nose, well clear of the chin.
-export const FACE = {
-  noseTip: 1.237,
-  eyeX: 0.069, eyeY: 1.303, eyeW: 0.03, // half-width of an eye
-  eyeTilt: 0.12, // outer corners up
-  browY: 1.343, browW: 0.042,
-  underNose: 1.228,
-  lipTop: 1.2205, mouthY: 1.2095, lipBot: 1.1945, mouthW: 0.046,
-  chin: 1.14,
+// Where the features sit, in (arc across, height). Taken from the rig itself: the pack's
+// FBX heads carry UV layers that place the avatar's own eye, brow and mouth textures,
+// and projected through those layers they land on these spots. Our features are our own
+// drawings, sized and centred on the same spots.
+export const FACES = {
+  m: {
+    noseTip: 1.237,
+    eyeX: 0.055, eyeY: 1.2965, eyeW: 0.029, // half-width of an eye
+    eyeTilt: 0.1, // outer corners up
+    browX: 0.06, browY: 1.3315, browW: 0.043,
+    underNose: 1.226,
+    lipTop: 1.197, mouthY: 1.192, lipBot: 1.1845, mouthW: 0.041,
+    chin: 1.14,
+  },
+  f: {
+    noseTip: 1.237,
+    eyeX: 0.057, eyeY: 1.2905, eyeW: 0.031,
+    eyeTilt: 0.12,
+    browX: 0.057, browY: 1.3295, browW: 0.04,
+    underNose: 1.226,
+    lipTop: 1.2015, mouthY: 1.192, lipBot: 1.1805, mouthW: 0.047,
+    chin: 1.14,
+  },
 };
+let FACE = FACES.m; // the layout being painted
 
 // canvas pixel from (arc across, height)
 const px = (s) => FW / 2 + s * PPM;
@@ -111,44 +124,58 @@ export function faceTexture(face, talk = false, sex = 'm') {
   const key = `${sex}|${JSON.stringify(face)}${talk ? '|t' : ''}`;
   let t = cache.get(key);
   if (t) return t;
+  t = wrapFront(paintFront(face, talk, sex), sex, !!face.buzz);
+  cache.set(key, t);
+  return t;
+}
+
+// The face painted flat on the front-of-the-head canvas (reused between calls).
+export function paintFront(face, talk = false, sex = 'm') {
   if (!front) {
     front = document.createElement('canvas');
     front.width = FW; front.height = FH;
   }
   const g = front.getContext('2d', { willReadFrequently: true });
   g.clearRect(0, 0, FW, FH);
-  paint(g, face, talk);
-  const src = g.getImageData(0, 0, FW, FH).data;
-  // wrap the front canvas onto the head's texture
+  paint(g, face, talk, sex);
+  return front;
+}
+
+// A front-of-the-head canvas (FW x FH, see FACE_SPACE) wrapped onto a head texture.
+// wide: read all the way round the head (a buzz cut); otherwise only the face is read.
+export function wrapFront(canvas, sex = 'm', wide = true) {
+  const rx0 = wide ? 0 : Math.max(0, Math.floor(px(-0.17))), rx1 = wide ? FW : Math.min(FW, Math.ceil(px(0.17)));
+  const RW = rx1 - rx0;
+  const src = canvas.getContext('2d', { willReadFrequently: true }).getImageData(rx0, 0, RW, FH).data;
   const c = document.createElement('canvas');
   c.width = c.height = S;
   const out = c.getContext('2d');
   const img = out.createImageData(S, S);
+  const dst = img.data;
   const lut = lutFor(sex);
   for (let n = 0; n < S * S; n++) {
-    const x = lut[n * 2], y = lut[n * 2 + 1];
-    if (x < 0) continue;
-    // bilinear
-    const x0 = Math.min(FW - 2, Math.max(0, Math.floor(x - 0.5))), y0 = Math.min(FH - 2, Math.max(0, Math.floor(y - 0.5)));
+    const x = lut[n * 2] - rx0, y = lut[n * 2 + 1];
+    if (x < 0 || x > RW) continue;
+    // bilinear, skipping texels with nothing painted under them (most of the head)
+    const x0 = Math.min(RW - 2, Math.max(0, Math.floor(x - 0.5))), y0 = Math.min(FH - 2, Math.max(0, Math.floor(y - 0.5)));
+    const i00 = (y0 * RW + x0) * 4, i10 = i00 + 4, i01 = i00 + RW * 4, i11 = i01 + 4;
+    if (!(src[i00 + 3] | src[i10 + 3] | src[i01 + 3] | src[i11 + 3])) continue;
     const fx = Math.min(1, Math.max(0, x - 0.5 - x0)), fy = Math.min(1, Math.max(0, y - 0.5 - y0));
-    const i00 = (y0 * FW + x0) * 4, i10 = i00 + 4, i01 = i00 + FW * 4, i11 = i01 + 4;
-    for (let ch = 0; ch < 4; ch++) {
-      const v = (src[i00 + ch] * (1 - fx) + src[i10 + ch] * fx) * (1 - fy) + (src[i01 + ch] * (1 - fx) + src[i11 + ch] * fx) * fy;
-      img.data[n * 4 + ch] = v;
-    }
+    const w00 = (1 - fx) * (1 - fy), w10 = fx * (1 - fy), w01 = (1 - fx) * fy, w11 = fx * fy;
+    for (let ch = 0; ch < 4; ch++) dst[n * 4 + ch] = src[i00 + ch] * w00 + src[i10 + ch] * w10 + src[i01 + ch] * w01 + src[i11 + ch] * w11;
   }
   out.putImageData(img, 0, 0);
-  t = new THREE.CanvasTexture(c);
+  const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.flipY = false;
   t.anisotropy = 4;
-  cache.set(key, t);
   return t;
 }
 
 // ---- painting on the front canvas ---------------------------------------------------------
 
-function paint(g, f, talk) {
+function paint(g, f, talk, sex) {
+  FACE = FACES[sex] || FACES.m;
   g.lineCap = 'round';
   g.lineJoin = 'round';
   const marks = f.marks || [];
@@ -156,34 +183,38 @@ function paint(g, f, talk) {
   // under everything: shading and skin marks
   if (marks.includes('rot')) blotches(g, 'rgba(60,70,40,0.35)', 14, 1.16, 1.42);
   if (marks.includes('veins')) veins(g);
-  if (marks.includes('blush')) for (const s of [-1, 1]) soft(g, s * 0.066, 1.258, 0.022, 'rgba(210,90,90,0.32)');
+  if (marks.includes('blush')) for (const s of [-1, 1]) soft(g, s * (FACE.eyeX + 0.006), FACE.eyeY - 0.042, 0.02, 'rgba(210,90,90,0.32)');
   if (marks.includes('bags')) for (const s of [-1, 1]) soft(g, s * FACE.eyeX, FACE.eyeY - 0.022, 0.016, 'rgba(90,55,55,0.16)');
   if (marks.includes('wrinkles')) {
     for (const s of [-1, 1]) {
       for (const k of [-1, 0, 1]) line(g, s * (FACE.eyeX + FACE.eyeW * 1.15), FACE.eyeY + k * 0.006, s * (FACE.eyeX + FACE.eyeW * 1.5), FACE.eyeY + k * 0.011, 'rgba(70,45,35,0.35)', 0.0018);
-      curve(g, s * 0.03, FACE.underNose + 0.004, s * 0.05, 1.218, s * 0.052, 1.197, 'rgba(70,45,35,0.32)', 0.002);
+      curve(g, s * 0.03, FACE.underNose + 0.004, s * (FACE.mouthW + 0.008), FACE.underNose - 0.012, s * (FACE.mouthW + 0.009), FACE.mouthY - 0.004, 'rgba(70,45,35,0.32)', 0.002);
     }
   }
   if (marks.includes('stubble')) stubble(g, 'rgba(40,30,25,0.42)', 1100);
   if (marks.includes('beard')) beard(g, f.beardColor || f.browColor || '#3a2a1e');
-  if (marks.includes('freckles')) speckle(g, -0.075, 0.075, 1.245, 1.29, 'rgba(120,70,40,0.55)', 70, 0.0012);
+  if (marks.includes('freckles')) speckle(g, -0.075, 0.075, FACE.eyeY - 0.055, FACE.eyeY - 0.018, 'rgba(120,70,40,0.55)', 70, 0.0012);
   if (marks.includes('scar')) {
     line(g, 0.078, 1.35, 0.094, 1.268, 'rgba(120,50,50,0.8)', 0.0032);
     for (let i = 0; i < 4; i++) { const t = (i + 0.5) / 4; const x = 0.078 + 0.016 * t, y = 1.35 - 0.082 * t; line(g, x - 0.005, y - 0.002, x + 0.005, y + 0.002, 'rgba(120,50,50,0.7)', 0.0016); }
   }
-  // the nose is modelled and casts its own shade: nostrils only if asked for
-  if (f.nose === 'wide') for (const s of [-1, 1]) soft(g, s * 0.011, FACE.underNose + 0.002, 0.0035, 'rgba(70,35,30,0.35)');
+  // the nose is modelled: only a soft shadow under its tip, and nostrils if asked for
+  const nose = f.nose || 'soft';
+  if (nose !== 'none') {
+    soft(g, 0, 1.2165, 0.009, 'rgba(90,50,40,0.14)');
+    if (nose === 'wide') for (const s of [-1, 1]) soft(g, s * 0.011, FACE.underNose + 0.002, 0.004, 'rgba(70,35,30,0.5)');
+  }
   // eyes and brows, mirrored
   for (const s of [-1, 1]) {
     eye(g, s, f);
     brow(g, s, f.brows || 'soft', f.browColor || '#3a2a1e');
   }
-  mouth(g, talk ? 'open' : f.mouth || 'flat', f);
+  mouth(g, talk ? 'open' : f.mouth || 'flat', f, sex);
   if (marks.includes('moustache')) moustache(g, f.beardColor || f.browColor || '#3a2a1e');
   if (marks.includes('blood')) {
     blotches(g, 'rgba(110,10,10,0.7)', 5, 1.16, 1.24);
-    line(g, -0.02, 1.2, -0.026, 1.155, 'rgba(110,10,10,0.8)', 0.004);
-    line(g, 0.03, 1.2, 0.034, 1.165, 'rgba(110,10,10,0.8)', 0.0034);
+    line(g, -0.02, FACE.mouthY - 0.004, -0.026, 1.15, 'rgba(110,10,10,0.8)', 0.004);
+    line(g, 0.03, FACE.mouthY - 0.003, 0.034, 1.158, 'rgba(110,10,10,0.8)', 0.0034);
   }
 }
 
@@ -265,8 +296,8 @@ function eye(g, side, f) {
 
 function brow(g, side, style, color) {
   if (style === 'none') return;
-  const thick = { soft: 0.0042, straight: 0.0048, arched: 0.004, thick: 0.0075, heavy: 0.009, worried: 0.0048, angry: 0.0065 }[style] || 0.0048;
-  const inner = side * (FACE.eyeX - FACE.browW * 0.95), outer = side * (FACE.eyeX + FACE.browW * 0.95), mid = side * FACE.eyeX;
+  const thick = { soft: 0.0058, straight: 0.0064, arched: 0.0054, thick: 0.0092, heavy: 0.011, worried: 0.0062, angry: 0.008 }[style] || 0.0062;
+  const inner = side * (FACE.browX - FACE.browW * 0.95), outer = side * (FACE.browX + FACE.browW * 0.95), mid = side * FACE.browX;
   const y = FACE.browY;
   let a, b, c; // heights at inner, middle, outer
   if (style === 'arched') [a, b, c] = [y - 0.003, y + 0.009, y - 0.001];
@@ -284,70 +315,114 @@ function brow(g, side, style, color) {
   g.fill();
 }
 
-function mouth(g, style, f) {
+// The mouth, in the style of the avatars: an upper lip with a slight bow and a fuller
+// lower lip, in a lip tone taken from the skin (rosier on women, grey on the dead),
+// parted by a dark line that thins toward the corners. Smiles tuck up at the corners.
+const MOUTHS = {
+  // corner lift on the model's right and left (up is +), and width as a share of mouthW
+  smile: [0.0042, 0.0042, 1],
+  flat: [0.0006, 0.0006, 0.9],
+  smirk: [0.0002, 0.0048, 0.95],
+  frown: [-0.003, -0.003, 0.9],
+  grin: [0.0055, 0.0055, 1.04],
+};
+function lipTone(f, sex, k = 0) {
+  if (f.lips) return f.lips;
+  const skin = f.skin || '#d9a582';
+  if (f.dead) return mix(skin, '#4a3444', 0.45, 1, k);
+  return sex === 'f' ? mix(skin, '#a83e50', 0.55, 1, k - 0.04) : mix(skin, '#8a4640', 0.34, 1, k - 0.06);
+}
+function mouth(g, style, f, sex) {
+  const y0 = FACE.mouthY;
+  const fem = sex === 'f';
+  // lip heights at the middle: upper, lower
+  const ut = FACE.lipTop - y0, lt = y0 - FACE.lipBot;
+  if (style === 'snarl' || style === 'slack') return deadMouth(g, style, f);
+  const shape = MOUTHS[style] || (style === 'open' ? [0.0015, 0.0015, 0.86] : MOUTHS.flat);
+  const w = FACE.mouthW * shape[2];
+  // the parting line: y at x
+  const at = (x) => y0 + (x < 0 ? shape[0] : shape[1]) * (x / w) * (x / w);
+  const upper = (u) => (1 - u * u) * (0.8 + 0.2 * smoothstep(0.04, 0.3, u)); // a slight bow
+  const lower = (u) => Math.pow(1 - u * u, 0.7);
+  // an opening between the lips (talking, grinning): how far the lower lip drops
+  const gap = style === 'open' ? 0.0115 : style === 'grin' ? 0.0095 : 0;
+  const low = (x) => at(x) - gap * Math.pow(Math.max(0, 1 - (x / w) * (x / w)), 0.8);
+  const N = 24;
+  const xs = Array.from({ length: N + 1 }, (_, i) => -w + (2 * w * i) / N);
+  const path = (top, bot) => {
+    g.beginPath();
+    xs.forEach((x, i) => (i ? g.lineTo : g.moveTo).call(g, px(x), py(top(x))));
+    for (let i = N; i >= 0; i--) g.lineTo(px(xs[i]), py(bot(xs[i])));
+    g.closePath();
+  };
+  // a little shade under the lower lip gives it some fullness
+  soft(g, 0, low(0) - lt - 0.003, 0.011, 'rgba(60,30,25,0.1)');
+  g.save();
+  g.filter = `blur(${L(0.0004).toFixed(2)}px)`;
+  // lips
+  path((x) => at(x) + ut * upper(Math.abs(x) / w), at);
+  g.fillStyle = lipTone(f, sex, -0.14); g.globalAlpha = fem ? 0.95 : 0.8; g.fill();
+  path(low, (x) => low(x) - lt * lower(Math.abs(x) / w));
+  g.fillStyle = lipTone(f, sex); g.globalAlpha = fem ? 0.9 : 0.7; g.fill();
+  g.globalAlpha = 1;
+  g.restore();
+  // a soft sheen on the lower lip
+  soft(g, 0, low(0) - lt * 0.45, lt * 0.8, fem ? 'rgba(255,235,230,0.22)' : 'rgba(255,235,225,0.1)');
+  if (gap) {
+    // the opening: dark, upper teeth, and a tongue when talking
+    path(at, low);
+    g.fillStyle = '#2a0e10'; g.fill();
+    g.save(); g.clip();
+    path(at, (x) => at(x) - 0.0042 * Math.sqrt(Math.max(0, 1 - (x / w) * (x / w))));
+    g.fillStyle = '#f0ece2'; g.fill();
+    if (style === 'open') { g.fillStyle = '#9a4448'; g.beginPath(); g.ellipse(px(0), py(low(0) + 0.0012), L(w * 0.42), L(0.0034), 0, 0, Math.PI * 2); g.fill(); }
+    g.restore();
+  }
+  // the parting line, thinning toward the corners
+  const t = 0.0013;
+  path((x) => at(x) + t * (1 - 0.6 * (x / w) * (x / w)), (x) => at(x) - t * (1 - 0.6 * (x / w) * (x / w)));
+  g.fillStyle = gap ? 'rgba(40,14,14,0.9)' : 'rgba(50,22,20,0.88)'; g.fill();
+  if (gap) {
+    path(low, (x) => low(x) - 0.0008 * (1 - (x / w) * (x / w)));
+    g.fillStyle = 'rgba(40,14,14,0.7)'; g.fill();
+  }
+  // corners: a short tuck, up for a smile, down for a frown
+  for (const sgn of [-1, 1]) {
+    const lift = sgn < 0 ? shape[0] : shape[1];
+    const cx = sgn * w, cy = at(cx);
+    const dy = lift > 0.002 ? 0.0028 : lift < -0.001 ? -0.0022 : 0.0008;
+    curve(g, cx - sgn * 0.003, at(cx - sgn * 0.003), cx, cy, cx + sgn * 0.0022, cy + dy, 'rgba(50,22,20,0.75)', 0.0011);
+  }
+}
+
+// The dead: a gaping, ragged hole, lips drawn back and grey.
+function deadMouth(g, style, f) {
   const x = px(0), y = py(FACE.mouthY);
   const w = L(FACE.mouthW);
-  const lips = f.lips || 'rgba(150,70,70,0.85)';
-  const line = L(0.0034);
-  g.strokeStyle = '#3a1a18';
-  g.lineWidth = line;
+  const h = L(style === 'snarl' ? 0.016 : 0.012);
   g.beginPath();
-  switch (style) {
-    case 'smile': g.moveTo(x - w, y - L(0.004)); g.quadraticCurveTo(x, y + L(0.009), x + w, y - L(0.004)); g.stroke(); break;
-    case 'smirk': g.moveTo(x - w * 0.8, y + L(0.001)); g.quadraticCurveTo(x, y + L(0.004), x + w, y - L(0.005)); g.stroke(); break;
-    case 'frown': g.moveTo(x - w * 0.85, y + L(0.004)); g.quadraticCurveTo(x, y - L(0.005), x + w * 0.85, y + L(0.004)); g.stroke(); break;
-    case 'grin': {
-      g.moveTo(x - w, y - L(0.005)); g.quadraticCurveTo(x, y + L(0.014), x + w, y - L(0.005)); g.quadraticCurveTo(x, y - L(0.002), x - w, y - L(0.005));
-      g.fillStyle = '#2a0f0f'; g.fill(); g.stroke();
-      g.save(); g.clip(); g.fillStyle = '#f2eee2'; g.fillRect(x - w, y - L(0.006), w * 2, L(0.006)); g.restore();
-      break;
-    }
-    case 'open': {
-      // talking
-      g.ellipse(x, y + L(0.001), w * 0.5, L(0.0085), 0, 0, Math.PI * 2);
-      g.fillStyle = '#2a0f0f'; g.fill(); g.stroke();
-      g.save(); g.clip();
-      g.fillStyle = '#f2eee2'; g.fillRect(x - w * 0.5, y - L(0.008), w, L(0.004));
-      g.fillStyle = '#9a4040'; g.beginPath(); g.ellipse(x, y + L(0.008), w * 0.32, L(0.004), 0, 0, Math.PI * 2); g.fill();
-      g.restore();
-      break;
-    }
-    case 'snarl': case 'slack': {
-      // the dead: a gaping, ragged hole
-      const h = L(style === 'snarl' ? 0.016 : 0.012);
-      g.moveTo(x - w * 0.8, y - L(0.004));
-      for (let i = 0; i <= 6; i++) g.lineTo(x - w * 0.8 + (i / 6) * w * 1.6, y - L(0.004) + (i % 2 ? -L(0.002) : L(0.001)));
-      g.quadraticCurveTo(x + w * 0.3, y + h, x - w * 0.8, y - L(0.004));
-      g.fillStyle = '#1a0606'; g.fill();
-      g.strokeStyle = '#4a1010'; g.lineWidth = L(0.0026); g.stroke();
-      g.save(); g.clip(); g.fillStyle = '#c8c0a0';
-      for (let i = 0; i < 6; i++) g.fillRect(x - w * 0.7 + i * w * 0.25, y - L(0.004), w * 0.14, L(0.004) + (i % 3) * L(0.0012));
-      g.restore();
-      break;
-    }
-    default: g.moveTo(x - w * 0.8, y); g.quadraticCurveTo(x, y + L(0.002), x + w * 0.8, y); g.stroke();
-  }
-  // a hint of lower lip under the closed shapes
-  if (['smile', 'flat', 'smirk', 'frown'].includes(style)) {
-    g.strokeStyle = lips;
-    g.lineWidth = L(0.0026);
-    g.beginPath();
-    const ly = py(FACE.lipBot + 0.004);
-    g.moveTo(x - w * 0.35, ly - L(0.001)); g.quadraticCurveTo(x, ly + L(0.002), x + w * 0.35, ly - L(0.001));
-    g.stroke();
-  }
+  g.moveTo(x - w * 0.8, y - L(0.004));
+  for (let i = 0; i <= 6; i++) g.lineTo(x - w * 0.8 + (i / 6) * w * 1.6, y - L(0.004) + (i % 2 ? -L(0.002) : L(0.001)));
+  g.quadraticCurveTo(x + w * 0.3, y + h, x - w * 0.8, y - L(0.004));
+  g.strokeStyle = lipTone(f, 'm', -0.1); g.lineWidth = L(0.005); g.stroke();
+  g.fillStyle = '#1a0606'; g.fill();
+  g.strokeStyle = '#4a1010'; g.lineWidth = L(0.0022); g.stroke();
+  g.save(); g.clip(); g.fillStyle = '#c8c0a0';
+  for (let i = 0; i < 6; i++) g.fillRect(x - w * 0.7 + i * w * 0.25, y - L(0.004), w * 0.14, L(0.004) + (i % 3) * L(0.0012));
+  g.restore();
 }
 
 // A beard: over the jaw and chin, up the cheeks, clear of the mouth.
 function beard(g, color) {
+  const hx = FACE.mouthW + 0.012; // the bare skin round the mouth
   g.fillStyle = color;
   g.beginPath();
   g.moveTo(px(-0.1), py(1.245));
   g.quadraticCurveTo(px(-0.1), py(1.14), px(0), py(1.128));
   g.quadraticCurveTo(px(0.1), py(1.14), px(0.1), py(1.245));
-  g.quadraticCurveTo(px(0.075), py(1.232), px(0.056), py(1.229));
+  g.quadraticCurveTo(px(0.075), py(1.232), px(hx), py(FACE.underNose));
   // round the mouth
-  g.lineTo(px(0.056), py(1.192)); g.quadraticCurveTo(px(0), py(1.176), px(-0.056), py(1.192)); g.lineTo(px(-0.056), py(1.229));
+  g.lineTo(px(hx), py(FACE.lipBot - 0.002)); g.quadraticCurveTo(px(0), py(FACE.lipBot - 0.018), px(-hx), py(FACE.lipBot - 0.002)); g.lineTo(px(-hx), py(FACE.underNose));
   g.quadraticCurveTo(px(-0.075), py(1.232), px(-0.1), py(1.245));
   g.fill();
   speckle(g, -0.1, 0.1, 1.13, 1.245, shade(color, 0.25) + '66', 380, 0.0011, true);
@@ -358,10 +433,11 @@ function moustache(g, color) {
   g.fillStyle = color;
   g.beginPath();
   g.moveTo(px(0), py(FACE.underNose - 0.001));
-  g.quadraticCurveTo(px(0.035), py(FACE.underNose), px(0.05), py(FACE.mouthY - 0.004));
-  g.quadraticCurveTo(px(0.03), py(FACE.lipTop + 0.001), px(0), py(FACE.lipTop + 0.002));
-  g.quadraticCurveTo(px(-0.03), py(FACE.lipTop + 0.001), px(-0.05), py(FACE.mouthY - 0.004));
-  g.quadraticCurveTo(px(-0.035), py(FACE.underNose), px(0), py(FACE.underNose - 0.001));
+  const w = FACE.mouthW;
+  g.quadraticCurveTo(px(w * 0.85), py(FACE.underNose), px(w + 0.009), py(FACE.mouthY - 0.004));
+  g.quadraticCurveTo(px(w * 0.7), py(FACE.lipTop + 0.001), px(0), py(FACE.lipTop + 0.002));
+  g.quadraticCurveTo(px(-w * 0.7), py(FACE.lipTop + 0.001), px(-w - 0.009), py(FACE.mouthY - 0.004));
+  g.quadraticCurveTo(px(-w * 0.85), py(FACE.underNose), px(0), py(FACE.underNose - 0.001));
   g.fill();
 }
 
@@ -405,6 +481,14 @@ function soft(g, x, y, r, c) {
   const gr = g.createRadialGradient(px(x), py(y), 0, px(x), py(y), L(r));
   gr.addColorStop(0, c); gr.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = gr; g.fillRect(px(x) - L(r), py(y) - L(r), L(r) * 2, L(r) * 2);
+}
+const smoothstep = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+// two '#rrggbb' colours mixed (t of the way to b), lightened or darkened by k, as css
+function mix(a, b, t, alpha = 1, k = 0) {
+  const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const A = rgb(a), B = rgb(b);
+  const c = A.map((v, i) => Math.max(0, Math.min(255, Math.round((v + (B[i] - v) * t) * (1 + k)))));
+  return `rgba(${c[0]},${c[1]},${c[2]},${alpha})`;
 }
 function rnd(seed) { let s = seed; return () => ((s = (s * 16807) % 2147483647) / 2147483647); }
 function speckle(g, x0, x1, y0, y1, c, n, r, jaw = false) {

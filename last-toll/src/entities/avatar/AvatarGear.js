@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { avatarAssets } from './AvatarAssets.js';
+import { FACES } from './FacePainter.js';
 
 // Gear fitted to the avatar's own shapes, built in bind space:
 //  - hats and helmets are shells shrink-wrapped over the head (and hair, when the hat
@@ -427,15 +428,16 @@ export function buildGear(look, sex, hair, regionsOf, shade) {
       }));
       rigid(b, 'HEAD__Skeleton', col('bandana', 0x8a2a24));
     } else if (g === 'glasses') {
-      // round frames over the eyes (see FACE in FacePainter), a bridge over the nose,
+      // round frames over the eyes (see FACES in FacePainter), a bridge over the nose,
       // arms back to the ears
-      const ey = 1.305, ex = 0.068, lz = 0.146;
+      const F = FACES[sex];
+      const ey = F.eyeY, ex = F.eyeX * 0.99, lz = 0.147, rx = 0.032, ry = 0.026;
       const frame = col('glasses', 0x1a1a1a);
       for (const sd of [-1, 1]) {
-        rigid(new THREE.TorusGeometry(1, 0.09, 5, 20), 'HEAD__Skeleton', frame, at(sd * ex, ey, lz - 0.004, 0.035, 0.028, 0.05));
-        rigid(bar(new THREE.Vector3(sd * 0.102, ey + 0.004, lz - 0.01), new THREE.Vector3(sd * 0.142, ey + 0.002, 0.0), 0.0028), 'HEAD__Skeleton', frame);
+        rigid(new THREE.TorusGeometry(1, 0.09, 5, 20), 'HEAD__Skeleton', frame, at(sd * ex, ey, lz - 0.004, rx, ry, 0.05));
+        rigid(bar(new THREE.Vector3(sd * (ex + rx), ey + 0.004, lz - 0.012), new THREE.Vector3(sd * 0.142, ey + 0.002, 0.0), 0.0028), 'HEAD__Skeleton', frame);
       }
-      rigid(bar(new THREE.Vector3(-0.034, ey + 0.006, lz + 0.002), new THREE.Vector3(0.034, ey + 0.006, lz + 0.002), 0.0028), 'HEAD__Skeleton', frame);
+      rigid(bar(new THREE.Vector3(-(ex - rx), ey + 0.006, lz + 0.002), new THREE.Vector3(ex - rx, ey + 0.006, lz + 0.002), 0.0028), 'HEAD__Skeleton', frame);
     } else if (g === 'vest') {
       const v = cached(`${sex}|vest`, () => vestShell(sex, regionsOf, 0.016));
       const c = col('vest', 0x2a2e33);
@@ -475,5 +477,7 @@ export function buildGear(look, sex, hair, regionsOf, shade) {
 
 // The Guard's eye-band, fitted to the head. The Guard wear it as a separate glowing piece.
 export function visorGeometry(sex) {
-  return cached(`${sex}|visor`, () => band(envelope(cloud(sex, 'bald', { ears: false })), { from: -1.4, to: 1.4, yTop: () => 1.336, yBot: () => 1.276, pad: 0.016, rows: 3, cols: 25, thick: 0.01 }));
+  // over the eyes, wherever this head's layout puts them
+  const ey = FACES[sex === 'f' ? 'f' : 'm'].eyeY;
+  return cached(`${sex}|visor`, () => band(envelope(cloud(sex, 'bald', { ears: false })), { from: -1.4, to: 1.4, yTop: () => ey + 0.037, yBot: () => ey - 0.022, pad: 0.016, rows: 3, cols: 25, thick: 0.01 }));
 }

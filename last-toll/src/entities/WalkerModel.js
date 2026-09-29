@@ -9,11 +9,11 @@ import { weaponModel } from '../world/Models.js';
 // drive the body; a pose layer on top reaches the arms of the dead, holds the Guard's
 // rifles and folds the crew's arms. Hit volumes are read from the bones in world space.
 //
-// The walkers come in two looks, a setting away: 'blocky' (boxes with painted pixel
-// skins, the default) or 'avatar' (the same bodies as the living, dead).
+// The walkers come in two looks, a setting away: 'avatar' (the same bodies as the
+// living, dead; the default) or 'blocky' (boxes with painted pixel skins).
 
-let walkerStyle = 'blocky';
-export function setWalkerStyle(s) { walkerStyle = s === 'avatar' ? 'avatar' : 'blocky'; }
+let walkerStyle = 'avatar';
+export function setWalkerStyle(s) { walkerStyle = s === 'blocky' ? 'blocky' : 'avatar'; }
 export function getWalkerStyle() { return walkerStyle; }
 
 const VISOR_MAT = new THREE.MeshBasicMaterial({ color: 0xff2a18 });
