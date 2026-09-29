@@ -137,6 +137,9 @@ src/
                        sky/fog/water/mist, models, batching
   entities/            player, walkers (skinned single-mesh bodies), horde AI, Living Guard soldiers and drones,
                        the Magnolia's crew
+  entities/avatar/     the new character bodies (prototype, not yet in play): avatar-style people built
+                       on one rig with painted faces, fitted gear and a pose layer, plus a blocky variant
+  assets/avatarData.js the rig, body parts and animations those bodies use (generated; see below)
   combat/              combat rules and the first-person view model
   game/                raid and hub orchestration, weapon stats and mods, container specs, loot,
                        inventory, profile/saves
@@ -168,7 +171,15 @@ Next steps for the VR build:
 5. Two-handed aiming for long guns, physical grab of walker collars and helmets.
 6. Comfort options: snap/smooth turn, teleport or smooth locomotion, tunneling vignette.
 
+## Credits
+
+The character rig, body meshes and animations in `src/assets/avatarData.js` are derived from Microsoft's
+Avatar Animation Pack and Avatar Rig for XNA Game Studio 4.0, used under the Microsoft Permissive License.
+See [`LICENSE-avatar.txt`](LICENSE-avatar.txt) for the full license and notices, and
+`tools/avatar/build-avatar.mjs` for how the file is built from the pack's FBX files. The faces, gear,
+colours and blocky bodies are this project's own.
+
 ---
 
 An independent project. Its melee and reload feel is inspired by *The Walking Dead: Saints & Sinners*;
-its world, story and characters are its own. Not affiliated with Skydance Interactive or AMC.
+its world, story and characters are its own. Not affiliated with Skydance Interactive, AMC or Microsoft.
