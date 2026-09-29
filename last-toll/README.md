@@ -75,6 +75,9 @@ board marks where to go. The captain's log keeps the story so far.
 
 ## How it plays
 
+- **Everyone is built on one rig.** The crew, the Guard and the dead share a skeleton and its animations,
+  with painted faces and gear fitted to the body. The dead are blocky by default; the captain's log has a
+  setting to make them look like the living instead.
 - **The dead only die when the brain goes.** Body hits stagger, knock down, or take legs (crawlers).
 - **Physical melee, translated to a mouse.** Hold to wind up; power comes from the swing and your stamina.
   A weak stab glances off the skull. Blades lodge in heads and have to be wrenched out (hold click and drag
@@ -135,10 +138,10 @@ src/
   data/                items, loot tables, recipes, zones, the story and crew dialogue
   world/               city and stilt-town generators, decals, collision + nav/flow fields,
                        sky/fog/water/mist, models, batching
-  entities/            player, walkers (skinned single-mesh bodies), horde AI, Living Guard soldiers and drones,
-                       the Magnolia's crew
-  entities/avatar/     the new character bodies (prototype, not yet in play): avatar-style people built
-                       on one rig with painted faces, fitted gear and a pose layer, plus a blocky variant
+  entities/            player, walkers, horde AI, Living Guard soldiers and drones, the Magnolia's crew;
+                       WalkerModel.js puts every one of them on the avatar rig
+  entities/avatar/     the character bodies: avatar-style people on one rig with painted faces, fitted
+                       gear, a pose layer (reaching dead, rifles held, arms folded) and the blocky dead
   assets/avatarData.js the rig, body parts and animations those bodies use (generated; see below)
   combat/              combat rules and the first-person view model
   game/                raid and hub orchestration, weapon stats and mods, container specs, loot,
@@ -148,6 +151,9 @@ src/
 ```
 
 Saves live in `localStorage` (`lasttoll.save.v1`).
+
+Every sound is synthesized in `core/Audio.js` for now. [`docs/AUDIO.md`](docs/AUDIO.md) lists the recorded
+sounds that would replace them, with file names.
 
 ## Road to VR
 

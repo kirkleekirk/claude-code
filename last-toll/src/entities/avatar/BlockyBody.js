@@ -27,7 +27,7 @@ const LIMBS = [
   ['foot', 'A', [0.03, 0, -0.08], [0.16, 0.1, 0.17]],
 ];
 const GEAR = {
-  helmet: [['helmet', 'HEAD__Skeleton', [-0.168, 1.33, -0.178], [0.168, 1.495, 0.158]]],
+  helmet: [['helmet', 'X_HELMET', [-0.168, 1.33, -0.178], [0.168, 1.495, 0.158]]],
   beanie: [['beanie', 'HEAD__Skeleton', [-0.162, 1.35, -0.172], [0.162, 1.5, 0.152]]],
   cap: [['cap', 'HEAD__Skeleton', [-0.158, 1.37, -0.168], [0.158, 1.48, 0.148]], ['bill', 'HEAD__Skeleton', [-0.12, 1.37, 0.14], [0.12, 1.39, 0.25]]],
   pack: [['pack', 'SC_BACKB__Skeleton', [-0.12, 0.84, -0.2], [0.12, 1.1, -0.1]]],
@@ -40,6 +40,14 @@ function partsFor(look) {
     out.push({ part, bone: `RT_${bone}__Skeleton`, min: [-b[0], a[1], a[2]], max: [-a[0], b[1], b[2]] });
   }
   for (const g of look.gear || []) for (const [part, bone, a, b] of GEAR[g] || []) out.push({ part, bone, min: a, max: b });
+  // what dismemberment leaves, each on a bone of its own and hidden until needed
+  if (look.gore) {
+    out.push({ part: 'stump', bone: 'X_NECK_STUMP', min: [-0.055, 1.11, -0.08], max: [0.055, 1.15, 0.03] });
+    for (const [s, bone] of [[1, 'X_HIP_STUMP_L'], [-1, 'X_HIP_STUMP_R']]) {
+      const x0 = s > 0 ? 0.02 : -0.16, x1 = s > 0 ? 0.16 : -0.02;
+      out.push({ part: 'thighStump', bone, min: [x0, 0.6, -0.07], max: [x1, 0.7, 0.07] });
+    }
+  }
   return out;
 }
 
@@ -151,11 +159,13 @@ function painter(look) {
         // her bottoms are shorts: bare legs (or leggings) below them
         col = sex === 'f' && p.y < 0.63 ? (legs || skin) : cloth(pants, p);
         break;
-      case 'foot': col = p.y > 0.085 && sex === 'f' ? (legs || skin) : shoe; break;
+      case 'foot': col = p.y > 0.085 && sex === 'f' && !(look.shoes && look.shoes.boots) ? (legs || skin) : shoe; break;
       case 'helmet': col = gc('helmet', 0x2a2e33); if (face !== 'top' && r >= h - 1) col = mul(col, 0.7); break;
       case 'beanie': col = gc('beanie', 0x3a3f34); if (face !== 'top' && r >= h - 2) col = mul(col, 0.8); break;
       case 'cap': col = gc('cap', 0x6a2a24); break;
       case 'bill': col = mul(gc('cap', 0x6a2a24), 0.75); break;
+      case 'stump': col = [90, 10, 10]; break;
+      case 'thighStump': col = face === 'bottom' ? [90, 10, 10] : cloth(pants, p); break;
       case 'pack': col = gc('pack', 0x4d5233); if (face === 'back' && r > h * 0.55 && c > 1 && c < w - 2) col = mul(col, 0.8); break;
       default: col = [255, 0, 255];
     }

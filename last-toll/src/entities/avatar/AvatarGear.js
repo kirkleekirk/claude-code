@@ -315,7 +315,8 @@ export function buildGear(look, sex, hair, regionsOf, shade) {
         return d.geo;
       });
       const c = col('helmet', 0x2a2e33);
-      rigid(s, 'HEAD__Skeleton', c);
+      // on its own bone, so it can be knocked off
+      rigid(s, 'X_HELMET', c);
       hidesHair = (x, y, z) => y > rim(Math.atan2(x, z)) - 0.012;
     } else if (g === 'beanie') {
       const rim = rimLine(1.372, 1.3);
@@ -385,8 +386,7 @@ export function buildGear(look, sex, hair, regionsOf, shade) {
       for (const s of [-1, 1]) rigid(new THREE.ConeGeometry(1, 1, 6), 'HEAD__Skeleton', shade(c, -0.08), at(s * 0.02, 1.25, back - 0.005, 0.02, 0.1, 0.012));
     } else if (g === 'visor') {
       // the Guard's red eye-band
-      const v = cached(K('visor'), () => band(envelope(cloud(sex, 'bald', { ears: false })), { from: -1.4, to: 1.4, yTop: () => 1.336, yBot: () => 1.276, pad: 0.016, rows: 3, cols: 25, thick: 0.01 }));
-      rigid(v, 'HEAD__Skeleton', col('visor', 0xd8281c));
+      rigid(visorGeometry(sex), 'HEAD__Skeleton', col('visor', 0xd8281c));
     } else if (g === 'bandana') {
       // over the nose and mouth, hanging to a point under the chin
       const b = cached(K('bandana'), () => band(envelope(cloud(sex, 'bald', { ears: false })), {
@@ -423,5 +423,21 @@ export function buildGear(look, sex, hair, regionsOf, shade) {
       rigid(new RoundedBoxGeometry(1, 1, 1, 2, 0.3), 'BACKB__Skeleton', shade(c, -0.25), at(0, 1.1, back - 0.06, 0.24, 0.06, 0.09));
     }
   }
+  // what dismemberment leaves: a raw neck, and the tops of the thighs; each on its own
+  // bone, hidden until the head or legs come off
+  if (look.gore) {
+    const raw = 0x5a0a0a;
+    rigid(new THREE.CylinderGeometry(0.058, 0.064, 0.035, 12), 'X_NECK_STUMP', raw, at(0, 1.13, -0.02));
+    const pants = (look.bottoms && look.bottoms.color) ?? 0x3a4a5a;
+    for (const [s, bone] of [[1, 'X_HIP_STUMP_L'], [-1, 'X_HIP_STUMP_R']]) {
+      rigid(new THREE.CylinderGeometry(0.078, 0.074, 0.09, 12), bone, pants, at(s * 0.09, 0.665, 0));
+      rigid(new THREE.CylinderGeometry(0.07, 0.07, 0.02, 12), bone, raw, at(s * 0.09, 0.615, 0));
+    }
+  }
   return { pieces, hidesHair };
+}
+
+// The Guard's eye-band, fitted to the head. The Guard wear it as a separate glowing piece.
+export function visorGeometry(sex) {
+  return cached(`${sex}|visor`, () => band(envelope(cloud(sex, 'bald', { ears: false })), { from: -1.4, to: 1.4, yTop: () => 1.336, yBot: () => 1.276, pad: 0.016, rows: 3, cols: 25, thick: 0.01 }));
 }

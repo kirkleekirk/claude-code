@@ -269,8 +269,12 @@ export class Horde {
         }
       }
 
-      if (!far || w.state === 'chase') {
-        w.model.animate(sdt, {
+      // walkers past arm's length of the action pose every other frame
+      w.animDt = (w.animDt || 0) + sdt;
+      if ((!far || w.state === 'chase') && (dist < 18 || (this.frame + w.id) % 2 === 0)) {
+        const adt = Math.min(w.animDt, 0.25);
+        w.animDt = 0;
+        w.model.animate(adt, {
           speed: Math.hypot(w.vel.x, w.vel.z),
           chase: w.state === 'chase',
           lunge: w.state === 'lunge' ? Math.min(1, w.t / 0.3) : 0,
@@ -878,7 +882,7 @@ export class Horde {
       const perp = Math.abs(rx * d.z - rz * d.x);
       if (perp > 2.5) continue;
       const v = w.volumes();
-      const headR = (w.helmet ? 0.16 : 0.14) + pad * 1.2;
+      const headR = w.model.headRadius + (w.helmet ? 0.02 : 0) + pad * 1.2;
       let t = raySphere(o.x, o.y, o.z, d.x, d.y, d.z, v.head.x, v.head.y, v.head.z, headR);
       if (t >= 0 && t < bestT) { bestT = t; best = { walker: w, part: 'head', t }; }
       t = rayCapsule(o, d, v.hips, v.neck, 0.2 + pad);

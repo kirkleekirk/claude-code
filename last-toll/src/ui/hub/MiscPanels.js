@@ -104,6 +104,7 @@ export class JournalPanel {
         <label for="set-vol">Volume<input id="set-vol" type="range" min="0" max="1" step="0.05" value="${st.volume}" data-set="volume"><span class="num">${Math.round(st.volume * 100)}</span></label>
         <label for="set-fov">Field of view<input id="set-fov" type="range" min="60" max="100" step="1" value="${st.fov}" data-set="fov"><span class="num">${st.fov}</span></label>
         <label for="set-voices">Crew voices<input id="set-voices" type="checkbox" ${st.voices !== false ? 'checked' : ''} data-set="voices"><span class="fine">Read lines aloud</span></label>
+        <label for="set-walkers">The dead<select id="set-walkers" data-set="walkers"><option value="blocky" ${st.walkers !== 'avatar' ? 'selected' : ''}>Blocky</option><option value="avatar" ${st.walkers === 'avatar' ? 'selected' : ''}>Like the living</option></select><span class="fine">From the next trip</span></label>
       </div>
       <h4>How it works</h4>
       ${HOWTO}
@@ -117,6 +118,12 @@ export class JournalPanel {
   _input(e) {
     const k = e.target.dataset.set;
     if (!k) return;
+    if (e.target.tagName === 'SELECT') {
+      this.p.settings[k] = e.target.value;
+      this.hub.app.applySettings();
+      saveProfile(this.p);
+      return;
+    }
     if (e.target.type === 'checkbox') {
       this.p.settings[k] = e.target.checked;
       if (!e.target.checked) this.hub.audio.hush();

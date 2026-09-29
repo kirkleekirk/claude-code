@@ -7,7 +7,7 @@ export default defineConfig(({ mode }) => ({
   build: {
     outDir: mode === 'artifact' ? 'dist-artifact' : 'dist',
     emptyOutDir: true,
-    chunkSizeWarningLimit: 2000,
+    chunkSizeWarningLimit: 3000,
     rollupOptions: mode === 'artifact' ? { external: ['three'] } : {},
   },
 }));

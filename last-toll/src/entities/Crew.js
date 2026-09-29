@@ -30,7 +30,7 @@ export class Crew {
       model.mesh.castShadow = true;
       boat.scene.add(model.root);
       boat.world.addBoxC(x, 0.9, z, 0.55, 1.8, 0.55, { occlude: false, kind: 'furniture' });
-      const head = new THREE.Vector3(x, 1.62, z);
+      const head = new THREE.Vector3(x, model.headHeight, z);
       const hit = { x0: x - 0.38, x1: x + 0.38, y0: 0, y1: 1.95, z0: z - 0.38, z1: z + 0.38 };
       const st = {
         id, npc: true, label: c.name, center: new THREE.Vector3(x, 0, z), face: new THREE.Vector3(Math.sin(c.facing), 0, Math.cos(c.facing)),

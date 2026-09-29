@@ -91,6 +91,7 @@ export function buildAvatarGeometry(look) {
     if (region === 'forearm' && top.sleeves === 'long') return top.color;
     if (region === 'upperarm' && top.sleeves === 'long') return top.color;
     if (region === 'hand' && look.gloves != null) return look.gloves;
+    if (region === 'foot' && look.shoes && look.shoes.boots) return look.shoes.color;
     if ((region === 'thigh' || region === 'shin') && bottoms.legs != null) return bottoms.legs;
     if (region === 'torso' && top.sleeves === 'none' && top.color != null) return top.color;
     return skin;
@@ -248,21 +249,38 @@ function bindPose() {
   return bindCache;
 }
 
-const _qa = new THREE.Quaternion(), _qm = new THREE.Quaternion(), _qp = new THREE.Quaternion(), _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
+const _qa = new THREE.Quaternion(), _q3 = new THREE.Quaternion(), _qm = new THREE.Quaternion(), _qp = new THREE.Quaternion(), _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
 const _mr = new THREE.Matrix4();
-const _p1 = new THREE.Vector3(), _p2 = new THREE.Vector3(), _ax = new THREE.Vector3(), _up = new THREE.Vector3(), _fo = new THREE.Vector3(), _ha = new THREE.Vector3(), _bd = new THREE.Vector3();
+const _p1 = new THREE.Vector3(), _p2 = new THREE.Vector3(), _p3 = new THREE.Vector3(), _p4 = new THREE.Vector3(), _p5 = new THREE.Vector3(), _p6 = new THREE.Vector3(), _p7 = new THREE.Vector3(), _p8 = new THREE.Vector3(), _p9 = new THREE.Vector3(), _p10 = new THREE.Vector3(), _p11 = new THREE.Vector3(), _down = new THREE.Vector3(0, -1, 0), _ax = new THREE.Vector3(), _up = new THREE.Vector3(), _fo = new THREE.Vector3(), _ha = new THREE.Vector3(), _bd = new THREE.Vector3();
 const X = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
 
+// the bones the pose layer reads or bends, every parent before its children
+const CHAIN = ['BASE', 'BACKA', 'BACKB', 'NECK', 'HEAD', 'LF_C', 'LF_S', 'LF_E', 'LF_W', 'RT_C', 'RT_S', 'RT_E', 'RT_W'].map((n) => `${n}__Skeleton`);
+
 // ---- the character --------------------------------------------------------------------------
+
+// A look's mesh and materials, built once and shared by everyone who wears that look.
+const builtCache = new Map();
+export function buildLook(look) {
+  const key = JSON.stringify(look);
+  let b = builtCache.get(key);
+  if (!b) {
+    // look.style 'blocky': a body of boxes with a pixel skin (see BlockyBody)
+    if (look.style === 'blocky') {
+      const k = buildBlocky(look);
+      b = { geo: k.geo, materials: [k.material, k.material] };
+    } else b = { geo: buildAvatarGeometry(look), materials: avatarMaterials(look.face) };
+    builtCache.set(key, b);
+  }
+  return b;
+}
 
 export class AvatarModel {
   constructor(look) {
     const A = avatarAssets();
     this.look = look;
     this.root = new THREE.Group();
-    // look.style 'blocky': a body of boxes with a pixel skin (see BlockyBody)
-    const blocky = look.style === 'blocky' ? buildBlocky(look) : null;
-    const geo = blocky ? blocky.geo : buildAvatarGeometry(look);
+    const built = buildLook(look);
     // bones: a fresh copy of the rig in its rest pose
     const bones = A.rest.map((r, i) => {
       const b = new THREE.Bone();
@@ -274,15 +292,16 @@ export class AvatarModel {
     this.bones = bones;
     this.byName = Object.fromEntries(bones.map((b) => [b.name, b]));
     const skeleton = new THREE.Skeleton(bones, A.boneInverses);
-    this.materials = blocky ? [blocky.material, blocky.material] : avatarMaterials(look.face);
-    const mesh = new THREE.SkinnedMesh(geo, this.materials[0]);
+    this.materials = built.materials;
+    const mesh = new THREE.SkinnedMesh(built.geo, this.materials[0]);
     mesh.add(bones[0]);
     mesh.bind(skeleton, new THREE.Matrix4());
     mesh.castShadow = true;
-    mesh.frustumCulled = false;
+    // big enough for any pose, lying down included (model units, before scaling)
+    mesh.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.7, 0), 1.6);
     this.mesh = mesh;
-    const s = HEIGHT * (look.height || 1);
-    this.root.scale.setScalar(s);
+    this.scale = HEIGHT * (look.height || 1);
+    this.root.scale.setScalar(this.scale);
     this.root.add(mesh);
     this.mixer = new THREE.AnimationMixer(mesh);
     this.actions = {};
@@ -292,17 +311,42 @@ export class AvatarModel {
     this.neck = this.byName.NECK__Skeleton;
     this.hips = this.byName.BASE__Skeleton;
     this.chest = this.byName.BACKB__Skeleton;
+    // where the head is, for hit tests and cameras (world units, standing)
+    this.headHeight = 1.32 * this.scale;
+    this.headRadius = 0.15 * this.scale;
+    // gore and helmets hang on bones of their own; the stumps start hidden
+    if (look.gore) for (const b of ['X_NECK_STUMP', 'X_HIP_STUMP_L', 'X_HIP_STUMP_R']) this.hide(b);
     // The pose layer, laid over whatever clip is playing (all in radians or 0..1):
     //  reach / reachL / reachR  arms held out in front (the dead reaching for you)
     //  lift, spread             how high and how wide the reaching arms are held
-    //  sway                     a slow, loose bob of the reaching arms
+    //  sway, swayRate           a loose bob of the reaching arms, and how fast
     //  lean                     the spine bent forward (negative: back)
     //  tilt                     the head lolled to one side
     //  yaw, pitch               the head turned and nodded (see lookAt)
-    this.layer = { reach: 0, reachL: null, reachR: null, lift: 0, spread: 0, sway: 0, lean: 0, tilt: 0, yaw: 0, pitch: 0 };
+    //  handL / handR            { at | obj | local, pole, w } puts a hand on a world point,
+    //                           an object, or a point of the model's space; pole is the
+    //                           way the elbow points, in the model's space (two-bone IK)
+    this.layer = { reach: 0, reachL: null, reachR: null, lift: 0, spread: 0, sway: 0, swayRate: 1, lean: 0, tilt: 0, yaw: 0, pitch: 0, handL: null, handR: null };
     this.time = Math.random() * 10;
     this._saved = new Map();
+    this._chain = CHAIN.map((n) => this.byName[n]);
+    this._ci = new Map(this._chain.map((b, i) => [b, i]));
+    this._clean = 0;
   }
+
+  // An Object3D that follows a bone, placed at a point of the bind pose (model units) with
+  // the model's own axes. For props, markers and anything else held or worn.
+  attach(boneName, at = [0, 0, 0], obj = new THREE.Object3D()) {
+    const A = avatarAssets();
+    const i = A.index.get(boneName);
+    new THREE.Matrix4().copy(A.boneInverses[i]).multiply(new THREE.Matrix4().makeTranslation(at[0], at[1], at[2])).decompose(obj.position, obj.quaternion, obj.scale);
+    this.bones[i].add(obj);
+    return obj;
+  }
+
+  // Hide everything bound to a bone (and the bones below it) by scaling it away.
+  hide(boneName) { this.byName[boneName].scale.setScalar(1e-4); }
+  show(boneName) { this.byName[boneName].scale.setScalar(1); }
 
   action(name) {
     let a = this.actions[name];
@@ -365,58 +409,103 @@ export class AvatarModel {
   _layer() {
     const L = this.layer;
     const armL = L.reachL ?? L.reach, armR = L.reachR ?? L.reach;
-    if (!armL && !armR && !L.lean && !L.tilt && !L.yaw && !L.pitch) return;
-    this.root.updateMatrixWorld(true);
-    this.mesh.getWorldQuaternion(_qm);
+    if (!armL && !armR && !L.lean && !L.tilt && !L.yaw && !L.pitch && !L.handL && !L.handR) return;
+    // only the bones along the spine and arms are kept current here, lazily and in
+    // order (see _fresh); the renderer brings the rest up to date before drawing
+    this.mesh.updateWorldMatrix(true, false);
+    this._clean = 0;
+    _qm.setFromRotationMatrix(_mr.extractRotation(this.mesh.matrixWorld));
     const B = this.byName;
     if (L.lean) {
-      this._turn(B.BACKA__Skeleton, X, L.lean * 0.45);
-      this._turn(B.BACKB__Skeleton, X, L.lean * 0.55);
+      this._rotate(B.BACKA__Skeleton, _qa.setFromAxisAngle(X, L.lean * 0.45));
+      this._rotate(B.BACKB__Skeleton, _qa.setFromAxisAngle(X, L.lean * 0.55));
     }
     if (L.tilt || L.yaw || L.pitch) {
-      this._turn(B.NECK__Skeleton, Y, L.yaw * 0.4);
-      this._turn(B.HEAD__Skeleton, Y, L.yaw * 0.6);
-      this._turn(B.NECK__Skeleton, X, L.pitch * 0.4);
-      this._turn(B.HEAD__Skeleton, X, L.pitch * 0.6);
-      this._turn(B.NECK__Skeleton, Z, L.tilt * 0.4);
-      this._turn(B.HEAD__Skeleton, Z, L.tilt * 0.6);
+      // tilted, then nodded, then turned: the turn last, about the vertical
+      for (const [bone, k] of [[B.NECK__Skeleton, 0.4], [B.HEAD__Skeleton, 0.6]]) {
+        _qa.setFromAxisAngle(Y, L.yaw * k).multiply(_q3.setFromAxisAngle(X, L.pitch * k)).multiply(_q3.setFromAxisAngle(Z, L.tilt * k));
+        this._rotate(bone, _qa);
+      }
     }
-    if (armL) this._reach('LF', armL);
-    if (armR) this._reach('RT', armR);
+    if (L.handL) this._ik('LF', L.handL); else if (armL) this._reach('LF', armL);
+    if (L.handR) this._ik('RT', L.handR); else if (armR) this._reach('RT', armR);
   }
 
-  // Bend a bone about an axis of the model (not its own), keeping the rest of the pose.
-  _turn(bone, axis, angle) {
-    if (!angle) return;
+  // Bring the chain's world matrices up to date as far as `bone`, parents first.
+  _fresh(bone) {
+    const i = this._ci.get(bone);
+    if (i === undefined) return;
+    for (let k = this._clean; k <= i; k++) this._chain[k].updateWorldMatrix(false, false);
+    if (i >= this._clean) this._clean = i + 1;
+  }
+
+  // A bone of the chain was bent: it and everything after it needs recomputing.
+  _bent(bone) {
     this._save(bone);
-    _q2.setFromAxisAngle(_ax.copy(axis).applyQuaternion(_qm), angle);
-    _qp.setFromRotationMatrix(_mr.extractRotation(bone.parent.matrixWorld));
+    const i = this._ci.get(bone);
+    if (i < this._clean) this._clean = i;
+  }
+
+  // Two-bone IK: shoulder and elbow turned so the wrist lands on the target, the elbow
+  // bending toward h.pole (a direction in the model's space).
+  _ik(side, h) {
+    const w = h.w ?? 1;
+    if (w <= 0) return;
+    const S = this.byName[`${side}_S__Skeleton`], E = this.byName[`${side}_E__Skeleton`], W = this.byName[`${side}_W__Skeleton`];
+    this._fresh(W);
+    const a = _p1.setFromMatrixPosition(S.matrixWorld);
+    const b = _p2.setFromMatrixPosition(E.matrixWorld);
+    const c = _p3.setFromMatrixPosition(W.matrixWorld);
+    const l1 = a.distanceTo(b), l2 = b.distanceTo(c);
+    // the target: a world point, an object (a rifle's grip), or a point in the model's space
+    const at = h.obj ? h.obj.getWorldPosition(_p9) : h.local ? this.mesh.localToWorld(_p9.copy(h.local)) : h.at;
+    const dir = _p4.copy(at).sub(a);
+    const dist = Math.min(Math.max(dir.length(), 1e-3), (l1 + l2) * 0.999);
+    dir.normalize();
+    const cosA = Math.max(-1, Math.min(1, (l1 * l1 + dist * dist - l2 * l2) / (2 * l1 * dist)));
+    const pole = _ax.copy(h.pole || _down).applyQuaternion(_qm);
+    pole.addScaledVector(dir, -pole.dot(dir));
+    if (pole.lengthSq() < 1e-6) pole.set(0, -1, 0);
+    pole.normalize();
+    const elbow = _p5.copy(a).addScaledVector(dir, l1 * cosA).addScaledVector(pole, l1 * Math.sqrt(1 - cosA * cosA));
+    const hand = _p6.copy(a).addScaledVector(dir, dist);
+    this._swing(S, E, _p7.subVectors(elbow, a), w);
+    this._fresh(E);
+    this._swing(E, W, _p8.setFromMatrixPosition(E.matrixWorld).negate().add(hand), w);
+  }
+
+  // Bend a bone by a rotation given in the model's space, keeping the rest of the pose.
+  _rotate(bone, dModel) {
+    this._fresh(bone.parent);
+    this._bent(bone);
+    // the rotation in the world, then carried into the parent's frame:
     // local' = parent⁻¹ · Δ · parent · local
+    _q2.copy(_qm).multiply(dModel).multiply(_q3.copy(_qm).invert());
+    _qp.setFromRotationMatrix(_mr.extractRotation(bone.parent.matrixWorld));
     _q1.copy(_qp).invert().multiply(_q2).multiply(_qp);
     bone.quaternion.premultiply(_q1);
-    bone.updateMatrixWorld(true);
+  }
+
+  // Swing a bone so the joint below it points along a world direction (w: how far).
+  _swing(bone, child, want, w) {
+    this._fresh(child);
+    const a = _p10.setFromMatrixPosition(bone.matrixWorld);
+    const cur = _p11.setFromMatrixPosition(child.matrixWorld).sub(a).normalize();
+    want.normalize().lerp(cur, 1 - w).normalize();
+    this._bent(bone);
+    _q2.setFromUnitVectors(cur, want);
+    _qp.setFromRotationMatrix(_mr.extractRotation(bone.parent.matrixWorld));
+    _q1.copy(_qp).invert().multiply(_q2).multiply(_qp);
+    bone.quaternion.premultiply(_q1);
   }
 
   // Blend a bone toward a rotation given in the model's space.
   _set(bone, q, w) {
-    this._save(bone);
+    this._fresh(bone.parent);
+    this._bent(bone);
     _qp.setFromRotationMatrix(_mr.extractRotation(bone.parent.matrixWorld));
     _q1.copy(_qp).invert().multiply(_q2.copy(_qm).multiply(q));
     bone.quaternion.slerp(_q1, w);
-    bone.updateMatrixWorld(true);
-  }
-
-  // Swing a bone so the joint below it moves toward a direction of the model's space.
-  _aim(bone, child, dir, w) {
-    this._save(bone);
-    const a = _p1.setFromMatrixPosition(bone.matrixWorld), b = _p2.setFromMatrixPosition(child.matrixWorld);
-    const cur = b.sub(a).normalize();
-    const want = _ax.copy(dir).applyQuaternion(_qm);
-    _q2.setFromUnitVectors(cur, want.lerp(cur, 1 - w).normalize());
-    _qp.setFromRotationMatrix(_mr.extractRotation(bone.parent.matrixWorld));
-    _q1.copy(_qp).invert().multiply(_q2).multiply(_qp);
-    bone.quaternion.premultiply(_q1);
-    bone.updateMatrixWorld(true);
   }
 
   _save(bone) {
@@ -429,21 +518,23 @@ export class AvatarModel {
     const L = this.layer, B = bindPose(), A = avatarAssets();
     const iS = A.index.get(`${side}_S__Skeleton`), iE = A.index.get(`${side}_E__Skeleton`), iW = A.index.get(`${side}_W__Skeleton`);
     const sx = side === 'LF' ? 1 : -1;
-    const bob = L.sway * Math.sin(this.time * 2.6 + (side === 'LF' ? 0 : 1.9)) * 0.1;
+    const bob = L.sway * Math.sin(this.time * 2.6 * L.swayRate + (side === 'LF' ? 0 : 1.9)) * 0.1;
     _up.set(sx * (0.16 + L.spread), 0.06 + L.lift + bob, 1).normalize();
     _fo.set(sx * (0.04 + L.spread * 0.5), 0.1 + L.lift + bob * 1.5, 1).normalize();
     _ha.set(sx * 0.05, -0.35 + L.lift * 0.5, 1).normalize();
     const S = this.bones[iS], E = this.bones[iE], W = this.bones[iW];
     // upper arm and forearm: aimed from where the joints are now (the shoulder and elbow
     // bones carry no skin, so their bind matrices say nothing about the arm)
-    this._aim(S, E, _up, w);
-    this._aim(E, W, _fo, w);
+    this._swing(S, E, _up.applyQuaternion(_qm), w);
+    this._swing(E, W, _fo.applyQuaternion(_qm), w);
     // the hand, from its bind pose (a T-pose, palm down): limp at the wrist, palm down
     _bd.set(sx, 0, 0);
     this._set(W, _qa.setFromUnitVectors(_bd, _ha).multiply(B[iW].q), w);
   }
 
+  // The mesh and materials are shared with everyone wearing the same look; only the
+  // animation state is this character's own.
   dispose() {
-    this.mesh.geometry.dispose();
+    this.mixer.stopAllAction();
   }
 }

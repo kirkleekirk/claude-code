@@ -19,6 +19,14 @@ const b64ToBytes = (s) => {
 let promise = null;
 let assets = null;
 
+// [name, parent, point in bind space]
+const EXTRA = [
+  ['X_HELMET', 'HEAD__Skeleton', [0, 1.33, 0]],
+  ['X_NECK_STUMP', 'SC_NECK__Skeleton', [0, 1.13, -0.02]],
+  ['X_HIP_STUMP_L', 'SC_BASE__Skeleton', [0.09, 0.64, 0]],
+  ['X_HIP_STUMP_R', 'SC_BASE__Skeleton', [-0.09, 0.64, 0]],
+];
+
 export function avatarAssets() {
   if (!assets) throw new Error('avatar assets used before loadAvatarAssets() resolved');
   return assets;
@@ -90,6 +98,22 @@ async function load() {
   // bones no part binds still need an inverse: derive it from the rest pose
   top.updateMatrixWorld(true);
   const boneInverses = bones.map((b, i) => inverses.list[i] || b.matrixWorld.clone().invert());
+  const names = bones.map((b) => b.name);
+
+  // extra bones the game hides things with (helmets, the stumps left by dismemberment):
+  // each sits at a point of the bind pose with the model's own axes and follows its
+  // parent exactly, so scaling one to nothing hides only what's bound to it
+  for (const [name, parent, at] of EXTRA) {
+    const pi = index.get(parent);
+    const bind = new THREE.Matrix4().makeTranslation(at[0], at[1], at[2]);
+    const local = boneInverses[pi].clone().multiply(bind);
+    const p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
+    local.decompose(p, q, s);
+    index.set(name, names.length);
+    names.push(name);
+    rest.push({ p, q, s, parent: pi });
+    boneInverses.push(bind.clone().invert());
+  }
 
   // clips
   const rot = new Int16Array(b64ToBytes(ANIM_ROT).buffer);
@@ -111,7 +135,7 @@ async function load() {
   }
 
   derive(clips);
-  return { bones: bones.map((b) => b.name), index, rest, boneInverses, parts, clips };
+  return { bones: names, index, rest, boneInverses, parts, clips };
 }
 
 // ---- clips made from the pack's clips ---------------------------------------------------------

@@ -13,6 +13,8 @@ import {
 } from './game/Profile.js';
 import { fmtSec } from './ui/HUD.js';
 import { objective, LOG } from './data/story.js';
+import { loadAvatarAssets } from './entities/avatar/AvatarAssets.js';
+import { setWalkerStyle } from './entities/WalkerModel.js';
 
 // App shell: title → aboard the Magnolia → raid → summary → back aboard.
 // Everything renders into one WebGL canvas with DOM overlays for UI.
@@ -73,6 +75,7 @@ class App {
     const s = this.profile.settings;
     this.input.sensitivity = s.sens;
     this.audio.setVolume(s.volume);
+    setWalkerStyle(s.walkers);
     if (this.raid) {
       this.raid.baseFov = s.fov;
     }
@@ -381,5 +384,11 @@ class App {
   }
 }
 
-// Exposed for debugging from the console.
-window.__lastToll = new App();
+// The characters' rig, bodies and clips unpack before anything is built.
+// The app is exposed for debugging from the console.
+loadAvatarAssets().then(() => {
+  window.__lastToll = new App();
+}).catch((e) => {
+  console.error(e);
+  document.getElementById('app').textContent = `Last Toll couldn't load its characters: ${e.message}`;
+});

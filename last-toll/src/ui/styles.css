@@ -546,6 +546,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--brass)
 .zone-pick .lead small { font-size: 13px; color: var(--bone-dim); }
 
 .settings label input[type="checkbox"] { justify-self: start; width: 20px; height: 20px; accent-color: var(--brass); }
+.settings select { justify-self: start; background: rgba(0,0,0,0.35); color: var(--bone); border: 1px solid rgba(201,162,74,0.45); border-radius: 4px; padding: 5px 8px; font: inherit; font-size: 14px; }
 .station-ui .lead.now { margin: 6px 0 12px; padding: 10px 14px; display: grid; gap: 3px; border-left: 2px solid #f2d27a; background: rgba(240, 214, 106, 0.08); }
 .station-ui .lead.now span { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: #f2d27a; font-weight: 600; }
 .station-ui .lead.now b { font-size: 17px; color: var(--bone); font-weight: 600; line-height: 1.35; }

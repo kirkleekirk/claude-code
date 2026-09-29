@@ -386,7 +386,7 @@ export class GuardForce {
     if (faceX !== null) s.facing += wrapAngle(Math.atan2(faceX, faceZ) - s.facing) * Math.min(1, dt * 6);
     s.root.rotation.y = s.facing;
     if (dist < 70) {
-      s.model.animate(dt, { speed: Math.hypot(s.vel.x, s.vel.z), aim: s.aim, lookYaw: s.lookYaw, lookPitch: s.lookPitch, stagger: s.stagger > 0 ? 1 : 0 });
+      s.model.animate(dt, { speed: Math.hypot(s.vel.x, s.vel.z), vx: s.vel.x, vz: s.vel.z, aim: s.aim, lookYaw: s.lookYaw, lookPitch: s.lookPitch, stagger: s.stagger > 0 ? 1 : 0 });
     }
   }
 
@@ -561,7 +561,7 @@ export class GuardForce {
       if (along < -2 || along > bestT + 2) continue;
       if (Math.abs(rx * dir.z - rz * dir.x) > 2.2) continue;
       const v = s.volumes();
-      let t = raySphere(o.x, o.y, o.z, dir.x, dir.y, dir.z, v.head.x, v.head.y, v.head.z, 0.16);
+      let t = raySphere(o.x, o.y, o.z, dir.x, dir.y, dir.z, v.head.x, v.head.y, v.head.z, s.model.headRadius + 0.02);
       if (t >= 0 && t < bestT) { bestT = t; best = { soldier: s, part: 'head', t }; }
       t = rayCapsule(o, dir, v.hips, v.neck, 0.23);
       if (t >= 0 && t < bestT) { bestT = t; best = { soldier: s, part: 'body', t }; }

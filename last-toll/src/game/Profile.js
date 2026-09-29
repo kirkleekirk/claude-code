@@ -40,7 +40,7 @@ export function newProfile() {
     lastZone: 'cypress',
     lastResult: null,
     story: newStory(),
-    settings: { sens: 1, volume: 0.8, fov: 68, invertY: false, voices: true },
+    settings: { sens: 1, volume: 0.8, fov: 68, invertY: false, voices: true, walkers: 'blocky' },
   };
 }
 

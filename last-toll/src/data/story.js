@@ -80,26 +80,26 @@ export function objective(p) {
 
 // ---- The crew -------------------------------------------------------------------------
 
-// look: palette for the living variant of the walker model
+// look: an avatar look (see entities/avatar/AvatarModel.js); hunch: how far they stoop
 export const CREW = {
   remy: {
     name: 'Remy Theriot', role: 'Captain of the Magnolia',
     pos: [-2.25, -11.85], facing: 0.4, pose: 'smoke',
-    look: { skin: 0xb88a68, shirt: 0xd8d0bc, pants: 0x3a342c, hair: 0xd8d4cc, beard: 0xcfcac0, hat: 'cap', coat: 0x26304a, long: true, sleeves: true, hunch: 0.1 },
+    look: { sex: 'm', height: 0.97, build: 1.08, hunch: 0.08, skin: 0xd9a07a, hair: { style: 'short', color: 0xd8d4cc }, top: { color: 0x26304a, sleeves: 'long' }, bottoms: { color: 0x8a7a5a }, shoes: { color: 0x4a3222 }, gear: ['captain'], face: { eyes: 'hooded', iris: '#5a4a3a', brows: 'thick', browColor: '#cfcac0', mouth: 'smile', marks: ['beard', 'wrinkles', 'bags'], beardColor: '#d8d4cc' } },
     voice: { pitch: 0.55, rate: 0.86, lang: 'en-US' },
     barks: ['Evening.', 'Mind the line on the foredeck.', 'She creaks. She\'s allowed.', 'Water\'s low tonight.'],
   },
   odile: {
     name: 'Odile Marchand', role: 'The Magnolia\'s nurse',
     pos: [2.05, 4.9], facing: -2.5, pose: 'arms',
-    look: { skin: 0x6a4a36, shirt: 0x7c96a0, pants: 0x55646a, hair: 0x17120e, hat: 'wrap', hatColor: 0x7a2a3a, vest: 0xd8d4c8, sleeves: true, hunch: 0.02 },
+    look: { sex: 'f', hunch: 0.02, skin: 0x6b4a36, hair: { style: 'bald', color: 0x17120e }, top: { color: 0x3f6f78, sleeves: 'long' }, bottoms: { color: 0x55646a }, shoes: { color: 0x2a2a2a }, gear: ['wrap', 'glasses'], gearColor: { wrap: 0x7a2a3a }, face: { eyes: 'almond', iris: '#2a1a10', brows: 'arched', browColor: '#17120e', mouth: 'flat', lips: 'rgba(90,40,40,0.9)', marks: [] } },
     voice: { pitch: 1.05, rate: 0.95, lang: 'en-US' },
     barks: ['Wipe your boots.', 'Still in one piece?', 'Eat something hot.', 'Mm.'],
   },
   hale: {
     name: 'Isaac Hale', role: 'Staff Sergeant, 9th Garrison (deserted)',
     pos: [2.4, 9.7], facing: -2.1, pose: 'lean',
-    look: { skin: 0xa87a5a, shirt: 0x3a4048, pants: 0x2e3338, hair: 0x241c14, beard: 0x3a2e24, hat: 'beanie', hatColor: 0x2e3338, vest: 0x2a2e33, patch: 0x9a1e18, arm: 0x9a1e18, sleeves: true, hunch: 0.0 },
+    look: { sex: 'm', hunch: 0, skin: 0xa87a5a, hair: { style: 'buzz', color: 0x241c14 }, top: { color: 0x3a4048, sleeves: 'long' }, bottoms: { color: 0x2e3338 }, shoes: { color: 0x1e1e1e }, gear: ['beanie', 'vest'], gearColor: { beanie: 0x2e3338, vest: 0x2a2e33, patch: 0x9a1e18 }, face: { eyes: 'narrow', iris: '#3a2a1e', brows: 'heavy', browColor: '#241c14', mouth: 'flat', marks: ['stubble', 'scar'] } },
     voice: { pitch: 0.8, rate: 0.92, lang: 'en-US' },
     barks: ['Sergeant.', 'Keep your voice down near the rail.', 'Radio\'s quiet tonight.', 'Still breathing. Good.'],
   },
