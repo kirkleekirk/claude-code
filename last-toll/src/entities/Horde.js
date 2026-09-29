@@ -44,7 +44,7 @@ export class Walker {
     this.lastSeen = new THREE.Vector3();
     this.lostT = 0;
     this.attackCd = 0;
-    this.groanT = rng.range(2, 12);
+    this.groanT = rng.range(4, 20);
     this.stuckT = 0;
     this.stuckCheck = this.pos.clone();
     this.sidestepT = 0;
@@ -262,7 +262,7 @@ export class Horde {
       w.groanT -= sdt;
       if (w.groanT <= 0) {
         const chasing = w.state === 'chase' || w.state === 'lunge' || w.state === 'grab';
-        w.groanT = chasing ? rng.range(1.8, 4.5) : rng.range(5, 14);
+        w.groanT = chasing ? rng.range(2.5, 5.5) : rng.range(10, 26);
         if (dist < 30 && w.state !== 'dormant') {
           w.headPos(_v);
           this.audio.groan(_v, w.fresh ? 1.25 : rng.range(0.85, 1.1), chasing ? 0.85 : 0.35, rng.range(0.9, 1.7));

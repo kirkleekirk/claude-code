@@ -2,6 +2,7 @@ import './ui/styles.css';
 import * as THREE from 'three';
 import { Input } from './core/Input.js';
 import { Audio } from './core/Audio.js';
+import { Music } from './core/Music.js';
 import { Hub } from './game/Hub.js';
 import { HOWTO } from './ui/howto.js';
 import { Raid } from './game/Raid.js';
@@ -42,6 +43,7 @@ class App {
 
     this.input = new Input(renderer.domElement);
     this.audio = new Audio();
+    this.music = new Music();
     this.profile = loadProfile();
     this.hasSave = !!this.profile;
     if (!this.profile) this.profile = newProfile();
@@ -75,6 +77,7 @@ class App {
     const s = this.profile.settings;
     this.input.sensitivity = s.sens;
     this.audio.setVolume(s.volume);
+    this.music.setVolume(s.volume);
     setWalkerStyle(s.walkers);
     if (this.raid) {
       this.raid.baseFov = s.fov;
@@ -124,6 +127,7 @@ class App {
   showTitle() {
     this.state = 'title';
     this.hub.showTitle();
+    this.music.play('title');
     const p = this.profile;
     const o = this._overlay(`
       <div id="title">
@@ -173,6 +177,7 @@ class App {
   startHub(fromRaid = false) {
     this._clearOverlay();
     this.state = 'hub';
+    this.music.stop('title', 6);
     this.hub.board(fromRaid);
   }
 

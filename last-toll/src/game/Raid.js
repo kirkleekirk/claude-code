@@ -231,7 +231,7 @@ export class Raid {
     this.spawnT = 0;
     this.extractT = 0;
     this.deathT = 0;
-    this.ambT = 8;
+    this.ambT = 20;
     this.broadcastT = 25 + this.rng.range(0, 20);
     this.broadcasts = 0;
     this.pulseT = 0;
@@ -1023,7 +1023,7 @@ export class Raid {
     this.ambT -= dt;
     if (this.ambT > 0) return;
     const audio = this.app.audio, rng = this.rng;
-    this.ambT = rng.range(10, 24);
+    this.ambT = rng.range(30, 65);
     const swamp = this.zone.mood === 'swamp';
     const P = this.player.pos;
     const far = (d) => {
@@ -1033,7 +1033,7 @@ export class Raid {
     const pick = rng.weighted(swamp
       ? [['frogs', 4], ['gator', 1.2], ['creak', 2], ['chime', 1.2], ['splash', 2], ['groan', 1.5], ['scream', 0.5], ['shots', 0.5]]
       : [['creak', 2], ['chime', 1], ['groan', 2.5], ['scream', 0.8], ['shots', 1.2], ['dog', 0.8]]);
-    if (pick === 'frogs') { audio.frogs(); audio.frogs(); }
+    if (pick === 'frogs') audio.frogs();
     else if (pick === 'gator') audio.gatorBellow();
     else if (pick === 'creak') audio.creak();
     else if (pick === 'chime') audio.chime();

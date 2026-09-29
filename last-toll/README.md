@@ -16,8 +16,9 @@ to the water before curfew. At curfew the Guard runs its **Sweep**: the horns on
 drive every dead thing in the sector ahead of laser-armed soldiers and searchlight drones. Die out
 there and everything you carried stays behind.
 
-Everything is procedural: the city, the models, the textures and every sound are generated in code.
-There are no asset files.
+The city, the textures and the sound effects are generated in code. The character rig comes from an
+open-licensed avatar pack (see Credits), and the only other asset file is the title theme
+(`public/audio/title.mp3`).
 
 ## Run it
 
@@ -134,7 +135,7 @@ them by hand in VR.
 ```
 src/
   main.js              app shell: title → hub → raid → summary
-  core/                input, procedural audio, seeded RNG, math
+  core/                input, procedural audio, music, seeded RNG, math
   data/                items, loot tables, recipes, zones, the story and crew dialogue
   world/               city and stilt-town generators, decals, collision + nav/flow fields,
                        sky/fog/water/mist, models, batching
@@ -152,8 +153,9 @@ src/
 
 Saves live in `localStorage` (`lasttoll.save.v1`).
 
-Every sound is synthesized in `core/Audio.js` for now. [`docs/AUDIO.md`](docs/AUDIO.md) lists the recorded
-sounds that would replace them, with file names.
+Every sound effect is synthesized in `core/Audio.js` for now. [`docs/AUDIO.md`](docs/AUDIO.md) lists the recorded
+sounds that would replace them, with file names. Music tracks go in `public/audio/` and are played by
+`core/Music.js`; the title theme starts on the title screen and fades out as you board the Magnolia.
 
 ## Road to VR
 
@@ -184,6 +186,8 @@ Avatar Animation Pack and Avatar Rig for XNA Game Studio 4.0, used under the Mic
 See [`LICENSE-avatar.txt`](LICENSE-avatar.txt) for the full license and notices, and
 `tools/avatar/build-avatar.mjs` for how the file is built from the pack's FBX files. The faces, gear,
 colours and blocky bodies are this project's own.
+
+The title theme (`public/audio/title.mp3`) was made for the game by its author.
 
 ---
 

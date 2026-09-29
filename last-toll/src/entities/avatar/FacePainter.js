@@ -14,7 +14,9 @@ import { avatarAssets } from './AvatarAssets.js';
 //   eyes:  'round' | 'almond' | 'sleepy' | 'wide' | 'narrow' | 'hooded'
 //   brows: 'soft' | 'straight' | 'arched' | 'thick' | 'heavy' | 'worried' | 'angry' | 'none'
 //   mouth: 'smile' | 'flat' | 'smirk' | 'frown' | 'grin' | 'open' | 'snarl' | 'slack'
-//   nose:  'soft' | 'wide' | 'none'  (a shadow under the modelled nose; nothing is painted on it)
+//   nose:  'soft' | 'wide' | 'none'  (the nose is modelled; 'wide' adds nostril shading)
+//   lashes: true for a couple of lashes at the outer corners
+//   skin:  the skin colour (set by the model), for folds and shading in the skin's own shade
 //   buzz:  a hair colour: a buzz cut painted on the scalp (set by the model for buzz cuts)
 //   marks: 'freckles' | 'stubble' | 'beard' | 'moustache' | 'scar' | 'blush' | 'bags' | 'wrinkles' | 'blood' | 'veins' | 'rot'
 
@@ -38,7 +40,7 @@ export const FACE = {
   eyeTilt: 0.12, // outer corners up
   browY: 1.343, browW: 0.042,
   underNose: 1.228,
-  lipTop: 1.2205, mouthY: 1.2095, lipBot: 1.1945, mouthW: 0.043,
+  lipTop: 1.2205, mouthY: 1.2095, lipBot: 1.1945, mouthW: 0.046,
   chin: 1.14,
 };
 
@@ -155,7 +157,7 @@ function paint(g, f, talk) {
   if (marks.includes('rot')) blotches(g, 'rgba(60,70,40,0.35)', 14, 1.16, 1.42);
   if (marks.includes('veins')) veins(g);
   if (marks.includes('blush')) for (const s of [-1, 1]) soft(g, s * 0.066, 1.258, 0.022, 'rgba(210,90,90,0.32)');
-  if (marks.includes('bags')) for (const s of [-1, 1]) arc(g, s * FACE.eyeX, FACE.eyeY + 0.004, FACE.eyeW * 0.8, 0.75, Math.PI - 0.75, 'rgba(80,50,50,0.3)', 0.0018);
+  if (marks.includes('bags')) for (const s of [-1, 1]) soft(g, s * FACE.eyeX, FACE.eyeY - 0.022, 0.016, 'rgba(90,55,55,0.16)');
   if (marks.includes('wrinkles')) {
     for (const s of [-1, 1]) {
       for (const k of [-1, 0, 1]) line(g, s * (FACE.eyeX + FACE.eyeW * 1.15), FACE.eyeY + k * 0.006, s * (FACE.eyeX + FACE.eyeW * 1.5), FACE.eyeY + k * 0.011, 'rgba(70,45,35,0.35)', 0.0018);
@@ -169,12 +171,8 @@ function paint(g, f, talk) {
     line(g, 0.078, 1.35, 0.094, 1.268, 'rgba(120,50,50,0.8)', 0.0032);
     for (let i = 0; i < 4; i++) { const t = (i + 0.5) / 4; const x = 0.078 + 0.016 * t, y = 1.35 - 0.082 * t; line(g, x - 0.005, y - 0.002, x + 0.005, y + 0.002, 'rgba(120,50,50,0.7)', 0.0016); }
   }
-  // the nose is modelled: only a soft shadow under its tip, and nostrils if asked for
-  const nose = f.nose || 'soft';
-  if (nose !== 'none') {
-    soft(g, 0, FACE.underNose, 0.008, 'rgba(90,50,40,0.12)');
-    if (nose === 'wide') for (const s of [-1, 1]) soft(g, s * 0.011, FACE.underNose + 0.002, 0.004, 'rgba(70,35,30,0.5)');
-  }
+  // the nose is modelled and casts its own shade: nostrils only if asked for
+  if (f.nose === 'wide') for (const s of [-1, 1]) soft(g, s * 0.011, FACE.underNose + 0.002, 0.0035, 'rgba(70,35,30,0.35)');
   // eyes and brows, mirrored
   for (const s of [-1, 1]) {
     eye(g, s, f);
@@ -190,66 +188,78 @@ function paint(g, f, talk) {
 }
 
 // One eye. side: -1 on the model's right (canvas left), +1 on its left.
+// The eye is the space between an upper and a lower lid curve; the white, the iris and
+// the pupil are clipped to it, so nothing ever shows above the lid line drawn on top.
+const EYES = {
+  // half-width, how far the upper lid rises and the lower lid drops (in half-widths)
+  round: [1, 0.78, 0.5], almond: [1.06, 0.62, 0.36], sleepy: [1, 0.42, 0.38],
+  wide: [1.02, 0.9, 0.58], narrow: [1.08, 0.34, 0.22], hooded: [1.02, 0.5, 0.38],
+};
 function eye(g, side, f) {
-  const shape = f.eyes || 'round';
-  // half-width and half-height, in model units
-  const [w, h] = { round: [1, 0.72], almond: [1.06, 0.55], sleepy: [1, 0.42], wide: [1.02, 0.82], narrow: [1.08, 0.3], hooded: [1.02, 0.5] }[shape] || [1, 0.72];
-  const rx = L(FACE.eyeW * w), ry = L(FACE.eyeW * h);
+  const shape = EYES[f.eyes] ? f.eyes : 'round';
+  const [w, up, lo] = EYES[shape];
+  const R = L(FACE.eyeW), rx = R * w;
+  const x0 = -side * rx, x1 = side * rx; // inner and outer corners
+  const y0 = R * 0.04, y1 = -R * 0.06; // the outer corner sits a touch higher
+  // a quadratic's middle is half way to its control point: aim the lids' peaks
+  const cUp = [side * rx * 0.12, 2 * -R * up - (y0 + y1) / 2];
+  const cLo = [side * rx * 0.08, 2 * R * lo - (y0 + y1) / 2];
+  const upper = (ctx) => { ctx.moveTo(x0, y0); ctx.quadraticCurveTo(cUp[0], cUp[1], x1, y1); };
+  const skinDark = shade(f.skin || '#b88a68', -0.3);
   g.save();
   g.translate(px(side * FACE.eyeX), py(FACE.eyeY));
   g.rotate(-side * FACE.eyeTilt);
   if (f.dead) {
     // dark, sunken sockets
-    g.beginPath(); g.ellipse(0, 1, rx * 1.35, ry * 1.6, 0, 0, Math.PI * 2); g.fillStyle = 'rgba(40,20,25,0.5)'; g.fill();
+    g.beginPath(); g.ellipse(0, R * 0.05, rx * 1.3, R * (up + lo) * 1.1, 0, 0, Math.PI * 2); g.fillStyle = 'rgba(40,20,25,0.5)'; g.fill();
   }
-  // the white
+  // the eye itself
   g.beginPath();
-  g.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+  upper(g);
+  g.quadraticCurveTo(cLo[0], cLo[1], x0, y0);
+  g.closePath();
   g.fillStyle = f.dead ? '#cfd3b8' : '#f7f4ee';
   g.fill();
   g.save();
   g.clip();
-  // a big iris that fills the eye's height, as avatar eyes do
-  const ir = Math.min(rx * 0.58, ry * 1.05);
-  const ix = -side * rx * 0.08, iy = ry * 0.12; // a little inward and down: looking at you
+  const ir = R * 0.6, iy = R * 0.06; // looking straight out, the lid over the top of it
   if (!f.dead) {
-    g.beginPath(); g.arc(ix, iy, ir, 0, Math.PI * 2); g.fillStyle = f.iris || '#4a3526'; g.fill();
-    g.beginPath(); g.arc(ix, iy, ir, 0, Math.PI * 2); g.lineWidth = ir * 0.18; g.strokeStyle = shade(f.iris || '#4a3526', -0.45); g.stroke();
-    g.beginPath(); g.arc(ix, iy, ir * 0.45, 0, Math.PI * 2); g.fillStyle = '#0c0a0a'; g.fill();
-    g.beginPath(); g.arc(ix - ir * 0.35, iy - ir * 0.38, ir * 0.22, 0, Math.PI * 2); g.fillStyle = 'rgba(255,255,255,0.92)'; g.fill();
+    g.beginPath(); g.arc(0, iy, ir, 0, Math.PI * 2); g.fillStyle = f.iris || '#4a3526'; g.fill();
+    g.beginPath(); g.arc(0, iy, ir, 0, Math.PI * 2); g.lineWidth = ir * 0.16; g.strokeStyle = shade(f.iris || '#4a3526', -0.45); g.stroke();
+    g.beginPath(); g.arc(0, iy, ir * 0.46, 0, Math.PI * 2); g.fillStyle = '#0c0a0a'; g.fill();
+    g.beginPath(); g.arc(-ir * 0.32, iy - ir * 0.36, ir * 0.2, 0, Math.PI * 2); g.fillStyle = 'rgba(255,255,255,0.92)'; g.fill();
   } else {
     // milky, sightless
-    g.beginPath(); g.arc(ix, iy, ir * 0.9, 0, Math.PI * 2); g.fillStyle = 'rgba(205,208,190,0.95)'; g.fill();
-    g.beginPath(); g.arc(ix, iy, ir * 0.35, 0, Math.PI * 2); g.fillStyle = 'rgba(170,175,160,0.9)'; g.fill();
+    g.beginPath(); g.arc(0, iy, ir * 0.95, 0, Math.PI * 2); g.fillStyle = 'rgba(205,208,190,0.95)'; g.fill();
+    g.beginPath(); g.arc(0, iy, ir * 0.36, 0, Math.PI * 2); g.fillStyle = 'rgba(170,175,160,0.9)'; g.fill();
   }
-  // heavy lids for sleepy and hooded eyes
-  const lid = shape === 'sleepy' ? 0.45 : shape === 'hooded' ? 0.3 : 0;
-  if (lid) {
-    g.beginPath();
-    g.rect(-rx * 1.2, -ry * 1.2, rx * 2.4, ry * 2.4 * lid);
-    g.fillStyle = f.lidColor || 'rgba(150,100,80,0.9)';
-    g.fill();
-  }
+  // the lid's shadow on the eyeball
+  g.beginPath(); upper(g); g.lineWidth = R * 0.34; g.strokeStyle = 'rgba(60,40,30,0.18)'; g.stroke();
   g.restore();
-  // upper lid: a heavy dark line, flicked out at the outer corner
-  const top = -ry + ry * 2 * lid * 1.2;
-  g.strokeStyle = f.dead ? '#3a1818' : '#1a120e';
-  g.lineWidth = L(0.0048);
+  // a fold above hooded and sleepy eyes, in the skin's own shade
+  if (shape === 'hooded' || shape === 'sleepy') {
+    g.beginPath();
+    g.moveTo(x0 * 1.02, y0 - R * 0.12);
+    g.quadraticCurveTo(cUp[0], cUp[1] - R * 0.45, x1 * 1.04, y1 - R * 0.14);
+    g.lineWidth = L(0.0024); g.strokeStyle = skinDark; g.stroke();
+  }
+  // the upper lid: a heavy dark line, flicked out at the outer corner
+  const ink = f.dead ? '#3a1818' : '#1a120e';
+  g.beginPath(); upper(g);
+  g.lineWidth = L(0.0044); g.strokeStyle = ink; g.stroke();
   g.beginPath();
-  g.moveTo(-side * rx * 1.02, ry * 0.1);
-  g.quadraticCurveTo(-side * rx * 0.2, top - ry * 0.35, side * rx * 1.02, top * 0.35 - ry * 0.05);
-  g.stroke();
-  g.lineWidth = L(0.0026);
-  g.beginPath();
-  g.moveTo(side * rx * 0.9, top * 0.35 - ry * 0.02);
-  g.lineTo(side * (rx + L(0.007)), top * 0.35 - ry * 0.5);
-  g.stroke();
-  // lower lid: a faint line
-  g.strokeStyle = 'rgba(40,25,20,0.3)';
-  g.lineWidth = L(0.0016);
-  g.beginPath();
-  g.ellipse(0, 0, rx * 0.92, ry * 1.02, 0, Math.PI * 0.18, Math.PI * 0.82);
-  g.stroke();
+  g.moveTo(x1 - side * R * 0.08, y1 - R * 0.02);
+  g.lineTo(x1 + side * L(0.0065), y1 - R * 0.32);
+  g.lineWidth = L(0.003); g.stroke();
+  if (f.lashes) {
+    for (const k of [0.55, 0.75]) {
+      const t = k, mx = (1 - t) * (1 - t) * x0 + 2 * (1 - t) * t * cUp[0] + t * t * x1, my = (1 - t) * (1 - t) * y0 + 2 * (1 - t) * t * cUp[1] + t * t * y1;
+      g.beginPath(); g.moveTo(mx, my); g.lineTo(mx + side * L(0.004), my - L(0.005)); g.lineWidth = L(0.0018); g.stroke();
+    }
+  }
+  // the lower lid: a faint line
+  g.beginPath(); g.moveTo(x0, y0); g.quadraticCurveTo(cLo[0], cLo[1], x1, y1);
+  g.lineWidth = L(0.0015); g.strokeStyle = 'rgba(40,25,20,0.28)'; g.stroke();
   g.restore();
 }
 

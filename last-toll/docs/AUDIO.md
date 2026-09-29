@@ -1,6 +1,6 @@
 # Last Toll — audio list
 
-Every sound in the game is synthesized in code right now (`src/core/Audio.js`). Most files below
+Every sound effect in the game is synthesized in code right now (`src/core/Audio.js`). Most files below
 replace one of those placeholders; the few marked *(new)* would add a sound the game doesn't have yet.
 Send them in any order, a few at a time is fine. Anything not supplied keeps its synthesized version.
 
@@ -222,11 +222,11 @@ would replace it. I can export a script of every line on request.
 
 ## 12. Music — `music/` (optional, stereo)
 
-The game has no music yet.
+Tracks go in `public/audio/` and are played by `src/core/Music.js`.
 
 | File | What |
 |---|---|
-| `title` | the title screen |
+| ~~`title`~~ | the title screen. **Done:** `public/audio/title.mp3`, looping on the title, fading out as you board |
 | `magnolia` | evenings aboard, quiet (loop) |
 | `raid_calm` / `raid_danger` | layered loops the game crossfades by threat |
 | `sweep` | the Sweep is coming |

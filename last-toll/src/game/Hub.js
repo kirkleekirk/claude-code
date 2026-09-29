@@ -378,9 +378,9 @@ export class Hub {
 
   _ambience(dt) {
     if (this.mode === 'title' || !this.app.audio.enabled) return;
-    this.ambT = (this.ambT ?? 6) - dt;
+    this.ambT = (this.ambT ?? 15) - dt;
     if (this.ambT > 0) return;
-    this.ambT = 7 + Math.random() * 14;
+    this.ambT = 25 + Math.random() * 30;
     const r = Math.random();
     if (r < 0.45) this.audio.frogs();
     else if (r < 0.7) this.audio.creak();

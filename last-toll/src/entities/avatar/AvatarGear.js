@@ -370,7 +370,7 @@ export function buildGear(look, sex, hair, regionsOf, shade) {
         // an egg: its half-width, and its depth in front of and behind the middle
         const outline = (t, grow) => new THREE.Vector3(C.x + Math.sin(t) * (hx + grow), 0, C.z + Math.cos(t) * ((Math.cos(t) > 0 ? zf : zb) + grow));
         const thetas = around(cols);
-        const topY = 1.5;
+        const topY = 1.508; // just clear of the crown of the head
         // rows of [height(theta), grow, forward]
         const grid = (spec) => {
           const Q = [];
@@ -383,19 +383,19 @@ export function buildGear(look, sex, hair, regionsOf, shade) {
         const crownSpec = [];
         for (let j = 0; j <= 4; j++) {
           const f = j / 4;
-          crownSpec.push([(t) => rim(t) + 0.036 + (topY - rim(t) - 0.036) * f, 0.004 + 0.022 * f * f, 0.012 * f]);
+          crownSpec.push([(t) => rim(t) + 0.036 + (topY - rim(t) - 0.036) * f, 0.004 + 0.012 * f * f, 0.01 * f]);
         }
         const crownG = slab(grid(crownSpec), { wrap: true, outward: radial, off: inH(0.006), top: false });
         // the top: rings closing in to the middle
-        const ring = grid([[() => topY + 0.003, 0.026, 0.012]]).P;
-        const mid = new THREE.Vector3(C.x, topY + 0.003, C.z + 0.012);
+        const ring = grid([[() => topY + 0.003, 0.016, 0.01]]).P;
+        const mid = new THREE.Vector3(C.x, topY + 0.003, C.z + 0.01);
         const T = [];
         for (let j = 0; j < 3; j++) for (const q of ring) T.push(mid.clone().lerp(q, 1 - j * 0.5));
         const lidG = slab({ P: T, rows: 3, cols }, { wrap: true, outward: () => new THREE.Vector3(0, 1, 0), off: () => new THREE.Vector3(0, -0.008, 0), top: false });
         // the peak, off the front of the band
         const front = [];
         for (let i = 0; i <= 12; i++) { const t = -1.1 + (2.2 * i) / 12; const q = outline(t, 0.006); q.y = rim(t) - 0.001; front.push(q); }
-        const peakG = peak(front, { length: 0.085, drop: 0.03 });
+        const peakG = peak(front, { length: 0.07, drop: 0.024 });
         return [bandG, crownG, lidG, peakG, C.z + zf + 0.006];
       });
       const c = col('captain', 0x1e2230);

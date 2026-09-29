@@ -21,7 +21,7 @@ import { buildBlocky } from './BlockyBody.js';
 
 const HEIGHT = 1.2; // the rig is ~1.47 m; scaled, a grown-up avatar stands ~1.77 m
 const _m = new THREE.Matrix4();
-const _v = new THREE.Vector3();
+const _v = new THREE.Vector3(), _n = new THREE.Vector3();
 const _c = new THREE.Color();
 
 // body regions, by the bone a vertex follows most
@@ -64,6 +64,8 @@ function shadeHex(hex, k) {
 
 // ---- building the merged mesh ------------------------------------------------------------------
 
+
+const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 export function buildAvatarGeometry(look) {
   const A = avatarAssets();
@@ -137,6 +139,21 @@ export function buildAvatarGeometry(look) {
     nor.set(p.nor, o * 3);
     si.set(p.idx, o * 4);
     sw.set(p.wt, o * 4);
+    // the nose, pulled in: the rig's head carries a longer nose than the avatars it's
+    // modelled on, and a hard wedge in the middle of a cartoon face reads as uncanny
+    if (q.kind === 'head') {
+      for (let i = 0; i < p.count; i++) {
+        const k = (o + i) * 3;
+        const x = pos[k], y = pos[k + 1], z = pos[k + 2];
+        if (z < 0.137 || Math.abs(x) > 0.045 || y < 1.2 || y > 1.3) continue;
+        const wx = 1 - smooth(0.015, 0.045, Math.abs(x)), wy = smooth(1.2, 1.22, y) * (1 - smooth(1.27, 1.3, y));
+        const wgt = wx * wy;
+        pos[k + 2] = 0.137 + (z - 0.137) * (1 - 0.45 * wgt);
+        // and shaded like the cheeks around it, not as a dark wedge underneath
+        _v.set(nor[k], nor[k + 1], nor[k + 2]).lerp(_n.set(0, 0.2, 1).normalize(), 0.8 * wgt).normalize();
+        nor[k] = _v.x; nor[k + 1] = _v.y; nor[k + 2] = _v.z;
+      }
+    }
     // a heavier or slighter build: push everything below the neck out from the spine
     if (bodyScale !== 1 && q.kind !== 'head' && q.kind !== 'hair') {
       for (let i = 0; i < p.count; i++) {
@@ -267,7 +284,10 @@ export function buildLook(look) {
     } else {
       // a buzz cut is painted on with the face
       const buzz = look.hair && look.hair.style === 'buzz' ? `#${(look.hair.color ?? 0x3a2a1e).toString(16).padStart(6, '0')}` : null;
-      const face = buzz ? { ...(look.face || {}), buzz } : look.face;
+      const hex = (h) => `#${h.toString(16).padStart(6, '0')}`;
+      const face = { ...(look.face || {}), skin: hex(look.skin ?? 0xd9a582) };
+      if (buzz) face.buzz = buzz;
+      if (look.sex === 'f' && face.lashes === undefined) face.lashes = true;
       b = { geo: buildAvatarGeometry(look), materials: avatarMaterials(face, look.sex === 'f' ? 'f' : 'm') };
     }
     builtCache.set(key, b);
