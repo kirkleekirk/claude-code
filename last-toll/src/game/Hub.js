@@ -414,6 +414,9 @@ export class Hub {
     const d = cam.getWorldDirection(new THREE.Vector3());
     let best = null, bt = 2.6;
     for (const s of this.boat.stations) {
+      // benches, boards and chests answer only from the side you work them from, so nothing is
+      // picked through a wall (the crew you can talk to from anywhere)
+      if (!s.npc && (o.x - s.center.x) * s.face.x + (o.z - s.center.z) * s.face.z < -0.1) continue;
       const t = rayBox(o, d, s.hit);
       if (t !== null && t < bt) { bt = t; best = s; }
     }
