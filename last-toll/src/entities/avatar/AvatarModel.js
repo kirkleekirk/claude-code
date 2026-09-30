@@ -144,8 +144,10 @@ export function buildAvatarGeometry(look) {
       for (let i = 0; i < p.count; i++) {
         const k = (o + i) * 3;
         const x = pos[k], y = pos[k + 1], z = pos[k + 2];
-        if (z < 0.125 || Math.abs(x) > 0.04 || y < 1.205 || y > 1.3) continue;
-        const w = (1 - smooth(0.018, 0.04, Math.abs(x))) * smooth(1.205, 1.215, y) * (1 - smooth(1.285, 1.3, y));
+        if (z < 0.125 || Math.abs(x) > 0.04 || y < 1.205 || y > 1.34) continue;
+        // the nose, and more narrowly the bridge up between the eyes
+        const up = y > 1.28 ? 1 - smooth(1.28, 1.3, y) * smooth(0.012, 0.028, Math.abs(x)) : 1;
+        const w = (1 - smooth(0.018, 0.04, Math.abs(x))) * smooth(1.205, 1.215, y) * (1 - smooth(1.32, 1.34, y)) * up;
         if (w <= 0) continue;
         let nx = nor[k], ny = nor[k + 1], nz = nor[k + 2];
         if (ny < 0) ny *= 1 - 0.7 * w; // underside: tipped toward the front
@@ -233,6 +235,8 @@ function faceMat(map) {
       .replace('#include <color_fragment>', 'diffuseColor.rgb = mix( vColor.rgb, faceTexel.rgb, faceTexel.a );');
   };
   m.customProgramCacheKey = () => 'avatar-face';
+  m.userData.shared = true;
+  map.userData.shared = true;
   return m;
 }
 export function avatarMaterials(face, sex = 'm') {
@@ -283,6 +287,8 @@ export function buildLook(look) {
     // look.style 'blocky': a body of boxes with a pixel skin (see BlockyBody)
     if (look.style === 'blocky') {
       const k = buildBlocky(look);
+      k.material.userData.shared = true;
+      if (k.material.map) k.material.map.userData.shared = true;
       b = { geo: k.geo, materials: [k.material, k.material] };
     } else {
       // a buzz cut is painted on with the face
@@ -293,6 +299,8 @@ export function buildLook(look) {
       if (look.sex === 'f' && face.lashes === undefined) face.lashes = true;
       b = { geo: buildAvatarGeometry(look), materials: avatarMaterials(face, look.sex === 'f' ? 'f' : 'm') };
     }
+    // kept across raids: a trip's clean-up leaves these alone
+    b.geo.userData.shared = true;
     builtCache.set(key, b);
   }
   return b;

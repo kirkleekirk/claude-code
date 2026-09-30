@@ -95,6 +95,10 @@ async function load() {
     else parts[name] = part;
   });
 
+  // the heads are symmetric but their normals are not quite: one cheek and one side of the
+  // nose come out darker. Average each vertex's normal with its mirror twin's.
+  for (const name of ['m_head', 'f_head']) if (parts[name]) mirrorNormals(parts[name]);
+
   // bones no part binds still need an inverse: derive it from the rest pose
   top.updateMatrixWorld(true);
   const boneInverses = bones.map((b, i) => inverses.list[i] || b.matrixWorld.clone().invert());
@@ -191,4 +195,25 @@ function joinParts(a, b) {
     pos: cat(a.pos, b.pos, Float32Array), nor: cat(a.nor, b.nor, Float32Array), idx: cat(a.idx, b.idx, Uint16Array), wt: cat(a.wt, b.wt, Float32Array),
     uv: a.uv && b.uv ? cat(a.uv, b.uv, Float32Array) : null, index, count: a.count + b.count,
   };
+}
+
+function mirrorNormals(p) {
+  const key = (x, y, z) => `${Math.round(x * 1e4)},${Math.round(y * 1e4)},${Math.round(z * 1e4)}`;
+  const at = new Map();
+  for (let i = 0; i < p.count; i++) {
+    const k = key(p.pos[i * 3], p.pos[i * 3 + 1], p.pos[i * 3 + 2]);
+    if (!at.has(k)) at.set(k, []);
+    at.get(k).push(i);
+  }
+  const nor = p.nor.slice();
+  for (let i = 0; i < p.count; i++) {
+    const twins = at.get(key(-p.pos[i * 3], p.pos[i * 3 + 1], p.pos[i * 3 + 2]));
+    if (!twins) continue;
+    const j = twins[0];
+    let x = (p.nor[i * 3] - p.nor[j * 3]) / 2, y = (p.nor[i * 3 + 1] + p.nor[j * 3 + 1]) / 2, z = (p.nor[i * 3 + 2] + p.nor[j * 3 + 2]) / 2;
+    if (Math.abs(p.pos[i * 3]) < 1e-4) x = 0;
+    const l = Math.hypot(x, y, z) || 1;
+    nor[i * 3] = x / l; nor[i * 3 + 1] = y / l; nor[i * 3 + 2] = z / l;
+  }
+  p.nor = nor;
 }

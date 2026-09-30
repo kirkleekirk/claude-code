@@ -4,6 +4,7 @@ import { RNG } from '../core/rng.js';
 import { rayCapsule, raySphere, wrapAngle } from '../core/math.js';
 import { rollItem } from '../data/loot.js';
 import { makeItem } from '../data/items.js';
+import { disposeTree } from '../core/dispose.js';
 
 // Walkers: perception, pathing (flow fields), grabbing, crippling, dying.
 // The dead only die when the brain is destroyed. Body damage staggers,
@@ -766,6 +767,8 @@ export class Horde {
     if (this.corpses.length > 60) {
       const old = this.corpses.shift();
       this.group.remove(old.root);
+      old.model.av?.dispose?.();
+      disposeTree(old.root);
       const idx = this.walkers.indexOf(old);
       if (idx >= 0) this.walkers.splice(idx, 1);
     }

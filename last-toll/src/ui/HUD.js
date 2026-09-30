@@ -120,11 +120,12 @@ export class HUD {
   }
 
   toast(text, danger = false) {
-    // collapse repeats
-    const last = this.toastsEl.lastElementChild;
-    if (last && last.textContent === text) {
-      clearTimeout(last._t);
-      last._t = setTimeout(() => last.remove(), 2600);
+    // collapse repeats: the same line already showing moves to the bottom and stays longer
+    for (const old of this.toastsEl.children) {
+      if (old.textContent !== text) continue;
+      clearTimeout(old._t);
+      this.toastsEl.appendChild(old);
+      old._t = setTimeout(() => old.remove(), 2600);
       return;
     }
     const t = document.createElement('div');

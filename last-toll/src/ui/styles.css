@@ -100,7 +100,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--brass)
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.9);
 }
 #hud .big h2 { font-family: var(--display); font-weight: 400; font-size: clamp(34px, 6vw, 76px); margin: 0; letter-spacing: 0.04em; color: var(--bone); }
-#hud .big p { margin: 6px 0 0; font-size: 20px; color: var(--bone-dim); letter-spacing: 0.08em; text-transform: uppercase; }
+#hud .big p { margin: 6px auto 0; max-width: min(820px, 88vw); font-size: clamp(14px, 1.6vw, 20px); line-height: 1.4; color: var(--bone-dim); letter-spacing: 0.08em; text-transform: uppercase; text-wrap: balance; }
 #hud .big.show { opacity: 1; }
 #hud .big.sweep h2 { color: #e8604a; letter-spacing: 0.12em; }
 

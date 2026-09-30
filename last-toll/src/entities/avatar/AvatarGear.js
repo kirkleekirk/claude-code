@@ -479,5 +479,7 @@ export function buildGear(look, sex, hair, regionsOf, shade) {
 export function visorGeometry(sex) {
   // over the eyes, wherever this head's layout puts them
   const ey = FACES[sex === 'f' ? 'f' : 'm'].eyeY;
-  return cached(`${sex}|visor`, () => band(envelope(cloud(sex, 'bald', { ears: false })), { from: -1.4, to: 1.4, yTop: () => ey + 0.037, yBot: () => ey - 0.022, pad: 0.016, rows: 3, cols: 25, thick: 0.01 }));
+  const g = cached(`${sex}|visor`, () => band(envelope(cloud(sex, 'bald', { ears: false })), { from: -1.4, to: 1.4, yTop: () => ey + 0.037, yBot: () => ey - 0.022, pad: 0.016, rows: 3, cols: 25, thick: 0.01 }));
+  g.userData.shared = true;
+  return g;
 }

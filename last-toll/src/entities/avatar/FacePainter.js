@@ -40,7 +40,7 @@ export const FACES = {
     noseTip: 1.237,
     eyeX: 0.055, eyeY: 1.2965, eyeW: 0.029, // half-width of an eye
     eyeTilt: 0.1, // outer corners up
-    browX: 0.06, browY: 1.3315, browW: 0.043,
+    browX: 0.058, browY: 1.3255, browW: 0.042,
     underNose: 1.226,
     lipTop: 1.197, mouthY: 1.192, lipBot: 1.1845, mouthW: 0.041,
     chin: 1.14,
@@ -49,7 +49,7 @@ export const FACES = {
     noseTip: 1.237,
     eyeX: 0.057, eyeY: 1.2905, eyeW: 0.031,
     eyeTilt: 0.12,
-    browX: 0.057, browY: 1.3295, browW: 0.04,
+    browX: 0.057, browY: 1.3235, browW: 0.04,
     underNose: 1.226,
     lipTop: 1.2015, mouthY: 1.192, lipBot: 1.1805, mouthW: 0.047,
     chin: 1.14,
@@ -212,7 +212,10 @@ function paint(g, f, talk, sex) {
   mouth(g, talk ? 'open' : f.mouth || 'flat', f, sex);
   if (marks.includes('moustache')) moustache(g, f.beardColor || f.browColor || '#3a2a1e');
   if (marks.includes('blood')) {
-    blotches(g, 'rgba(110,10,10,0.7)', 5, 1.16, 1.24);
+    // round the mouth and down the chin, where it fed
+    soft(g, 0, FACE.mouthY - 0.006, FACE.mouthW + 0.006, 'rgba(100,12,10,0.42)');
+    const R = rnd(29);
+    for (let i = 0; i < 4; i++) soft(g, (R() - 0.5) * FACE.mouthW * 1.6, FACE.mouthY - 0.012 - R() * 0.03, 0.006 + R() * 0.006, 'rgba(95,8,8,0.55)');
     line(g, -0.02, FACE.mouthY - 0.004, -0.026, 1.15, 'rgba(110,10,10,0.8)', 0.004);
     line(g, 0.03, FACE.mouthY - 0.003, 0.034, 1.158, 'rgba(110,10,10,0.8)', 0.0034);
   }
@@ -221,10 +224,12 @@ function paint(g, f, talk, sex) {
 // One eye. side: -1 on the model's right (canvas left), +1 on its left.
 // The eye is the space between an upper and a lower lid curve; the white, the iris and
 // the pupil are clipped to it, so nothing ever shows above the lid line drawn on top.
+// The upper lid always rests on the top of the iris: white showing above it reads as
+// a startled stare.
 const EYES = {
   // half-width, how far the upper lid rises and the lower lid drops (in half-widths)
-  round: [1, 0.78, 0.5], almond: [1.06, 0.62, 0.36], sleepy: [1, 0.42, 0.38],
-  wide: [1.02, 0.9, 0.58], narrow: [1.08, 0.34, 0.22], hooded: [1.02, 0.5, 0.38],
+  round: [1, 0.56, 0.42], almond: [1.06, 0.5, 0.33], sleepy: [1, 0.36, 0.33],
+  wide: [1.04, 0.64, 0.46], narrow: [1.08, 0.3, 0.22], hooded: [1.02, 0.44, 0.34],
 };
 function eye(g, side, f) {
   const shape = EYES[f.eyes] ? f.eyes : 'round';
@@ -253,7 +258,8 @@ function eye(g, side, f) {
   g.fill();
   g.save();
   g.clip();
-  const ir = R * 0.6, iy = R * 0.06; // looking straight out, the lid over the top of it
+  // looking straight out, a little low, its top tucked under the upper lid
+  const iy = R * 0.1, ir = R * Math.min(0.66, Math.max(0.5, up + 0.07));
   if (!f.dead) {
     g.beginPath(); g.arc(0, iy, ir, 0, Math.PI * 2); g.fillStyle = f.iris || '#4a3526'; g.fill();
     g.beginPath(); g.arc(0, iy, ir, 0, Math.PI * 2); g.lineWidth = ir * 0.16; g.strokeStyle = shade(f.iris || '#4a3526', -0.45); g.stroke();
@@ -296,7 +302,7 @@ function eye(g, side, f) {
 
 function brow(g, side, style, color) {
   if (style === 'none') return;
-  const thick = { soft: 0.0058, straight: 0.0064, arched: 0.0054, thick: 0.0092, heavy: 0.011, worried: 0.0062, angry: 0.008 }[style] || 0.0062;
+  const thick = { soft: 0.0074, straight: 0.008, arched: 0.007, thick: 0.0108, heavy: 0.0126, worried: 0.0078, angry: 0.0096 }[style] || 0.0078;
   const inner = side * (FACE.browX - FACE.browW * 0.95), outer = side * (FACE.browX + FACE.browW * 0.95), mid = side * FACE.browX;
   const y = FACE.browY;
   let a, b, c; // heights at inner, middle, outer

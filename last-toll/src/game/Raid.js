@@ -18,6 +18,7 @@ import { def, makeItem } from '../data/items.js';
 import { zoneClock } from '../data/zones.js';
 import { packCapacity, maxHealthFor, countIn } from './Profile.js';
 import { clamp } from '../core/math.js';
+import { disposeTree } from '../core/dispose.js';
 
 // One trip into the flooded parish: from the skiff until you make it back to the
 // water, or the dead (or the Living Guard) take you. At curfew the Guard runs its
@@ -1113,13 +1114,18 @@ export class Raid {
   }
 
   dispose() {
+    // free everything this trip put on the GPU (the scene first: the parts below only unhook)
+    disposeTree(this.scene);
+    disposeTree(this.vm.scene);
+    // and the characters themselves, wherever they are (level of detail takes far ones out of the scene)
+    for (const w of this.horde.walkers) { w.model.av?.dispose?.(); disposeTree(w.model.root); }
+    for (const s of this.guards.soldiers) { s.model?.av?.dispose?.(); disposeTree(s.model?.root); }
     this.app.audio.stopAmbience();
     this.hud.root.remove();
     this.invUI.el.remove();
     this.mapUI.el.remove();
     this.guards.dispose();
     try { window.speechSynthesis?.cancel(); } catch (_) { /* optional */ }
-    this.city.mesh.traverse((o) => o.geometry && o.geometry.dispose());
   }
 }
 

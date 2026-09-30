@@ -37,6 +37,9 @@ export class Hub {
     this.app = app;
     this.boat = new Magnolia();
     this.scene = this.boat.scene;
+    // the talk light (see openStation), made up front so switching it on costs nothing
+    this.faceLight = new THREE.PointLight(0xffe4c8, 0, 3, 1.4);
+    this.scene.add(this.faceLight);
     this.camera = this.boat.camera;
     this.player = new Player({ camera: this.camera, world: this.boat.world, audio: app.audio, input: app.input });
     this.player.spawn(this.boat.spawn.pos, this.boat.spawn.yaw);
@@ -178,6 +181,9 @@ export class Hub {
       this.mode = 'walk';
       this._lockHint(true);
     }
+    // the click that brought you aboard (Begin, Continue, Back to the Magnolia) can take
+    // the mouse, so you can look around straight away
+    if (navigator.userActivation && navigator.userActivation.isActive) this.app.input.requestLock();
     this._status();
   }
 
@@ -200,6 +206,16 @@ export class Hub {
     // frame the station in the part of the screen its panel leaves open
     const view = st.npc ? this.boat.crew.talkView(st.id, from) : this._frame(st, this.panel.el);
     this._tweenTo(view.pos, lookQuat(view.pos, view.look, new THREE.Quaternion()), 0.55, null);
+    // a soft key light on whoever you're talking to, from beside the camera, so a face
+    // isn't lost against the lamps behind it
+    if (st.npc) {
+      const head = this.boat.crew.get(st.id).head;
+      this.faceLight.position.copy(view.pos).sub(head).setY(0).normalize().multiplyScalar(0.85).add(head);
+      this.faceLight.position.x += (view.pos.z - head.z) * 0.25;
+      this.faceLight.position.z -= (view.pos.x - head.x) * 0.25;
+      this.faceLight.position.y = head.y + 0.25;
+      this.faceLight.intensity = 2;
+    }
   }
 
   _frame(st, el) {
@@ -225,6 +241,7 @@ export class Hub {
   closeStation() {
     if (this.mode !== 'station') return;
     this._closePanel();
+    if (this.faceLight) this.faceLight.intensity = 0;
     this.hud.root.style.display = '';
     this.lidOpen = 0;
     this.mode = 'returning';
@@ -235,6 +252,9 @@ export class Hub {
     this.camera.position.copy(fromP);
     this.camera.quaternion.copy(fromQ);
     this._tweenTo(toP, toQ, 0.45, () => { this.mode = 'walk'; this._lockHint(true); });
+    // a click or key that closed it can take the mouse straight back, so looking around
+    // doesn't need another click (Esc can't: browsers keep it for letting go of the mouse)
+    if (navigator.userActivation && navigator.userActivation.isActive) this.app.input.requestLock();
     this._status();
   }
 

@@ -17,6 +17,7 @@ export function setWalkerStyle(s) { walkerStyle = s === 'blocky' ? 'blocky' : 'a
 export function getWalkerStyle() { return walkerStyle; }
 
 const VISOR_MAT = new THREE.MeshBasicMaterial({ color: 0xff2a18 });
+VISOR_MAT.userData.shared = true;
 
 // crew poses, as hand targets in the model's space (bind-pose units)
 const P = (x, y, z) => new THREE.Vector3(x, y, z);
