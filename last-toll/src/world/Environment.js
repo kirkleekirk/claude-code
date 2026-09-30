@@ -8,6 +8,32 @@ import { SKY, createSkyDome } from './Sky.js';
 // A mood picks the lighting track: dusk raids fall into night; night and swamp
 // raids start in the dark.
 
+// Bake meshes (each with its own transform) into one geometry: positions, normals and indices.
+function mergeMeshes(meshes) {
+  const pos = [], nor = [], idx = [];
+  let base = 0;
+  for (const mesh of meshes) {
+    mesh.updateMatrix();
+    const g = mesh.geometry.clone().applyMatrix4(mesh.matrix);
+    const p = g.attributes.position, n = g.attributes.normal;
+    for (let i = 0; i < p.count; i++) {
+      pos.push(p.getX(i), p.getY(i), p.getZ(i));
+      nor.push(n.getX(i), n.getY(i), n.getZ(i));
+    }
+    if (g.index) for (let i = 0; i < g.index.count; i++) idx.push(g.index.getX(i) + base);
+    else for (let i = 0; i < p.count; i++) idx.push(i + base);
+    base += p.count;
+    g.dispose();
+    mesh.geometry.dispose();
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  out.setIndex(idx);
+  out.computeBoundingSphere();
+  return out;
+}
+
 // Light and fog. Fog colour is only a fallback: fog takes the sky's colour (Sky.js).
 const DUSK = [
   { h: 16.0, fog: 0x8c8a7c, near: 30, far: 340, sun: 0xffdcb0, sunI: 2.2, hs: 0xa8b4c0, hg: 0x44443a, hi: 1.75, elev: 30, dark: 0 },
@@ -117,8 +143,11 @@ float waveH(vec2 p, float fine) {
   float t = wTime;
   float h = wv_n(p * 0.28 + vec2(t * 0.05, t * 0.03)) * 0.55;
   h += wv_n(mat2(0.8, 0.6, -0.6, 0.8) * p * 0.75 - vec2(t * 0.09, -t * 0.05)) * 0.3;
-  h += wv_n(mat2(0.6, -0.8, 0.8, 0.6) * p * 1.9 + vec2(-t * 0.16, t * 0.11)) * 0.14 * fine;
-  h += wv_n(p * 4.3 + vec2(t * 0.25, t * 0.2)) * 0.06 * fine;
+  // the fine chop only near the camera (it's faded out past 70 m anyway)
+  if (fine > 0.0) {
+    h += wv_n(mat2(0.6, -0.8, 0.8, 0.6) * p * 1.9 + vec2(-t * 0.16, t * 0.11)) * 0.14 * fine;
+    h += wv_n(p * 4.3 + vec2(t * 0.25, t * 0.2)) * 0.06 * fine;
+  }
   return h;
 }`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
@@ -280,12 +309,12 @@ export class Environment {
       add(new THREE.BoxGeometry(w1 + 0.4, 0.3, w1 + 0.4), 0, y1, 0);
     }
     // herder horns: a crown of flared speakers
+    const hornMat = new THREE.MeshBasicMaterial({ color: 0x14161a, fog: false, side: THREE.DoubleSide });
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2;
-      const horn = add(new THREE.CylinderGeometry(1.6, 0.35, 3.6, 8, 1, true), Math.cos(a) * 1.8, H + 1.2, Math.sin(a) * 1.8, 0, 0, 0);
+      const horn = add(new THREE.CylinderGeometry(1.6, 0.35, 3.6, 8, 1, true), Math.cos(a) * 1.8, H + 1.2, Math.sin(a) * 1.8, 0, 0, 0, hornMat);
       horn.lookAt(g.position.x + Math.cos(a) * 20, H + 1.2, g.position.z + Math.sin(a) * 20);
       horn.rotateX(Math.PI / 2);
-      horn.material = new THREE.MeshBasicMaterial({ color: 0x14161a, fog: false, side: THREE.DoubleSide });
     }
     add(new THREE.CylinderGeometry(0.3, 0.3, 12, 6), 0, H + 7, 0);
     // walled compound at the foot
@@ -317,6 +346,19 @@ export class Environment {
       this.beams.push(beam);
     }
     this.beamMat = beamMat;
+    // everything that doesn't move is one mesh per material: the lattice alone is ~130 boxes,
+    // which would otherwise be ~130 draw calls in every scene the mast stands over
+    const byMat = new Map();
+    for (const c of g.children) {
+      if (this.beams.includes(c)) continue;
+      if (!byMat.has(c.material)) byMat.set(c.material, []);
+      byMat.get(c.material).push(c);
+    }
+    for (const [mat, list] of byMat) {
+      if (list.length < 2) continue;
+      for (const c of list) g.remove(c);
+      g.add(new THREE.Mesh(mergeMeshes(list), mat));
+    }
     g.position.set(pos.x, -2, pos.z);
     this.mastGroup = g;
     this.mastPos = pos;

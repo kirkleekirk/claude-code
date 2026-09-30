@@ -98,7 +98,8 @@ export function installSkyFog() {
     } else fogFactor = smoothstep( fogNear, fogFar, vFogDepth );
   #endif
   vec3 fogC = fogColor;
-  if ( skyP.z > 0.5 ) {
+  // (no sky lookup where the fog is too thin to see: most of what's close)
+  if ( skyP.z > 0.5 && fogFactor > 0.003 ) {
     vec3 wd = normalize( ( vec4( vFogView, 0.0 ) * viewMatrix ).xyz );
     fogC = linearToOutputTexel( vec4( skyBase( wd ), 1.0 ) ).rgb;
   }
@@ -177,7 +178,8 @@ float sk_fbm(vec2 p, float fw) {
   float v = 0.0, a = 0.5, tot = 0.0;
   for (int i = 0; i < 6; i++) {
     float k = 1.0 - smoothstep(0.25, 0.7, fw);
-    v += a * k * sk_n(p) + a * (1.0 - k) * 0.5;
+    // (an octave faded right out is flat grey: no need to look up its noise)
+    v += k > 0.0 ? a * k * sk_n(p) + a * (1.0 - k) * 0.5 : a * 0.5;
     tot += a;
     p = mat2(1.6, 1.2, -1.2, 1.6) * p + 7.31;
     fw *= 2.0;
@@ -196,6 +198,7 @@ float sk_cirrus(vec2 uv, float fw) {
   float band = sk_fbm(vec2(p.x * 0.05, p.y * 0.3) + 3.1, fw * 0.3);
   float cov = mix(0.64, 0.42, cloudP.x);
   float mask = smoothstep(cov, cov + 0.16, band);
+  if (mask <= 0.0) return 0.0;  // clear sky between the bands
   vec2 q = vec2(p.x * 0.45, p.y * 5.0);
   q.y += (sk_fbm(p * 0.9 + 1.7, fw * 0.9) - 0.5) * 1.4;
   float fib = sk_fbm(q, fw * 5.0);
@@ -209,8 +212,9 @@ float sk_cirrus(vec2 uv, float fw) {
 float sk_deck(vec2 uv, float fw) {
   vec2 p = sk_rot(uv, cloudP.w * 0.6 + 0.4) * 1.1 + vec2(uTime * 0.006, 0.0) + nightP.w * 0.7;
   float n = sk_fbm(p * 0.8 + 11.0, fw * 0.8);
-  n += (sk_fbm(p * 3.1 - 4.0, fw * 3.1) - 0.5) * 0.25;
   float cov = mix(0.72, 0.28, cloudP.y);
+  if (n + 0.125 <= cov) return 0.0;  // the detail layer can't lift it to a cloud
+  n += (sk_fbm(p * 3.1 - 4.0, fw * 3.1) - 0.5) * 0.25;
   return smoothstep(cov, cov + 0.3, n);
 }
 
@@ -254,10 +258,28 @@ vec3 sk_milky(vec3 d) {
   return vec3(0.55, 0.6, 0.78) * v * 0.16;
 }
 
+vec4 sk_out(vec3 col) {
+  col += vec3(0.5, 0.52, 0.62) * nightP.z * 0.25;
+  // soft shoulder so the sun's glow rolls off instead of clipping
+  vec3 k = max(col - 0.8, 0.0);
+  col = min(col, vec3(0.8)) + 0.2 * (1.0 - exp(-k * 5.0));
+  vec4 o = linearToOutputTexel(vec4(col, 1.0));
+  o.rgb += (sk_h(gl_FragCoord.xy + fract(uTime) * 91.0) - 0.5) / 255.0;
+  return o;
+}
+
 void main() {
   vec3 d = normalize(vDir);
   float y = d.y;
   float ya = max(y, 0.0);
+  // the cloud planes' pixel footprint (taken before any pixel leaves early)
+  vec2 uv = d.xz / (ya + 0.1);
+  float fw = length(fwidth(uv));
+  // below the horizon: the haze, a little darker (nothing else shows there)
+  if (y < 0.0) {
+    gl_FragColor = sk_out(skyBase(vec3(d.x, 0.0, d.z)) * mix(1.0, 0.82, smoothstep(0.0, -0.1, y)));
+    return;
+  }
   vec3 col = skyBase(d);
   float mu = dot(d, skySun);
   vec2 dh = d.xz / max(length(d.xz), 1e-4);
@@ -293,8 +315,6 @@ void main() {
   col += night * clear;
 
   // clouds on high planes; parallel streaks meet at the horizon
-  vec2 uv = d.xz / (ya + 0.1);
-  float fw = length(fwidth(uv));
   float fade = smoothstep(0.0, 0.06, ya);
   float fwdS = pow(max(mu, 0.0), 3.0);
   float low = exp(-ya * 4.0);
@@ -319,7 +339,8 @@ void main() {
   }
 
   // stratus band just above the horizon, lit along its underside on the sun's side
-  if (cloudP.z > 0.001) {
+  // (only in the strip it can reach: just above the horizon)
+  if (cloudP.z > 0.001 && y > bandP.x - 0.005 && y < bandP.y + 0.04) {
     float az = atan(d.z, d.x);
     float wob = sk_fbm(vec2(az * 5.0, 1.3), 0.0);
     float lo = bandP.x, hi = bandP.y + (wob - 0.5) * 0.05;
@@ -332,15 +353,7 @@ void main() {
     col = mix(col, scol, clamp(sb, 0.0, 1.0) * cloudP.z);
   }
 
-  // below the horizon: the haze, a little darker
-  if (y < 0.0) col = skyBase(vec3(d.x, 0.0, d.z)) * mix(1.0, 0.82, smoothstep(0.0, -0.1, y));
-  col += vec3(0.5, 0.52, 0.62) * flash * 0.25;
-
-  // soft shoulder so the sun's glow rolls off instead of clipping
-  vec3 k = max(col - 0.8, 0.0);
-  col = min(col, vec3(0.8)) + 0.2 * (1.0 - exp(-k * 5.0));
-  gl_FragColor = linearToOutputTexel(vec4(col, 1.0));
-  gl_FragColor.rgb += (sk_h(gl_FragCoord.xy + fract(uTime) * 91.0) - 0.5) / 255.0;
+  gl_FragColor = sk_out(col);
 }`;
 
 export function createSkyDome(radius = 420) {
@@ -360,6 +373,8 @@ export function createSkyDome(radius = 420) {
     new THREE.ShaderMaterial({ uniforms, vertexShader: DOME_VERT, fragmentShader: DOME_FRAG, side: THREE.BackSide, depthWrite: false, fog: false, toneMapped: false }),
   );
   mesh.frustumCulled = false;
-  mesh.renderOrder = -10;
+  // drawn after everything opaque, at the far plane, so the clouds are only worked out
+  // for pixels where the sky actually shows
+  mesh.renderOrder = 100;
   return mesh;
 }

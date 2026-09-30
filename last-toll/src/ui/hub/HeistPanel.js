@@ -195,7 +195,9 @@ export class HeistPanel {
     const h = hub.p.heist || {};
     this.sel = h.pick || APPROACHES[0].id;
     this.hover = null;
-    this.el = frame('The Covenant Job', h.stage === 'done' ? 'Done' : h.scouted ? 'Planning' : 'Scouting', '', { side: 'left', wide: true });
+    this.el = (h.stage || 'locked') === 'locked'
+      ? frame('Hale\'s Corkboard', '', '', { side: 'left', wide: true })
+      : frame('The Covenant Job', h.stage === 'done' ? 'Done' : h.scouted ? 'Planning' : 'Scouting', '', { side: 'left', wide: true });
     hub.app.uiRoot.appendChild(this.el);
     this.el.addEventListener('click', (e) => this._click(e));
     this.render();

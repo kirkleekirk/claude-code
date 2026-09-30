@@ -425,7 +425,9 @@ export class Hub {
     if (best) {
       let sub = '';
       if (best.id === 'skiff') sub = ` — ${zoneById(this.p.lastZone || 'cypress').name}`;
-      html = `<span class="key">E</span><span>${best.verb}<b>${best.label}${sub}</b></span>`;
+      // Hale's board is just a corkboard until he's told you about the ship
+      const blank = best.id === 'heist' && (!this.p.heist || this.p.heist.stage === 'locked');
+      html = `<span class="key">E</span><span>${blank ? 'Look at' : best.verb}<b>${blank ? 'Hale\'s Corkboard' : best.label}${sub}</b></span>`;
     }
     if (this.hud.prompt.dataset.h !== html) { this.hud.prompt.innerHTML = html; this.hud.prompt.dataset.h = html; }
   }
