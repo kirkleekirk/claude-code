@@ -462,6 +462,13 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--brass)
 .repair .comps { grid-column: 1 / -1; grid-row: 2; }
 .repair .btn { grid-column: 2; grid-row: 1; }
 .repair.ok { grid-template-columns: 1fr; }
+/* the weapon bench's own upgrade, above the gun */
+.bench-up { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; align-items: center; font-size: 14px; color: var(--bone-dim); padding: 8px 10px; border: 1px solid rgba(201, 162, 74, 0.45); background: rgba(201, 162, 74, 0.07); border-radius: 4px; margin-bottom: 12px; }
+.bench-up b { color: var(--bone); font-weight: 600; }
+.bench-up small { display: block; font-size: 12px; color: var(--brass-light); margin-top: 2px; }
+.bench-up .comps { grid-column: 1 / -1; grid-row: 2; }
+.bench-up .btn { grid-column: 2; grid-row: 1; }
+.bench-up.max { grid-template-columns: 1fr; border-color: var(--line); background: none; }
 .slot-tabs { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 4px; margin-bottom: 10px; }
 .slot-tab { appearance: none; text-align: left; cursor: pointer; display: grid; gap: 1px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 3px; background: rgba(255, 255, 255, 0.025); color: var(--bone-dim); }
 .slot-tab span { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; color: var(--muted); }
@@ -579,3 +586,37 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--brass)
 .heist-list small { display: block; margin: 2px 0 0 1.3em; opacity: 0.72; font-size: 0.92em; line-height: 1.35; }
 .heist-esc { margin: 0; padding-left: 1.1em; line-height: 1.45; }
 .heist-esc li { margin: 3px 0; }
+
+/* ------------------------------------------------------------- sandbox */
+.sheet.sandbox section { margin: 0 0 20px; }
+.sheet.sandbox h4 { font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--bone-dim); font-weight: 600; margin: 14px 0 8px; }
+.sheet.sandbox h4 small { text-transform: none; letter-spacing: 0; color: var(--brass-light); font-weight: 500; }
+.sb-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.sb-chip, .sb-gun, .sb-go {
+  appearance: none; border: 1px solid var(--line-strong); background: rgba(255, 255, 255, 0.04); color: var(--bone);
+  border-radius: 4px; cursor: pointer; font: inherit; font-size: 15px; padding: 7px 12px; text-align: left;
+  transition: background 0.12s, border-color 0.12s;
+}
+.sb-chip:hover, .sb-gun:hover, .sb-go:hover { background: rgba(255, 255, 255, 0.09); border-color: var(--bone-dim); }
+.sb-chip i { display: inline-block; width: 12px; height: 12px; margin-right: 8px; vertical-align: -1px; border: 1px solid var(--bone-dim); border-radius: 2px; }
+.sb-chip.on { border-color: var(--brass); background: rgba(201, 162, 74, 0.14); }
+.sb-chip.on i { background: var(--brass); border-color: var(--brass-light); box-shadow: inset 0 0 0 2px #1a1408; }
+.sb-rack { margin: 10px 0; }
+.sb-gun { border-left: 3px solid var(--tc, var(--bone-dim)); font-size: 14px; padding: 6px 10px; }
+.sb-gun.on { background: rgba(201, 162, 74, 0.16); border-color: var(--brass); border-left-color: var(--tc, var(--brass)); }
+.sb-gun small { margin-left: 8px; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brass-light); }
+.sb-go { display: flex; flex-direction: column; gap: 2px; min-width: 170px; }
+.sb-go b { font-weight: 600; font-size: 16px; }
+.sb-go small { font-size: 12px; color: var(--bone-dim); }
+.sb-go.heist { border-color: rgba(163, 48, 42, 0.55); }
+.sb-held { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 10px 0 4px; }
+.sb-held span { border: 1px solid var(--line); border-radius: 4px; padding: 6px 10px; font-size: 14px; }
+.sb-held small { display: block; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--bone-dim); }
+.sb-keys { color: var(--bone-dim); font-size: 15px; line-height: 2; margin: 0; }
+.sb-keys .key { margin-left: 10px; }
+.sb-foot { display: flex; flex-wrap: wrap; gap: 8px; border-top: 1px solid var(--line); padding-top: 14px; }
+@media (max-width: 640px) { .sb-held { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* on a sandbox trip: what the extra keys do */
+#hud .sb-tag { position: absolute; right: 22px; top: 60px; font-size: 13px; color: var(--bone-dim); background: rgba(8, 10, 9, 0.55); border: 1px solid rgba(201, 162, 74, 0.35); border-radius: 4px; padding: 5px 10px; text-shadow: 0 1px 3px #000; }
+#hud .sb-tag b { color: var(--brass-light); letter-spacing: 0.14em; text-transform: uppercase; font-size: 12px; margin-right: 6px; }
+#hud .sb-tag .key { margin-left: 6px; }

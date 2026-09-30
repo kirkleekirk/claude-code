@@ -171,6 +171,8 @@ export class Hub {
     else this.boat.env.mastDead = false;
     this.save();
     this.hud.root.style.display = '';
+    this.hud.root.querySelector('.hh-boat').textContent = p.sandbox ? 'The Magnolia · Sandbox' : 'The Magnolia';
+    this.hud.root.querySelector('.hh-keys').innerHTML = `<span class="key">WASD</span> walk <span class="key">E</span> use <span class="key">Tab</span> stash <span class="key">Esc</span> ${p.sandbox ? 'sandbox and menu' : 'menu'}`;
     drawBoard(this.boat, p);
     drawHeistBoard(this.boat.heistFace, p);
     this.audio.startAmbience();

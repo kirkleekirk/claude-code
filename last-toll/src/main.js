@@ -10,8 +10,10 @@ import { zoneById } from './data/zones.js';
 import { def, makeItem } from './data/items.js';
 import { weaponStats } from './game/weapons.js';
 import {
-  newProfile, loadProfile, saveProfile, clearSave, maxHealthFor, applyRaidToContracts,
+  newProfile, loadProfile, loadSandbox, saveProfile, clearSave, maxHealthFor, applyRaidToContracts,
 } from './game/Profile.js';
+import { newSandboxProfile } from './game/Sandbox.js';
+import { showSandbox } from './ui/SandboxSheet.js';
 import { fmtSec } from './ui/HUD.js';
 import { objective, LOG } from './data/story.js';
 import { loadAvatarAssets } from './entities/avatar/AvatarAssets.js';
@@ -125,6 +127,8 @@ class App {
   // ---- title --------------------------------------------------------------------
 
   showTitle() {
+    // the title always belongs to your own game
+    if (this.profile.sandbox) { this.leaveSandbox(); return; }
     this.state = 'title';
     this.hub.showTitle();
     this.music.play('title');
@@ -137,6 +141,7 @@ class App {
           <p class="tag">A flooded parish, the dead, and the Living Guard: an army rebuilt on the old government's secrets that turned on everyone outside its walls. Every night it sweeps the parish, and whoever is still out there pays the toll.</p>
           <nav class="t-menu">
             ${this.hasSave ? `<button class="t-item primary" data-t="continue"><span>Continue</span><small>Day ${p.day} aboard the Magnolia</small></button><button class="t-item" data-t="new"><span>New game</span><small>Start over from the skiff</small></button>` : '<button class="t-item primary" data-t="new"><span>Begin</span><small>Wake up aboard the Magnolia</small></button>'}
+            <button class="t-item" data-t="sandbox"><span>Sandbox</span><small>Every weapon, every place, your rules. A separate save</small></button>
             <button class="t-item" data-t="howto"><span>How to survive</span><small>Weapons, tiers, the workbench, the Guard</small></button>
           </nav>
         </div>
@@ -161,8 +166,36 @@ class App {
         saveProfile(this.profile);
         this.applySettings();
         this.startHub();
-      } else if (b.dataset.t === 'howto') this._howto(() => this.showTitle());
+      } else if (b.dataset.t === 'sandbox') this.enterSandbox();
+      else if (b.dataset.t === 'howto') this._howto(() => this.showTitle());
     });
+  }
+
+  // ---- the sandbox: its own save, so trying things out never touches your game ----------
+
+  enterSandbox() {
+    if (this.profile.sandbox) { this.startHub(); return; }
+    const settings = this.profile.settings;
+    this.profile = loadSandbox() || newSandboxProfile(settings);
+    this.profile.settings = { ...settings };
+    saveProfile(this.profile);
+    this.applySettings();
+    this.startHub();
+  }
+
+  leaveSandbox() {
+    if (this.profile.sandbox) {
+      saveProfile(this.profile);
+      const settings = this.profile.settings;
+      const main = loadProfile();
+      this.hasSave = !!main;
+      this.profile = main || newProfile();
+      // settings changed in the sandbox come back with you
+      this.profile.settings = { ...this.profile.settings, ...settings };
+      if (main) saveProfile(this.profile);
+      this.applySettings();
+    }
+    this.showTitle();
   }
 
   _howto(back) {
@@ -186,9 +219,10 @@ class App {
     const s = this.profile.settings;
     const o = this._overlay(`
       <div class="sheet pause-card">
-        <h2>The Magnolia</h2>
-        <p class="sub">Day ${this.profile.day}. The river's quiet tonight.</p>
+        <h2>The Magnolia${this.profile.sandbox ? ' · Sandbox' : ''}</h2>
+        <p class="sub">${this.profile.sandbox ? 'The sandbox: your own game\'s save is untouched.' : `Day ${this.profile.day}. The river's quiet tonight.`}</p>
         <button class="btn primary go" data-m="resume">Back on deck</button>
+        ${this.profile.sandbox ? '<button class="btn go" data-m="sandbox">Sandbox: rules, armory, go anywhere</button>' : ''}
         <div class="settings">
           <label for="h-sens">Mouse sensitivity<input id="h-sens" type="range" min="0.3" max="2.5" step="0.05" value="${s.sens}" data-set="sens"><span class="num">${s.sens.toFixed(2)}</span></label>
           <label for="h-vol">Volume<input id="h-vol" type="range" min="0" max="1" step="0.05" value="${s.volume}" data-set="volume"><span class="num">${Math.round(s.volume * 100)}</span></label>
@@ -203,7 +237,11 @@ class App {
       this.audio.ui();
       if (b.dataset.m === 'resume') { this._clearOverlay(); this.hub.resume(); this.input.requestLock(); }
       else if (b.dataset.m === 'howto') this._howto(() => this.showHubMenu());
-      else if (b.dataset.m === 'title') { saveProfile(this.profile); this.hasSave = true; this.showTitle(); }
+      else if (b.dataset.m === 'sandbox') showSandbox(this, 'hub', () => this.showHubMenu());
+      else if (b.dataset.m === 'title') {
+        if (this.profile.sandbox) { this.leaveSandbox(); return; }
+        saveProfile(this.profile); this.hasSave = true; this.showTitle();
+      }
     });
     o.addEventListener('input', (e) => {
       const k = e.target.dataset.set;
@@ -217,6 +255,15 @@ class App {
   }
 
   resetGame() {
+    // in the sandbox, "start over" starts the sandbox over and leaves your own save alone
+    if (this.profile.sandbox) {
+      this.profile = newSandboxProfile(this.profile.settings);
+      saveProfile(this.profile);
+      this.applySettings();
+      this.hub._closePanel();
+      this.startHub();
+      return;
+    }
     clearSave();
     this.profile = newProfile();
     saveProfile(this.profile);
@@ -273,6 +320,7 @@ class App {
           <span class="key">F</span><span>Flashlight · <span class="key">H</span> heal · <span class="key">C</span> crouch</span>
         </div>
         <button class="btn primary go" data-p="resume">${first ? 'Click to begin' : 'Resume'}</button>
+        ${this.profile.sandbox ? '<button class="btn go" data-p="sandbox">Sandbox: rules and armory</button>' : ''}
         <div class="settings">
           <label for="p-sens">Mouse sensitivity<input id="p-sens" type="range" min="0.3" max="2.5" step="0.05" value="${s.sens}" data-set="sens"><span class="num">${s.sens.toFixed(2)}</span></label>
           <label for="p-vol">Volume<input id="p-vol" type="range" min="0" max="1" step="0.05" value="${s.volume}" data-set="volume"><span class="num">${Math.round(s.volume * 100)}</span></label>
@@ -285,6 +333,7 @@ class App {
       if (!b) return;
       this.audio.init();
       if (b.dataset.p === 'resume') this.input.requestLock();
+      else if (b.dataset.p === 'sandbox') showSandbox(this, 'raid', () => this._showPause(first));
       else if (b.dataset.p === 'abandon') {
         if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = 'Click again to abandon'; return; }
         this._clearOverlay();
@@ -358,6 +407,7 @@ class App {
     p.day++;
     p.nourishment = Math.max(0, p.nourishment - 15);
     p.health = Math.min(maxHealthFor(p.nourishment), p.health + 25);
+    if (p.sandbox) { p.nourishment = 100; p.health = maxHealthFor(100); }
     p.lastResult = out.result;
     saveProfile(p);
 

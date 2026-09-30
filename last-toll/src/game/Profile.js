@@ -10,6 +10,8 @@ import { newStory } from '../data/story.js';
 import { newHeist } from '../data/heist.js';
 
 const SAVE_KEY = 'lasttoll.save.v1';
+// the sandbox keeps its own save, so trying things out never touches your game
+const SANDBOX_KEY = 'lasttoll.sandbox.v1';
 export const STASH_CAP = 60;
 
 export function newProfile() {
@@ -78,9 +80,9 @@ function migrate(p) {
   return p;
 }
 
-export function loadProfile() {
+export function loadProfile(key = SAVE_KEY) {
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
+    const raw = localStorage.getItem(key);
     if (!raw) return null;
     const p = JSON.parse(raw);
     if (!p || (p.version !== 1 && p.version !== 2)) return null;
@@ -94,15 +96,20 @@ export function loadProfile() {
     p.stations = { ...base.stations, ...(p.stations || {}) };
     p.story = { ...base.story, ...(p.story || {}) };
     p.heist = { ...base.heist, ...(p.heist || {}) };
+    if (key === SANDBOX_KEY) p.sandbox = { god: true, ammo: true, sweep: false, hour: null, ...(p.sandbox || {}) };
     return p;
   } catch (_) {
     return null;
   }
 }
 
+export function loadSandbox() {
+  return loadProfile(SANDBOX_KEY);
+}
+
 export function saveProfile(p) {
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(p));
+    localStorage.setItem(p.sandbox ? SANDBOX_KEY : SAVE_KEY, JSON.stringify(p));
     return true;
   } catch (_) {
     return false;
@@ -114,7 +121,8 @@ export function clearSave() {
 }
 
 export function packCapacity(p) {
-  return PACK_BASE + PACK_STEP * (p.packLevel || 0);
+  // in the sandbox a full kit and its ammo always fit
+  return PACK_BASE + PACK_STEP * (p.packLevel || 0) + (p.sandbox ? 12 : 0);
 }
 
 export function maxHealthFor(nourishment) {

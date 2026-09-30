@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { def, SLOT_ORDER, TIERS } from '../../data/items.js';
 import { modsFor, modDef, SLOT_LABEL, QUALITY } from '../../data/mods.js';
-import { repairCost } from '../../data/recipes.js';
+import { repairCost, STATION_UPGRADES } from '../../data/recipes.js';
 import { payWithSalvage, planCost } from '../../game/Profile.js';
 import { weaponStats, applyMods, ratings, traits, clampLoaded } from '../../game/weapons.js';
 import { weaponModel } from '../../world/Models.js';
@@ -10,7 +10,10 @@ import { esc, tierBadge, costHTML, barsHTML, frame, BenchPreview } from './commo
 // The weapon workbench. Your gun lies on the mat; each part you can change has a
 // marker on the gun itself: point at the barrel to see barrels. Hovering a mod
 // bolts it on so you can see it and compare the numbers before you commit.
-// Mods you take off go in the parts drawer and cost nothing to put back.
+// Mods you take off go in the parts drawer and cost nothing to put back. The bench
+// itself upgrades from the same panel: better tools fit better mods.
+
+const BENCH_UNLOCKS = { 2: 'Standard and Special mods', 3: 'Fine and Experimental mods' };
 
 const _v = new THREE.Vector3();
 
@@ -83,8 +86,9 @@ export class GunsmithPanel {
     const head = this.el.querySelector('.st-head div');
     this.el.querySelector('.st-lvl')?.remove();
     head.insertAdjacentHTML('beforeend', `<span class="st-lvl">Level ${lvl} of 3</span>`);
+    const upgrade = this._upgradeHTML(lists, lvl);
     if (!this.pick) {
-      this.el.querySelector('.st-body').innerHTML = '<p class="dd">No weapons aboard. Bring one back, or build one at the workshop.</p>';
+      this.el.querySelector('.st-body').innerHTML = `<p class="dd">No weapons aboard. Bring one back, or build one at the workshop.</p>${upgrade}`;
       this.hs.innerHTML = '';
       return;
     }
@@ -136,7 +140,7 @@ export class GunsmithPanel {
         const drawer = p.parts[fm.id] || 0;
         const useAlt = fm.alt && planCost(lists, fm.alt).ok;
         const c = drawer ? { html: '<p class="dd">You have one in the parts drawer. Free to fit.</p>', ok: true } : costHTML(lists, useAlt ? fm.alt : fm.cost);
-        act = `<h4>Components</h4>${c.html}<button class="btn primary go" data-x="install" ${locked || !c.ok ? 'disabled' : ''}>${locked ? `Needs bench level ${q.bench}` : 'Install <span class="key">Enter</span>'}</button>`;
+        act = `<h4>Components</h4>${c.html}<button class="btn primary go" data-x="install" ${locked || !c.ok ? 'disabled' : ''}>${locked ? `Needs bench level ${q.bench}` : 'Install <span class="key">Enter</span>'}</button>${locked ? '<p class="dd">Upgrade the bench (top of this panel) to fit it.</p>' : ''}`;
       }
       const tr = traits(focus !== undefined ? cmpStats : stats);
       modsHTML = `
@@ -156,11 +160,38 @@ export class GunsmithPanel {
     }
     this.el.querySelector('.st-body').innerHTML = `
       <div class="wchips">${chips}</div>
+      ${upgrade}
       <div class="wsel"><h3>${esc(d.name)}</h3>${tierBadge(it.id)}</div>
       ${repair}
       ${modsHTML}`;
     this.el.querySelector('.st-foot').innerHTML = `Point at a part of the gun to see what fits there · <span class="key">W</span><span class="key">S</span> browse <span class="key">Enter</span> install`;
     this._hotspots();
+  }
+
+  // The bench's own upgrade: what the next level costs and what it lets you fit.
+  _upgradeHTML(lists, lvl) {
+    const next = STATION_UPGRADES.gunsmith[lvl + 1];
+    if (!next) return `<div class="bench-up max"><span>Bench level <b>${lvl}</b> of 3: a full shop. Every mod can be fitted here.</span></div>`;
+    const c = costHTML(lists, next);
+    return `<div class="bench-up"><span><b>Upgrade the bench to level ${lvl + 1}</b><small>Unlocks ${BENCH_UNLOCKS[lvl + 1]}</small></span>${c.html}<button class="btn small" data-x="upgrade" ${c.ok ? '' : 'disabled'}>Upgrade</button></div>`;
+  }
+
+  _upgrade() {
+    const p = this.p, lvl = p.stations.gunsmith || 1;
+    const next = STATION_UPGRADES.gunsmith[lvl + 1];
+    if (!next) return;
+    if (!payWithSalvage(this.hub.lists(), next, (x) => this.hub.give(x))) { this.hub.audio.ui('error'); return; }
+    p.stations.gunsmith = lvl + 1;
+    this.hub.audio.ui('craft');
+    this.hub.audio.mech('bench');
+    this.hub.save();
+    this.hub.refreshStatus();
+    this.render();
+    const f = document.createElement('div');
+    f.className = 'st-flash';
+    f.textContent = `Weapon Workbench is now level ${lvl + 1}`;
+    this.el.appendChild(f);
+    setTimeout(() => f.remove(), 1600);
   }
 
   _hotspots() {
@@ -257,6 +288,7 @@ export class GunsmithPanel {
     if (x === 'install') return this._install();
     if (x === 'remove') return this._remove();
     if (x === 'repair') return this._repair();
+    if (x === 'upgrade') return this._upgrade();
     if (t.dataset.w !== undefined) {
       this.pick = this.weapons[+t.dataset.w];
       this.slot = null;

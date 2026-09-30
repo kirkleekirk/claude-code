@@ -1,6 +1,9 @@
 import { def } from '../../data/items.js';
 import { APPROACHES, SETUPS, KITS, ESCAPES, readiness, approachById } from '../../data/heist.js';
 import { esc, frame } from './common.js';
+import { fitLine, wrapBox } from './boardText.js';
+
+const COND = (w) => (px) => `${w} ${px}px "Barlow Condensed", "Arial Narrow", sans-serif`;
 
 // Hale's planning board by his bunk: the Covenant job. A photo of the ship with
 // everything you learned scouting her written on, and a card for each way in: what
@@ -15,24 +18,23 @@ function pin(g, x, y, col = '#b8322a') {
   g.beginPath(); g.arc(x - 2, y - 2, 2.5, 0, Math.PI * 2); g.fill();
 }
 
-function note(g, x, y, w, h, rot, text, bg = '#efe8d8', font = '600 17px "Barlow Condensed", "Arial Narrow", sans-serif') {
+// A note pinned up: the writing shrinks a little to fit, and if it still doesn't, the
+// note is a longer scrap of paper. Never runs off the edge.
+function note(g, x, y, w, h, rot, text, bg = '#efe8d8', font = COND(600), size = 17) {
+  const pad = 8;
   g.save();
   g.translate(x, y);
   g.rotate(rot);
-  g.fillStyle = 'rgba(0,0,0,0.3)';
-  g.fillRect(4, 5, w, h);
-  g.fillStyle = bg;
-  g.fillRect(0, 0, w, h);
-  g.fillStyle = '#2a2420';
-  g.font = font;
+  g.textAlign = 'left';
   g.textBaseline = 'top';
-  const words = String(text).split(' ');
-  let line = '', yy = 8;
-  for (const wd of words) {
-    const t = line ? `${line} ${wd}` : wd;
-    if (g.measureText(t).width > w - 16 && line) { g.fillText(line, 8, yy); line = wd; yy += 19; } else line = t;
-  }
-  if (line) g.fillText(line, 8, yy);
+  const fit = wrapBox(g, text, pad, pad, w - pad * 2, h - pad * 2, font, size, Math.round(size * 0.82), { draw: false });
+  const hh = Math.max(h, fit.height + pad * 2 + 2);
+  g.fillStyle = 'rgba(0,0,0,0.3)';
+  g.fillRect(4, 5, w, hh);
+  g.fillStyle = bg;
+  g.fillRect(0, 0, w, hh);
+  g.fillStyle = '#2a2420';
+  wrapBox(g, text, pad, pad + Math.max(0, (hh - pad * 2 - fit.height) / 2), w - pad * 2, hh - pad * 2, font, fit.size, fit.size);
   g.restore();
 }
 
@@ -52,7 +54,7 @@ export function drawHeistBoard(face, p, state = {}) {
   g.strokeRect(7, 7, W - 14, H - 14);
   const h = p.heist || { stage: 'locked' };
   if (h.stage === 'locked') {
-    note(g, W / 2 - 170, H / 2 - 40, 340, 80, -0.03, 'Nothing pinned up yet. Hale keeps his cards close.', '#e8dfc8', 'italic 600 22px Georgia, serif');
+    note(g, W / 2 - 170, H / 2 - 40, 340, 80, -0.03, 'Nothing pinned up yet. Hale keeps his cards close.', '#e8dfc8', (px) => `italic 600 ${px}px Georgia, serif`, 22);
     tex.needsUpdate = true;
     return [];
   }
@@ -121,7 +123,7 @@ export function drawHeistBoard(face, p, state = {}) {
       [px + 350, py + 262, 'Sea chest under Hold 3: grate, needs a torch'],
       [px + 470, py + 30, 'Hold 3: the cage. Code, torch or a charge'],
     ];
-    n.forEach(([x, y, t], i) => note(g, x, y, 160, 64, ((i % 3) - 1) * 0.03, t, '#f0d66a', '600 15px "Barlow Condensed", sans-serif'));
+    n.forEach(([x, y, t], i) => note(g, x, y, 160, 64, ((i % 3) - 1) * 0.03, t, '#f0d66a', COND(600), 15));
   }
   // the four ways in down the right side
   const regions = [];
@@ -137,18 +139,19 @@ export function drawHeistBoard(face, p, state = {}) {
     g.fillStyle = a.id === state.hover ? '#fffaf0' : '#efe8d8';
     g.fillRect(0, 0, w, hh);
     g.fillStyle = '#231e1a';
-    g.font = '700 24px "Barlow Condensed", sans-serif';
+    g.textAlign = 'left';
     g.textBaseline = 'top';
-    g.fillText(a.name, 12, 8);
-    g.font = '500 15px "Barlow Condensed", sans-serif';
+    fitLine(g, a.name, 12, 8, w - 60, COND(700), 24);
     g.fillStyle = '#5a4a3a';
-    g.fillText(`${a.vehicle} · ${a.style}`, 12, 36);
+    fitLine(g, `${a.vehicle} · ${a.style}`, 12, 36, w - 24, COND(500), 15);
+    // what it needs, in two columns that each keep to their own half of the card
+    const col = (w - 24) / 2;
     r.setups.forEach((s, k) => {
       g.fillStyle = s.ok ? '#2a6a2a' : '#8a2a22';
-      g.fillText(`${s.ok ? '✓' : '✗'} ${s.label}`, 12 + (k % 2) * 140, 58 + Math.floor(k / 2) * 18);
+      fitLine(g, `${s.ok ? '✓' : '✗'} ${s.label}`, 12 + (k % 2) * col, 58 + Math.floor(k / 2) * 18, col - 8, COND(500), 15, 12);
     });
     g.fillStyle = r.kit.ok ? '#2a6a2a' : '#8a2a22';
-    g.fillText(`${r.kit.ok ? '✓' : '✗'} ${r.kit.label}`, 12, 96);
+    fitLine(g, `${r.kit.ok ? '✓' : '✗'} ${r.kit.label}`, 12, 96, r.ready ? w - 130 : w - 24, COND(500), 15, 12);
     if (r.ready) {
       g.save();
       g.translate(w - 64, 90);
@@ -182,7 +185,7 @@ export function drawHeistBoard(face, p, state = {}) {
     g.quadraticCurveTo(620, 420, px + 380, py + 180);
     g.stroke();
   }
-  if (h.stage === 'done') note(g, 90, 520, 440, 90, -0.04, 'DONE. The prototype case came home. The Covenant can sail empty.', '#c8e0b0', 'italic 700 24px Georgia, serif');
+  if (h.stage === 'done') note(g, 90, 520, 440, 90, -0.04, 'DONE. The prototype case came home. The Covenant can sail empty.', '#c8e0b0', (px) => `italic 700 ${px}px Georgia, serif`, 24);
   else if (h.runs) note(g, 90, 520, 380, 70, -0.03, `Tried ${h.runs} time${h.runs > 1 ? 's' : ''}. ${h.last && h.last.gotCase ? '' : 'The case is still aboard her.'}`, '#e8dfc8');
   tex.needsUpdate = true;
   return regions;

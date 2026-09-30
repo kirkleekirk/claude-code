@@ -12,7 +12,8 @@ export const HOWTO = `<div class="howto">
     <p>Every gun reloads by hand with <span class="key">R</span>, one step at a time. Hold <span class="key">R</span> to run the whole sequence. Bows draw while you hold the trigger and loose when you let go.</p></section>
   <section><h3>The weapon workbench</h3>
     <p>Point at a part of the gun on the bench to see what fits there. Scrap guns take shoddy parts, but also the wild, expensive specials: fire rounds that spread from one of the dead to the next, armour-piercing rechambers, explosive bolts. Military guns take clean, reliable attachments.</p>
-    <p>Mods you take off go in the parts drawer and cost nothing to fit again. Short on components? The bench breaks down salvage from your trunk to cover them.</p></section>
+    <p>Mods you take off go in the parts drawer and cost nothing to fit again. Short on components? The bench breaks down salvage from your trunk to cover them.</p>
+    <p>The bench itself upgrades from the top of its panel: level 2 fits Standard and Special mods, level 3 Fine and Experimental ones.</p></section>
   <section><h3>The Living Guard</h3>
     <p>What's left of a rebuilding army's local garrison, cut off from its command and running the parish like an occupation. Soldiers shoot on sight after curfew. A drone that catches you in its light calls the dead and every soldier nearby, so break line of sight. Dead Guardsmen carry energy cells and keycards; keycards open their weapons lockers.</p></section>
   <section><h3>The crew</h3>
@@ -21,6 +22,9 @@ export const HOWTO = `<div class="howto">
   <section><h3>The Covenant</h3>
     <p>Once Hale trusts you he'll tell you about a Guard freighter at anchor off Port Lafitte. Scout her from the lighthouse or a crane, then plan the job on the board by his bunk: four ways in, each with its own setups, kit and ways out.</p>
     <p>Ladders climb with <span class="key">E</span>. In the water you swim; with dive gear, <span class="key">C</span> dives and <span class="key">Space</span> rises. At a boat's wheel, <span class="key">W</span> idles quietly and <span class="key">Shift</span>+<span class="key">W</span> opens it up — loudly. <span class="key">E</span> gets you off.</p></section>
+  <section><h3>The sandbox</h3>
+    <p>Sandbox, on the title screen, is a separate save for trying things out; your own game is never touched. Every weapon is on the armory rack, every mod is in the parts drawer, the benches are fully built, and every place is on the board from the start, Port Lafitte included. <span class="key">Esc</span> opens its sheet: pick a weapon and it goes straight into its holster, change the rules (no damage, ammo that never runs out, the Sweep on or off), set the time of day, and go anywhere, or straight to any of the Covenant approaches.</p>
+    <p>On a sandbox trip, <span class="key">N</span> puts a walker in front of you, <span class="key">J</span> a Guardsman, <span class="key">K</span> puts down every walker near you, and <span class="key">T</span> moves the night on an hour.</p></section>
   <section><h3>Controls</h3>
     <div class="keys-list">
       <span class="key">WASD</span><span>Move · <span class="key">Shift</span> sprint · <span class="key">C</span> crouch</span>

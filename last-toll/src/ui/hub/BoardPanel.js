@@ -3,6 +3,9 @@ import { def, makeItem, SLOT_ORDER, TIERS } from '../../data/items.js';
 import { countIn, payCost, maxHealthFor } from '../../game/Profile.js';
 import { esc, frame } from './common.js';
 import { objective } from '../../data/story.js';
+import { fitLine, wrapBox } from './boardText.js';
+
+const COND = (w) => (px) => `${w} ${px}px "Barlow Condensed", "Arial Narrow", sans-serif`;
 
 // The bulletin board on wheels. Photos of the places the skiff can reach are
 // pinned to cork with their dangers written on; Remy's contract slips hang down
@@ -17,6 +20,16 @@ export function boardZones(p) {
 }
 
 function sketch(g, id, x, y, w, h) {
+  // nothing in the picture hangs off the edge of the print
+  g.save();
+  g.beginPath();
+  g.rect(x, y, w, h);
+  g.clip();
+  _sketch(g, id, x, y, w, h);
+  g.restore();
+}
+
+function _sketch(g, id, x, y, w, h) {
   const [sky, ground] = PHOTO[id] || ['#555', '#777'];
   const gr = g.createLinearGradient(0, y, 0, y + h);
   gr.addColorStop(0, sky);
@@ -119,16 +132,15 @@ export function drawBoard(boat, p, state = {}) {
     g.fillRect(0, 0, cw, ch);
     sketch(g, z.id, 10, 10, cw - 20, 118);
     g.fillStyle = '#231e1a';
-    g.font = '600 22px "Barlow Condensed", "Arial Narrow", sans-serif';
     g.textAlign = 'left';
-    g.fillText(z.name, 12, 150);
-    g.font = '500 15px "Barlow Condensed", "Arial Narrow", sans-serif';
+    g.textBaseline = 'alphabetic';
+    fitLine(g, z.name, 12, 150, cw - 24, COND(600), 22);
+    // the time and the Sweep on the left, the threat in red pips on the right, clear of each other
     g.fillStyle = '#5a4a3a';
-    g.fillText(`${z.night ? 'After dark' : 'Dusk'} · Sweep ${z.sweepMinutes}:00`, 12, 172);
-    // threat in red pips
+    fitLine(g, `${z.night ? 'After dark' : 'Dusk'} · Sweep ${z.sweepMinutes}:00`, 12, 172, cw - 24 - 50, COND(500), 15, 13);
     for (let k = 0; k < 4; k++) {
       g.fillStyle = k < z.threat ? '#a8302a' : 'rgba(90,70,50,0.35)';
-      g.beginPath(); g.arc(cw - 60 + k * 14, 166, 5, 0, Math.PI * 2); g.fill();
+      g.beginPath(); g.arc(cw - 48 + k * 11, 167, 4, 0, Math.PI * 2); g.fill();
     }
     // the relay is down: somebody's crossed out the red light
     if (z.id === 'outpost' && p.story && p.story.mastDown) {
@@ -150,22 +162,21 @@ export function drawBoard(boat, p, state = {}) {
     }
     g.restore();
     pin(g, x + cw / 2, y + 6);
-    // Hale's lead, on a yellow scrap tucked in the corner of the photo
+    // Hale's lead, on a yellow scrap tucked over the corner of the photo (not the writing)
     if (leads.includes(z.id)) {
       g.save();
-      g.translate(x + 48, y + ch + 4);
+      g.translate(x + 56, y + 104);
       g.rotate(-0.1);
       g.fillStyle = 'rgba(0,0,0,0.3)';
-      g.fillRect(-58, -20, 120, 40);
+      g.fillRect(-56, -16, 120, 40);
       g.fillStyle = '#f0d66a';
-      g.fillRect(-62, -24, 120, 40);
+      g.fillRect(-60, -20, 120, 40);
       g.fillStyle = '#2a2420';
-      g.font = 'italic 600 17px Georgia, serif';
       g.textAlign = 'center';
       g.textBaseline = 'middle';
-      g.fillText(o.chapter, -2, -3);
+      fitLine(g, o.chapter, 0, 1, 104, (px) => `italic 600 ${px}px Georgia, serif`, 17, 12);
       g.restore();
-      pin(g, x + 46, y + ch - 16, '#c9a24a');
+      pin(g, x + 54, y + 86, '#c9a24a');
     }
     if (z.id === sel) {
       // circled in red grease pencil
@@ -198,38 +209,35 @@ export function drawBoard(boat, p, state = {}) {
     g.fillStyle = c.done ? '#b8b0a0' : '#e8dca0';
     g.fillRect(0, 0, 270, 100);
     g.fillStyle = '#2a2420';
-    g.font = '500 17px "Barlow Condensed", "Arial Narrow", sans-serif';
-    wrap(g, c.text, 12, 26, 246, 20);
-    g.font = '600 15px "Barlow Condensed", sans-serif';
+    g.textAlign = 'left';
+    g.textBaseline = 'top';
+    wrapBox(g, c.text, 12, 11, 246, 62, COND(500), 17, 12);
+    g.textBaseline = 'alphabetic';
+    g.font = COND(600)(15);
     g.fillStyle = c.done ? '#5a5a50' : c.progress >= c.target && c.kind !== 'deliver' ? '#2a6a2a' : '#6a4a2a';
-    g.fillText(c.done ? 'DONE' : c.kind === 'deliver' ? 'Deliver aboard' : `${c.progress}/${c.target}`, 12, 88);
+    g.fillText(c.done ? 'DONE' : c.kind === 'deliver' ? 'Deliver aboard' : `${c.progress}/${c.target}`, 12, 90);
     if (c.done) { g.strokeStyle = 'rgba(40,40,40,0.8)'; g.lineWidth = 3; g.beginPath(); g.moveTo(8, 50); g.lineTo(262, 44); g.stroke(); }
     g.restore();
     pin(g, x + 135, y + 4, '#3a6a9a');
   });
-  // the skiff note the string runs to
+  // the skiff note the string runs to, as wide as its writing
+  const skiff = `Skiff → ${zoneById(sel).name}`;
+  g.font = COND(600)(18);
+  const sw = Math.min(280, Math.max(160, g.measureText(skiff).width + 32));
   g.save();
   g.translate(800, 612);
+  g.fillStyle = 'rgba(0,0,0,0.3)';
+  g.fillRect(-sw / 2 + 4, -22, sw, 44);
   g.fillStyle = '#efe8d8';
-  g.fillRect(-80, -26, 160, 44);
+  g.fillRect(-sw / 2, -26, sw, 44);
   g.fillStyle = '#2a2420';
-  g.font = '600 18px "Barlow Condensed", sans-serif';
   g.textAlign = 'center';
-  g.fillText(`Skiff → ${zoneById(sel).name}`, 0, 2);
+  g.textBaseline = 'middle';
+  fitLine(g, skiff, 0, -4, sw - 24, COND(600), 18, 14);
   g.restore();
   pin(g, 800, 590, '#c9a24a');
   tex.needsUpdate = true;
   return regions;
-}
-
-function wrap(g, text, x, y, maxW, lh) {
-  const words = String(text).split(' ');
-  let line = '';
-  for (const w of words) {
-    const t = line ? `${line} ${w}` : w;
-    if (g.measureText(t).width > maxW && line) { g.fillText(line, x, y); line = w; y += lh; } else line = t;
-  }
-  if (line) g.fillText(line, x, y);
 }
 
 export class BoardPanel {

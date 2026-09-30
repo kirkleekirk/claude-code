@@ -109,8 +109,9 @@ export class JournalPanel {
       <h4>How it works</h4>
       ${HOWTO}
       <div style="margin-top:22px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <button class="btn danger" data-x="reset">${this.confirm ? 'Click again to erase everything' : 'Start over'}</button>
-        ${this.confirm ? '<button class="btn" data-x="keep">Keep my save</button>' : ''}
+        ${this.p.sandbox
+    ? `<button class="btn danger" data-x="reset">${this.confirm ? 'Click again to start the sandbox over' : 'Start the sandbox over'}</button>${this.confirm ? '<button class="btn" data-x="keep">Keep it</button>' : ''}<span class="fine">Your own game's save isn't touched.</span>`
+    : `<button class="btn danger" data-x="reset">${this.confirm ? 'Click again to erase everything' : 'Start over'}</button>${this.confirm ? '<button class="btn" data-x="keep">Keep my save</button>' : ''}`}
       </div>`;
     this.el.querySelector('.st-foot').innerHTML = 'Your progress saves itself';
   }

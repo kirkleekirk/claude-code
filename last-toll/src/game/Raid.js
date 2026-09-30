@@ -12,7 +12,7 @@ import { GuardForce } from '../entities/Guard.js';
 import { ViewModel } from '../combat/ViewModel.js';
 import { Combat, SLOTS } from '../combat/Combat.js';
 import { Inventory } from './Inventory.js';
-import { HUD } from '../ui/HUD.js';
+import { HUD, fmtClock } from '../ui/HUD.js';
 import { InventoryUI } from '../ui/InventoryUI.js';
 import { MapUI } from '../ui/MapUI.js';
 import { RNG, noise1 } from '../core/rng.js';
@@ -127,6 +127,9 @@ export class Raid {
 
     const player = new Player({ camera, world: this.world, audio, input });
     this.player = player;
+    // the sandbox's rules, if this is a sandbox trip
+    this.sandbox = profile.sandbox || null;
+    this.sbT = 0;
     player.maxHealth = maxHealthFor(profile.nourishment);
     player.health = Math.min(profile.health, player.maxHealth);
     player.battery = profile.battery ?? 100;
@@ -241,7 +244,17 @@ export class Raid {
     this.clk = clk;
     this.clock = clk.start;
     this.rate = (clk.sweep - clk.start) / (zone.sweepMinutes * 60);
+    this.clk0 = { ...clk };
+    this.rate0 = this.rate;
     this.swept = false;
+    if (this.sandbox) {
+      if (this.sandbox.hour != null && !this.heist) this.setHour(this.sandbox.hour);
+      this.applySandbox();
+      const tag = document.createElement('div');
+      tag.className = 'sb-tag';
+      tag.innerHTML = '<b>Sandbox</b> <span class="key">N</span> walker <span class="key">J</span> Guardsman <span class="key">K</span> clear <span class="key">T</span> +1 hour <span class="key">Esc</span> rules &amp; armory';
+      this.hud.root.appendChild(tag);
+    }
     this.overrun = false;
     this.warned = false;
     this.spawnT = 0;
@@ -668,6 +681,86 @@ export class Raid {
     if (it.id === 'battery') { p.battery = 100; this.hud.toast('Fresh battery'); }
   }
 
+  // ---- the sandbox ------------------------------------------------------------------------
+
+  // Put the sandbox's rules into effect now: no damage, and the clock stopped (no Sweep).
+  applySandbox() {
+    const sb = this.sandbox;
+    if (!sb) return;
+    this.player.invulnerable = !!sb.god;
+    if (!sb.sweep && !this.swept) {
+      this.rate = 0;
+      this.clk.sweep = Infinity;
+      this.clk.overrun = Infinity;
+    } else if (sb.sweep && this.rate === 0) {
+      this.rate = this.rate0;
+      this.clk.sweep = this.clk0.sweep;
+      this.clk.overrun = this.clk0.overrun;
+    }
+  }
+
+  // Move the night to another hour (before the Sweep), keeping how long there is until it.
+  setHour(h) {
+    if (this.swept) return false;
+    const c = this.clk0;
+    this.clk0 = { start: h, sweep: h + (c.sweep - c.start), overrun: h + (c.overrun - c.start) };
+    this.clk = { ...this.clk0 };
+    this.clock = h;
+    this.rate = this.rate0;
+    this.warned = false;
+    this.applySandbox();
+    return true;
+  }
+
+  _sandboxKeys(dt) {
+    const input = this.app.input, P = this.player.pos, sb = this.sandbox;
+    // ammo that never runs out: keep a stack in the pack for every gun you carry
+    this.sbT -= dt;
+    if (sb.ammo && this.sbT <= 0) {
+      this.sbT = 0.5;
+      for (const it of Object.values(this.inv.loadout)) {
+        const d = it && def(it.id);
+        if (!d || d.kind !== 'gun' || !d.ammo) continue;
+        const stack = def(d.ammo).stack || 1;
+        if (this.inv.count(d.ammo) < stack) this.inv.add(makeItem(d.ammo, stack));
+      }
+    }
+    if (this.uiOpen) return;
+    const spot = (dist) => {
+      const fx = -Math.sin(this.player.yaw), fz = -Math.cos(this.player.yaw);
+      for (const k of [dist, dist * 0.7, dist * 1.3, dist * 0.45]) {
+        const x = P.x + fx * k, z = P.z + fz * k;
+        if (!this.world.isWalkable(x, z)) continue;
+        const y = this.world.floorMode ? this.world.heightAt(x, z, P.y + 0.6) : 0;
+        if (y === null || Math.abs(y - P.y) > 2.5) continue;
+        return new THREE.Vector3(x, y, z);
+      }
+      return null;
+    };
+    if (input.wasPressed('KeyN')) {
+      const v = spot(8);
+      if (v) { this.horde.spawn(v, { state: 'wander' }); this.noise(P, 12); } else this.hud.toast('No room for one there');
+    }
+    if (input.wasPressed('KeyJ')) {
+      const v = spot(16);
+      if (v) this.guards.spawnSoldier(v, { post: true, facing: Math.atan2(P.x - v.x, P.z - v.z) });
+      else this.hud.toast('No room for one there');
+    }
+    if (input.wasPressed('KeyK')) {
+      let n = 0;
+      for (const w of this.horde.walkers) {
+        if (w.dead || Math.hypot(w.pos.x - P.x, w.pos.z - P.z) > 40) continue;
+        this.horde.kill(w);
+        n++;
+      }
+      this.hud.toast(n ? `${n} put down` : 'Nothing dead near you');
+    }
+    if (input.wasPressed('KeyT')) {
+      if (this.setHour(this.clock + 1 > 28 ? 16.5 : this.clock + 1)) this.hud.toast(`It's ${fmtClock(this.clock)}`);
+      else this.hud.toast('The Sweep is on: the night runs on its own now');
+    }
+  }
+
   _quickHeal() {
     const p = this.player;
     const missing = p.maxHealth - p.health - p.heal.remaining;
@@ -752,6 +845,7 @@ export class Raid {
         if (input.wasPressed('KeyH')) this._quickHeal();
         if (input.wasPressed('KeyM')) this.mapUI.toggle(!this.mapUI.open);
       }
+      if (this.sandbox) this._sandboxKeys(dt);
       if (input.wasPressed('Tab')) this.toggleInventory();
       // in the water, on a ladder or at a wheel your hands are full
       this.handsBusy = player.mode !== 'walk' && player.mode !== 'fall';
@@ -892,7 +986,7 @@ export class Raid {
     if (story && story.mark) markers.push({ x: story.mark.x, z: story.mark.z, kind: 'story' });
     this.hud.update(dt, {
       yaw: player.yaw, px: player.pos.x, pz: player.pos.z, markers,
-      clock: this.clock, sweepIn: (this.clk.sweep - this.clock) / this.rate, swept: this.swept, overrun: this.overrun, spotted: this.guards.spotted,
+      clock: this.clock, sweepIn: (this.clk.sweep - this.clock) / this.rate, sweepOff: this.rate === 0 && !this.swept, swept: this.swept, overrun: this.overrun, spotted: this.guards.spotted,
       health: player.health, maxHealth: player.maxHealth, stamina: player.stamina, battery: player.battery, flashlight: player.flashlightOn,
       weapon, slots: SLOTS.map((s) => !!this.inv.loadout[s]), slotIndex: SLOTS.indexOf(c.slot),
       ads: c.ads, hideCross: c.isGun && c.ads > 0.6, charge: c.melee && c.melee.phase === 'windup' ? c.melee.charge : null,

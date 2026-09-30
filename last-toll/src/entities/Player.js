@@ -146,6 +146,13 @@ export class Player {
 
   damage(amount, kind = 'hit', src = null) {
     if (this.dead) return;
+    // the sandbox's "can't be hurt": you still feel it land
+    if (this.invulnerable) {
+      this.hurtT = 0.4;
+      this.shake = Math.max(this.shake, 0.25);
+      this.audio.hurt();
+      return;
+    }
     this.health -= amount;
     this.hurtT = 1;
     this.shake = Math.max(this.shake, 0.5);

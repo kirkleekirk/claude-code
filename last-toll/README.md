@@ -166,6 +166,20 @@ after dark. Every place has its own cloud style (clear, hazy, storm, swamp, star
 colour in the direction you look, so distant rooftops fade into gold on the sun side and blue on the other,
 and the water reflects the same sky.
 
+### The sandbox
+
+**Sandbox** on the title screen is a second save for trying things out; your own game's save is never touched
+(`game/Sandbox.js`, `ui/SandboxSheet.js`). Every place is on the board from the start, Port Lafitte and the
+Covenant job included; the benches are fully built; every mod is in the parts drawer; the stash is full of
+salvage, ammo, meds and the heist setups. **Esc** opens the sandbox sheet, aboard or on a trip:
+
+- **Rules:** can't be hurt, ammo that never runs out (you still reload), the Sweep on or off, and the time of day.
+- **Armory:** every weapon, by tier. Click one and it goes into its holster, loaded, with ammo in the pack.
+- **Go** (aboard): any place, or straight into any of the four Covenant approaches without the setups.
+
+On a sandbox trip **N** puts a walker in front of you, **J** a Guardsman, **K** puts down every walker nearby,
+and **T** moves the night on an hour. Leave the sandbox from its sheet or with Quit to title.
+
 Every container is a hollow shell with real shelves, drawers and lids. Loot rests on those surfaces,
 scaled to fit, and drawer contents ride out with the drawer, so the same containers work when you open
 them by hand in VR.

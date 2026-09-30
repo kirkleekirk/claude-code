@@ -188,9 +188,9 @@ export class HUD {
 
     // wrist
     this._set('time', this.timeEl, 'text', fmtClock(s.clock));
-    const sweepTxt = s.swept ? (s.overrun ? 'Overrun' : 'Sweep on') : `Sweep in ${fmtSec(s.sweepIn)}`;
+    const sweepTxt = s.swept ? (s.overrun ? 'Overrun' : 'Sweep on') : s.sweepOff ? 'Sweep off' : `Sweep in ${fmtSec(s.sweepIn)}`;
     this._set('sweep', this.sweepEl, 'text', sweepTxt);
-    this._set('sweepc', this.sweepEl, 'class', 'sweep' + (s.swept || s.sweepIn < 60 ? ' now' : ''));
+    this._set('sweepc', this.sweepEl, 'class', 'sweep' + (!s.sweepOff && (s.swept || s.sweepIn < 60) ? ' now' : ''));
     this._set('spot', this.spotEl, 'opacity', s.spotted ? '1' : '0');
     this._set('hp', this.hpBar, 'width', `${(s.health / 100) * 100}%`);
     this.hpCap.style.left = `${s.maxHealth}%`;

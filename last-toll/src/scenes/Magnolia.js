@@ -119,11 +119,12 @@ export class Magnolia {
 
   _hull() {
     const b = this.b;
-    // hull below the deck, tapering to the bow
-    b.box(0, -1.15, 1, 10, 2.3, 28, GREEN, { ao: 1 });
+    // hull below the deck, tapering to the bow. Its top stops 10 cm under the planks:
+    // at the planks' own height the two surfaces fought and the deck flickered green
+    b.box(0, -1.2, 1, 10, 2.2, 28, GREEN, { ao: 1 });
     for (let i = 0; i < 6; i++) {
       const z = -13 - i * 0.7, w = 10 - i * 1.55;
-      b.box(0, -1.15, z, Math.max(1.2, w), 2.3, 0.72, GREEN, { ao: 1 });
+      b.box(0, -1.2, z, Math.max(1.2, w), 2.2, 0.72, GREEN, { ao: 1 });
     }
     // white upper strake and a red boot stripe at the waterline
     b.box(-5.02, -0.25, 1, 0.06, 0.5, 28, WHITE_D, { ao: 1 });
@@ -217,7 +218,7 @@ export class Magnolia {
     b.box(0, h + 0.08, (z0 + z1) / 2, x1 - x0 + 0.2, 0.16, z1 - z0 + 0.2, WHITE_D, { ao: 1 });
     for (const z of [z0 - 0.09, z1 + 0.09]) b.box(0, h - 0.18, z, x1 - x0 + 0.2, 0.3, 0.04, TRIM);
     b.box(0, 0.012, 3.5, 3.4, 0.02, 5.2, 0x6a2a24, { ao: 1 });
-    b.box(0, 0.014, 3.5, 3.0, 0.02, 4.8, 0x8a5a3a, { ao: 1 });
+    b.box(0, 0.018, 3.5, 3.0, 0.02, 4.8, 0x8a5a3a, { ao: 1 });
     this.world.interiors.push({ x0, z0, x1, z1, surface: 'wood' });
     this.salon = { x0, z0, x1, z1, h };
   }
