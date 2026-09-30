@@ -21,7 +21,7 @@ export class Soldier {
     this.model = new WalkerModel(rng, { soldier: true });
     this.root = this.model.root;
     this.pos = this.root.position;
-    this.pos.set(pos.x, 0, pos.z);
+    this.pos.set(pos.x, pos.y || 0, pos.z);
     this.facing = opts.facing ?? rng.range(-Math.PI, Math.PI);
     this.state = opts.post ? 'post' : 'patrol';
     this.route = opts.route || null;
@@ -132,6 +132,7 @@ export class GuardForce {
     this.onKill = onKill;
     this.soldiers = [];
     this.drones = [];
+    this.allies = []; // the Magnolia's crew, when they come along
     this.group = new THREE.Group();
     scene.add(this.group);
     this.frame = 0;
@@ -217,7 +218,7 @@ export class GuardForce {
     const fx = Math.sin(s.facing + s.lookYaw), fz = Math.cos(s.facing + s.lookYaw);
     const dot = (fx * dx + fz * dz) / (dist || 1);
     if (dot < 0.25 && dist > near && !s.inCombat) return false;
-    return this.world.lineOfSight(s.pos.x, 1.62, s.pos.z, p.eye.x, p.eye.y - 0.15, p.eye.z);
+    return this.world.lineOfSight(s.pos.x, s.pos.y + 1.62, s.pos.z, p.eye.x, p.eye.y - 0.15, p.eye.z);
   }
 
   _updateSoldier(s, dt, time) {
@@ -259,16 +260,31 @@ export class GuardForce {
           this.callIn(p.pos, 35);
         }
       }
+      // the crew, if they're here and you aren't in sight
+      s.allyTgt = null;
+      if (!s.seesPlayer && this.allies.length) {
+        let bestA = range * 1.2;
+        for (const a of this.allies) {
+          if (a.down) continue;
+          const d = Math.hypot(a.pos.x - s.pos.x, a.pos.z - s.pos.z);
+          if (d < bestA && this.world.lineOfSight(s.pos.x, s.pos.y + 1.62, s.pos.z, a.pos.x, a.pos.y + 1.5, a.pos.z)) { bestA = d; s.allyTgt = a; }
+        }
+        if (s.allyTgt) {
+          s.lastSeen.copy(s.allyTgt.pos);
+          s.lostT = 0;
+          if (!s.inCombat) { s.state = 'combat'; s.t = 0; s.shotT = rng.range(0.6, 1.2); this.audio.radio(); }
+        }
+      }
       // walkers close enough to matter
       s.threat = null;
       let best = 9;
       for (const w of this.horde.walkers) {
         if (w.dead || w.state === 'dormant') continue;
         const d = Math.hypot(w.pos.x - s.pos.x, w.pos.z - s.pos.z);
-        if (d < best && this.world.lineOfSight(s.pos.x, 1.6, s.pos.z, w.pos.x, 1.5, w.pos.z)) { best = d; s.threat = w; }
+        if (d < best && this.world.lineOfSight(s.pos.x, s.pos.y + 1.6, s.pos.z, w.pos.x, w.pos.y + 1.5, w.pos.z)) { best = d; s.threat = w; }
       }
     }
-    if (!s.seesPlayer) s.lostT += dt;
+    if (!s.seesPlayer && !s.allyTgt) s.lostT += dt;
 
     let speed = 0, dirX = 0, dirZ = 0;
     let faceX = null, faceZ = null;
@@ -323,7 +339,7 @@ export class GuardForce {
         const tx = s.lastSeen.x - s.pos.x, tz = s.lastSeen.z - s.pos.z;
         const td = Math.hypot(tx, tz) || 1;
         // keep a firing distance; circle when in range
-        if (!s.seesPlayer) { speed = 2.3; dirX = tx / td; dirZ = tz / td; }
+        if (!s.seesPlayer && !s.allyTgt) { speed = 2.3; dirX = tx / td; dirZ = tz / td; }
         else if (td > 17) { speed = 2.0; dirX = tx / td; dirZ = tz / td; }
         else if (td < 6) { speed = 1.8; dirX = -tx / td; dirZ = -tz / td; }
         else {
@@ -334,7 +350,7 @@ export class GuardForce {
           dirZ = (tx / td) * s.strafeDir;
         }
         faceX = tx; faceZ = tz;
-        target = s.threat && Math.hypot(s.threat.pos.x - s.pos.x, s.threat.pos.z - s.pos.z) < 4.5 ? s.threat : s.seesPlayer ? 'player' : null;
+        target = s.threat && Math.hypot(s.threat.pos.x - s.pos.x, s.threat.pos.z - s.pos.z) < 4.5 ? s.threat : s.seesPlayer ? 'player' : s.allyTgt && !s.allyTgt.down ? s.allyTgt : null;
       }
     }
 
@@ -343,7 +359,7 @@ export class GuardForce {
       const tp = target === 'player' ? _v.set(p.pos.x, p.eye.y - 0.35, p.pos.z) : _v.copy(target.volumes().head);
       faceX = tp.x - s.pos.x;
       faceZ = tp.z - s.pos.z;
-      s.lookPitch = Math.atan2(tp.y - 1.5, Math.hypot(faceX, faceZ));
+      s.lookPitch = Math.atan2(tp.y - (s.pos.y + 1.5), Math.hypot(faceX, faceZ));
       s.aim = Math.min(1, s.aim + dt * 4);
       if (s.charge > 0) {
         s.charge += dt / 0.55;
@@ -378,7 +394,11 @@ export class GuardForce {
     s.pos.z += (s.vel.z + s.push.z) * dt;
     s.push.multiplyScalar(Math.exp(-dt * 6));
     this.world.resolveCircle(s.pos, 0.3);
-    this.world.constrain(s.pos, px, pz, 0.3);
+    this.world.constrainAt(s.pos, px, pz, 0.3);
+    if (this.world.floorMode) {
+      const g = this.world.heightAt(s.pos.x, s.pos.z, s.pos.y);
+      if (g !== null) s.pos.y = g;
+    }
     // stay out of the player's body
     const pdx = s.pos.x - p.pos.x, pdz = s.pos.z - p.pos.z, pd = Math.hypot(pdx, pdz);
     if (pd < 0.65 && pd > 1e-4) { s.pos.x += (pdx / pd) * (0.65 - pd); s.pos.z += (pdz / pd) * (0.65 - pd); }
@@ -415,6 +435,15 @@ export class GuardForce {
         const hit = this.world.raycast(from.x, from.y, from.z, _d.x, _d.y, _d.z, 60, true);
         end = hit ? from.clone().addScaledVector(_d, hit.t) : from.clone().addScaledVector(_d, 60);
         if (hit) this.fx.impact(end, _v2.set(hit.nx, hit.ny, hit.nz), 'burn');
+      }
+    } else if (target.isAlly) {
+      const dist = from.distanceTo(tp);
+      const chance = clamp(0.7 - dist * 0.018, 0.15, 0.75);
+      if (this.world.lineOfSight(from.x, from.y, from.z, tp.x, tp.y, tp.z) && this.rng.chance(chance)) {
+        end = tp.clone();
+        target.damage(this.rng.range(14, 22));
+      } else {
+        end = tp.clone().add(new THREE.Vector3(this.rng.range(-0.9, 0.9), this.rng.range(-0.4, 0.6), this.rng.range(-0.9, 0.9)));
       }
     } else {
       const w = target;
@@ -693,9 +722,9 @@ export class GuardForce {
   _drop(it, pos) {
     for (let i = 0; i < 6; i++) {
       const x = pos.x + this.rng.range(-0.7, 0.7), z = pos.z + this.rng.range(-0.7, 0.7);
-      if (this.world.onFloor(x, z) && this.world.isWalkable(x, z)) return this.loot.dropItem(it, _v.set(x, 0, z));
+      if (this.world.floorOKAt(x, z, 0.1, pos.y) && (Math.abs(pos.y) > 0.5 || this.world.isWalkable(x, z))) return this.loot.dropItem(it, _v.set(x, pos.y, z));
     }
-    this.loot.dropItem(it, _v.set(pos.x, 0, pos.z));
+    this.loot.dropItem(it, _v.set(pos.x, pos.y, pos.z));
   }
 
   dispose() {

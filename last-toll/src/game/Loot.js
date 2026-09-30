@@ -227,7 +227,7 @@ export class Loot {
   // Drops (from the player's pack or a dead walker) land on the floor.
   dropItem(item, pos, floorY = 0.08) {
     const p = pos.clone();
-    p.y = floorY;
+    p.y = (pos.y || 0) + floorY;
     return this.spawnItem(item, p, Math.random() * Math.PI * 2, { static: false });
   }
 

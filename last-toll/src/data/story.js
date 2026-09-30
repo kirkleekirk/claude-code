@@ -303,8 +303,47 @@ export const DIALOGUE = {
           { text: 'What\'s the Living Guard, really?', to: 'guard', topic: 'hale.guard' },
           { text: 'Tell me about Colonel Merritt.', to: 'merritt', topic: 'hale.merritt', if: (c) => c.at('codebook') },
           { text: 'What is a herder mast?', to: 'herder', topic: 'hale.herder' },
+          { text: 'Anything else on the Guard\'s radio?', to: 'covenant', if: (c) => c.at('codebook') && (!c.p.heist || c.p.heist.stage === 'locked') },
+          { text: 'About the Covenant.', to: 'covMain', if: (c) => c.p.heist && c.p.heist.stage !== 'locked' && !c.have('prototype_case') },
+          { text: 'I brought the prototype case.', to: 'caseOpen', if: (c) => c.have('prototype_case') },
           bye(),
         ],
+      },
+      covenant: {
+        say: 'One thing. There\'s a freighter talking to the 9th every night: the Covenant, anchored off Port Lafitte. She\'s loading Experimental gear out of the Natchez labs for Merritt — the kind of thing the Guard doesn\'t let off the colony walls. She sails when she\'s full.',
+        replies: [{ text: 'And you want what\'s on her.', to: 'covenant2' }],
+      },
+      covenant2: {
+        say: 'I want Merritt not to have it, and I wouldn\'t mind if we did. All you need is a boat with fuel, and a plan. Go and look at her first. The lighthouse on the breakwater, or climb a crane. Count heads, find the ways aboard. Then we plan it on the board by my bunk.',
+        act: (c) => { c.p.heist.stage = 'offered'; c.log('The Covenant: a Guard freighter off Port Lafitte, loading Experimental gear from the Natchez labs. Scout her from the lighthouse or a crane, then plan it on Hale\'s board.'); },
+        replies: [{ text: 'What are the ways aboard?', to: 'covWays' }, bye('I\'ll go and look.')],
+      },
+      covWays: {
+        say: 'Quiet or loud. Quiet is under the water or up a ladder in the dark — a diver through the bottom of her, or a fast boat running with the engine barely ticking over. Loud is a fast boat flat out, or the Magnolia herself alongside with all of us. Each wants its own kit. Suppressors for quiet. Something with a big magazine for loud.',
+        replies: [bye('Understood.')],
+      },
+      covMain: {
+        say: (c) => {
+          const h = c.p.heist;
+          if (h.stage === 'done') return 'The Covenant\'s cage is empty and Merritt knows who emptied it. Worth it.';
+          if (!h.scouted) return 'Port Lafitte. Glass her from the lighthouse or the crane, and come back alive with it in your head.';
+          return 'The board\'s by my bunk. Four ways in. Pick one, get what it needs, carry the right kit. And think about how you get off her before you get on.';
+        },
+        replies: [{ text: 'What are the ways aboard?', to: 'covWays' }, { text: 'Something else.', to: 'main' }, bye()],
+      },
+      caseOpen: {
+        say: 'Natchez Labs seal. ... Let me. There. Look at that. They weren\'t giving him rifles, they were giving him the future. Take what\'s in it. You earned the whole case.',
+        act: (c) => {
+          c.take('prototype_case', 1);
+          c.give('beam_lance', 1, { loaded: 4, chambered: true });
+          c.give('arc_carbine', 1, { loaded: 18, chambered: true });
+          c.give('ecell', 6);
+          c.give('nano_injector', 2);
+          c.p.heist.stage = 'done';
+          c.p.heist.done = true;
+          c.log('The Covenant job is done. Hale opened the prototype case: a beam lance, an arc carbine, cells and Guard injectors.');
+        },
+        replies: [bye('Thank you, Sergeant.')],
       },
       tags: {
         say: 'Pruitt. Okafor. ... Byrne. Byrne was Signals. I trained him. If Merritt is putting radio men on the Sweep, there\'s nobody left on the radios but Merritt\'s own.',

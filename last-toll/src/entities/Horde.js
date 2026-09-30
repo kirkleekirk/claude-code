@@ -183,7 +183,7 @@ export class Horde {
       if (w.dead || w.state === 'held' || w.state === 'grab') continue;
       const d = Math.hypot(w.pos.x - pos.x, w.pos.z - pos.z);
       if (d > radius) continue;
-      if (d > radius * 0.55 && !this.world.lineOfSight(w.pos.x, 1.6, w.pos.z, pos.x, 1.5, pos.z)) {
+      if (d > radius * 0.55 && !this.world.lineOfSight(w.pos.x, w.pos.y + 1.6, w.pos.z, pos.x, (pos.y || 0) + 1.2, pos.z)) {
         // muffled through walls
         if (d > radius * 0.7) continue;
       }
@@ -349,7 +349,7 @@ export class Horde {
       if (w.dead || w.gone || w.state === 'emerge') continue;
       const dx = w.pos.x - point.x, dz = w.pos.z - point.z;
       const d = Math.hypot(dx, dz);
-      if (d > radius || Math.abs(point.y - 0.9) > radius) continue;
+      if (d > radius || Math.abs(point.y - (w.pos.y + 0.9)) > radius) continue;
       const l = d || 1;
       if (d < radius * 0.38) {
         this.fx.gib(w.volumes().neck, dx / l, dz / l);
@@ -431,7 +431,7 @@ export class Horde {
       for (const s of this.guards.soldiers) {
         if (s.dead) continue;
         const d = Math.hypot(s.pos.x - w.pos.x, s.pos.z - w.pos.z);
-        if (d < best && this.world.lineOfSight(w.pos.x, 1.6, w.pos.z, s.pos.x, 1.6, s.pos.z)) { best = d; w.tgtSoldier = s; }
+        if (d < best && Math.abs(s.pos.y - w.pos.y) < 1.2 && this.world.lineOfSight(w.pos.x, w.pos.y + 1.6, w.pos.z, s.pos.x, s.pos.y + 1.6, s.pos.z)) { best = d; w.tgtSoldier = s; }
       }
       if (w.tgtSoldier && !w.isDown && w.state !== 'stagger' && w.state !== 'chase' && w.state !== 'lunge') w.setState('chase');
     }
@@ -463,7 +463,7 @@ export class Horde {
     const dot = (fx * dx + fz * dz) / (dist || 1);
     const inCone = dot > 0.3 || dist < near || w.state === 'chase';
     if (!inCone) return;
-    const eye = this.world.lineOfSight(w.pos.x, 1.6, w.pos.z, player.eye.x, player.eye.y - 0.1, player.eye.z);
+    const eye = this.world.lineOfSight(w.pos.x, w.pos.y + 1.6, w.pos.z, player.eye.x, player.eye.y - 0.1, player.eye.z);
     if (!eye) {
       // chasers still smell you when very close
       if (w.state === 'chase' && dist < 3) w.seesPlayer = true;
@@ -529,7 +529,7 @@ export class Horde {
           }
         }
         const reach = w.model.crawler ? 1.0 : 1.3;
-        if (dist < reach && w.attackCd <= 0 && !player.dead) {
+        if (dist < reach && w.attackCd <= 0 && !player.dead && Math.abs(player.pos.y - w.pos.y) < 0.9) {
           w.setState('lunge');
           w.headPos(_v);
           this.audio.snarl(_v);
@@ -543,7 +543,7 @@ export class Horde {
           const fx = Math.sin(w.facing), fz = Math.cos(w.facing);
           const dot = (fx * dx + fz * dz) / (dist || 1);
           const reach = w.model.crawler ? 1.15 : 1.45;
-          if (dist < reach && dot > 0.45 && !player.dead && player.canBeGrabbed(w)) {
+          if (dist < reach && dot > 0.45 && !player.dead && player.canBeGrabbed(w) && Math.abs(player.pos.y - w.pos.y) < 0.9) {
             w.setState('grab');
             w.biteT = 0;
             player.addGrabber(w);
@@ -663,10 +663,15 @@ export class Horde {
     const decay = Math.exp(-dt * 5);
     const shoved = Math.hypot(w.push.x, w.push.z) > 0.6;
     world.resolveCircle(w.pos, 0.28);
-    if (world.floorMode && !world.floorOK(w.pos.x, w.pos.z, 0.2)) {
-      // shoved at the edge of the boardwalk, and the shove carries it over: into the swamp
-      if (shoved && !world.onFloor(w.pos.x + w.push.x * 0.25, w.pos.z + w.push.z * 0.25)) { this.drown(w); return; }
-      world.constrain(w.pos, px, pz, 0.2);
+    if (world.floorMode) {
+      if (!world.floorOKAt(w.pos.x, w.pos.z, 0.2, w.pos.y)) {
+        // shoved at the edge of the boardwalk, and the shove carries it over: into the water
+        const over = world.heightAt(w.pos.x + w.push.x * 0.25, w.pos.z + w.push.z * 0.25, w.pos.y);
+        if (shoved && (over === null || over < w.pos.y - 0.6)) { this.drown(w); return; }
+        world.constrainAt(w.pos, px, pz, 0.2);
+      }
+      const g = world.heightAt(w.pos.x, w.pos.z, w.pos.y);
+      if (g !== null) w.pos.y = g;
     }
     w.push.x *= decay;
     w.push.z *= decay;
@@ -718,7 +723,7 @@ export class Horde {
         if (!bFixed) { b.pos.x += nx * push; b.pos.z += nz * push; }
       }
       // body contact with the player
-      if (a.state === 'held' || a.state === 'grab' || a.isDown) continue;
+      if (a.state === 'held' || a.state === 'grab' || a.isDown || Math.abs(a.pos.y - P.y) > 1.2) continue;
       const dx = a.pos.x - P.x, dz = a.pos.z - P.z;
       const d2 = dx * dx + dz * dz;
       const pr = 0.6;
@@ -775,12 +780,12 @@ export class Horde {
     if (!w.lootRolled) {
       w.lootRolled = true;
       // a dead Guardsman still wears his tags
-      if (w.riot && this.rng.chance(0.4)) this.loot.dropItem(makeItem('dogtags'), _v.set(w.pos.x + this.rng.range(-0.3, 0.3), 0, w.pos.z + this.rng.range(-0.3, 0.3)));
+      if (w.riot && this.rng.chance(0.4)) this.loot.dropItem(makeItem('dogtags'), _v.set(w.pos.x + this.rng.range(-0.3, 0.3), w.pos.y, w.pos.z + this.rng.range(-0.3, 0.3)));
       if (this.rng.chance(0.14)) {
-        this.loot.dropItem(rollItem(this.rng, 'walker', 1), _v.set(w.pos.x + this.rng.range(-0.4, 0.4), 0, w.pos.z + this.rng.range(-0.4, 0.4)));
+        this.loot.dropItem(rollItem(this.rng, 'walker', 1), _v.set(w.pos.x + this.rng.range(-0.4, 0.4), w.pos.y, w.pos.z + this.rng.range(-0.4, 0.4)));
       }
     }
-    this.fx.bloodPool(w.pos.x + fx * 0.8 * w.model.fallDir, w.pos.z + fz * 0.8 * w.model.fallDir, 0.9 + this.rng.next() * 0.6);
+    this.fx.bloodPool(w.pos.x + fx * 0.8 * w.model.fallDir, w.pos.z + fz * 0.8 * w.model.fallDir, 0.9 + this.rng.next() * 0.6, w.pos.y);
     this.events?.onKill?.(w, info);
   }
 

@@ -9,7 +9,12 @@ import { objective } from '../../data/story.js';
 // the side. The board itself is what you point at: click a photo to pick the
 // night's destination.
 
-const PHOTO = { cypress: ['#5e6a58', '#a09070'], railyard: ['#56605e', '#8a6a4a'], quarter: ['#5a5456', '#a08a6a'], marais: ['#1e2a24', '#3a4a3a'], outpost: ['#23272c', '#5a2a24'] };
+const PHOTO = { cypress: ['#5e6a58', '#a09070'], railyard: ['#56605e', '#8a6a4a'], quarter: ['#5a5456', '#a08a6a'], marais: ['#1e2a24', '#3a4a3a'], outpost: ['#23272c', '#5a2a24'], harbor: ['#6a7a98', '#c8a878'] };
+
+// The zones on the board: Port Lafitte only once Hale has told you about the Covenant.
+export function boardZones(p) {
+  return ZONES.filter((z) => !z.heist || (p.heist && p.heist.stage !== 'locked'));
+}
 
 function sketch(g, id, x, y, w, h) {
   const [sky, ground] = PHOTO[id] || ['#555', '#777'];
@@ -32,6 +37,17 @@ function sketch(g, id, x, y, w, h) {
     g.fillRect(x, base + 4, w, 6);
     for (let i = 0; i < 4; i++) { const bx = x + 18 + i * 56; g.fillRect(bx, base - 28, 40, 28); for (const px of [bx + 4, bx + 34]) g.fillRect(px, base, 3, 18); }
     for (let i = 0; i < 3; i++) { const tx = x + 40 + i * 80; g.fillRect(tx, y + 10, 5, base - y - 6); g.beginPath(); g.ellipse(tx + 2, y + 18, 26, 9, 0, 0, Math.PI * 2); g.fill(); }
+  } else if (id === 'harbor') {
+    // the sun going down behind a freighter at anchor, a crane on the quay
+    g.fillStyle = 'rgba(255,220,150,0.8)';
+    g.beginPath(); g.arc(x + w * 0.42, base - 4, 10, Math.PI, 0); g.fill();
+    g.fillStyle = 'rgba(15,15,15,0.85)';
+    g.fillRect(x + 20, base - 12, 140, 12);
+    g.fillRect(x + 120, base - 34, 26, 22);
+    g.fillRect(x + 126, base - 44, 6, 10);
+    g.fillRect(x + w - 30, y + 20, 6, base - y - 20);
+    g.fillRect(x + w - 70, y + 20, 64, 5);
+    g.fillRect(x, base, w, 3);
   } else if (id === 'outpost') {
     g.fillRect(x, base - 26, w, 26);
     g.fillRect(x + w / 2 - 4, y + 8, 8, base - y - 8);
@@ -86,10 +102,11 @@ export function drawBoard(boat, p, state = {}) {
   const regions = [];
   const o = objective(p);
   const leads = o ? (o.zone ? [o.zone] : o.zones || []) : [];
+  const zones = boardZones(p);
   const cw = 196, ch = 190;
-  const spots = [[40, 110], [258, 100], [476, 112], [120, 380], [360, 372]];
+  const spots = zones.length > 5 ? [[30, 104], [240, 96], [450, 106], [30, 384], [240, 378], [450, 388]] : [[40, 110], [258, 100], [476, 112], [120, 380], [360, 372]];
   const sel = state.sel || p.lastZone || 'cypress';
-  ZONES.forEach((z, i) => {
+  zones.forEach((z, i) => {
     const [x, y] = spots[i];
     const rot = ((i * 37) % 7 - 3) * 0.012;
     g.save();
@@ -163,7 +180,7 @@ export function drawBoard(boat, p, state = {}) {
   // red string from the photos to the skiff note
   g.strokeStyle = 'rgba(170,30,25,0.8)';
   g.lineWidth = 3;
-  const si = ZONES.findIndex((z) => z.id === sel);
+  const si = zones.findIndex((z) => z.id === sel);
   if (si >= 0) {
     const [sx, sy] = spots[si];
     g.beginPath();

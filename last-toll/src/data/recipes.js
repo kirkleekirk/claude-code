@@ -26,6 +26,10 @@ export const RECIPES = [
   { id: 'r_axe', bench: 'workshop', cat: 'Blades', level: 3, out: ['axe', 1], cost: { steel: 3, leather: 1, fasteners: 2 } },
   // Hale's plans, only while the relay at Outpost 9 still stands
   { id: 'r_charge', bench: 'workshop', cat: 'Demolition', level: 1, out: ['demo_charge', 1], cost: { gunpowder: 4, chemicals: 3, electronics: 2, tape: 2, fasteners: 2 }, story: 'mast' },
+  // the Covenant job, once Hale has told you about the ship
+  { id: 'r_torch', bench: 'workshop', cat: 'The Covenant', level: 1, out: ['cutting_torch', 1], cost: { steel: 2, chemicals: 4, fasteners: 2, electronics: 1, tape: 1 }, heist: true },
+  { id: 'r_plate', bench: 'workshop', cat: 'The Covenant', level: 1, out: ['hull_plate', 1], cost: { steel: 3, fasteners: 3, scrap: 2 }, heist: true },
+  { id: 'r_heist_charge', bench: 'workshop', cat: 'The Covenant', level: 1, out: ['demo_charge', 1], cost: { gunpowder: 4, chemicals: 3, electronics: 2, tape: 2, fasteners: 2 }, heist: true, notStory: 'mast' },
   // Reloading bench
   { id: 'r_arrow', bench: 'reloading', cat: 'Arrows & bolts', level: 1, out: ['arrow', 4], cost: { scrap: 1, cloth: 1, glue: 1 } },
   { id: 'r_bolt', bench: 'reloading', cat: 'Arrows & bolts', level: 1, out: ['bolt', 3], cost: { scrap: 1, fasteners: 1, cloth: 1 } },

@@ -75,6 +75,15 @@ export const ITEMS = {
   ledger: { name: 'Chapel Ledger', cat: 'story', stack: 1, desc: 'Father Anselme\'s parish book from Marais Noir: births, burials, who owes who for bait. The last pages are in a hurried hand. For Odile.' },
   demo_charge: { name: 'Demolition Charge', cat: 'story', stack: 1, desc: 'Powder and fertilizer packed in a coffee can, a kitchen timer wired to a blasting cap. Hale\'s design. Plant it on the relay mast at Outpost 9.' },
 
+  // ---- The Covenant job: gear for the heist and the prize
+  dive_gear: { name: 'Dive Gear', cat: 'story', stack: 1, heist: true, desc: 'A rebreather, a mask and fins from the Port Lafitte dive shop. About two and a half minutes of air under water, and no bubbles.' },
+  cutting_torch: { name: 'Cutting Torch', cat: 'story', stack: 1, heist: true, desc: 'An oxy-acetylene torch with a short hose and a full bottle. Cuts a grate or a cage lock in a few seconds. Bright, but quiet.' },
+  boat_keys: { name: 'Speedboat Keys', cat: 'story', stack: 1, heist: true, desc: 'On a cork float: "RAY\'S — SLIP 14". The fast boat at the end of the Port Lafitte marina.' },
+  fuel_can: { name: 'Fuel Can', cat: 'story', stack: 4, heist: true, desc: 'Five gallons of diesel from the port\'s fuel depot. A fast boat needs two. The Magnolia needs four.' },
+  hull_plate: { name: 'Hull Plating', cat: 'story', stack: 2, heist: true, desc: 'Steel plate cut and drilled to bolt over the Magnolia\'s rails and wheelhouse. Two will do.' },
+  manifest: { name: 'Covenant Manifest', cat: 'story', stack: 1, heist: true, desc: 'The freighter\'s cargo manifest from the harbor master\'s desk. Hold 3: "EXPERIMENTAL — NATCHEZ LABS — CAGE CODE 4-1-7-7". The cage opens for anyone who knows the code.' },
+  prototype_case: { name: 'Prototype Case', cat: 'story', stack: 1, heist: true, desc: 'A sealed Guard case from the Covenant\'s cage, stencilled NATCHEZ LABS. Heavy. Hale will know how to open it.' },
+
   // ---- Utility
   battery: { name: 'Battery', cat: 'util', stack: 5, desc: 'Refills your flashlight.' },
   suppressor: { name: 'Loose Suppressor', cat: 'junk', stack: 1, yields: { steel: 1, fasteners: 2 }, desc: 'A pistol can. The gunsmith bench can fit it as a mod for free.' },

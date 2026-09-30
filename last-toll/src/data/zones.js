@@ -1,5 +1,8 @@
 // Raid destinations. Every trip is generated fresh from the zone's recipe.
-//   layout: 'city' (street grid behind a levee) or 'stilts' (boardwalks over the swamp)
+//   layout: 'city' (street grid behind a levee), 'stilts' (boardwalks over the swamp)
+//           or 'harbor' (Port Lafitte: a beach, a port, and the Covenant at anchor)
+//   sky:    cloud style (see world/Environment.js SKY_STYLES)
+//   heist:  only on the board once the Covenant job is known
 //   mood:   'dusk' raids start at five and fall into night; 'night' and 'swamp' start after dark
 //   sweepMinutes: real minutes until the Living Guard's curfew Sweep begins
 //   guards: soldiers on post and on patrol before the Sweep; sweepTeam: soldiers who come with it
@@ -111,6 +114,27 @@ export const ZONES = [
     dronesBeforeSweep: 1,
     lots: [['compound', 2.2], ['warehouse', 2], ['containers', 2], ['yard', 1.2], ['house', 0.8]],
     palette: { fog: 0x20242a },
+  },
+  {
+    id: 'harbor',
+    name: 'Port Lafitte',
+    threat: 3,
+    layout: 'harbor',
+    mood: 'dusk',
+    sky: 'sea',
+    heist: true,
+    blurb: 'A Gulf port the Guard took for its supply line: a beach, a marina, a quay with two cranes, and the freighter Covenant riding at anchor off the breakwater. Scout it, prep it, then take it.',
+    focus: 'The Covenant · Boats · Fuel · Dive gear',
+    walkers: 40,
+    maxWalkers: 60,
+    sweepMinutes: 12,
+    lootTier: 2,
+    riot: 0.1,
+    fresh: 0.1,
+    guards: { posts: 2, patrols: 1 },
+    sweepTeam: 3,
+    drones: 2,
+    palette: { fog: 0x7a8288 },
   },
 ];
 

@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { CityGen } from '../world/CityGen.js';
 import { StiltGen } from '../world/StiltGen.js';
+import { HarborGen, WY as HARBOR_WY } from '../world/HarborGen.js';
+import { HarborRaid } from './Harbor.js';
 import { Environment } from '../world/Environment.js';
 import { Loot } from './Loot.js';
 import { Effects } from '../fx/Effects.js';
@@ -63,8 +65,9 @@ function angryZone(z) {
 const clone = (x) => (x ? JSON.parse(JSON.stringify(x)) : x);
 
 export class Raid {
-  constructor(app, { zone, profile, seed }) {
+  constructor(app, { zone, profile, seed, heist = null }) {
     this.app = app;
+    this.heist = heist;
     this.profile = profile;
     this.hornsDead = !!(profile.story && profile.story.mastDown);
     this.zone = this.hornsDead ? angryZone(zone) : zone;
@@ -91,19 +94,25 @@ export class Raid {
     scene.add(camera);
 
     const stilts = zone.layout === 'stilts';
-    const mastA = this.rng.range(0, Math.PI * 2);
+    const harbor = zone.layout === 'harbor';
+    // the Guard's mast stands inland; at the harbor that's behind the town
+    const mastA = harbor ? Math.PI / 2 + this.rng.range(-0.5, 0.5) : this.rng.range(0, Math.PI * 2);
     this.env = new Environment(scene, {
       mastDir: new THREE.Vector3(Math.cos(mastA), 0, Math.sin(mastA)),
       fogTint: zone.palette.fog,
-      mood: zone.mood || 'dusk',
+      mood: this.heist?.mood || zone.mood || 'dusk',
       storm: !!zone.storm,
       fireflies: !!zone.fireflies,
-      waterY: stilts ? -1.6 : undefined,
+      waterY: stilts ? -1.6 : harbor ? HARBOR_WY : undefined,
+      sky: zone.sky,
+      mist: harbor ? [[0.2, 0.3], [0.7, 0.18]] : null,
     });
     this.env.onThunder = (delay) => audio.thunder(delay);
     this.loot = new Loot(scene, audio);
-    const Gen = stilts ? StiltGen : CityGen;
-    const gen = new Gen({ zone, seed: this.seed, scene, loot: this.loot, force: this._storyForce() });
+    const Gen = stilts ? StiltGen : harbor ? HarborGen : CityGen;
+    // on the All Hands job the Magnolia herself comes along
+    const magnoliaModel = this.heist && this.heist.approach === 'magnolia' ? this.app.hub?.boat?.exterior?.() || null : null;
+    const gen = new Gen({ zone, seed: this.seed, scene, loot: this.loot, force: this._storyForce(), heist: this.heist, magnoliaModel });
     this.city = gen.build();
     this.world = this.city.world;
     this.docks = this.city.docks;
@@ -129,7 +138,8 @@ export class Raid {
         this.hud.toast('Bitten', true);
         this.stats.bites++;
       }
-      if (player.using) this._cancelUse();
+      // a hit spoils what you were doing, unless it's work that keeps going (a torch on a lock)
+      if (player.using && player.using.kind !== 'work') this._cancelUse();
     };
     player.onDeath = (kind) => this._onDeath(kind);
 
@@ -220,9 +230,14 @@ export class Raid {
     }
 
     this._setupStory();
+    if (this.city.harbor) {
+      this.harbor = new HarborRaid(this);
+      this.harbor.start();
+    }
     this._spawnWalkers();
 
-    const clk = zoneClock(zone);
+    // the night of the job runs on its own clock
+    const clk = this.heist ? { start: this.heist.time, sweep: this.heist.time + 2.5, overrun: this.heist.time + 3.75 } : zoneClock(zone);
     this.clk = clk;
     this.clock = clk.start;
     this.rate = (clk.sweep - clk.start) / (zone.sweepMinutes * 60);
@@ -239,10 +254,14 @@ export class Raid {
     this.env.setTime(this.clock);
     audio.startAmbience();
     audio.setAmbience({ wind: 0.16, insects: 0, drone: 0 });
-    const lede = stilts
-      ? 'Scavenge the village. The dead climb out of the water here. Get back to your skiff before the Sweep.'
-      : 'Scavenge. Get back to the water before the Living Guard sweeps the sector.';
-    this.hud.big(zone.name, lede, '', 5);
+    const lede = this.heist
+      ? this.harbor.approach.entry
+      : stilts
+        ? 'Scavenge the village. The dead climb out of the water here. Get back to your skiff before the Sweep.'
+        : harbor
+          ? 'The Covenant rides at anchor off the breakwater. Scavenge the port, and get back to the water before the Sweep.'
+          : 'Scavenge. Get back to the water before the Living Guard sweeps the sector.';
+    this.hud.big(this.heist ? this.harbor.approach.name : zone.name, lede, '', this.heist ? 9 : 5);
     if (this.gaveScrewdriver) setTimeout(() => this.hud.toast('You found a rusty screwdriver in the skiff'), 1500);
     this.hud.toast('Tab: backpack · M: map · F: flashlight');
     for (const n of this.app.raidNotes || []) setTimeout(() => this.hud.toast(n), 2600);
@@ -385,6 +404,10 @@ export class Raid {
 
   // What the story wants of you here, for the HUD.
   _storyHud() {
+    if (this.harbor) {
+      const h = this.harbor.objective();
+      if (h) return h;
+    }
     const g = this.storyGoal, s = this.profile.story;
     if (this.charge) return { text: `Get clear of the mast — ${Math.ceil(this.charge.t)}`, urgent: true };
     if (g && g.kind === 'escape') return { text: 'The relay is down. Get to a skiff.' };
@@ -611,6 +634,7 @@ export class Raid {
   _finishUse() {
     const u = this.player.using;
     this.player.using = null;
+    if (u.kind && this.harbor && this.harbor.finishUse(u)) return;
     if (u.kind === 'guts') {
       u.corpse.gutted = true;
       this.player.disguise = 60;
@@ -729,7 +753,12 @@ export class Raid {
         if (input.wasPressed('KeyM')) this.mapUI.toggle(!this.mapUI.open);
       }
       if (input.wasPressed('Tab')) this.toggleInventory();
-      if (!uiBlock) {
+      // in the water, on a ladder or at a wheel your hands are full
+      this.handsBusy = player.mode !== 'walk' && player.mode !== 'fall';
+      if (!uiBlock && this.handsBusy) {
+        this.combat.update(dt, { ...inputShim, isDown: () => false }, { x: 0, y: 0, rawY: 0 });
+        player.lookInput(look.x, look.y);
+      } else if (!uiBlock) {
         this.combat.update(dt, input, look);
         player.lookInput(look.x * this.combat.lookMul, look.y * this.combat.lookMul);
       } else {
@@ -741,9 +770,12 @@ export class Raid {
         moveZ: uiBlock ? 0 : input.moveZ,
         sprint: !uiBlock && input.isDown('ShiftLeft') && !hb && this.combat.ads < 0.3,
         crouchToggle: !uiBlock && (input.wasPressed('KeyC') || input.wasPressed('ControlLeft')),
+        rise: !uiBlock && input.isDown('Space'),
         speedMul: (player.using ? 0.6 : 1) * (this.combat.ads > 0.5 ? 0.6 : 1),
         time: this.time,
       });
+      if (this.harbor) this.harbor.update(dt);
+      if (this.ended) return;
       if (!this.combat.held) player.speedMul = 1;
       if (player.using) {
         player.using.t += dt;
@@ -766,13 +798,15 @@ export class Raid {
     }
     player.applyCamera(this.time);
     const zoom = this.combat.isGun ? (this.combat.d.zoom || (this.combat.d.slot === 'long' ? this.baseFov * 0.78 : this.baseFov * 0.85)) : this.baseFov;
-    const targetFov = this.baseFov + (zoom - this.baseFov) * this.combat.ads;
+    let targetFov = this.baseFov + (zoom - this.baseFov) * this.combat.ads;
+    if (player.using && player.using.kind === 'scope') targetFov = 14;
     if (Math.abs(this.camera.fov - targetFov) > 0.01) {
       this.camera.fov = targetFov;
       this.camera.updateProjectionMatrix();
     }
     this.camera.updateMatrixWorld();
     this.env.update(dt, this.camera.position, this.time);
+    if (this.harbor) this.harbor.afterCamera(this.camera);
 
     // lights
     this.flashlight.intensity = player.flashlightOn ? 55 * (player.battery < 15 ? 0.4 + Math.random() * 0.6 : 1) : 0;
@@ -802,7 +836,7 @@ export class Raid {
       } else if (target.type === 'container') prompt = `Search ${target.label}`;
       else prompt = target.label;
     }
-    if (!uiBlock && !player.dead && input.wasPressed('KeyE')) {
+    if (!uiBlock && !player.dead && player.mode !== 'seat' && player.mode !== 'climb' && input.wasPressed('KeyE')) {
       if (corpse && !player.using) {
         player.using = { kind: 'guts', corpse, t: 0, dur: 1.6 };
         this.app.audio.splat(corpse.pos);
@@ -862,7 +896,7 @@ export class Raid {
       health: player.health, maxHealth: player.maxHealth, stamina: player.stamina, battery: player.battery, flashlight: player.flashlightOn,
       weapon, slots: SLOTS.map((s) => !!this.inv.loadout[s]), slotIndex: SLOTS.indexOf(c.slot),
       ads: c.ads, hideCross: c.isGun && c.ads > 0.6, charge: c.melee && c.melee.phase === 'windup' ? c.melee.charge : null,
-      prompt, promptKey, hint: player.using ? (player.using.kind === 'guts' ? 'Smearing guts…' : `Using ${def(player.using.item.id).name}…`) : c.hint,
+      prompt, promptKey, hint: player.using ? (player.using.hint || (player.using.kind === 'guts' ? 'Smearing guts…' : `Using ${def(player.using.item.id).name}…`)) : c.hint,
       status: this._status(),
       grab, extract: extractK, hurt: player.hurtT, scope: c.isGun && c.d.scope && c.ads > 0.92,
       objective: story,
@@ -879,6 +913,7 @@ export class Raid {
     if (p.regenBoost > 0) out.push('Painkillers');
     if (p.crouched) out.push('Crouched');
     if (this.guards.spotted) out.push('Spotted by the Guard');
+    if (this.harbor) out.push(...this.harbor.status());
     return out.join(' · ');
   }
 
@@ -1076,7 +1111,7 @@ export class Raid {
 
   render(renderer) {
     renderer.render(this.scene, this.camera);
-    this.vm.render(renderer);
+    if (!this.handsBusy) this.vm.render(renderer);
   }
 
   setPaused(p) {
@@ -1109,6 +1144,7 @@ export class Raid {
       backpack: this.inv.backpack,
       carried: this.inv.all(),
       storyEvents: this.storyEvents.slice(),
+      heist: this.heist ? { approach: this.heist.approach, gotCase: this.inv.count('prototype_case') > 0 } : null,
     };
     this.app.onRaidEnd(out);
   }
@@ -1125,6 +1161,7 @@ export class Raid {
     this.invUI.el.remove();
     this.mapUI.el.remove();
     this.guards.dispose();
+    this.harbor?.dispose();
     try { window.speechSynthesis?.cancel(); } catch (_) { /* optional */ }
   }
 }

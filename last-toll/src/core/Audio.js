@@ -667,6 +667,49 @@ export class Audio {
     };
   }
 
+  // An outboard motor: a throaty loop. rev(k) runs it from idle (0) to flat out (1).
+  engine(pos) {
+    if (!this.enabled) return null;
+    const ctx = this.ctx;
+    const p = ctx.createPanner();
+    p.panningModel = 'equalpower';
+    p.distanceModel = 'inverse';
+    p.refDistance = 6;
+    p.rolloffFactor = 1;
+    p.connect(this.sfx);
+    const g = ctx.createGain();
+    g.gain.value = 0.0;
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = 380;
+    f.Q.value = 2;
+    f.connect(g);
+    g.connect(p);
+    const base = [38, 57, 76];
+    const oscs = base.map((fr, i) => {
+      const o = ctx.createOscillator();
+      o.type = i === 1 ? 'square' : 'sawtooth';
+      o.frequency.value = fr;
+      o.connect(f);
+      o.start();
+      return o;
+    });
+    const set = (v) => {
+      if (p.positionX) { p.positionX.value = v.x; p.positionY.value = v.y; p.positionZ.value = v.z; } else p.setPosition(v.x, v.y, v.z);
+    };
+    set(pos);
+    return {
+      set,
+      rev: (k) => {
+        const t = ctx.currentTime;
+        oscs.forEach((o, i) => o.frequency.setTargetAtTime(base[i] * (1 + k * 1.6), t, 0.15));
+        f.frequency.setTargetAtTime(300 + k * 900, t, 0.15);
+        g.gain.setTargetAtTime(0.1 + k * 0.28, t, 0.2);
+      },
+      stop: () => { for (const o of oscs) { try { o.stop(); } catch (_) { /* stopped */ } } p.disconnect(); },
+    };
+  }
+
   alarm(pos) {
     if (!this.enabled) return;
     const t = this.now;

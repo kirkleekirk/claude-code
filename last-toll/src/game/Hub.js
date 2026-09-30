@@ -13,6 +13,8 @@ import { GunsmithPanel } from '../ui/hub/GunsmithPanel.js';
 import { BoardPanel, drawBoard } from '../ui/hub/BoardPanel.js';
 import { StashPanel } from '../ui/hub/StashPanel.js';
 import { RecyclerPanel, JournalPanel, SkiffPanel } from '../ui/hub/MiscPanels.js';
+import { HeistPanel, drawHeistBoard } from '../ui/hub/HeistPanel.js';
+import { approachById, readiness, SETUPS } from '../data/heist.js';
 
 // Home: the Magnolia as a place you walk around. The title screen floats a camera
 // around her; once you're aboard you walk the deck in first person and use the
@@ -21,6 +23,7 @@ import { RecyclerPanel, JournalPanel, SkiffPanel } from '../ui/hub/MiscPanels.js
 const PANELS = {
   workshop: CraftPanel, reloading: CraftPanel, infirmary: CraftPanel, galley: CraftPanel,
   gunsmith: GunsmithPanel, board: BoardPanel, stash: StashPanel, recycler: RecyclerPanel, journal: JournalPanel, skiff: SkiffPanel,
+  heist: HeistPanel,
 };
 
 const _v = new THREE.Vector3();
@@ -120,6 +123,13 @@ export class Hub {
         note({ html: 'Health restored', kind: 'get' });
       },
       radio: () => hub.audio.radio(),
+      // a line in the captain's log, and a note on screen that the job's on
+      log: (text) => {
+        p.story.log.push({ day: p.day, step: 'covenant', text });
+        hub.save();
+        drawHeistBoard(hub.boat.heistFace, p);
+        note({ html: `<span>Journal</span> <b>The Covenant</b> — ${esc(text)}`, kind: 'obj' });
+      },
     };
   }
 
@@ -138,6 +148,8 @@ export class Hub {
     };
     if (s.step === 'codebook' && zoneId === 'quarter') move('keycard');
     if (s.step === 'mast' && zoneId === 'outpost') move('demo_charge');
+    // Port Lafitte: bring the Covenant gear you have, so you can use it there
+    if (zoneId === 'harbor') for (const id of ['boat_keys', 'dive_gear', 'cutting_torch', 'manifest']) move(id);
     return notes;
   }
 
@@ -160,6 +172,7 @@ export class Hub {
     this.save();
     this.hud.root.style.display = '';
     drawBoard(this.boat, p);
+    drawHeistBoard(this.boat.heistFace, p);
     this.audio.startAmbience();
     this.audio.setAmbience({ wind: 0.1, insects: 0.7, drone: 0 });
     if (fromRaid) {
@@ -278,6 +291,24 @@ export class Hub {
     this.app.startRaid(zoneId);
   }
 
+  // The night of the Covenant job: use up what the approach burns, bring the gear.
+  launchHeist(id) {
+    const p = this.p, a = approachById(id);
+    if (!a || !readiness(p, a).ready) { this.audio.ui('error'); return; }
+    for (const s of a.setups) {
+      const u = SETUPS[s].uses;
+      if (u) removeFrom([p.stash, p.backpack], u[0], u[1]);
+    }
+    const own = (x) => countOwned(p, x) > 0;
+    const gear = { dive_gear: a.id === 'dive' || own('dive_gear'), cutting_torch: own('cutting_torch'), boat_keys: a.start === 'boat', manifest: own('manifest') };
+    p.heist.pick = id;
+    this.leave();
+    this.p.lastZone = 'harbor';
+    this.app.raidNotes = [];
+    this.save();
+    this.app.startRaid('harbor', undefined, { approach: id, time: a.time, gear });
+  }
+
   // Esc while walking: the pause menu.
   pause() {
     if (this.mode !== 'walk') return;
@@ -367,11 +398,11 @@ export class Hub {
 
   _titleCam() {
     const t = this.t;
-    const a = 0.72 + Math.sin(t * 0.045) * 0.35;
-    const r = 25 + Math.sin(t * 0.07) * 2;
-    this.camera.position.set(Math.sin(a) * r + 2, 5.2 + Math.sin(t * 0.21) * 0.25, -Math.cos(a) * r - 2);
-    // the boat sits to the right of the title
-    this.camera.lookAt(6, 3.2, 6);
+    // off the stern quarter looking upriver into the sunset; the boat sits to the right of the title
+    const a = 0.55 + Math.sin(t * 0.045) * 0.22;
+    const r = 27 + Math.sin(t * 0.07) * 2;
+    this.camera.position.set(-Math.sin(a) * r - 3, 4.6 + Math.sin(t * 0.21) * 0.25, Math.cos(a) * r + 4);
+    this.camera.lookAt(-14, 6.5, -22);
     this.titlePos = this.camera.position.clone();
     this.titleQ = this.camera.quaternion.clone();
   }
@@ -448,11 +479,24 @@ export class Hub {
     this.hud.status.innerHTML = `
       <div class="row"><span class="label">Health</span><div class="bar hp"><em style="left:${maxH}%;right:0"></em><span style="width:${p.health}%"></span></div><span class="v num">${Math.ceil(p.health)}</span></div>
       <div class="row"><span class="label">Fed</span><div class="bar st"><span style="width:${p.nourishment}%"></span></div><span class="v num">${Math.round(p.nourishment)}</span></div>
-      <div class="hh-next"><span class="label">Next trip</span> ${z.name}</div>`;
+      <div class="hh-next"><span class="label">Next trip</span> ${z.name}</div>
+      ${this._heistLine()}`;
     this._objective();
   }
 
   refreshStatus() { this._status(); }
+
+  // The Covenant job, a line under the status while it's on.
+  _heistLine() {
+    const h = this.p.heist;
+    if (!h || h.stage === 'locked' || h.stage === 'done') {
+      if (h && h.stage === 'done' && countOwned(this.p, 'prototype_case')) return '<div class="hh-next"><span class="label">The Covenant</span> Take the case to Hale</div>';
+      return '';
+    }
+    if (countOwned(this.p, 'prototype_case')) return '<div class="hh-next"><span class="label">The Covenant</span> Take the case to Hale</div>';
+    const t = !h.scouted ? 'Scout her at Port Lafitte' : 'Plan it on Hale\'s board';
+    return `<div class="hh-next"><span class="label">The Covenant</span> ${t}</div>`;
+  }
 
   // The story objective, top left, and a marker over whatever it points at aboard.
   _objective() {

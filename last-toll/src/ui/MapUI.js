@@ -31,7 +31,7 @@ export class MapUI {
   }
 
   _w2c(x, z) {
-    const S = this.canvas.width, H = WORLD_HALF;
+    const S = this.canvas.width, H = this.map?.half || WORLD_HALF;
     return [((x + H) / (2 * H)) * S, ((z + H) / (2 * H)) * S];
   }
 
@@ -50,7 +50,14 @@ export class MapUI {
       for (let x = 0; x <= S; x += 20) g.lineTo(x, y + Math.sin(x * 0.03 + i) * 3);
       g.stroke();
     }
-    if (!this.map.stilts) {
+    // the harbor's land, the beach and the ship on the water
+    for (const l of this.map.land || []) {
+      const [x0, z0] = this._w2c(l.x0, l.z0);
+      const [x1, z1] = this._w2c(l.x1, l.z1);
+      g.fillStyle = l.col;
+      g.fillRect(x0, z0, x1 - x0, z1 - z0);
+    }
+    if (!this.map.stilts && !this.map.harbor) {
       // the levee around the city
       const [lx0, lz0] = this._w2c(-CITY_HALF - 0.6, -CITY_HALF - 0.6);
       const [lx1, lz1] = this._w2c(CITY_HALF + 0.6, CITY_HALF + 0.6);
@@ -70,7 +77,7 @@ export class MapUI {
     for (const b of this.map.buildings) {
       const [x0, z0] = this._w2c(b.x0, b.z0);
       const [x1, z1] = this._w2c(b.x1, b.z1);
-      g.fillStyle = b.kind === 'container' ? '#5a4a3e' : b.kind === 'tent' ? '#4d5233' : b.kind === 'clinic' ? '#6a6c66' : '#4a4f48';
+      g.fillStyle = b.kind === 'container' ? '#5a4a3e' : b.kind === 'tent' ? '#4d5233' : b.kind === 'clinic' ? '#6a6c66' : b.kind === 'ship' ? '#2e3338' : b.kind === 'hold' ? '#1c1e20' : b.kind === 'house' ? '#8a8880' : '#4a4f48';
       g.fillRect(x0, z0, x1 - x0, z1 - z0);
       g.strokeStyle = 'rgba(0,0,0,0.5)';
       g.lineWidth = 1;

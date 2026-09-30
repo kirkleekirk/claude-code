@@ -18,6 +18,9 @@ export const HOWTO = `<div class="howto">
   <section><h3>The crew</h3>
     <p>Remy, the Magnolia's captain, keeps the board. Odile runs the infirmary and will patch you up once a day. A Guard deserter named Hale lives on the aft deck, and he has work for you. Walk up to any of them and press <span class="key">E</span> to talk; pick a reply with <span class="key">1</span>–<span class="key">4</span>.</p>
     <p>Your current objective is at the top left, aboard and ashore. A gold marker shows where it points; a yellow note on the board marks the place to go. The captain's log keeps the story so far.</p></section>
+  <section><h3>The Covenant</h3>
+    <p>Once Hale trusts you he'll tell you about a Guard freighter at anchor off Port Lafitte. Scout her from the lighthouse or a crane, then plan the job on the board by his bunk: four ways in, each with its own setups, kit and ways out.</p>
+    <p>Ladders climb with <span class="key">E</span>. In the water you swim; with dive gear, <span class="key">C</span> dives and <span class="key">Space</span> rises. At a boat's wheel, <span class="key">W</span> idles quietly and <span class="key">Shift</span>+<span class="key">W</span> opens it up — loudly. <span class="key">E</span> gets you off.</p></section>
   <section><h3>Controls</h3>
     <div class="keys-list">
       <span class="key">WASD</span><span>Move · <span class="key">Shift</span> sprint · <span class="key">C</span> crouch</span>

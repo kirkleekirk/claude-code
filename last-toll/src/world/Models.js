@@ -740,6 +740,8 @@ const SHAPES = {
   watch: ['disc', 0xc9a227], toolkit: ['toolbox', 0x9a2a1e], lighter: ['smallbox', 0xc8c8c8], cutlery: ['bar', 0xb8bcc0],
   belt: ['strip', 0x4a2e1a], fertilizer: ['sack', 0xa89a6a], fireworks: ['bundle', 0xb03030], phone: ['phone', 0x151515], blanket: ['folded', 0x5a6a7a],
   codebook: ['book', 0x2b3035], ledger: ['book', 0x4a2a1a], demo_charge: ['charge', 0x6a5a3a],
+  dive_gear: ['jug', 0xd8b43a], cutting_torch: ['tin', 0x3a6a4a], boat_keys: ['smallbox', 0xe06a1a], fuel_can: ['jug', 0x9a1e18],
+  hull_plate: ['bar', 0x6a6e70], manifest: ['book', 0x9a1e18], prototype_case: ['toolbox', 0x3d444a],
   beans: ['can', 0x9a3a22], crackers: ['box', 0xd0b070], jerky: ['flat', 0x6a3a1a], soda: ['can', 0xb02a2a], mre: ['flat', 0x7a6a4a],
   rice: ['sack', 0xe0dcc8], beansrice: ['bowl', 0x7a2a1a], gumbo: ['bowl', 0x5a3a1a],
   bandage: ['roll', 0xe8e4da], antiseptic: ['bottle', 0x6a4a2a], pills: ['pills', 0xd0741f], medkit: ['medkit', 0xb02a2a], adrenaline: ['syringe', 0xd8d4c8],

@@ -151,6 +151,9 @@ export class Effects {
     p.rot.set(Math.random() * 6, Math.random() * 6, Math.random() * 6);
     p.color = color;
     p.lastSlot = -1;
+    // what it lands on: the ground, or a deck up off it
+    const w = this.world;
+    p.floor = w && w.floorMode ? w.heightAt(pos.x, pos.z, pos.y) ?? -50 : 0;
     return p;
   }
 
@@ -202,10 +205,10 @@ export class Effects {
     }
   }
 
-  bloodPool(x, z, size = 1) {
+  bloodPool(x, z, size = 1, y = 0) {
     const i = this.nextPool;
     this.nextPool = (this.nextPool + 1) % 90;
-    this.poolData[i] = { x, z, size: 0.05, target: size, rot: Math.random() * 6.28 };
+    this.poolData[i] = { x, y, z, size: 0.05, target: size, rot: Math.random() * 6.28 };
     this.pools.count = Math.max(this.pools.count, i + 1);
     this._poolMatrix(i);
   }
@@ -214,7 +217,7 @@ export class Effects {
     const d = this.poolData[i];
     _q.setFromAxisAngle(UP, d.rot);
     _s.set(d.size, 1, d.size);
-    _p.set(d.x, 0.07 + (i % 7) * 0.001, d.z);
+    _p.set(d.x, (d.y || 0) + 0.07 + (i % 7) * 0.001, d.z);
     _m.compose(_p, _q, _s);
     this.pools.setMatrixAt(i, _m);
     this.pools.instanceMatrix.needsUpdate = true;
@@ -280,8 +283,9 @@ export class Effects {
       if (p.life <= 0) { p.alive = false; continue; }
       p.vel.y -= p.g * dt;
       p.pos.addScaledVector(p.vel, dt);
-      if (p.pos.y < 0.06 + p.size / 2 && p.pos.y > -0.3) {
-        p.pos.y = 0.06 + p.size / 2;
+      const fl = p.floor ?? 0;
+      if (p.pos.y < fl + 0.06 + p.size / 2 && p.pos.y > fl - 0.3) {
+        p.pos.y = fl + 0.06 + p.size / 2;
         if (p.vel.y < -1 && p.bounce > 0) {
           p.vel.y = -p.vel.y * p.bounce;
           p.vel.x *= 0.6;

@@ -43,17 +43,50 @@ export class Magnolia {
     this._salonInterior();
     this._aftDeck();
     this._skiff();
+    // the bayou around her goes in its own batch, so the boat can be borrowed on her own
+    const boat = this.b;
+    this.b = new Batcher();
     this._surroundings();
     const mat = new THREE.MeshLambertMaterial({ vertexColors: true, map: grimeTexture() });
-    this.mesh = this.b.build(mat);
+    this.mesh = boat.build(mat);
     this.scene.add(this.mesh);
+    this.scene.add(this.b.build(mat));
+    this.b = boat;
     this.glowMat = new THREE.MeshBasicMaterial({ vertexColors: true });
-    this.scene.add(this.glow.build(this.glowMat));
+    this.glowMesh = this.glow.build(this.glowMat);
+    this.scene.add(this.glowMesh);
     this._board();
+    this._heistBoard();
     this._lights();
     this.spawn = { pos: new THREE.Vector3(0, 0, -2.6), yaw: 0 };
     this.t = 0;
     this.crew = new Crew(this);
+  }
+
+  // Her hull, decks, cabins and wheel, to stand in another scene (the Covenant job), sharing
+  // this boat's geometry: marked shared so a raid ending doesn't free what the hub still draws.
+  // Comes with what you bump into aboard her, in her own frame (deck at y 0, bow toward -z).
+  exterior() {
+    const g = new THREE.Group();
+    g.userData.boxes = this.world.boxes.filter((b) => b !== this.boardBox && b.x0 > -5.3 && b.x1 < 5.3 && b.z0 > -17 && b.z1 < 17).map((b) => ({ ...b }));
+    g.userData.floors = this.world.floors.map((f) => ({ ...f }));
+    g.userData.interiors = this.world.interiors.map((r) => ({ ...r }));
+    const share = (o) => {
+      if (o.geometry) o.geometry.userData.shared = true;
+      const ms = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+      for (const m of ms) m.userData.shared = true;
+    };
+    for (const src of [this.mesh, this.glowMesh]) {
+      share(src);
+      const m = new THREE.Mesh(src.geometry, src.material);
+      m.castShadow = true;
+      m.receiveShadow = true;
+      g.add(m);
+    }
+    const wheel = this.wheel.clone();
+    wheel.traverse(share);
+    g.add(wheel);
+    return g;
   }
 
   // ---- helpers -----------------------------------------------------------------------
@@ -516,7 +549,7 @@ export class Magnolia {
     b.box(0, 1.35, c.z - 0.02, 2.02, 1.34, 0.06, 0x6a5a48);
     b.box(0, 0.62, c.z, 1.9, 0.04, 0.04, 0x9a9ea3);
     this.scene.add(b.build(new THREE.MeshLambertMaterial({ vertexColors: true })));
-    this.world.addBoxC(0, 1, c.z, 2.2, 2, 0.8, { occlude: false, kind: 'furniture' });
+    this.boardBox = this.world.addBoxC(0, 1, c.z, 2.2, 2, 0.8, { occlude: false, kind: 'furniture' });
     // the board face is a canvas the bench UI draws on
     const canvas = document.createElement('canvas');
     canvas.width = 1024;
@@ -529,6 +562,27 @@ export class Magnolia {
     this.scene.add(face);
     this.boardFace = { mesh: face, canvas, tex, w: 1.9, h: 1.26 };
     this.station('board', 'Bulletin Board', c, f, [2.1, 2.0, 0.8], { dist: 1.75, eye: 1.4, lookY: 1.34, verb: 'Plan the next trip' });
+  }
+
+  // ---- Hale's planning board on the salon's aft wall, by his spot -------------------------
+
+  _heistBoard() {
+    const c = new THREE.Vector3(-2.2, 0, 8.22), f = new THREE.Vector3(0, 0, 1);
+    const b = new Batcher();
+    b.box(c.x, 1.55, c.z - 0.02, 1.9, 1.3, 0.05, 0x5a4632);
+    b.box(c.x, 0.88, c.z + 0.04, 1.9, 0.05, 0.12, 0x5a4632);
+    this.scene.add(b.build(new THREE.MeshLambertMaterial({ vertexColors: true })));
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    canvas.height = 680;
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 1.2), new THREE.MeshLambertMaterial({ map: tex, emissive: 0x2a2014, emissiveMap: tex, emissiveIntensity: 0.35 }));
+    face.position.set(c.x, 1.55, c.z + 0.01);
+    this.scene.add(face);
+    this.heistFace = { mesh: face, canvas, tex, w: 1.8, h: 1.2 };
+    this.station('heist', 'The Covenant Job', c, f, [1.9, 1.4, 0.3], { dist: 1.7, eye: 1.5, lookY: 1.5, verb: 'Plan' });
   }
 
   // ---- light ----------------------------------------------------------------------------

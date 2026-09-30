@@ -1,29 +1,66 @@
 import * as THREE from 'three';
-import { waterNormalTexture, radialTexture } from './Textures.js';
+import { radialTexture } from './Textures.js';
 import { lerp, clamp } from '../core/math.js';
+import { SKY, createSkyDome } from './Sky.js';
 
 // Sky, fog, sun/moon, water, ground mist, fireflies, lightning, and the Living
 // Guard's herder mast on the horizon. Time is in hours (17.0 = 5 PM; 25.0 = 1 AM).
 // A mood picks the lighting track: dusk raids fall into night; night and swamp
 // raids start in the dark.
 
+// Light and fog. Fog colour is only a fallback: fog takes the sky's colour (Sky.js).
 const DUSK = [
-  { h: 16.0, top: 0x66788c, hor: 0xbcae92, fog: 0x8c8a7c, near: 20, far: 120, sun: 0xffdcb0, sunI: 2.2, hs: 0xa8b4c0, hg: 0x44443a, hi: 1.75, elev: 30, dark: 0 },
-  { h: 17.5, top: 0x4c5a74, hor: 0xb89272, fog: 0x847a6c, near: 17, far: 100, sun: 0xffbe86, sunI: 1.8, hs: 0x949aa8, hg: 0x403a2e, hi: 1.5, elev: 16, dark: 0.1 },
-  { h: 18.6, top: 0x2a3048, hor: 0x8a5446, fog: 0x5a4c4a, near: 13, far: 78, sun: 0xe0784c, sunI: 1.1, hs: 0x6e6e86, hg: 0x302a24, hi: 1.05, elev: 4, dark: 0.4 },
-  { h: 19.5, top: 0x121828, hor: 0x3a2a38, fog: 0x2a2a32, near: 9, far: 56, sun: 0x8a9ac8, sunI: 0.55, hs: 0x4a5270, hg: 0x1c1a18, hi: 0.92, elev: 38, dark: 0.74 },
-  { h: 20.5, top: 0x0a0e1a, hor: 0x1c1e2c, fog: 0x1c1f2a, near: 6, far: 46, sun: 0x7888b8, sunI: 0.46, hs: 0x384060, hg: 0x121210, hi: 0.78, elev: 42, dark: 0.92 },
-  { h: 26.0, top: 0x070912, hor: 0x161824, fog: 0x171a24, near: 5, far: 42, sun: 0x6c7aa8, sunI: 0.42, hs: 0x303652, hg: 0x0e0e0c, hi: 0.7, elev: 45, dark: 1 },
+  { h: 16.0, fog: 0x8c8a7c, near: 30, far: 340, sun: 0xffdcb0, sunI: 2.2, hs: 0xa8b4c0, hg: 0x44443a, hi: 1.75, elev: 30, dark: 0 },
+  { h: 17.5, fog: 0x847a6c, near: 26, far: 300, sun: 0xffbe86, sunI: 1.8, hs: 0x9ca4b4, hg: 0x484234, hi: 1.65, elev: 16, dark: 0.1 },
+  { h: 18.6, fog: 0x5a4c4a, near: 20, far: 250, sun: 0xe0784c, sunI: 1.1, hs: 0x7c7e98, hg: 0x383028, hi: 1.3, elev: 4, dark: 0.4 },
+  { h: 19.5, fog: 0x2a2a32, near: 12, far: 170, sun: 0x8a9ac8, sunI: 0.55, hs: 0x4a5270, hg: 0x1c1a18, hi: 0.92, elev: 38, dark: 0.74 },
+  { h: 20.5, fog: 0x1c1f2a, near: 8, far: 110, sun: 0x7888b8, sunI: 0.46, hs: 0x384060, hg: 0x121210, hi: 0.78, elev: 42, dark: 0.92 },
+  { h: 26.0, fog: 0x171a24, near: 6, far: 95, sun: 0x6c7aa8, sunI: 0.42, hs: 0x303652, hg: 0x0e0e0c, hi: 0.7, elev: 45, dark: 1 },
 ];
 const NIGHT = [
-  { h: 20.0, top: 0x0c1020, hor: 0x20222e, fog: 0x1e212c, near: 7, far: 52, sun: 0x8090c0, sunI: 0.5, hs: 0x3c4466, hg: 0x141412, hi: 0.82, elev: 40, dark: 0.9 },
-  { h: 26.0, top: 0x06080f, hor: 0x141620, fog: 0x151820, near: 5, far: 44, sun: 0x6c7aa8, sunI: 0.42, hs: 0x2e3450, hg: 0x0c0c0a, hi: 0.7, elev: 48, dark: 1 },
+  { h: 20.0, fog: 0x1e212c, near: 8, far: 115, sun: 0x8090c0, sunI: 0.5, hs: 0x3c4466, hg: 0x141412, hi: 0.82, elev: 40, dark: 0.9 },
+  { h: 26.0, fog: 0x151820, near: 6, far: 95, sun: 0x6c7aa8, sunI: 0.42, hs: 0x2e3450, hg: 0x0c0c0a, hi: 0.7, elev: 48, dark: 1 },
 ];
 const SWAMP = [
-  { h: 20.0, top: 0x0a100e, hor: 0x1c2620, fog: 0x19221d, near: 5, far: 44, sun: 0x9ab09a, sunI: 0.42, hs: 0x3c4c40, hg: 0x0c100c, hi: 0.78, elev: 36, dark: 0.95 },
-  { h: 26.0, top: 0x060a08, hor: 0x121a16, fog: 0x121a16, near: 4, far: 38, sun: 0x8aa08a, sunI: 0.36, hs: 0x324238, hg: 0x0a0c0a, hi: 0.66, elev: 44, dark: 1 },
+  { h: 20.0, fog: 0x19221d, near: 5, far: 80, sun: 0x9ab09a, sunI: 0.42, hs: 0x3c4c40, hg: 0x0c100c, hi: 0.78, elev: 36, dark: 0.95 },
+  { h: 26.0, fog: 0x121a16, near: 4, far: 70, sun: 0x8aa08a, sunI: 0.36, hs: 0x324238, hg: 0x0a0c0a, hi: 0.66, elev: 44, dark: 1 },
 ];
 const TRACKS = { dusk: DUSK, night: NIGHT, swamp: SWAMP };
+
+// The sky, as it should look on screen.
+//   zen/hor: zenith and horizon away from the sun; glow: the horizon toward the sun;
+//   belt: the rosy band opposite the sun; sunC: glow round the sun (glowAmt: how much);
+//   se: sun elevation in degrees; cLit/cAmb: cloud colour toward and away from the sun;
+//   strat: the stratus band on the horizon; stars, milky: night sky; moon: moon colour.
+const SKY_DUSK = [
+  { h: 16.0, se: 26, zen: 0x2f5591, hor: 0xa9bfd6, glow: 0xe4e2d4, belt: 0x000000, sunC: 0xfff4e0, glowAmt: 0.55, cLit: 0xffffff, cAmb: 0xd2dae6, strat: 0x8a96a8, stars: 0, milky: 0, moon: 0x000000 },
+  { h: 17.5, se: 13, zen: 0x2f5189, hor: 0x9fb3cc, glow: 0xe8dcc2, belt: 0x000000, sunC: 0xffe8c8, glowAmt: 0.62, cLit: 0xfff8ea, cAmb: 0xc4cedc, strat: 0x76849a, stars: 0, milky: 0, moon: 0x000000 },
+  { h: 18.45, se: 1.2, zen: 0x30508a, hor: 0x8a9ab4, glow: 0xb4a89e, belt: 0x14080c, sunC: 0xffc88a, glowAmt: 0.42, cLit: 0xf6e6c2, cAmb: 0xb4bccc, strat: 0x56606e, stars: 0, milky: 0, moon: 0x000000 },
+  { h: 18.9, se: -1.5, zen: 0x2c4270, hor: 0x8e8eaa, glow: 0xf0aa6c, belt: 0x2a1426, sunC: 0xff9a50, glowAmt: 0.8, cLit: 0xffc088, cAmb: 0xa6a2bc, strat: 0x4e5266, stars: 0, milky: 0, moon: 0x000000 },
+  { h: 19.3, se: -5, zen: 0x1f2f58, hor: 0x76709a, glow: 0xd9784e, belt: 0x281830, sunC: 0xe0602e, glowAmt: 0.55, cLit: 0xf0906c, cAmb: 0x8a80a6, strat: 0x3e3e54, stars: 0.05, milky: 0, moon: 0x30343c },
+  { h: 19.8, se: -9, zen: 0x121c3c, hor: 0x3e4068, glow: 0x86505a, belt: 0x100a18, sunC: 0x803040, glowAmt: 0.3, cLit: 0x9a6a78, cAmb: 0x4c4c6c, strat: 0x24263a, stars: 0.3, milky: 0.1, moon: 0x5a6070 },
+  { h: 20.5, se: -14, zen: 0x0a1028, hor: 0x1c2040, glow: 0x2c2640, belt: 0x000000, sunC: 0x000000, glowAmt: 0, cLit: 0x3a3e56, cAmb: 0x262840, strat: 0x14182a, stars: 0.75, milky: 0.45, moon: 0x747c92 },
+  { h: 26.0, se: -30, zen: 0x05091a, hor: 0x10162c, glow: 0x121830, belt: 0x000000, sunC: 0x000000, glowAmt: 0, cLit: 0x2c324a, cAmb: 0x1a1e30, strat: 0x0e1220, stars: 1, milky: 0.85, moon: 0x8088a0 },
+];
+const SKY_NIGHT = [
+  { h: 20.0, se: -20, zen: 0x081026, hor: 0x1a2240, glow: 0x1c2442, belt: 0x000000, sunC: 0x000000, glowAmt: 0, cLit: 0x323a54, cAmb: 0x1c2236, strat: 0x10162a, stars: 0.9, milky: 0.75, moon: 0x8a94b0 },
+  { h: 26.0, se: -30, zen: 0x050918, hor: 0x121a32, glow: 0x141c34, belt: 0x000000, sunC: 0x000000, glowAmt: 0, cLit: 0x2c3450, cAmb: 0x181e30, strat: 0x0e1426, stars: 1, milky: 0.9, moon: 0x8a94b0 },
+];
+const SKY_SWAMP = [
+  { h: 20.0, se: -20, zen: 0x06100e, hor: 0x16241f, glow: 0x18261f, belt: 0x000000, sunC: 0x000000, glowAmt: 0, cLit: 0x2c3a30, cAmb: 0x18221c, strat: 0x0e1612, stars: 0.5, milky: 0.3, moon: 0x8c9a7c },
+  { h: 26.0, se: -30, zen: 0x040a09, hor: 0x101a16, glow: 0x121c17, belt: 0x000000, sunC: 0x000000, glowAmt: 0, cLit: 0x243028, cAmb: 0x141c18, strat: 0x0a120e, stars: 0.6, milky: 0.35, moon: 0x8c9a7c },
+];
+const SKY_TRACKS = { dusk: SKY_DUSK, night: SKY_NIGHT, swamp: SKY_SWAMP };
+
+// Clouds per place: cirrus and deck cover, the stratus band, how dark a thick deck gets.
+export const SKY_STYLES = {
+  clear: { cirrus: 0.55, deck: 0.06, stratus: 0.6, deckDark: 0.6, wind: 0.5 },
+  hazy: { cirrus: 0.4, deck: 0.34, stratus: 0.4, deckDark: 0.55, wind: 1.2 },
+  storm: { cirrus: 0.2, deck: 0.74, stratus: 0.25, deckDark: 0.85, wind: 2.2 },
+  swamp: { cirrus: 0.25, deck: 0.55, stratus: 0.2, deckDark: 0.9, wind: 2.8 },
+  starry: { cirrus: 0.32, deck: 0.08, stratus: 0.2, deckDark: 0.6, wind: 0.9 },
+  sea: { cirrus: 0.52, deck: 0.1, stratus: 0.75, deckDark: 0.55, wind: 0.35, clear: 1.6 },
+};
 
 const _c1 = new THREE.Color();
 const _c2 = new THREE.Color();
@@ -52,12 +89,75 @@ void main(){
   gl_FragColor = vec4(color, a);
 }`;
 
+// Water that reflects the sky: Phong for lamps and the sun's glitter, plus the sky
+// gradient seen in the waves, stronger at a glancing angle. The waves are noise in
+// world space, calmed with distance so they don't shimmer or tile toward the horizon.
+function waterMaterial(color, reflect, chop) {
+  const m = new THREE.MeshPhongMaterial({ color, specular: 0x6a7a70, shininess: 90 });
+  const wTime = { value: 0 };
+  // a rectangle (x0, z0, x1, z1) where there is no water: inside a ship's hull
+  const wHole = { value: new THREE.Vector4(0, 0, 0, 0) };
+  m.userData.wTime = wTime;
+  m.userData.wHole = wHole;
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.wTime = wTime;
+    sh.uniforms.wHole = wHole;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWaterW;')
+      .replace('#include <fog_vertex>', '#include <fog_vertex>\nvWaterW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+uniform float wTime;
+uniform vec4 wHole;
+varying vec3 vWaterW;
+float wv_h(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+float wv_n(vec2 p) { vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(wv_h(i), wv_h(i + vec2(1.0, 0.0)), u.x), mix(wv_h(i + vec2(0.0, 1.0)), wv_h(i + vec2(1.0, 1.0)), u.x), u.y); }
+float waveH(vec2 p, float fine) {
+  float t = wTime;
+  float h = wv_n(p * 0.28 + vec2(t * 0.05, t * 0.03)) * 0.55;
+  h += wv_n(mat2(0.8, 0.6, -0.6, 0.8) * p * 0.75 - vec2(t * 0.09, -t * 0.05)) * 0.3;
+  h += wv_n(mat2(0.6, -0.8, 0.8, 0.6) * p * 1.9 + vec2(-t * 0.16, t * 0.11)) * 0.14 * fine;
+  h += wv_n(p * 4.3 + vec2(t * 0.25, t * 0.2)) * 0.06 * fine;
+  return h;
+}`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+if (vWaterW.x > wHole.x && vWaterW.x < wHole.z && vWaterW.z > wHole.y && vWaterW.z < wHole.w) discard;
+{
+  float wd = length(vWaterW - cameraPosition);
+  float fine = 1.0 - smoothstep(20.0, 70.0, wd);
+  float e = 0.08;
+  float h0 = waveH(vWaterW.xz, fine);
+  float gx = (waveH(vWaterW.xz + vec2(e, 0.0), fine) - h0) / e;
+  float gz = (waveH(vWaterW.xz + vec2(0.0, e), fine) - h0) / e;
+  float amp = ${chop.toFixed(2)} / (1.0 + wd * 0.025);
+  vec3 nw = normalize(vec3(-gx * amp, 1.0, -gz * amp));
+  normal = normalize(mat3(viewMatrix) * nw);
+}`)
+      .replace('#include <opaque_fragment>', `
+    #ifdef USE_FOG
+    {
+      vec3 vv = normalize(vViewPosition);
+      vec3 rv = reflect(-vv, normal);
+      vec3 rw = normalize((vec4(rv, 0.0) * viewMatrix).xyz);
+      rw.y = abs(rw.y);
+      float fr = 0.03 + 0.97 * pow(1.0 - clamp(dot(normal, vv), 0.0, 1.0), 5.0);
+      outgoingLight = mix(outgoingLight, skyBase(rw) * 0.5, clamp(fr * ${reflect.toFixed(2)}, 0.0, 1.0));
+    }
+    #endif
+    #include <opaque_fragment>`);
+  };
+  return m;
+}
+
 export class Environment {
-  constructor(scene, { mastDir = null, fogTint = null, shadows = true, mood = 'dusk', mist = null, fireflies = false, storm = false, waterY = -0.32 } = {}) {
+  constructor(scene, { mastDir = null, fogTint = null, shadows = true, mood = 'dusk', mist = null, fireflies = false, storm = false, waterY = -0.32, sky = null, seed = Math.random() * 100 } = {}) {
     this.scene = scene;
     this.fogTint = fogTint;
     this.mood = mood;
     this.keys = TRACKS[mood] || DUSK;
+    this.skyKeys = SKY_TRACKS[mood] || SKY_DUSK;
+    this.style = typeof sky === 'object' && sky ? sky : SKY_STYLES[sky] || SKY_STYLES[storm ? (mood === 'swamp' ? 'swamp' : 'storm') : mood === 'dusk' ? 'clear' : 'starry'];
     this.storm = storm;
     scene.fog = new THREE.Fog(0x888888, 20, 120);
     scene.background = new THREE.Color(0x222222);
@@ -74,63 +174,27 @@ export class Environment {
     scene.add(this.sun);
     scene.add(this.sun.target);
 
-    // sky dome
-    this.skyUniforms = {
-      top: { value: new THREE.Color(0x6f8aa0) },
-      hor: { value: new THREE.Color(0xd4c6a2) },
-      sunDir: { value: new THREE.Vector3(0, 0.3, -1).normalize() },
-      sunCol: { value: new THREE.Color(0xffd0a0) },
-      glow: { value: 1 },
-      flash: { value: 0 },
+    // the sky: one shader for gradient, clouds, sun, moon and stars (Sky.js)
+    this.sky = createSkyDome(420);
+    const su = this.sky.material.uniforms;
+    su.cloudP.value.set(this.style.cirrus, this.style.deck, this.style.stratus, this.style.wind + seed * 0.37);
+    su.nightP.value.w = seed;
+    su.bandP.value.set(0.03, 0.105, this.style.deckDark, 1);
+    this.skyUniforms = su;
+    scene.add(this.sky);
+    // what the sky state is this frame, copied into the shared uniforms every frame so
+    // the hub and a raid can each keep their own
+    this.skyState = {
+      sun: new THREE.Vector3(0, 0.1, -1), moon: new THREE.Vector3(0.3, 0.4, 0.8),
+      zen: new THREE.Color(), hor: new THREE.Color(), glow: new THREE.Color(), belt: new THREE.Color(),
+      sunC: new THREE.Color(), moonC: new THREE.Color(), glowAmt: 0,
     };
-    const sky = new THREE.Mesh(
-      new THREE.SphereGeometry(420, 24, 12),
-      new THREE.ShaderMaterial({
-        uniforms: this.skyUniforms,
-        side: THREE.BackSide,
-        depthWrite: false,
-        fog: false,
-        vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); vec4 p = modelViewMatrix * vec4(position,1.0); gl_Position = projectionMatrix * p; gl_Position.z = gl_Position.w; }`,
-        fragmentShader: `uniform vec3 top; uniform vec3 hor; uniform vec3 sunDir; uniform vec3 sunCol; uniform float glow; uniform float flash; varying vec3 vDir;
-          void main(){ float h = clamp(vDir.y, -0.2, 1.0); float t = pow(max(h,0.0), 0.55); vec3 c = mix(hor, top, t);
-          float s = max(dot(normalize(vDir), normalize(sunDir)), 0.0); c += sunCol * (pow(s, 12.0) * 0.35 + pow(s, 400.0) * 1.2) * glow;
-          if (h < 0.0) c = mix(hor, hor * 0.6, -h * 5.0);
-          c += vec3(0.55, 0.58, 0.7) * flash * (0.4 + 0.6 * t);
-          gl_FragColor = vec4(c, 1.0); }`,
-      }),
-    );
-    sky.frustumCulled = false;
-    sky.renderOrder = -10;
-    this.sky = sky;
-    scene.add(sky);
-
-    // stars
-    const starGeo = new THREE.BufferGeometry();
-    const sp = [];
-    for (let i = 0; i < 900; i++) {
-      const u = Math.random() * 2 - 1, a = Math.random() * Math.PI * 2;
-      const y = Math.abs(u);
-      const r = Math.sqrt(1 - y * y);
-      sp.push(Math.cos(a) * r * 400, y * 400 + 10, Math.sin(a) * r * 400);
-    }
-    starGeo.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
-    this.stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xdfe6ff, size: 1.3, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false }));
-    this.stars.frustumCulled = false;
-    scene.add(this.stars);
-
-    // moon, a little sick in the swamp
-    const moonMat = new THREE.MeshBasicMaterial({ color: mood === 'swamp' ? 0xd8e0c4 : 0xe8ecf4, fog: false, transparent: true, opacity: 0 });
-    this.moon = new THREE.Mesh(new THREE.CircleGeometry(9, 24), moonMat);
-    scene.add(this.moon);
 
     // water
-    const nm = waterNormalTexture();
-    nm.repeat.set(60, 60);
-    this.waterNormal = nm;
     this.waterBase = mood === 'swamp' ? 0x141c16 : 0x1b2723;
     this.water = new THREE.Mesh(
       new THREE.PlaneGeometry(1100, 1100).rotateX(-Math.PI / 2),
-      new THREE.MeshPhongMaterial({ color: this.waterBase, specular: 0x6a7a70, shininess: 80, normalMap: nm, normalScale: new THREE.Vector2(0.5, 0.5) }),
+      waterMaterial(this.waterBase, mood === 'swamp' ? 0.3 : 0.55, mood === 'swamp' ? 0.35 : 0.8),
     );
     this.water.position.y = waterY;
     this.waterY = waterY;
@@ -266,14 +330,10 @@ export class Environment {
     while (i < keys.length - 2 && h > keys[i + 1].h) i++;
     const a = keys[i], b = keys[i + 1];
     const t = clamp((h - a.h) / (b.h - a.h), 0, 1);
-    const sky = this.skyUniforms;
-    lerpColor(a.top, b.top, t, sky.top.value);
-    lerpColor(a.hor, b.hor, t, sky.hor.value);
-    lerpColor(a.fog, b.fog, t, this.scene.fog.color);
-    if (this.fogTint) this.scene.fog.color.lerp(_c1.setHex(this.fogTint), 0.2);
-    this.scene.background.copy(this.scene.fog.color);
+    // sea air carries further than a swamp's
+    const clear = 1 + ((this.style.clear || 1) - 1) * clamp(lerp(a.dark, b.dark, t) * 1.4, 0, 1);
     this.scene.fog.near = lerp(a.near, b.near, t);
-    this.scene.fog.far = lerp(a.far, b.far, t);
+    this.scene.fog.far = lerp(a.far, b.far, t) * clear;
     lerpColor(a.sun, b.sun, t, this.sun.color);
     this.sun.intensity = lerp(a.sunI, b.sunI, t);
     lerpColor(a.hs, b.hs, t, this.hemi.color);
@@ -282,7 +342,8 @@ export class Environment {
     this.hemi.intensity = this.baseHemi * (1 + this.flash * 3);
     this.darkness = lerp(a.dark, b.dark, t);
     this.sightRange = lerp(26, 10, this.darkness);
-    this.drawDistance = this.scene.fog.far + 12;
+    // walkers and loot aren't drawn past where they'd shrink to a speck in the haze
+    this.drawDistance = Math.min(this.scene.fog.far, 150) + 12;
 
     // the sun sets in the west; afterwards the moon stands in the east
     const dusk = this.mood === 'dusk';
@@ -290,12 +351,7 @@ export class Environment {
     const sunElev = THREE.MathUtils.degToRad(lerp(a.elev, b.elev, t));
     const sunAz = THREE.MathUtils.degToRad(night > 0.5 ? 70 : 255);
     this.lightDir = new THREE.Vector3(Math.cos(sunAz) * Math.cos(sunElev), Math.sin(sunElev), Math.sin(sunAz) * Math.cos(sunElev)).normalize();
-    const realSunElev = THREE.MathUtils.degToRad(dusk ? lerp(28, -12, clamp((h - 16) / 4, 0, 1)) : -20);
-    sky.sunDir.value.set(Math.cos(THREE.MathUtils.degToRad(255)) * Math.cos(realSunElev), Math.sin(realSunElev), Math.sin(THREE.MathUtils.degToRad(255)) * Math.cos(realSunElev));
-    lerpColor(0xffc890, 0xd05030, clamp((h - 17) / 2, 0, 1), sky.sunCol.value);
-    sky.glow.value = 1 - night;
-    this.stars.material.opacity = (dusk ? clamp((h - 19.2) / 1.2, 0, 1) : 1) * (this.mood === 'swamp' ? 0.45 : 0.9);
-    this.moon.material.opacity = dusk ? clamp((h - 19) / 1, 0, 1) : this.mood === 'swamp' ? 0.7 : 1;
+    this._skyAt(h);
     this.water.material.color.setHex(this.waterBase).multiplyScalar(1 - this.darkness * 0.55);
   }
 
@@ -305,12 +361,9 @@ export class Environment {
     this.sun.target.position.set(camPos.x, 0, camPos.z);
     this.sun.target.updateMatrixWorld();
     this.sky.position.copy(camPos);
-    this.stars.position.copy(camPos);
-    const moonDir = new THREE.Vector3(Math.cos(1.2) * 0.8, 0.45, Math.sin(1.2) * 0.8).normalize();
-    this.moon.position.copy(camPos).addScaledVector(moonDir, 380);
-    this.moon.lookAt(camPos);
-    this.waterNormal.offset.x = time * 0.004;
-    this.waterNormal.offset.y = time * 0.006;
+    this.skyUniforms.uTime.value = time;
+    this.applySky();
+    this.water.material.userData.wTime.value = time;
 
     // mist follows the camera; brightness tracks the ambient light
     const fogC = this.scene.fog.color;
@@ -356,7 +409,7 @@ export class Environment {
         this.flash = k < 0.07 ? 1 : k < 0.14 ? 0.1 : k < 0.24 ? 0.8 : Math.max(0, 0.5 - (k - 0.24) * 2);
         if (k > 0.6) { this.flash = 0; this.strikeT = undefined; }
         this.hemi.intensity = this.baseHemi * (1 + this.flash * 3);
-        this.skyUniforms.flash.value = this.flash;
+        this.skyUniforms.nightP.value.z = this.flash;
       }
     }
 
@@ -376,6 +429,61 @@ export class Environment {
     }
   }
 
+  // Sky colours at hour h, from the mood's sky track.
+  _skyAt(h) {
+    const keys = this.skyKeys;
+    let i = 0;
+    while (i < keys.length - 2 && h > keys[i + 1].h) i++;
+    const a = keys[i], b = keys[i + 1];
+    const t = clamp((h - a.h) / (b.h - a.h), 0, 1);
+    const st = this.skyState;
+    for (const k of ['zen', 'hor', 'glow', 'belt', 'sunC']) lerpColor(a[k], b[k], t, st[k]);
+    lerpColor(a.moon, b.moon, t, st.moonC);
+    st.glowAmt = lerp(a.glowAmt, b.glowAmt, t);
+    const u = this.skyUniforms;
+    lerpColor(a.cLit, b.cLit, t, u.cLit.value);
+    lerpColor(a.cAmb, b.cAmb, t, u.cAmb.value);
+    lerpColor(a.strat, b.strat, t, u.stratC.value);
+    u.cDark.value.copy(u.cAmb.value).multiplyScalar(lerp(0.7, 0.3, this.style.deckDark));
+    u.nightP.value.x = lerp(a.stars, b.stars, t) * (this.style.deck > 0.6 ? 0.6 : 1);
+    u.nightP.value.y = lerp(a.milky, b.milky, t) * (this.style.deck > 0.6 ? 0.5 : 1);
+    // clouds catch less light once the sun is gone
+    u.bandP.value.w = 1;
+    const se = THREE.MathUtils.degToRad(lerp(a.se, b.se, t));
+    const az = THREE.MathUtils.degToRad(255);
+    st.sun.set(Math.cos(az) * Math.cos(se), Math.sin(se), Math.sin(az) * Math.cos(se));
+    const me = THREE.MathUtils.degToRad(this.mood === 'dusk' ? lerp(8, 34, clamp((h - 19) / 3, 0, 1)) : 36), maz = THREE.MathUtils.degToRad(68);
+    st.moon.set(Math.cos(maz) * Math.cos(me), Math.sin(me), Math.sin(maz) * Math.cos(me));
+    // a storm dims the stars and turns the horizon grey
+    if (this.storm) {
+      for (const k of ['hor', 'glow']) st[k].lerp(_c1.copy(u.cAmb.value).multiplyScalar(0.7), 0.4);
+      st.zen.multiplyScalar(0.8);
+      u.cAmb.value.multiplyScalar(0.8);
+    }
+    // the fallback fog colour and background follow the horizon
+    this.scene.fog.color.copy(st.hor).lerp(st.glow, 0.3);
+    this.scene.background.copy(this.scene.fog.color);
+  }
+
+  // Copy this environment's sky into the uniforms every fogged material shares.
+  applySky() {
+    const st = this.skyState;
+    const put = (o, v) => { o.x = v.x; o.y = v.y; o.z = v.z; };
+    const col = (o, c) => { o.x = c.r; o.y = c.g; o.z = c.b; };
+    put(SKY.sun, st.sun);
+    put(SKY.moon, st.moon);
+    col(SKY.zen, st.zen);
+    col(SKY.hor, st.hor);
+    col(SKY.glow, st.glow);
+    col(SKY.belt, st.belt);
+    col(SKY.sunC, st.sunC);
+    col(SKY.moonC, st.moonC);
+    SKY.p.x = st.glowAmt;
+    SKY.p.y = 0.5;
+    SKY.p.z = 1;
+    SKY.p.w = 4.5;
+  }
+
   startSweep() {
     this.sweep = 1;
   }
@@ -387,6 +495,6 @@ export class Environment {
   }
 
   dispose() {
-    for (const o of [this.hemi, this.sun, this.sun.target, this.sky, this.stars, this.moon, this.water, this.mastGroup, this.flies, ...this.mist]) if (o) this.scene.remove(o);
+    for (const o of [this.hemi, this.sun, this.sun.target, this.sky, this.water, this.mastGroup, this.flies, this.vista, ...this.mist]) if (o) this.scene.remove(o);
   }
 }

@@ -227,7 +227,7 @@ class App {
 
   // ---- raid -----------------------------------------------------------------------
 
-  startRaid(zoneId, seed) {
+  startRaid(zoneId, seed, heist = null) {
     const zone = zoneById(zoneId);
     this.input.exitLock();
     this.state = 'loading';
@@ -236,7 +236,7 @@ class App {
     // let the loading card paint before the (synchronous) world build
     setTimeout(() => {
       this.profile.stats.raids++;
-      this.raid = new Raid(this, { zone, profile: this.profile, seed });
+      this.raid = new Raid(this, { zone, profile: this.profile, seed, heist });
       this.raid.start();
       this.state = 'raid';
       this.raid.setPaused(true);
@@ -340,6 +340,19 @@ class App {
     } else if (survived) {
       const o = objective(p);
       if (o && o.where && p.story.step !== 'hale') storyLine = `${o.chapter}: ${o.text}.`;
+    }
+    // the Covenant job
+    const ev = out.storyEvents || [];
+    if (p.heist && survived && ev.includes('scouted') && !p.heist.scouted) {
+      p.heist.scouted = true;
+      if (p.heist.stage === 'offered') p.heist.stage = 'planning';
+      storyLine = 'The Covenant is scouted. Hale\'s board by his bunk has four ways aboard her; pick one and get what it needs.';
+    }
+    if (out.heist && p.heist) {
+      p.heist.runs = (p.heist.runs || 0) + 1;
+      p.heist.last = { approach: out.heist.approach, result: out.result, gotCase: !!out.heist.gotCase && survived };
+      if (survived && out.heist.gotCase) storyLine = 'You got the prototype case off the Covenant. Take it to Hale.';
+      else if (!survived) storyLine = 'The Covenant job went wrong. The setups you used are gone; the rest are still aboard. Try it again, or another way.';
     }
     // the night passes aboard the Magnolia
     p.day++;

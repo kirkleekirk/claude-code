@@ -47,6 +47,9 @@ Needs a desktop browser with WebGL2, a mouse and a keyboard. Headphones help: wa
 | 1–4 / wheel | Sheath · hip · holster · shoulder |
 | F / H | Flashlight / quick heal |
 | Tab / M / Esc | Backpack / map / pause |
+| E at a ladder | Climb up or down (ladders, the anchor chain, rope ladders) |
+| In the water | WASD swim · C dive (with dive gear) · Space rise · look down or up to go deeper or shallower |
+| At a boat's wheel | W idle ahead quietly · Shift+W flat out (loud) · A/D steer · S back off · E get off |
 
 Aboard the Magnolia: WASD to walk, E to use a station or talk to the crew, Tab for the stash, Esc for the
 menu. At a bench, W/S browse, A/D switch categories or mod slots, Enter builds, Esc leaves. In a
@@ -116,7 +119,7 @@ board marks where to go. The captain's log keeps the story so far.
   and the trunk in the salon is your stash. Benches work like Fallout's: pick a recipe, see what it needs, and
   if you're short on a component the bench breaks your salvage down to cover it.
 
-Five areas, each generated fresh every trip:
+Six areas, each generated fresh every trip:
 
 | Area | Threat | Time | What's there |
 | --- | --- | --- | --- |
@@ -125,6 +128,43 @@ Five areas, each generated fresh every trip:
 | St. Aubin Quarter | 3 | dusk, storm | Shops, a clinic, raised tombs, a fallen Guard checkpoint full of armoured dead. |
 | Marais Noir | 3 | night, storm | A fishing village on stilts over the black water. Boardwalks, shacks, a chapel with the Guard's gallows. The dead climb up out of the swamp, and anything shoved off the edge goes under. |
 | Guard Outpost 9 | 4 | night | A forward base behind HESCO walls: floodlights, soldiers on the gates, drones before the Sweep, and lockers full of their tech. |
+| Port Lafitte | 3 | dusk | A Gulf port: a beach with dunes and fishing camps on stilts, a marina, a quay with two gantry cranes, a container yard, warehouses, a fuel depot, a breakwater with a lighthouse, and the Guard freighter *Covenant* at anchor off it. On the board once Hale tells you about the ship. |
+
+### The Covenant job
+
+After you bring Hale the dog tags, ask him what else is on the Guard's radio. The *Covenant*, a Living Guard
+freighter anchored off Port Lafitte, is loading Experimental equipment from the Natchez labs. All you need is
+a boat with fuel, and a plan:
+
+1. **Scout her.** Go to Port Lafitte, climb the lighthouse on the breakwater or a gantry crane, and glass the ship
+   with your binoculars. Get home and Hale's planning board by his bunk opens up.
+2. **Set it up.** Each way in needs its own setups: dive gear from the dive shop, a cutting torch (the workshop, or
+   the welder's chest in the boat yard), the speedboat's keys from the harbor master's desk, diesel from the fuel
+   depot, hull plating from the workshop, spare guns for the crew. The manifest on the harbor master's desk has
+   the cage code, so you won't need a torch or a charge.
+3. **Carry the kit.** Quiet approaches need a *silent kit* (a suppressed gun, a bow, or a photon pistol). Loud ones
+   need a *loud kit* (a military or well-modded long gun and a full reload for it).
+4. **Pick a way in:**
+
+| Approach | Vehicle | Style | Way in | Ways out |
+| --- | --- | --- | --- | --- |
+| Silent Running | Dive gear | Stealth, after dark | Wade off the beach, dive under the hull, cut the sea chest grate and come up in Hold 3 beside the cage | Back down the sea chest to the beach · the lifeboat · over the side |
+| Running Dark | Speedboat | Stealth, after dark | Idle round to her seaward side and go up the pilot ladder | The speedboat · the lifeboat · over the side |
+| Hot Run | Speedboat | Aggressive, at sundown | Flat out across the harbor, up the gangway, fight down into Hold 3 | The speedboat · the lifeboat · over the side |
+| All Hands | The Magnolia | Full assault, at sundown | Remy brings the Magnolia alongside; you, Hale and Remy go up the boarding ladders and take the ship | Back aboard the Magnolia · the lifeboat |
+
+Take the prototype case from the cage in Hold 3 and get it home. Hale opens it.
+
+The world has heights now: stairs, decks and holds stack, you can fall off a ledge, and in open water you
+swim (and, with dive gear, dive on about two and a half minutes of air).
+
+### The sky
+
+The sky is one shader (`world/Sky.js`): a gradient that warms toward the sun, a glow round the sun and moon,
+cirrus streaks and a cloud deck on high planes, a stratus band on the horizon, and stars and the Milky Way
+after dark. Every place has its own cloud style (clear, hazy, storm, swamp, starry, sea). Fog takes the sky's
+colour in the direction you look, so distant rooftops fade into gold on the sun side and blue on the other,
+and the water reflects the same sky.
 
 Every container is a hollow shell with real shelves, drawers and lids. Loot rests on those surfaces,
 scaled to fit, and drawer contents ride out with the drawer, so the same containers work when you open
@@ -136,17 +176,20 @@ them by hand in VR.
 src/
   main.js              app shell: title → hub → raid → summary
   core/                input, procedural audio, music, seeded RNG, math
-  data/                items, loot tables, recipes, zones, the story and crew dialogue
-  world/               city and stilt-town generators, decals, collision + nav/flow fields,
-                       sky/fog/water/mist, models, batching
-  entities/            player, walkers, horde AI, Living Guard soldiers and drones, the Magnolia's crew;
+  data/                items, loot tables, recipes, zones, the story and crew dialogue, the Covenant job
+  world/               city, stilt-town and harbor generators (HarborGen.js builds Port Lafitte and the
+                       Covenant), decals, collision with floor heights + nav/flow fields, the sky shader
+                       and sky-coloured fog (Sky.js), water/mist, models, batching
+  entities/            player (walking, falling, swimming, diving), walkers, horde AI, Living Guard soldiers
+                       and drones, the Magnolia's crew (and armed, in Allies.js), boats (Boat.js);
                        WalkerModel.js puts every one of them on the avatar rig
   entities/avatar/     the character bodies: avatar-style people on one rig with painted faces, fitted
                        gear, a pose layer (reaching dead, rifles held, arms folded) and the blocky dead
   assets/avatarData.js the rig, body parts and animations those bodies use (generated; see below)
   combat/              combat rules and the first-person view model
-  game/                raid and hub orchestration, weapon stats and mods, container specs, loot,
-                       inventory, profile/saves
+  game/                raid and hub orchestration (Harbor.js runs Port Lafitte: ladders, water, boats, the
+                       cage, the escapes), weapon stats and mods, container specs, loot, inventory,
+                       profile/saves
   scenes/Magnolia.js   the walkable riverboat: deck, salon, stations and their camera framings
   ui/                  HUD, backpack, map, styles; ui/hub/ holds the station panels
 ```

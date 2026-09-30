@@ -104,7 +104,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--brass)
 #hud .big.show { opacity: 1; }
 #hud .big.sweep h2 { color: #e8604a; letter-spacing: 0.12em; }
 
-/* compass */
+/* compass (the objective, top left, stops short of where its letters fade in) */
 #hud .compass {
   position: absolute; left: 50%; top: 16px; width: min(560px, 70vw); height: 34px; transform: translateX(-50%);
   overflow: hidden;
@@ -120,7 +120,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--brass)
 #hud .compass .mk.mast i { border-top-color: #e2402e; }
 #hud .compass .mk.story { color: #f2d27a; }
 #hud .compass .mk.story i { border-top-color: #f2d27a; border-left-width: 6px; border-right-width: 6px; border-top-width: 9px; }
-#hud .objective { position: absolute; left: 22px; top: 18px; max-width: min(360px, 34vw); display: none; gap: 10px; align-items: flex-start; padding: 8px 12px; font-size: 15px; line-height: 1.35; color: var(--bone); background: linear-gradient(90deg, rgba(8, 10, 9, 0.62), rgba(8, 10, 9, 0)); border-left: 2px solid #f2d27a; text-shadow: 0 1px 3px #000; }
+#hud .objective { position: absolute; left: 22px; top: 18px; max-width: min(360px, 34vw, calc(50vw - min(280px, 35vw) + min(100px, 12.6vw) - 60px)); display: none; gap: 10px; align-items: flex-start; padding: 8px 12px; font-size: 15px; line-height: 1.35; color: var(--bone); background: linear-gradient(90deg, rgba(8, 10, 9, 0.62), rgba(8, 10, 9, 0)); border-left: 2px solid #f2d27a; text-shadow: 0 1px 3px #000; }
 #hud .objective.on { display: flex; }
 #hud .objective i { flex: none; width: 8px; height: 8px; margin-top: 6px; transform: rotate(45deg); border: 2px solid #f2d27a; }
 #hud .objective.urgent { color: #ffd0c0; border-left-color: #e8604a; animation: pulse 0.8s infinite; }
@@ -556,3 +556,26 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--brass)
 .storylog li span { font-size: 12px; color: var(--brass-light); letter-spacing: 0.08em; }
 .storylog li p { margin: 0; font-size: 15px; line-height: 1.45; color: var(--bone-dim); }
 .storylog li:first-child p { color: var(--bone); }
+
+/* under the water: the edges go dark green */
+#hud.underwater::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 45%, rgba(20, 70, 70, 0.12) 20%, rgba(2, 22, 24, 0.72) 100%);
+}
+
+/* the Covenant job board */
+.heist-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 10px; }
+.heist-card h3 { margin: 6px 0 6px; }
+.heist-card h3 .label { display: block; margin-top: 2px; }
+.heist-card h4 { margin: 14px 0 6px; }
+.heist-list li { display: block; padding: 5px 0; }
+.heist-list li .cn { font-weight: 600; }
+.heist-list li.ok .cn { color: #9fbf6a; }
+.heist-list li.miss .cn { color: #e07a5a; }
+.heist-list li.opt .cn { color: var(--bone, #d8d0bc); opacity: 0.8; }
+.heist-list small { display: block; margin: 2px 0 0 1.3em; opacity: 0.72; font-size: 0.92em; line-height: 1.35; }
+.heist-esc { margin: 0; padding-left: 1.1em; line-height: 1.45; }
+.heist-esc li { margin: 3px 0; }

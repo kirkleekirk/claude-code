@@ -25,7 +25,8 @@ const OUT_L = P(1, -0.8, -0.2), OUT_R = P(-1, -0.8, -0.2);
 
 export class WalkerModel {
   // living: a crew member's look (see CREW in data/story.js)
-  constructor(rng, { riot = false, fresh = false, soldier = false, living = null } = {}) {
+  // gun: what a soldier (or an armed crew member) carries
+  constructor(rng, { riot = false, fresh = false, soldier = false, living = null, gun = 'arc_carbine' } = {}) {
     this.soldier = soldier;
     this.living = !!living;
     this.fresh = fresh;
@@ -63,17 +64,17 @@ export class WalkerModel {
     };
 
     if (soldier) {
-      // the Guard's red eye-band glows on its own
-      this.visor = av.attach('HEAD__Skeleton', [0, 0, 0], new THREE.Mesh(visorGeometry(look.sex), VISOR_MAT));
+      // the Guard's red eye-band glows on its own (not on the crew when they carry guns)
+      if (!living) this.visor = av.attach('HEAD__Skeleton', [0, 0, 0], new THREE.Mesh(visorGeometry(look.sex), VISOR_MAT));
       // the carbine, on a pivot that swings from low ready up to the shoulder
       const mount = av.attach('BACKB__Skeleton', [0, 0, 0]);
       this.pivot = new THREE.Object3D();
       mount.add(this.pivot);
-      this.rifle = weaponModel('arc_carbine');
+      this.rifle = weaponModel(gun);
       this.rifle.scale.setScalar(0.9 / av.scale);
       this.rifle.rotation.y = Math.PI;
       this.pivot.add(this.rifle);
-      this.muzzle = this.rifle.getObjectByName('muzzle');
+      this.muzzle = this.rifle.getObjectByName('muzzle') || this.rifle;
       this.gripR = new THREE.Object3D();
       this.gripR.position.set(0, -0.055, 0.05);
       this.gripL = new THREE.Object3D();

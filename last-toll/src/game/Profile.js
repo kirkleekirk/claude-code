@@ -7,6 +7,7 @@ import { PACK_BASE, PACK_STEP } from '../data/recipes.js';
 import { ZONES } from '../data/zones.js';
 import { RNG } from '../core/rng.js';
 import { newStory } from '../data/story.js';
+import { newHeist } from '../data/heist.js';
 
 const SAVE_KEY = 'lasttoll.save.v1';
 export const STASH_CAP = 60;
@@ -40,6 +41,7 @@ export function newProfile() {
     lastZone: 'cypress',
     lastResult: null,
     story: newStory(),
+    heist: newHeist(),
     settings: { sens: 1, volume: 0.8, fov: 68, invertY: false, voices: true, walkers: 'avatar', walkersV: 2 },
   };
 }
@@ -91,6 +93,7 @@ export function loadProfile() {
     p.stats = { ...base.stats, ...(p.stats || {}) };
     p.stations = { ...base.stations, ...(p.stations || {}) };
     p.story = { ...base.story, ...(p.story || {}) };
+    p.heist = { ...base.heist, ...(p.heist || {}) };
     return p;
   } catch (_) {
     return null;

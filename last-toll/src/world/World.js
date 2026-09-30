@@ -1,5 +1,11 @@
 // Static collision world: axis-aligned boxes in a uniform grid, used for player
 // and walker movement, bullet/LOS raycasts, and a nav grid for flow fields.
+//
+// Most places are flat: everyone walks at y = 0. Floors can also sit at a height,
+// or ramp between two (stairs), and can stack (a deck above a hold): an entity
+// stands on the highest floor it can step onto from where it is. Boxes block
+// movement relative to the entity's own height. The nav grid covers the ground
+// level only; walkers live there.
 
 const UNREACHED = 65535;
 
@@ -19,12 +25,87 @@ export class World {
     this.floorMode = false;
     this.floors = [];
     this.floorGrid = null;
+    // open water you can swim in (off a floor you fall in rather than being held back)
+    this.swim = false;
+    this.waterY = -1.6;
+    this.seabed = null; // (x, z) => depth of the bottom, for divers
+    this.ladders = [];
   }
 
-  addFloor(x0, z0, x1, z1, surface = 'wood') {
+  // A walkable rectangle at height y. ramp: { axis: 'x'|'z', y0, y1 } rises from y0
+  // at the low edge of the axis to y1 at the high edge (stairs, a beach, a gangway).
+  addFloor(x0, z0, x1, z1, surface = 'wood', y = 0, ramp = null) {
     this.floorMode = true;
-    this.floors.push({ x0: Math.min(x0, x1), z0: Math.min(z0, z1), x1: Math.max(x0, x1), z1: Math.max(z0, z1), surface });
+    const f = { x0: Math.min(x0, x1), z0: Math.min(z0, z1), x1: Math.max(x0, x1), z1: Math.max(z0, z1), surface, y, ramp };
+    if (ramp) f.y = Math.max(ramp.y0, ramp.y1);
+    this.floors.push(f);
     this.floorGrid = null;
+    return f;
+  }
+
+  floorY(f, x, z) {
+    const r = f.ramp;
+    if (!r) return f.y;
+    const k = r.axis === 'x' ? (x - f.x0) / (f.x1 - f.x0 || 1) : (z - f.z0) / (f.z1 - f.z0 || 1);
+    return r.y0 + (r.y1 - r.y0) * Math.max(0, Math.min(1, k));
+  }
+
+  // Height of the floor under (x, z) that something at height y stands on: the highest
+  // one no more than `step` above it. null over open water or the void.
+  heightAt(x, z, y = 0, step = 0.55) {
+    if (!this.floorMode) return 0;
+    if (!this.floorGrid) this._buildFloorGrid();
+    const arr = this.floorGrid[this._cell(z) * this.gn + this._cell(x)];
+    let best = null;
+    for (let i = 0; i < arr.length; i++) {
+      const f = arr[i];
+      if (x < f.x0 || x > f.x1 || z < f.z0 || z > f.z1) continue;
+      const h = f.ramp ? this.floorY(f, x, z) : f.y;
+      if (h <= y + step && (best === null || h > best)) best = h;
+    }
+    return best;
+  }
+
+  floorAt(x, z, y = 0, step = 0.55) {
+    if (!this.floorMode) return null;
+    if (!this.floorGrid) this._buildFloorGrid();
+    const arr = this.floorGrid[this._cell(z) * this.gn + this._cell(x)];
+    let best = null, bh = -Infinity;
+    for (let i = 0; i < arr.length; i++) {
+      const f = arr[i];
+      if (x < f.x0 || x > f.x1 || z < f.z0 || z > f.z1) continue;
+      const h = f.ramp ? this.floorY(f, x, z) : f.y;
+      if (h <= y + step && h > bh) { bh = h; best = f; }
+    }
+    return best;
+  }
+
+  // Floor under all four sides of a circle at about height y (no ledge to step off).
+  floorOKAt(x, z, r, y) {
+    if (!this.floorMode) return true;
+    for (const [dx, dz] of [[r, 0], [-r, 0], [0, r], [0, -r]]) {
+      const h = this.heightAt(x + dx, z + dz, y);
+      if (h === null || h < y - 0.6) return false;
+    }
+    return true;
+  }
+
+  // Keep something standing at pos.y on floor at its own level, sliding along edges.
+  constrainAt(pos, px, pz, r) {
+    if (!this.floorMode || this.floorOKAt(pos.x, pos.z, r, pos.y)) return false;
+    if (this.floorOKAt(pos.x, pz, r, pos.y)) { pos.z = pz; return true; }
+    if (this.floorOKAt(px, pos.z, r, pos.y)) { pos.x = px; return true; }
+    pos.x = px;
+    pos.z = pz;
+    return true;
+  }
+
+  // A ladder up a wall: from (x, y0, z) at the foot to y1 at the top, where you step
+  // off in direction (dx, dz) onto the floor above. label names it for the prompt.
+  addLadder(x, z, y0, y1, dx, dz, label = 'ladder') {
+    const l = { x, z, y0, y1, dx, dz, label };
+    this.ladders.push(l);
+    return l;
   }
 
   _buildFloorGrid() {
@@ -102,13 +183,14 @@ export class World {
     }
   }
 
-  // Push a vertical cylinder (circle on XZ, spanning yMin..yMax) out of solid boxes.
-  // Returns true if any collision happened.
+  // Push a vertical cylinder (circle on XZ, spanning yMin..yMax above its feet at
+  // pos.y) out of solid boxes. Returns true if any collision happened.
   resolveCircle(pos, r, yMin = 0.35, yMax = 1.7) {
     let hit = false;
+    const lo = pos.y + yMin, hi = pos.y + yMax;
     for (let iter = 0; iter < 2; iter++) {
       this._forBoxesNear(pos.x - r, pos.z - r, pos.x + r, pos.z + r, (b) => {
-        if (!b.collide || b.y1 <= yMin || b.y0 >= yMax) return;
+        if (!b.collide || b.y1 <= lo || b.y0 >= hi) return;
         const cx = pos.x < b.x0 ? b.x0 : pos.x > b.x1 ? b.x1 : pos.x;
         const cz = pos.z < b.z0 ? b.z0 : pos.z > b.z1 ? b.z1 : pos.z;
         let dx = pos.x - cx, dz = pos.z - cz;
@@ -203,9 +285,12 @@ export class World {
     return !h;
   }
 
-  surfaceAt(x, z) {
+  surfaceAt(x, z, y = 0) {
     for (const r of this.interiors) if (x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1) return r.surface || 'wood';
-    if (this.floorMode) return 'wood';
+    if (this.floorMode) {
+      const f = this.floorAt(x, z, y);
+      return f ? f.surface : 'wood';
+    }
     return 'ground';
   }
 
@@ -222,22 +307,40 @@ export class World {
     this.navN = n;
     const nav = new Uint8Array(n * n);
     const pad = 0.2;
+    // ground height per cell: the ground level only (on a raised deck or down in a
+    // hold there's no nav; out of the water, up to a little above y = 0)
+    let navH = null;
+    if (this.floorMode) {
+      navH = new Float32Array(n * n);
+      const lo = this.swim ? this.waterY + 0.25 : -0.6;
+      for (let j = 0; j < n; j++) {
+        for (let i = 0; i < n; i++) {
+          const x = (i + 0.5) * res - this.half, z = (j + 0.5) * res - this.half;
+          const c = j * n + i;
+          const h = this.heightAt(x, z, 1.2, 0);
+          navH[c] = h === null ? NaN : h;
+          if (h === null || h < lo || !this.floorOKAt(x, z, 0.2, h)) nav[c] = 1;
+        }
+      }
+    }
     for (const b of this.boxes) {
-      if (!b.collide || b.y1 <= 0.35 || b.y0 >= 1.2) continue;
+      if (!b.collide) continue;
+      if (!navH && (b.y1 <= 0.35 || b.y0 >= 1.2)) continue;
       const i0 = Math.max(0, Math.ceil((b.x0 - pad + this.half) / res - 0.5));
       const i1 = Math.min(n - 1, Math.floor((b.x1 + pad + this.half) / res - 0.5));
       const j0 = Math.max(0, Math.ceil((b.z0 - pad + this.half) / res - 0.5));
       const j1 = Math.min(n - 1, Math.floor((b.z1 + pad + this.half) / res - 0.5));
-      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) nav[j * n + i] = 1;
-    }
-    if (this.floorMode) {
-      for (let j = 0; j < n; j++) {
-        for (let i = 0; i < n; i++) {
-          const x = (i + 0.5) * res - this.half, z = (j + 0.5) * res - this.half;
-          if (!this.floorOK(x, z, 0.2)) nav[j * n + i] = 1;
+      for (let j = j0; j <= j1; j++) {
+        for (let i = i0; i <= i1; i++) {
+          if (navH) {
+            const h = navH[j * n + i];
+            if (h !== h || b.y1 <= h + 0.35 || b.y0 >= h + 1.2) continue;
+          }
+          nav[j * n + i] = 1;
         }
       }
     }
+    this.navH = navH;
     this.nav = nav;
     this.queue = new Int32Array(n * n);
   }

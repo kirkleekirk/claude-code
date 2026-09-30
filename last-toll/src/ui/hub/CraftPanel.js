@@ -32,7 +32,9 @@ export class CraftPanel {
 
   _entries() {
     const lvl = this.p.stations[this.id] || 1;
-    const out = RECIPES.filter((r) => r.bench === this.id && (!r.story || this.hub.p.story.step === r.story)).map((r) => ({ kind: 'recipe', r, cat: r.cat, locked: r.level > lvl, level: r.level }));
+    const p = this.hub.p;
+    const heistOn = !!(p.heist && p.heist.stage && p.heist.stage !== 'locked' && p.heist.stage !== 'done');
+    const out = RECIPES.filter((r) => r.bench === this.id && (!r.story || p.story.step === r.story) && (!r.heist || heistOn) && (!r.notStory || p.story.step !== r.notStory)).map((r) => ({ kind: 'recipe', r, cat: r.cat, locked: r.level > lvl, level: r.level }));
     // gear: the backpack is sewn at the workshop
     if (this.id === 'workshop') {
       const pl = this.p.packLevel || 0;

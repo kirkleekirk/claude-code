@@ -470,7 +470,7 @@ export class Combat {
     w.pos.x += (tx - w.pos.x) * Math.min(1, dt * 12);
     w.pos.z += (tz - w.pos.z) * Math.min(1, dt * 12);
     this.g.world.resolveCircle(w.pos, 0.26);
-    this.g.world.constrain(w.pos, wpx, wpz, 0.2);
+    this.g.world.constrainAt(w.pos, wpx, wpz, 0.2);
     w.facing = Math.atan2(player.pos.x - w.pos.x, player.pos.z - w.pos.z);
     player.spendStamina((w.riot ? 13 : 9.5) * dt);
     player.speedMul = 0.5;
