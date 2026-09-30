@@ -155,6 +155,11 @@ a boat with fuel, and a plan:
 
 Take the prototype case from the cage in Hold 3 and get it home. Hale opens it.
 
+Aboard her: side decks run the length of the ship past the three holds (a ladder down into each at its forward
+end), stairs let into the forecastle's aft end climb to the bow, and the accommodation block aft has doors on
+three sides into a corridor, the crew mess and a stair tower that goes up four flights to the bridge. The
+wheelhouse has doors on both wings and aft.
+
 The world has heights now: stairs, decks and holds stack, you can fall off a ledge, and in open water you
 swim (and, with dive gear, dive on about two and a half minutes of air).
 

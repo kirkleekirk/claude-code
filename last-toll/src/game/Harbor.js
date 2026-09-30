@@ -105,7 +105,7 @@ export class HarborRaid {
     const r = this.r;
     this.holdLights = [];
     for (const p of this.city.ship.lights) {
-      const l = new THREE.PointLight(0xfff0d0, 22, 20, 1.3);
+      const l = new THREE.PointLight(0xfff0d0, 34, 22, 1.3);
       l.position.set(p.x, SHIP.hold + 6, (SHIP.hz0 + SHIP.hz1) / 2);
       r.scene.add(l);
       this.holdLights.push(l);

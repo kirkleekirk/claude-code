@@ -172,6 +172,7 @@ export class CityGen {
       const gapL = s - prevEnd, gapR = nextStart - e;
       if (o.kind === 'door') {
         seg(s, e, 2.2, h);
+        if ((opts.doorLeaves ?? this.doorLeaves) && out) this._doorLeaf(axis, fixed, s, e, t, out, gapL, gapR, opts);
         const cz = 1.3;
         if (axis === 'x') this.clear.push({ x0: s - 0.25, x1: e + 0.25, z0: fixed - cz, z1: fixed + cz });
         else this.clear.push({ z0: s - 0.25, z1: e + 0.25, x0: fixed - cz, x1: fixed + cz });
@@ -208,6 +209,33 @@ export class CityGen {
       cur = e;
     }
     seg(cur, a1, 0, h);
+  }
+
+  // A frame round an outside door, and the door itself swung back flat against the wall
+  // where there's room for it (wide openings are left as they are).
+  _doorLeaf(axis, fixed, s, e, t, out, gapL, gapR, opts) {
+    const trim = opts.trim ?? 0xd8d0bc, fr = 0.07, dh = 2.2;
+    const put = (a0, a1, y0, y1, off, th, col, collide) => {
+      const c = (a0 + a1) / 2, L = a1 - a0, cy = (y0 + y1) / 2, H = y1 - y0;
+      if (axis === 'x') this.batch.box(c, cy, fixed + off, L, H, th, col, { jitter: 0.04 });
+      else this.batch.box(fixed + off, cy, c, th, H, L, col, { jitter: 0.04 });
+      if (!collide) return;
+      if (axis === 'x') this.world.addBox(a0, y0, fixed + off - th / 2, a1, y1, fixed + off + th / 2, { occlude: false, kind: 'door' });
+      else this.world.addBox(fixed + off - th / 2, y0, a0, fixed + off + th / 2, y1, a1, { occlude: false, kind: 'door' });
+    };
+    put(s, s + fr, 0, dh, 0, t + 0.05, trim, false);
+    put(e - fr, e, 0, dh, 0, t + 0.05, trim, false);
+    put(s, e, dh - fr, dh, 0, t + 0.05, trim, false);
+    const w = e - s;
+    if (w > 1.7) return;
+    const need = w + 0.5;
+    const side = gapR >= need ? 1 : gapL >= need ? -1 : 0;
+    if (!side) return;
+    const lw = w - 0.06, off = out * (t / 2 + 0.05);
+    const a0 = side > 0 ? e + 0.03 : s - 0.03 - lw;
+    put(a0, a0 + lw, 0.03, dh - 0.1, off, 0.05, opts.doorColor ?? this.rng.pick([0x5a3a2a, 0x3a4a5a, 0x2e4a3a, 0x8a8478, 0x6a2a24]), true);
+    const kx = side > 0 ? a0 + lw - 0.1 : a0 + 0.1;
+    put(kx - 0.03, kx + 0.03, 0.98, 1.06, off + out * 0.04, 0.05, 0x2a2622, false);
   }
 
   // Lay out openings on a wall span so nothing overlaps: doors first, then windows.
@@ -279,8 +307,9 @@ export class CityGen {
     }
     const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, w = x1 - x0, d = z1 - z0;
     this.batch.box(cx, 0.05, cz, w, 0.06, d, b.floor, { jitter: 0.02, ao: 1 });
-    // roof slab + ceiling
+    // roof slab + ceiling (a light one, or rooms read as black holes overhead)
     this.batch.box(cx, h + 0.14, cz, w + 0.7, 0.28, d + 0.7, b.roof, { ao: 1 });
+    this.batch.box(cx, h - 0.03, cz, w - T - 0.02, 0.06, d - T - 0.02, b.ceiling ?? (b.kind === 'container' ? b.inner : 0xd6d0c2), { jitter: 0.03 });
     this.world.addBox(x0 - 0.35, h, z0 - 0.35, x1 + 0.35, h + 0.28, z1 + 0.35, { collide: false });
     if (b.trim) {
       this.batch.box(cx, h - 0.1, z0 - T / 2 - 0.03, w + 0.3, 0.2, 0.06, b.trim);
