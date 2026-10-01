@@ -1,0 +1,31 @@
+CARD WARS: GLOWBOARD  (glowboard.html)
+A fan-made, offline, single-file tribute to "Card Wars" from Adventure Time (S4E14). Not affiliated with
+Cartoon Network. Vanilla JS + Canvas 2D + DOM/CSS. No libraries, fonts, images, audio files or network.
+
+ASSUMPTIONS / DECISIONS
+- Director's note wins: the game plays like Card Wars in the show (and its official 2014 adaptations), and
+  the original GLOWBOARD brief is mapped onto it:
+  * 9x13 grid, Wells, Keep/Watchposts -> 4 lanes, Landscapes, 25 hero HP (as in the show / official game).
+  * Glow resource -> 2 Actions per turn (official). 1 Action draws a card or moves a creature one lane.
+  * "Surge" -> FLOOP (turn the card sideways). Placing a card also "floops" it onto the board.
+  * Factions -> 6 Landscapes: Blue Plains (Finn), Cornfield (Jake), Useless Swamp, IcyLands, NiceLands,
+    LavaFlats, plus Rainbow neutrals. 12 signature cards each + 11 Rainbow cards + 3 tokens.
+  * Champions cost 2 Actions but need 3 matching face-up Landscapes (official cost = requirement rule).
+  * Structures can be attacked: an undefended lane hits the building first, excess spills to the hero
+    (the show: "I'm attacking your schoolhouse with my Husker Knights").
+  * Show cards: Pig (eats landscapes, gets stuck in mud), Husker Knight, Silo of Truth, Cerebral
+    Bloodstorm, Field of Nightmares + Earlings, Teleport, Volcano, Reclaim Landscape, Immortal Maize Walker,
+    Wandering Bald Man, Archer Dan, The Reaper, Cool Dog, Ancient Scholar, Schoolhouse, Spirit Tower,
+    Cave of Solitude. Holograms glow in the controller's colour (Finn blue / Jake orange) like the episode.
+- Decks are 20 cards (brief) instead of 40; first player skips the first draw and cannot floop/fight on
+  turn 1; from round 15 the board overheats (growing damage) so games always end.
+- The AI plans on Engine.redact(state): it never sees hidden hands, deck order or face-down traps.
+- Card levels: L2 +1 DEF, L3 +1 ATK (spells +1 power), L4 +1 DEF. Balance sims use level 1.
+- Character portraits and minis are simplified procedural fan art; quotes are short paraphrases.
+
+STRUCTURE (one <script>)
+  /* ENGINE */ ... /* END ENGINE */  pure deterministic rules + card data (no DOM)   <- extract for tests
+  /* AI */     ... /* END AI */      beam-search opponent using only redacted states
+  /* ART */ /* RENDER */ /* AUDIO */ /* UI */ /* META */ /* TUTORIAL */ /* MAIN */
+Dev sources, rule tests (node test/engine.test.js) and the balance harness (node test/balance.js) live in
+glowboard-dev/ next to this file; build with: node glowboard-dev/build.js

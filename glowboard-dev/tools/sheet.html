@@ -1,0 +1,20 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+body{margin:0;background:#140f1c;color:#ddd;font:11px sans-serif}
+.grid{display:flex;flex-wrap:wrap;gap:6px;padding:8px}
+.c{width:150px;background:#1d1828;border-radius:6px;padding:4px;text-align:center}
+.c canvas{background:#2a3a2a}
+</style></head><body><div class="grid" id="g"></div>
+<script src="../src/engine.js"></script><script src="../src/art.js"></script>
+<script>
+const g=document.getElementById('g');
+const ids=[...new Set(Object.values(Engine.CARDS).map(c=>c.art))];
+for(const id of ids){
+  const d=document.createElement('div');d.className='c';
+  const cv=document.createElement('canvas');cv.width=140;cv.height=86;const x=cv.getContext('2d');
+  [['#3fc8ff',0],['#ff9a2e',70]].forEach(([col,ox])=>{const s=Art.holo(id,col,78);x.globalCompositeOperation='lighter';x.globalAlpha=.5;x.drawImage(s.glow,ox+(70-s.w)/2,2-s.pad+ 4);x.globalAlpha=1;x.globalCompositeOperation='source-over';x.drawImage(s.body,ox+(70-s.w)/2,2-s.pad+4);});
+  d.appendChild(cv);const l=document.createElement('div');l.textContent=id;d.appendChild(l);g.appendChild(d);
+}
+for(const p of Object.keys(Art.P)){const d=document.createElement('div');d.className='c';d.appendChild(Art.portrait(p,80));const l=document.createElement('div');l.textContent=p;d.appendChild(l);g.appendChild(d);}
+const d=document.createElement('div');d.className='c';const cv=document.createElement('canvas');cv.width=140;cv.height=40;const x=cv.getContext('2d');['corn','blue','swamp','ice','nice','lava','rainbow'].forEach((t,i)=>Art.landIcon(x,t,10+i*20,20,8,'#fff'));d.appendChild(cv);g.appendChild(d);
+document.title='done';
+</script></body></html>
