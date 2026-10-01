@@ -98,13 +98,13 @@ const settings = { speed: 1, haptics: true, reduceMotion: false, timer: false, c
 const D = { q: [], cur: null, speed: 1, ff: false };
 function dur(ev) {
   const T = {
-    turn: 950, draw: 110, cast: 620, summon: 640, build: 640, replace: 180, floop: 430, ready: 260, move: 400, attack: 420, damage: 170, bdamage: 150,
-    hero: 330, heal: 220, heroHeal: 260, death: 430, bdeath: 460, status: 150, buff: 150, land: 680, steal: 700, trap: 650, spirit: 760,
-    reveal: 1500, stealCard: 800, study: 320, zap: 360, crash: 260, say: 950, volcano: 1300, immortal: 420, immune: 300, fightPhase: 420,
-    endTurn: 120, overtime: 800, reshuffle: 450, handFull: 300, buyDraw: 60, mulligan: 0, setup: 0, gameOver: 200, pending: 0, actions: 0, _sync: 0
+    turn: 900, draw: 100, cast: 540, summon: 540, build: 540, replace: 160, floop: 360, ready: 220, move: 340, attack: 340, damage: 120, bdamage: 120,
+    hero: 300, heal: 180, heroHeal: 220, death: 360, bdeath: 400, status: 100, buff: 100, land: 580, steal: 620, trap: 560, spirit: 680,
+    reveal: 1500, stealCard: 700, study: 260, zap: 300, crash: 220, say: 900, volcano: 1200, immortal: 380, immune: 260, fightPhase: 380,
+    endTurn: 100, overtime: 800, reshuffle: 400, handFull: 260, buyDraw: 60, mulligan: 0, setup: 0, gameOver: 200, pending: 0, actions: 0, _sync: 0
   };
   let d = T[ev.t] != null ? T[ev.t] : 120;
-  if (ev.t === 'turn' && ev.side !== M.viewer && M.seats[ev.side].kind !== 'human') d = 650;
+  if (ev.t === 'turn' && ev.side !== M.viewer && M.seats[ev.side].kind !== 'human') d = 520;
   if (ev.t === 'draw' && (ev.silent || ev.side !== M.viewer)) d = 40;
   if (ev.t === 'fightPhase' && !anyAttacker(ev)) d = 0;
   if (ev.t === 'say' && !ev.text) d = 0;
@@ -239,6 +239,7 @@ function startEvent(ev) {
       seatEl.classList.remove('shake'); void seatEl.offsetWidth; seatEl.classList.add('shake');
       const ep = R.edgePos(ev.side); R.burst(ep.x, ep.y, '#ff6a6a', 14, { speed: 140 });
       if (ev.n >= 3) R.shake(4 + ev.n, 0.3);
+      if (ev.n >= 5) react(ev.side, ['Oof! Lucky shot.', 'Hey, that hurt!', 'You\u2019re a babe in the woods... a dangerous babe.']);
       Sound.play('hero'); vib(35);
       if (M.stats) { if (ev.side === M.viewer) M.stats.taken += ev.n; else M.stats.dealt += ev.n; }
       break;
@@ -277,7 +278,7 @@ function startEvent(ev) {
     }
     case 'land': {
       const p = R.P(R.laneX(ev.lane), 0, (ev.side === M.viewer ? -1 : 1) * 1.6);
-      if (ev.cause === 'eat') { R.text(p.x, p.y, 'CHOMP!', '#ffd2a6', { size: 24 }); R.burst(p.x, p.y, '#c9a15a', 26, { speed: 150, square: true, add: false }); Sound.play('eat'); R.shake(3, 0.2); logLine('The Pig eats a ' + E.LANDS[ev.type].name + '!', 'sys'); }
+      if (ev.cause === 'eat') { react(ev.side, ev.type === 'corn' ? ['NOOOOO! My cornfields!', 'Pigs EAT corn?!', 'My Husker Knights draw energy from that!'] : ['Hey! That was my landscape!', 'NOOOOO!']); R.text(p.x, p.y, 'CHOMP!', '#ffd2a6', { size: 24 }); R.burst(p.x, p.y, '#c9a15a', 26, { speed: 150, square: true, add: false }); Sound.play('eat'); R.shake(3, 0.2); logLine('The Pig eats a ' + E.LANDS[ev.type].name + '!', 'sys'); }
       else if (ev.cause === 'convert') { R.text(p.x, p.y, E.LANDS[ev.type].name.toUpperCase() + '!', LANDC[ev.type], { size: 18 }); R.burst(p.x, p.y, LANDC[ev.type], 26, { speed: 120 }); Sound.play('holo'); }
       else { R.burst(p.x, p.y, LANDC[ev.type], 16, { speed: 80, up: 100 }); Sound.play('heal'); }
       break;
@@ -285,6 +286,7 @@ function startEvent(ev) {
     case 'steal': {
       R.anim(ev.uid, 'move', 0.6, { fx: R.laneX(ev.lane), fz: R.rowZ(ev.from, 'c') });
       const p = headOf(ev.to, ev.toLane); R.text(p.x, p.y - 20, 'STOLEN!', teamOf(ev.to), { size: 20 });
+      react(ev.from, ['You ganked my creature!', 'AAAGH! Give it back!', 'That\u2019s not fair!']); react(ev.to, ['Mine now!', 'Thanks for the new friend!']);
       Sound.play('steal'); vib(30);
       logLine(pname(ev.to) + ' takes control of ' + cname(ev.id) + '!', 'sys');
       break;
@@ -316,13 +318,20 @@ function startEvent(ev) {
       break;
     }
     case 'immortal': toast(cname(ev.id) + ' is Immortal — back to hand!'); break;
-    case 'immune': { const p = headOf(ev.side, ev.lane); R.text(p.x, p.y - 20, 'Zzz (safe)', '#d9cff7', { size: 15 }); break; }
+    case 'immune': { const p = headOf(ev.side, ev.lane); R.text(p.x, p.y - 20, ev.cool ? 'Too cool!' : 'Zzz (safe)', ev.cool ? '#9fe8ff' : '#d9cff7', { size: 15 }); break; }
     case 'fightPhase': if (anyAttacker(ev)) { stamp('FIGHT!', teamOf(ev.side)); Sound.play('fight'); } break;
     case 'overtime': showBanner('OVERTIME', 'The board overheats: -' + ev.n + ' HP', '#ff6a6a'); break;
     case 'reshuffle': if (ev.side === M.viewer) toast('Your discard pile is shuffled back into your deck'); break;
     case 'handFull': if (ev.side === M.viewer) toast('Hand full!'); break;
     case 'gameOver': break;
   }
+}
+// Opponent reactions to big moments (AI seats only, rate-limited).
+let reactAt = 0;
+function react(side, lines) {
+  if (!M.seats || !M.seats[side] || M.seats[side].kind !== 'ai') return;
+  const now = performance.now(); if (now - reactAt < 6000 || Math.random() < 0.35) return;
+  reactAt = now; speak(side, lines[Math.floor(Math.random() * lines.length)]);
 }
 function stamp(txt, color) {
   const r = R.rect; R.text(r.x + r.w / 2, r.y + r.h / 2, txt, color || '#fff', { size: 46, life: 0.7, vy: 0 });
@@ -613,7 +622,7 @@ function aiStep() {
   if (r.error) { M.aiPlan = []; if (M.aiGuard > 60) exec({ t: 'end', p: me }, 'ai'); aiTimer = 0.05; return; }
   if (cmd.t === 'end') { M.aiPlan = null; M.aiGuard = 0; aiTimer = 0.2; maybeAITaunt(me); return; }
   if (r.events.some(e => e.rng || e.t === 'draw' || e.t === 'trap' || e.t === 'reveal' || e.t === 'pending')) M.aiPlan = [];
-  aiTimer = 0.35 / D.speed;
+  aiTimer = 0.25 / D.speed;
   if (cmd.lane != null) R.sel = { side: me, lane: cmd.lane, slot: cmd.slot || 'c' };
 }
 function maybeAITaunt(side) {

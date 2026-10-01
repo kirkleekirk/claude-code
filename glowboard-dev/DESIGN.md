@@ -57,41 +57,105 @@ Schoolhouse. Spawners/reanimators: Cornucopia, Crypt, Penguin Igloo. Traps: Mud 
 (+ Spirit Tower reacts). Siege: Archer Dan, Lava Golem, Lava Cannon, Candy Wall thorns. Links: Gumdrop
 Towers, Magic Portal pairs. Control zones: Ice Castle, Fire Pit, Blizzard Wizard push.
 
-## Card list (cost = Actions and landscape requirement; L = Champion)
-Numbers are tuned by the balance harness; the engine data table is the source of truth.
+## Card list (generated from the engine data table)
+Cost = Actions and landscape requirement. B = building DEF.
 
-**Blue Plains** — Hot Dog Knight 0 1/2 (destroyed: draw) · Cool Dog 1 2/5 (floop: enemy across -2 ATK
-until your next turn) · Ancient Scholar 1 1/5 (floop: Study; at 3, Raise the Dead) · Sky Pup 1 2/3 Flying ·
-Cloud Ranger 2 3/7 (+2 ATK when it moves) · **The Pig** L 3/7 (floop: eat the landscape across, 1 dmg; muddy) ·
-Schoolhouse 1 B5 · Spirit Tower 2 B6 · Cave of Solitude 1 B6 · Mathematical! 0 · Adventure Time! 2 ·
-Rainicorn Ride 1.
+**Blue Plains** (Floop tricks & mobility)
+- Hot Dog Knight — cost 0 1/2 — When destroyed, draw a card.
+- Cool Dog — cost 1 3/5 — Too cool: can't be Chilled or Frozen. FLOOP: The enemy creature across gets -2 ATK until your next turn.
+- Ancient Scholar — cost 1 2/5 — FLOOP: Study (+2 with a Schoolhouse here). At 3 Study: Raise the Dead - put a creature from your discard pile into an empty lane.
+- Sky Pup — cost 1 2/4 — Flying.
+- Cloud Ranger — cost 2 4/6 — Whenever it moves, it gets +2 ATK this turn.
+- The Pig — Champion, cost 2 (needs 3) 4/7 — FLOOP: Eat the landscape across (flip it face-down) and deal 1 damage to the creature on it. Muddy: if the Pig attacks and destroys a creature on a Useless Swamp, it gets stuck in the mud - that swamp's owner takes control of it.
+- Schoolhouse — cost 1 B5 — At the start of your turn, your creature here gains +1 DEF permanently (max +2). Ancient Scholar studies twice as fast here.
+- Cave of Solitude — cost 1 B6 — Your flooped creature here naps inside: it can't be attacked, targeted or damaged by enemies.
+- Spirit Tower — cost 2 B6 — When an enemy creature with 5+ ATK attacks this lane, cancel the attack and take control of it. Then the Spirit Tower fades.
+- Mathematical! — cost 0 — Ready one of your flooped creatures. It can floop or fight again.
+- Rainicorn Ride — cost 1 — Move any creature (yours or an enemy's) to an empty lane on its side.
+- Adventure Time! — cost 2 — Your creatures get +2 ATK this turn. Draw a card.
 
-**Cornfield** — Cornball 0 1/2 Ripen · Husker Knight 1 2/4 Ripen, collapses · Scarecrow 1 1/6 Guard ·
-Husker Worm 2 3/6 (Earlings beside it) · Corn Ronin 2 2/6 (+1 ATK per other ally) · **Immortal Maize
-Walker** L 1/8 (triple damage with 3+ Cornfields, Immortal) · Silo of Truth 2 B5 · Cornucopia 1 B4 ·
-Corn Dome 2 B5 · Cerebral Bloodstorm 1 · Field of Nightmares 2 · Plant Corn 0.
+**Cornfield** (Swarm & growth)
+- Cornball — cost 0 1/2 — Ripen.
+- Husker Knight — cost 1 2/4 — Ripen. Collapses (can't attack) while its landscape is face-down.
+- Scarecrow — cost 1 1/6 — Guard.
+- Husker Worm — cost 2 3/5 — When played, put a 1/1 Earling into each adjacent empty lane.
+- Corn Ronin — cost 2 2/5 — +1 ATK for each other creature you control.
+- Immortal Maize Walker — Champion, cost 2 (needs 3) 1/7 — Deals triple damage while you control 3+ face-up Cornfields. Immortal.
+- Cornucopia — cost 1 B4 — At the start of your turn, put a 1/1 Earling into a random empty lane of yours.
+- Silo of Truth — cost 2 B5 — FLOOP: See your opponent's hand and face-down buildings, then steal a Spell from their hand.
+- Corn Dome — cost 2 B5 — Your creatures in this lane and adjacent lanes get +1 ATK.
+- Plant Corn — cost 0 — Turn one of your landscapes into a face-up Cornfield.
+- Cerebral Bloodstorm — cost 1 — Deal 2 damage to every Ready creature - yours too! Flooped creatures are safe.
+- Field of Nightmares — cost 2 — Summon the Legion of Earlings: a 1/1 Earling into each of your empty lanes.
 
-**Useless Swamp** — Swamp Wisp 0 1/1 Flying · Mud Slinger 1 2/4 (Rot) · Gravedigger 1 1/5 (floop 1: Zombie) ·
-Bog Witch 2 3/7 Lifesteal · Grave Gobbler 2 3/6 (grows on deaths) · **The Lich** L 4/8 (floop 1: all enemies
-Rot) · Crypt 1 B5 · Mud Pit 1 trap · Witch's Cauldron 2 B5 · The Reaper 2 · Unearth 1 · Bog Breath 1.
+**Useless Swamp** (Rot, Zombies & soul-stealing)
+- Swamp Wisp — cost 0 1/1 — Flying.
+- Mud Slinger — cost 1 2/4 — Creatures it damages in fights Rot.
+- Gravedigger — cost 1 1/5 — FLOOP (1 Action): Raise a 1/1 Zombie in an adjacent empty lane.
+- Bog Witch — cost 2 3/6 — Lifesteal.
+- Grave Gobbler — cost 2 3/5 — Whenever another creature is destroyed, it gets +1 ATK permanently (max +3).
+- The Lich — Champion, cost 2 (needs 3) 4/8 — FLOOP (1 Action): Every enemy creature Rots.
+- Crypt — cost 1 B5 — When one of your creatures in this or an adjacent lane is destroyed, raise a 1/1 Zombie here.
+- Mud Pit — cost 1 B3 — Trap. When an enemy creature enters the opposing lane, it gets Stuck and Rots. Then the pit sinks.
+- Witch's Cauldron — cost 2 B5 — FLOOP: Destroy your creature here: draw 2 cards and gain 1 Action.
+- Unearth — cost 1 — Put a creature from your discard pile into an empty lane of yours. It Rots.
+- Bog Breath — cost 1 — Deal 2 damage to a creature. It Rots.
+- The Reaper — cost 2 — Take control of every damaged enemy creature with 2 or less DEF left.
 
-**IcyLands** — Gunter 0 1/2 (floop: 1 dmg + Chill random enemy) · Snow Golem 1 1/6 Guard · Snow Sprite 1 1/4
-Ranged (floop: Chill) · Abominable Snowman 2 4/7 (+2 vs Chilled) · Blizzard Wizard 2 3/6 (floop: push) ·
-**Ice King** L 3/8 (floop 1: Freeze across, Chill others) · Ice Castle 2 B8 · Frozen Lake 1 trap ·
-Penguin Igloo 1 B4 · Deep Freeze 1 · Blizzard 2 · Snow Day 1.
+**IcyLands** (Chill, Freeze & control)
+- Gunter — cost 0 1/3 — FLOOP: Deal 1 damage to a random enemy creature and Chill it.
+- Snow Golem — cost 1 2/6 — Guard.
+- Snow Sprite — cost 1 2/4 — Ranged. FLOOP: Chill an enemy creature.
+- Abominable Snowman — cost 2 5/7 — Deals +2 damage to Chilled or Frozen creatures.
+- Blizzard Wizard — cost 2 3/7 — FLOOP: Push the enemy creature across into an adjacent lane. If an enemy creature is already there, both take 2 damage.
+- Ice King — Champion, cost 2 (needs 3) 4/8 — FLOOP (1 Action): Freeze the enemy creature across and Chill every other enemy creature.
+- Ice Castle — cost 1 B7 — At the end of your turn, Chill the enemy creature across.
+- Frozen Lake — cost 1 B3 — Trap. When an enemy creature enters the opposing lane, Freeze it and deal 2 damage. Then the ice cracks.
+- Penguin Igloo — cost 1 B4 — At the start of your turn, if your creature slot here is empty, a 1/1 Penguin waddles out.
+- Deep Freeze — cost 1 — Freeze an enemy creature.
+- Snow Day — cost 1 — Turn any landscape into IcyLands. Chill the creature on it.
+- Blizzard — cost 2 — Deal 2 damage to every enemy creature and Chill them.
 
-**NiceLands** — Banana Guard 0 1/2 Guard · Peppermint Butler 1 1/4 (floop: Shield 2) · Royal Tart Toter 1 1/5
-(floop: heal 3) · Gumball Guardian 2 3/8 Guard Ranged · Mr. Cupcake 2 4/6 Shield 2 · **Princess Bubblegum** L
-3/8 (floop 1: each building zaps for 2) · Gumdrop Tower 1 B5 · Candy Lab 1 B4 · Candy Wall 1 B8 ·
-Bubble Barrier 1 · Science! 0 · Sweet Justice 2.
+**NiceLands** (Shields, buildings & spells)
+- Banana Guard — cost 0 1/3 — Guard.
+- Peppermint Butler — cost 1 1/4 — FLOOP: Give an ally Shield 2.
+- Royal Tart Toter — cost 1 2/5 — FLOOP: Heal 3 damage from an ally.
+- Gumball Guardian — cost 2 2/8 — Guard. Ranged.
+- Mr. Cupcake — cost 2 4/6 — Enters with Shield 2.
+- Princess Bubblegum — Champion, cost 2 (needs 3) 3/8 — FLOOP (1 Action): SCIENCE! Each of your buildings zaps the enemy creature across from it for 2.
+- Gumdrop Tower — cost 1 B5 — At the start of your turn, your creature here gets Shield 1 (Shield 2 while you control another Gumdrop Tower - they link).
+- Candy Lab — cost 1 B4 — Your first Spell each turn costs 1 less.
+- Candy Wall — cost 1 B8 — Creatures that attack this building take 2 damage.
+- Science! — cost 0 — Draw a card. If you control a building, draw 2 instead.
+- Bubble Barrier — cost 1 — Give a creature and its adjacent allies Shield 2.
+- Sweet Justice — cost 2 — Deal 4 damage to an enemy creature in a lane where you have a building.
 
-**LavaFlats** — Fire Wolf Pup 0 2/1 · Cinnamon Bun 1 2/5 Guard · Flambo 1 1/4 (floop: Burn 2) · Fire Elemental
-1 3/3 (explodes) · Lava Golem 2 4/7 Siege 2 · **Flame Princess** L 5/6 (floop 1: Burn 2 all enemies) ·
-Fire Forge 1 B5 · Lava Cannon 2 B4 · Fire Pit 1 B3 · Fireball 1 · Eruption 2 · Heat Wave 1.
+**LavaFlats** (Burn, siege & aggro)
+- Fire Wolf Pup — cost 0 2/1 — A hot-tempered little wolf.
+- Cinnamon Bun — cost 1 2/5 — Guard.
+- Flambo — cost 1 1/4 — FLOOP: Burn 2 an enemy creature.
+- Fire Elemental — cost 1 3/3 — When destroyed, deal 2 damage to the enemy creature across.
+- Lava Golem — cost 2 4/7 — Siege 2.
+- Flame Princess — Champion, cost 2 (needs 3) 5/6 — FLOOP (1 Action): Burn 2 every enemy creature.
+- Fire Forge — cost 1 B5 — At the end of your turn, your creature here gets +1 ATK permanently (max +2).
+- Fire Pit — cost 1 B3 — At the end of your turn, Burn 1 the enemy creatures in this lane and adjacent lanes.
+- Lava Cannon — cost 2 B4 — At the end of your turn, fire across this lane: 3 damage to a building, else 2 to the creature, else 2 to the hero.
+- Fireball — cost 1 — Deal 3 damage to a creature and 1 to the creatures beside it.
+- Heat Wave — cost 1 — Deal 2 damage to the enemy hero. Burn 1 every enemy creature.
+- Eruption — cost 2 — Turn any landscape into LavaFlats and deal 3 damage to the creature on it.
 
-**Rainbow** — Wandering Bald Man 0 2/2 · Archer Dan 2 3/5 Ranged (3 dmg to every enemy building) · Nurse
-Poundcake 1 1/5 · Teleport 0 · Reclaim Landscape 1 · Bacon Pancakes 1 · For the Glory! 1 · Volcano 2 B6 ·
-Tree Fort 1 B6 · Magic Portal 1 B3 · Booby Trap 0 trap.
+**Rainbow**
+- Wandering Bald Man — cost 0 2/2 — At the start of your turn, wanders into a random empty lane of yours - unless he is stuck in a Useless Swamp.
+- Nurse Poundcake — cost 1 1/5 — FLOOP: Heal your hero 2.
+- Archer Dan — cost 2 3/5 — Ranged. When played, deal 3 damage to every enemy building.
+- Booby Trap — cost 0 B2 — Trap. When an enemy creature enters the opposing lane, deal 3 damage to it. Then it's spent.
+- Tree Fort — cost 1 B6 — At the start of your turn, your creature here heals 2.
+- Magic Portal — cost 1 B3 — When played, a twin Portal opens in another empty building slot of yours. Your creatures move between Portal lanes for free, at any distance.
+- Volcano — cost 2 B6 — FLOOP: Destroy ALL creatures - yours too! Then the Volcano is spent. (Can't floop the turn it's played.)
+- Teleport — cost 0 — Move one of your creatures to any lane of yours (swapping if needed). Only works on your own creatures!
+- Reclaim Landscape — cost 1 — Restore all your landscapes: flip them face-up and undo enemy conversions.
+- Bacon Pancakes — cost 1 — Draw 2 cards.
+- For the Glory! — cost 1 — Your creatures get +1 ATK this turn. Draw a card.
 
 Tokens: Earling 1/1 (Cornfield), Zombie 1/1 (Swamp), Penguin 1/1 (Ice, chills).
 

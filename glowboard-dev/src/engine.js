@@ -55,7 +55,7 @@ function def(o) {
 def({ id: 'b_hotdog', name: 'Hot Dog Knight', land: 'blue', type: 'creature', cost: 0, atk: 1, def: 2, r: 'C', art: 'hotdog',
   ab: [{ on: 'death', fx: 'drawCards', n: 1 }], text: 'When destroyed, draw a card.', flavor: 'Brave. Bun-armored. Mostly mustard.' });
 def({ id: 'b_cooldog', name: 'Cool Dog', land: 'blue', type: 'creature', cost: 1, atk: 3, def: 5, r: 'C', art: 'cooldog',
-  ab: [{ on: 'floop', fx: 'coolStare', n: 2 }], text: 'FLOOP: The enemy creature across gets -2 ATK until your next turn.', flavor: '"Cool Dog? That\'s a cool dog."' });
+  kw: { cool: 1 }, ab: [{ on: 'floop', fx: 'coolStare', n: 2 }], text: 'Too cool: can\'t be Chilled or Frozen. FLOOP: The enemy creature across gets -2 ATK until your next turn.', flavor: '"Cool Dog? That\'s a cool dog."' });
 def({ id: 'b_scholar', name: 'Ancient Scholar', land: 'blue', type: 'creature', cost: 1, atk: 2, def: 5, r: 'R', art: 'scholar',
   ab: [{ on: 'floop', fx: 'study', plan: 'scholar' }], text: 'FLOOP: Study (+2 with a Schoolhouse here). At 3 Study: Raise the Dead - put a creature from your discard pile into an empty lane.', flavor: '"My Ancient Scholar\'s been studying the Raise the Dead ability."' });
 def({ id: 'b_skypup', name: 'Sky Pup', land: 'blue', type: 'creature', cost: 1, atk: 2, def: 4, r: 'C', art: 'skypup',
@@ -436,12 +436,14 @@ function applyRot(st, side, lane, ev) {
 }
 function freeze(st, side, lane, ev) {
   const c = cr(st, side, lane); if (!c) return;
+  if (card(c.id).kw.cool) { ev.push({ t: 'immune', side, lane, cool: 1 }); return; }
   c.frozen = true; c.chill = 0;
   c.thawAt = st.active === side ? st.turn + 2 : st.turn + 1;
   ev.push({ t: 'status', side, lane, s: 'freeze', n: 1 });
 }
 function chill(st, side, lane, n, ev) {
   const c = cr(st, side, lane); if (!c || n <= 0) return;
+  if (card(c.id).kw.cool) { ev.push({ t: 'immune', side, lane, cool: 1 }); return; }
   if (c.frozen) return;
   c.chill = (c.chill || 0) + n;
   if (c.chill >= 2) freeze(st, side, lane, ev);

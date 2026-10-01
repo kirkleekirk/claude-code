@@ -454,7 +454,7 @@ function def(o) {
 def({ id: 'b_hotdog', name: 'Hot Dog Knight', land: 'blue', type: 'creature', cost: 0, atk: 1, def: 2, r: 'C', art: 'hotdog',
   ab: [{ on: 'death', fx: 'drawCards', n: 1 }], text: 'When destroyed, draw a card.', flavor: 'Brave. Bun-armored. Mostly mustard.' });
 def({ id: 'b_cooldog', name: 'Cool Dog', land: 'blue', type: 'creature', cost: 1, atk: 3, def: 5, r: 'C', art: 'cooldog',
-  ab: [{ on: 'floop', fx: 'coolStare', n: 2 }], text: 'FLOOP: The enemy creature across gets -2 ATK until your next turn.', flavor: '"Cool Dog? That\'s a cool dog."' });
+  kw: { cool: 1 }, ab: [{ on: 'floop', fx: 'coolStare', n: 2 }], text: 'Too cool: can\'t be Chilled or Frozen. FLOOP: The enemy creature across gets -2 ATK until your next turn.', flavor: '"Cool Dog? That\'s a cool dog."' });
 def({ id: 'b_scholar', name: 'Ancient Scholar', land: 'blue', type: 'creature', cost: 1, atk: 2, def: 5, r: 'R', art: 'scholar',
   ab: [{ on: 'floop', fx: 'study', plan: 'scholar' }], text: 'FLOOP: Study (+2 with a Schoolhouse here). At 3 Study: Raise the Dead - put a creature from your discard pile into an empty lane.', flavor: '"My Ancient Scholar\'s been studying the Raise the Dead ability."' });
 def({ id: 'b_skypup', name: 'Sky Pup', land: 'blue', type: 'creature', cost: 1, atk: 2, def: 4, r: 'C', art: 'skypup',
@@ -835,12 +835,14 @@ function applyRot(st, side, lane, ev) {
 }
 function freeze(st, side, lane, ev) {
   const c = cr(st, side, lane); if (!c) return;
+  if (card(c.id).kw.cool) { ev.push({ t: 'immune', side, lane, cool: 1 }); return; }
   c.frozen = true; c.chill = 0;
   c.thawAt = st.active === side ? st.turn + 2 : st.turn + 1;
   ev.push({ t: 'status', side, lane, s: 'freeze', n: 1 });
 }
 function chill(st, side, lane, n, ev) {
   const c = cr(st, side, lane); if (!c || n <= 0) return;
+  if (card(c.id).kw.cool) { ev.push({ t: 'immune', side, lane, cool: 1 }); return; }
   if (c.frozen) return;
   c.chill = (c.chill || 0) + n;
   if (c.chill >= 2) freeze(st, side, lane, ev);
@@ -3031,7 +3033,7 @@ const R = {
   heroAnchor: null, onShake: null
 };
 const S = Math.sin, Cc = Math.cos;
-let bg = null, bgKey = '', board = null, boardKey = '';
+let bg = null, bgKey = '', board = null, boardKey = '', combo = null, comboKey = '';
 let shakeT = 0, shakeA = 0, hitStop = 0;
 
 // ------------------------------------------------------------------ setup
@@ -3232,7 +3234,7 @@ function drawDen(x, W, H) {
 function drawHomeLive(x, t) {
   const W = R.W, H = R.H, wallH = H * 0.5, wide = W > H;
   // mini holo board on the table
-  const cx = wide ? W * 0.74 : W * 0.5, cy = wide ? H * 0.74 : H * 0.83, bw = Math.min(W * (wide ? 0.34 : 0.7), 360), bh = bw * 0.36;
+  const cx = wide ? W * 0.27 : W * 0.5, cy = wide ? H * 0.86 : H * 0.83, bw = Math.min(W * (wide ? 0.3 : 0.7), 340), bh = bw * 0.36;
   x.save();
   x.fillStyle = 'rgba(10,8,24,.75)'; x.beginPath(); x.ellipse(cx, cy, bw / 2, bh / 2, 0, 0, 7); x.fill();
   x.strokeStyle = 'rgba(120,220,255,.5)'; x.lineWidth = 2; x.stroke();
@@ -3246,7 +3248,7 @@ function drawHomeLive(x, t) {
   });
   x.restore();
   // BMO standing on the table
-  const bx = wide ? W * 0.56 : W * 0.13, by = wide ? H * 0.8 : H * 0.95, bs = Math.min(W, H) * (wide ? 0.2 : 0.15);
+  const bx = wide ? W * 0.07 : W * 0.13, by = wide ? H * 0.97 : H * 0.95, bs = Math.min(W, H) * (wide ? 0.17 : 0.15);
   x.save(); x.translate(bx, by - bs + Math.sin(t * 3) * 2);
   x.drawImage(Art.portrait('bmo', Math.round(bs)), -bs / 2, 0, bs, bs);
   x.fillStyle = '#4aa995'; x.fillRect(-bs * 0.28, bs * 0.95, bs * 0.08, bs * 0.18); x.fillRect(bs * 0.2, bs * 0.95, bs * 0.08, bs * 0.18);
@@ -3302,10 +3304,10 @@ function decor(x, type, side, lane, down) {
   }
 }
 function drawBoardLayer() {
-  const st = R.st; if (!st) return;
+  const st = R.st; if (!st) return false;
   const lands = st.players.map(P0 => P0.lanes.map(L => L.land.type + (L.land.down ? 'D' : ''))).join('|');
   const key = lands + R.viewer + R.cam.F.toFixed(2) + R.cam.cx.toFixed(1) + R.cam.cy.toFixed(1) + R.W + R.H + (R.cbIcons ? 1 : 0);
-  if (board && boardKey === key) return;
+  if (board && boardKey === key) return false;
   boardKey = key;
   board = board || document.createElement('canvas');
   board.width = R.cv.width; board.height = R.cv.height;
@@ -3354,8 +3356,9 @@ function drawBoardLayer() {
   }
   // side lights along the centre seam
   for (const sx of [-BOARD.hx - 0.04, BOARD.hx + 0.04]) { const q = P(sx, 0, 0); x.fillStyle = 'rgba(255,207,58,.9)'; x.beginPath(); x.arc(q.x, q.y, Math.max(2.5, q.s * 0.035), 0, 7); x.fill(); }
-  // lane separators
+  // lane separators (function returns true below: layer was rebuilt)
   for (let k = 1; k < 4; k++) { const gx = laneX(0) + (R.viewer === 0 ? 1 : -1) * (k - 0.5); const a = P(gx, 0, -BOARD.hz + 0.1), b = P(gx, 0, BOARD.hz - 0.1); x.strokeStyle = 'rgba(255,255,255,.05)'; x.lineWidth = 1; x.beginPath(); x.moveTo(a.x, a.y); x.lineTo(b.x, b.y); x.stroke(); }
+  return true;
 }
 
 // ------------------------------------------------------------------ dynamic effects
@@ -3424,7 +3427,28 @@ function cardQuad(x, side, lane, slot, faction, rot, alpha, back, hidden) {
   if (hidden) { const p = P(cx, 0.01, cz); x.fillStyle = '#b9adf0'; x.font = '900 ' + Math.max(9, p.s * 0.16) + 'px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('?', p.x, p.y); }
   x.restore();
 }
+const glowCache = {};
+function discSprite(rgb) {
+  const k = 'd' + rgb.join(','); if (glowCache[k]) return glowCache[k];
+  const c = document.createElement('canvas'); c.width = 128; c.height = 128; const y = c.getContext('2d');
+  const g = y.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0, rgba(rgb, 0.55)); g.addColorStop(0.7, rgba(rgb, 0.18)); g.addColorStop(1, rgba(rgb, 0));
+  y.fillStyle = g; y.fillRect(0, 0, 128, 128);
+  y.strokeStyle = rgba(rgb, 0.7); y.lineWidth = 3; y.beginPath(); y.arc(64, 64, 51, 0, 7); y.stroke();
+  return (glowCache[k] = c);
+}
+function beamSprite(rgb) {
+  const k = 'b' + rgb.join(','); if (glowCache[k]) return glowCache[k];
+  const c = document.createElement('canvas'); c.width = 64; c.height = 128; const y = c.getContext('2d');
+  const g = y.createLinearGradient(0, 128, 0, 0); g.addColorStop(0, rgba(rgb, 0.22)); g.addColorStop(1, rgba(rgb, 0));
+  y.fillStyle = g; y.beginPath(); y.moveTo(32 - 32 * 0.33, 128); y.lineTo(0, 0); y.lineTo(64, 0); y.lineTo(32 + 32 * 0.33, 128); y.closePath(); y.fill();
+  return (glowCache[k] = c);
+}
 function disc(x, p, rgb, a, r) {
+  const rx = p.s * (r || 0.32), ry = rx * 0.42;
+  x.globalAlpha = a; x.drawImage(discSprite(rgb), p.x - rx, p.y - ry, rx * 2, ry * 2); x.globalAlpha = 1;
+}
+function discOld(x, p, rgb, a, r) {
   const rx = p.s * (r || 0.32), ry = rx * 0.42;
   const g = x.createRadialGradient(p.x, p.y, 0, p.x, p.y, rx);
   g.addColorStop(0, rgba(rgb, 0.55 * a)); g.addColorStop(0.7, rgba(rgb, 0.18 * a)); g.addColorStop(1, rgba(rgb, 0));
@@ -3434,15 +3458,20 @@ function disc(x, p, rgb, a, r) {
   x.restore();
 }
 function beamCone(x, p, h, w, rgb, a) {
+  x.globalAlpha = a; x.drawImage(beamSprite(rgb), p.x - w * 0.55, p.y - h, w * 1.1, h); x.globalAlpha = 1;
+}
+function beamConeOld(x, p, h, w, rgb, a) {
   const g = x.createLinearGradient(0, p.y, 0, p.y - h);
   g.addColorStop(0, rgba(rgb, 0.22 * a)); g.addColorStop(1, rgba(rgb, 0));
   x.fillStyle = g; x.beginPath(); x.moveTo(p.x - w * 0.18, p.y); x.lineTo(p.x - w * 0.55, p.y - h); x.lineTo(p.x + w * 0.55, p.y - h); x.lineTo(p.x + w * 0.18, p.y); x.closePath(); x.fill();
 }
+let badgeFont = '';
 function badge(x, bx, by, txt, bgA, bgB, sz) {
-  x.font = '900 ' + sz + 'px ' + 'system-ui, sans-serif';
-  const w = Math.max(sz * 1.25, x.measureText(txt).width + sz * 0.55), h = sz * 1.25;
-  const g = x.createLinearGradient(0, by - h / 2, 0, by + h / 2); g.addColorStop(0, bgA); g.addColorStop(1, bgB);
-  rr(x, bx - w / 2, by - h / 2, w, h, h * 0.35); x.fillStyle = g; x.fill(); x.lineWidth = Math.max(1.5, sz * 0.12); x.strokeStyle = '#1b1424'; x.stroke();
+  const f = '900 ' + Math.round(sz) + 'px system-ui, sans-serif';
+  if (badgeFont !== f || x.font !== f) { x.font = f; badgeFont = f; }
+  const w = Math.max(sz * 1.25, txt.length * sz * 0.62 + sz * 0.5), h = sz * 1.25;
+  rr(x, bx - w / 2, by - h / 2, w, h, h * 0.35); x.fillStyle = bgB; x.fill(); x.lineWidth = Math.max(1.5, sz * 0.12); x.strokeStyle = '#1b1424'; x.stroke();
+  rr(x, bx - w / 2 + 1.5, by - h / 2 + 1.5, w - 3, h * 0.45, h * 0.25); x.fillStyle = bgA; x.globalAlpha = 0.55; x.fill(); x.globalAlpha = 1;
   x.fillStyle = '#fff'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(txt, bx, by + sz * 0.05);
 }
 function statusIcons(x, cx, cy, sz, c) {
@@ -3691,16 +3720,25 @@ R.frame = function (t, dt) {
   const x = R.x;
   x.setTransform(1, 0, 0, 1, 0, 0);
   ensureBg();
-  x.drawImage(bg, 0, 0);
+  if (R.mode === 'home' || !R.st || (R.intro && R.intro.t < 1.6)) x.drawImage(bg, 0, 0);
   x.setTransform(R.dpr, 0, 0, R.dpr, 0, 0);
   if (R.mode === 'home') { if (R.homeLive) drawHomeLive(x, t); drawParticles(x); drawTexts(x); return; }
   if (!R.st) return;
   let sx = 0, sy = 0;
   if (shakeT > 0) { shakeT -= dt; sx = (Math.random() - 0.5) * shakeA * 2; sy = (Math.random() - 0.5) * shakeA * 2; if (shakeT <= 0) shakeA = 0; }
   x.save(); x.translate(sx, sy);
-  drawBoardLayer();
+  const changed = drawBoardLayer();
   x.setTransform(1, 0, 0, 1, sx * R.dpr, sy * R.dpr);
-  if (R.intro && R.intro.t < 1.6) {
+  if (!(R.intro && R.intro.t < 1.6)) {
+    // one full-screen blit per frame: cached table + board composite
+    if (!combo || changed || comboKey !== boardKey + '|' + bgKey) {
+      combo = combo || document.createElement('canvas'); combo.width = R.cv.width; combo.height = R.cv.height;
+      const c = combo.getContext('2d'); c.drawImage(bg, 0, 0); c.drawImage(board, 0, 0); comboKey = boardKey + '|' + bgKey;
+    }
+    x.setTransform(1, 0, 0, 1, 0, 0);
+    if (sx || sy) { x.fillStyle = '#2a160a'; x.fillRect(0, 0, R.cv.width, R.cv.height); }
+    x.drawImage(combo, Math.round(sx * R.dpr), Math.round(sy * R.dpr)); x.setTransform(R.dpr, 0, 0, R.dpr, sx * R.dpr, sy * R.dpr);
+  } else if (R.intro && R.intro.t < 1.6) {
     // "Floop your land cards": landscapes flip onto the board one by one
     R.intro.t += dt;
     x.globalAlpha = 0.28; x.drawImage(board, 0, 0); x.globalAlpha = 1;
@@ -3715,7 +3753,7 @@ R.frame = function (t, dt) {
       if (!R.intro['p' + side + l]) { R.intro['p' + side + l] = 1; const c = P(cxp, 0, czp); R.burst(c.x, c.y, LANDC[R.st.players[side].lanes[l].land.type], 10, { speed: 90, up: 60 }); if (R.onIntroPop) R.onIntroPop(); }
     }
     x.clip(); x.setTransform(1, 0, 0, 1, sx * R.dpr, sy * R.dpr); x.drawImage(board, 0, 0); x.restore();
-  } else x.drawImage(board, 0, 0);
+  }
   x.setTransform(R.dpr, 0, 0, R.dpr, sx * R.dpr, sy * R.dpr);
   drawRubble(x);
   drawHighlights(x, t);
@@ -3986,13 +4024,13 @@ const settings = { speed: 1, haptics: true, reduceMotion: false, timer: false, c
 const D = { q: [], cur: null, speed: 1, ff: false };
 function dur(ev) {
   const T = {
-    turn: 950, draw: 110, cast: 620, summon: 640, build: 640, replace: 180, floop: 430, ready: 260, move: 400, attack: 420, damage: 170, bdamage: 150,
-    hero: 330, heal: 220, heroHeal: 260, death: 430, bdeath: 460, status: 150, buff: 150, land: 680, steal: 700, trap: 650, spirit: 760,
-    reveal: 1500, stealCard: 800, study: 320, zap: 360, crash: 260, say: 950, volcano: 1300, immortal: 420, immune: 300, fightPhase: 420,
-    endTurn: 120, overtime: 800, reshuffle: 450, handFull: 300, buyDraw: 60, mulligan: 0, setup: 0, gameOver: 200, pending: 0, actions: 0, _sync: 0
+    turn: 900, draw: 100, cast: 540, summon: 540, build: 540, replace: 160, floop: 360, ready: 220, move: 340, attack: 340, damage: 120, bdamage: 120,
+    hero: 300, heal: 180, heroHeal: 220, death: 360, bdeath: 400, status: 100, buff: 100, land: 580, steal: 620, trap: 560, spirit: 680,
+    reveal: 1500, stealCard: 700, study: 260, zap: 300, crash: 220, say: 900, volcano: 1200, immortal: 380, immune: 260, fightPhase: 380,
+    endTurn: 100, overtime: 800, reshuffle: 400, handFull: 260, buyDraw: 60, mulligan: 0, setup: 0, gameOver: 200, pending: 0, actions: 0, _sync: 0
   };
   let d = T[ev.t] != null ? T[ev.t] : 120;
-  if (ev.t === 'turn' && ev.side !== M.viewer && M.seats[ev.side].kind !== 'human') d = 650;
+  if (ev.t === 'turn' && ev.side !== M.viewer && M.seats[ev.side].kind !== 'human') d = 520;
   if (ev.t === 'draw' && (ev.silent || ev.side !== M.viewer)) d = 40;
   if (ev.t === 'fightPhase' && !anyAttacker(ev)) d = 0;
   if (ev.t === 'say' && !ev.text) d = 0;
@@ -4127,6 +4165,7 @@ function startEvent(ev) {
       seatEl.classList.remove('shake'); void seatEl.offsetWidth; seatEl.classList.add('shake');
       const ep = R.edgePos(ev.side); R.burst(ep.x, ep.y, '#ff6a6a', 14, { speed: 140 });
       if (ev.n >= 3) R.shake(4 + ev.n, 0.3);
+      if (ev.n >= 5) react(ev.side, ['Oof! Lucky shot.', 'Hey, that hurt!', 'You\u2019re a babe in the woods... a dangerous babe.']);
       Sound.play('hero'); vib(35);
       if (M.stats) { if (ev.side === M.viewer) M.stats.taken += ev.n; else M.stats.dealt += ev.n; }
       break;
@@ -4165,7 +4204,7 @@ function startEvent(ev) {
     }
     case 'land': {
       const p = R.P(R.laneX(ev.lane), 0, (ev.side === M.viewer ? -1 : 1) * 1.6);
-      if (ev.cause === 'eat') { R.text(p.x, p.y, 'CHOMP!', '#ffd2a6', { size: 24 }); R.burst(p.x, p.y, '#c9a15a', 26, { speed: 150, square: true, add: false }); Sound.play('eat'); R.shake(3, 0.2); logLine('The Pig eats a ' + E.LANDS[ev.type].name + '!', 'sys'); }
+      if (ev.cause === 'eat') { react(ev.side, ev.type === 'corn' ? ['NOOOOO! My cornfields!', 'Pigs EAT corn?!', 'My Husker Knights draw energy from that!'] : ['Hey! That was my landscape!', 'NOOOOO!']); R.text(p.x, p.y, 'CHOMP!', '#ffd2a6', { size: 24 }); R.burst(p.x, p.y, '#c9a15a', 26, { speed: 150, square: true, add: false }); Sound.play('eat'); R.shake(3, 0.2); logLine('The Pig eats a ' + E.LANDS[ev.type].name + '!', 'sys'); }
       else if (ev.cause === 'convert') { R.text(p.x, p.y, E.LANDS[ev.type].name.toUpperCase() + '!', LANDC[ev.type], { size: 18 }); R.burst(p.x, p.y, LANDC[ev.type], 26, { speed: 120 }); Sound.play('holo'); }
       else { R.burst(p.x, p.y, LANDC[ev.type], 16, { speed: 80, up: 100 }); Sound.play('heal'); }
       break;
@@ -4173,6 +4212,7 @@ function startEvent(ev) {
     case 'steal': {
       R.anim(ev.uid, 'move', 0.6, { fx: R.laneX(ev.lane), fz: R.rowZ(ev.from, 'c') });
       const p = headOf(ev.to, ev.toLane); R.text(p.x, p.y - 20, 'STOLEN!', teamOf(ev.to), { size: 20 });
+      react(ev.from, ['You ganked my creature!', 'AAAGH! Give it back!', 'That\u2019s not fair!']); react(ev.to, ['Mine now!', 'Thanks for the new friend!']);
       Sound.play('steal'); vib(30);
       logLine(pname(ev.to) + ' takes control of ' + cname(ev.id) + '!', 'sys');
       break;
@@ -4204,13 +4244,20 @@ function startEvent(ev) {
       break;
     }
     case 'immortal': toast(cname(ev.id) + ' is Immortal — back to hand!'); break;
-    case 'immune': { const p = headOf(ev.side, ev.lane); R.text(p.x, p.y - 20, 'Zzz (safe)', '#d9cff7', { size: 15 }); break; }
+    case 'immune': { const p = headOf(ev.side, ev.lane); R.text(p.x, p.y - 20, ev.cool ? 'Too cool!' : 'Zzz (safe)', ev.cool ? '#9fe8ff' : '#d9cff7', { size: 15 }); break; }
     case 'fightPhase': if (anyAttacker(ev)) { stamp('FIGHT!', teamOf(ev.side)); Sound.play('fight'); } break;
     case 'overtime': showBanner('OVERTIME', 'The board overheats: -' + ev.n + ' HP', '#ff6a6a'); break;
     case 'reshuffle': if (ev.side === M.viewer) toast('Your discard pile is shuffled back into your deck'); break;
     case 'handFull': if (ev.side === M.viewer) toast('Hand full!'); break;
     case 'gameOver': break;
   }
+}
+// Opponent reactions to big moments (AI seats only, rate-limited).
+let reactAt = 0;
+function react(side, lines) {
+  if (!M.seats || !M.seats[side] || M.seats[side].kind !== 'ai') return;
+  const now = performance.now(); if (now - reactAt < 6000 || Math.random() < 0.35) return;
+  reactAt = now; speak(side, lines[Math.floor(Math.random() * lines.length)]);
 }
 function stamp(txt, color) {
   const r = R.rect; R.text(r.x + r.w / 2, r.y + r.h / 2, txt, color || '#fff', { size: 46, life: 0.7, vy: 0 });
@@ -4501,7 +4548,7 @@ function aiStep() {
   if (r.error) { M.aiPlan = []; if (M.aiGuard > 60) exec({ t: 'end', p: me }, 'ai'); aiTimer = 0.05; return; }
   if (cmd.t === 'end') { M.aiPlan = null; M.aiGuard = 0; aiTimer = 0.2; maybeAITaunt(me); return; }
   if (r.events.some(e => e.rng || e.t === 'draw' || e.t === 'trap' || e.t === 'reveal' || e.t === 'pending')) M.aiPlan = [];
-  aiTimer = 0.35 / D.speed;
+  aiTimer = 0.25 / D.speed;
   if (cmd.lane != null) R.sel = { side: me, lane: cmd.lane, slot: cmd.slot || 'c' };
 }
 function maybeAITaunt(side) {
@@ -5071,7 +5118,7 @@ function home() {
   if (!S.started) { starterPick(); return; }
   const st = S.stats;
   const next = TOUR.find(o => !S.tour.beaten.includes(o.id));
-  const el = screen('home', '<div class="homewrap"><div>' + '<div class="top" style="justify-content:flex-end">' + sparksHTML() + '</div>' +
+  const el = screen('home', '<div style="position:absolute;right:.8rem;top:calc(env(safe-area-inset-top) + .7rem);z-index:2">' + sparksHTML() + '</div><div class="homewrap"><div>' +
     '<div class="logo"><div class="cw">CARD<br>WARS</div><div class="sub">GLOWBOARD</div><div class="fan">a fan-made tribute to the Adventure Time episode</div></div></div>' +
     '<div><div class="menu">' +
     '<button class="btn" data-go="tour">Table Tour' + (next ? '<br><small style="font-size:.6rem;opacity:.8">next: ' + esc(next.name) + '</small>' : '<br><small style="font-size:.6rem">champion!</small>') + '</button>' +
@@ -5234,6 +5281,11 @@ function results(res, o, ctx) {
     (o && !ctx.daily ? '<button class="btn blue" data-again>Rematch</button>' : '') +
     (ctx.tour != null && won && ctx.tour + 1 < TOUR.length ? '<button class="btn green" data-next>Next opponent</button>' : '') +
     '<button class="btn ghost" data-home>Home</button></div></div>');
+  if (won !== false) {
+    // confetti in the colours of all six landscapes
+    const cols = Object.values(LANDC);
+    for (let k = 0; k < 5; k++) setTimeout(() => { for (const c of cols) R.burst(window.innerWidth * (0.15 + Math.random() * 0.7), window.innerHeight * (0.1 + Math.random() * 0.2), c, 7, { speed: 220, up: 160, g: 320, life: 1.8, size: 7, add: false }); }, k * 260);
+  }
   if (sparks) { let n = 0; const tgt = sparks; const t = setInterval(() => { n = Math.min(tgt, n + Math.ceil(tgt / 25)); const s = el.querySelector('#sparkCount'); if (s) s.textContent = '+' + n; if (n % 3 === 0) Sound.play('coin'); if (n >= tgt) clearInterval(t); }, 40); }
   const pk = el.querySelector('[data-pack]'); if (pk) pk.onclick = () => openPack(packN, () => results(res, o, Object.assign({}, ctx, { opened: true })));
   if (ctx.opened && pk) pk.remove();
@@ -5613,7 +5665,18 @@ function frame(ts) {
   const t = ts / 1000, dt = Math.min(0.05, last ? t - last : 0.016);
   last = t;
   try { UI.tick(dt); Render.frame(t, dt); } catch (e) { console.error(e); }
+  adapt(dt);
   raf = requestAnimationFrame(frame);
+}
+// Adaptive quality: if a match keeps running below ~38 fps, drop to battery-saver resolution once.
+let slowAcc = 0, slowN = 0, adapted = false;
+function adapt(dt) {
+  if (adapted || UI.screen !== 'match' || Meta.S.settings.quality < 1) return;
+  slowAcc += dt; slowN++;
+  if (slowN >= 180) {
+    if (slowAcc / slowN > 0.026) { adapted = true; Meta.S.settings.quality = 0.75; Meta.save(); Meta.applySettings(); UI.toast('Switched to Battery saver graphics for smoother play'); }
+    slowAcc = 0; slowN = 0;
+  }
 }
 function boot() {
   Meta.load();

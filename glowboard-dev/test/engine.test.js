@@ -205,6 +205,13 @@ test('Frozen defenders do not hit back', () => {
   const r = run(st, { t: 'end', p: 0 });
   eq(C(r.state, 0, 0).dmg, 0); eq(C(r.state, 1, 0).dmg, ATK('b_cooldog'));
 });
+test('Cool Dog is too cool to be Chilled or Frozen', () => {
+  const st = arena(); K.put(st, 0, 0, 'i_sprite'); K.put(st, 1, 0, 'b_cooldog');
+  const r = run(st, { t: 'floop', p: 0, lane: 0, slot: 'c', targets: [{ side: 1, lane: 0 }] });
+  eq(C(r.state, 1, 0).chill, 0); ok(r.events.some(e => e.t === 'immune' && e.cool));
+  const st2 = arena({ lands0: ['ice', 'ice', 'ice', 'ice'] }); K.put(st2, 1, 1, 'b_cooldog'); const [df] = K.hand(st2, 0, ['i_freeze']);
+  ok(!C(run(st2, { t: 'play', p: 0, uid: df.uid, targets: [{ side: 1, lane: 1 }] }).state, 1, 1).frozen);
+});
 test('Chill reduces ATK and wears off at the end of its controller\'s turn', () => {
   const st = arena(); K.put(st, 1, 0, 'c_worm', { chill: 1 });
   eq(E.cStats(st, 1, 0).atk, 2);
@@ -413,14 +420,14 @@ test('Grave Gobbler grows when creatures die', () => {
 // ---------------------------------------------------------------- IcyLands
 test('Ice Castle chills across; Frostbite chills on hit', () => {
   const st = arena({ lands0: ['ice', 'ice', 'ice', 'ice'] }); K.build(st, 0, 0, 'i_castle'); K.put(st, 1, 0, 'c_worm');
-  K.put(st, 0, 1, 'i_golem'); K.put(st, 1, 1, 'b_cooldog');
+  K.put(st, 0, 1, 'i_golem'); K.put(st, 1, 1, 'c_scarecrow');
   const r = run(st, { t: 'end', p: 0 });
   eq(C(r.state, 1, 0).chill, 1); eq(E.cStats(r.state, 1, 0).atk, 2);
   eq(C(r.state, 1, 1).chill, 1, 'golem hit chills');
 });
 test('Frozen Lake freezes and damages an entering enemy', () => {
   const st = arena({ lands0: ['blue', 'blue', 'blue', 'blue'] }); K.build(st, 1, 1, 'i_lake');
-  const [cd] = K.hand(st, 0, ['b_cooldog']);
+  const [cd] = K.hand(st, 0, ['b_ranger']);
   const r = run(st, { t: 'play', p: 0, uid: cd.uid, lane: 1 });
   ok(C(r.state, 0, 1).frozen); eq(C(r.state, 0, 1).dmg, 2); eq(B(r.state, 1, 1), null);
   const r2 = run(r.state, { t: 'end', p: 0 });

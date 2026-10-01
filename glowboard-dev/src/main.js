@@ -10,7 +10,18 @@ function frame(ts) {
   const t = ts / 1000, dt = Math.min(0.05, last ? t - last : 0.016);
   last = t;
   try { UI.tick(dt); Render.frame(t, dt); } catch (e) { console.error(e); }
+  adapt(dt);
   raf = requestAnimationFrame(frame);
+}
+// Adaptive quality: if a match keeps running below ~38 fps, drop to battery-saver resolution once.
+let slowAcc = 0, slowN = 0, adapted = false;
+function adapt(dt) {
+  if (adapted || UI.screen !== 'match' || Meta.S.settings.quality < 1) return;
+  slowAcc += dt; slowN++;
+  if (slowN >= 180) {
+    if (slowAcc / slowN > 0.026) { adapted = true; Meta.S.settings.quality = 0.75; Meta.save(); Meta.applySettings(); UI.toast('Switched to Battery saver graphics for smoother play'); }
+    slowAcc = 0; slowN = 0;
+  }
 }
 function boot() {
   Meta.load();

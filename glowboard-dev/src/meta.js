@@ -106,7 +106,7 @@ function home() {
   if (!S.started) { starterPick(); return; }
   const st = S.stats;
   const next = TOUR.find(o => !S.tour.beaten.includes(o.id));
-  const el = screen('home', '<div class="homewrap"><div>' + '<div class="top" style="justify-content:flex-end">' + sparksHTML() + '</div>' +
+  const el = screen('home', '<div style="position:absolute;right:.8rem;top:calc(env(safe-area-inset-top) + .7rem);z-index:2">' + sparksHTML() + '</div><div class="homewrap"><div>' +
     '<div class="logo"><div class="cw">CARD<br>WARS</div><div class="sub">GLOWBOARD</div><div class="fan">a fan-made tribute to the Adventure Time episode</div></div></div>' +
     '<div><div class="menu">' +
     '<button class="btn" data-go="tour">Table Tour' + (next ? '<br><small style="font-size:.6rem;opacity:.8">next: ' + esc(next.name) + '</small>' : '<br><small style="font-size:.6rem">champion!</small>') + '</button>' +
@@ -269,6 +269,11 @@ function results(res, o, ctx) {
     (o && !ctx.daily ? '<button class="btn blue" data-again>Rematch</button>' : '') +
     (ctx.tour != null && won && ctx.tour + 1 < TOUR.length ? '<button class="btn green" data-next>Next opponent</button>' : '') +
     '<button class="btn ghost" data-home>Home</button></div></div>');
+  if (won !== false) {
+    // confetti in the colours of all six landscapes
+    const cols = Object.values(LANDC);
+    for (let k = 0; k < 5; k++) setTimeout(() => { for (const c of cols) R.burst(window.innerWidth * (0.15 + Math.random() * 0.7), window.innerHeight * (0.1 + Math.random() * 0.2), c, 7, { speed: 220, up: 160, g: 320, life: 1.8, size: 7, add: false }); }, k * 260);
+  }
   if (sparks) { let n = 0; const tgt = sparks; const t = setInterval(() => { n = Math.min(tgt, n + Math.ceil(tgt / 25)); const s = el.querySelector('#sparkCount'); if (s) s.textContent = '+' + n; if (n % 3 === 0) Sound.play('coin'); if (n >= tgt) clearInterval(t); }, 40); }
   const pk = el.querySelector('[data-pack]'); if (pk) pk.onclick = () => openPack(packN, () => results(res, o, Object.assign({}, ctx, { opened: true })));
   if (ctx.opened && pk) pk.remove();

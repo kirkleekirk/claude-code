@@ -17,7 +17,7 @@ const R = {
   heroAnchor: null, onShake: null
 };
 const S = Math.sin, Cc = Math.cos;
-let bg = null, bgKey = '', board = null, boardKey = '';
+let bg = null, bgKey = '', board = null, boardKey = '', combo = null, comboKey = '';
 let shakeT = 0, shakeA = 0, hitStop = 0;
 
 // ------------------------------------------------------------------ setup
@@ -218,7 +218,7 @@ function drawDen(x, W, H) {
 function drawHomeLive(x, t) {
   const W = R.W, H = R.H, wallH = H * 0.5, wide = W > H;
   // mini holo board on the table
-  const cx = wide ? W * 0.74 : W * 0.5, cy = wide ? H * 0.74 : H * 0.83, bw = Math.min(W * (wide ? 0.34 : 0.7), 360), bh = bw * 0.36;
+  const cx = wide ? W * 0.27 : W * 0.5, cy = wide ? H * 0.86 : H * 0.83, bw = Math.min(W * (wide ? 0.3 : 0.7), 340), bh = bw * 0.36;
   x.save();
   x.fillStyle = 'rgba(10,8,24,.75)'; x.beginPath(); x.ellipse(cx, cy, bw / 2, bh / 2, 0, 0, 7); x.fill();
   x.strokeStyle = 'rgba(120,220,255,.5)'; x.lineWidth = 2; x.stroke();
@@ -232,7 +232,7 @@ function drawHomeLive(x, t) {
   });
   x.restore();
   // BMO standing on the table
-  const bx = wide ? W * 0.56 : W * 0.13, by = wide ? H * 0.8 : H * 0.95, bs = Math.min(W, H) * (wide ? 0.2 : 0.15);
+  const bx = wide ? W * 0.07 : W * 0.13, by = wide ? H * 0.97 : H * 0.95, bs = Math.min(W, H) * (wide ? 0.17 : 0.15);
   x.save(); x.translate(bx, by - bs + Math.sin(t * 3) * 2);
   x.drawImage(Art.portrait('bmo', Math.round(bs)), -bs / 2, 0, bs, bs);
   x.fillStyle = '#4aa995'; x.fillRect(-bs * 0.28, bs * 0.95, bs * 0.08, bs * 0.18); x.fillRect(bs * 0.2, bs * 0.95, bs * 0.08, bs * 0.18);
@@ -288,10 +288,10 @@ function decor(x, type, side, lane, down) {
   }
 }
 function drawBoardLayer() {
-  const st = R.st; if (!st) return;
+  const st = R.st; if (!st) return false;
   const lands = st.players.map(P0 => P0.lanes.map(L => L.land.type + (L.land.down ? 'D' : ''))).join('|');
   const key = lands + R.viewer + R.cam.F.toFixed(2) + R.cam.cx.toFixed(1) + R.cam.cy.toFixed(1) + R.W + R.H + (R.cbIcons ? 1 : 0);
-  if (board && boardKey === key) return;
+  if (board && boardKey === key) return false;
   boardKey = key;
   board = board || document.createElement('canvas');
   board.width = R.cv.width; board.height = R.cv.height;
@@ -340,8 +340,9 @@ function drawBoardLayer() {
   }
   // side lights along the centre seam
   for (const sx of [-BOARD.hx - 0.04, BOARD.hx + 0.04]) { const q = P(sx, 0, 0); x.fillStyle = 'rgba(255,207,58,.9)'; x.beginPath(); x.arc(q.x, q.y, Math.max(2.5, q.s * 0.035), 0, 7); x.fill(); }
-  // lane separators
+  // lane separators (function returns true below: layer was rebuilt)
   for (let k = 1; k < 4; k++) { const gx = laneX(0) + (R.viewer === 0 ? 1 : -1) * (k - 0.5); const a = P(gx, 0, -BOARD.hz + 0.1), b = P(gx, 0, BOARD.hz - 0.1); x.strokeStyle = 'rgba(255,255,255,.05)'; x.lineWidth = 1; x.beginPath(); x.moveTo(a.x, a.y); x.lineTo(b.x, b.y); x.stroke(); }
+  return true;
 }
 
 // ------------------------------------------------------------------ dynamic effects
@@ -410,7 +411,28 @@ function cardQuad(x, side, lane, slot, faction, rot, alpha, back, hidden) {
   if (hidden) { const p = P(cx, 0.01, cz); x.fillStyle = '#b9adf0'; x.font = '900 ' + Math.max(9, p.s * 0.16) + 'px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('?', p.x, p.y); }
   x.restore();
 }
+const glowCache = {};
+function discSprite(rgb) {
+  const k = 'd' + rgb.join(','); if (glowCache[k]) return glowCache[k];
+  const c = document.createElement('canvas'); c.width = 128; c.height = 128; const y = c.getContext('2d');
+  const g = y.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0, rgba(rgb, 0.55)); g.addColorStop(0.7, rgba(rgb, 0.18)); g.addColorStop(1, rgba(rgb, 0));
+  y.fillStyle = g; y.fillRect(0, 0, 128, 128);
+  y.strokeStyle = rgba(rgb, 0.7); y.lineWidth = 3; y.beginPath(); y.arc(64, 64, 51, 0, 7); y.stroke();
+  return (glowCache[k] = c);
+}
+function beamSprite(rgb) {
+  const k = 'b' + rgb.join(','); if (glowCache[k]) return glowCache[k];
+  const c = document.createElement('canvas'); c.width = 64; c.height = 128; const y = c.getContext('2d');
+  const g = y.createLinearGradient(0, 128, 0, 0); g.addColorStop(0, rgba(rgb, 0.22)); g.addColorStop(1, rgba(rgb, 0));
+  y.fillStyle = g; y.beginPath(); y.moveTo(32 - 32 * 0.33, 128); y.lineTo(0, 0); y.lineTo(64, 0); y.lineTo(32 + 32 * 0.33, 128); y.closePath(); y.fill();
+  return (glowCache[k] = c);
+}
 function disc(x, p, rgb, a, r) {
+  const rx = p.s * (r || 0.32), ry = rx * 0.42;
+  x.globalAlpha = a; x.drawImage(discSprite(rgb), p.x - rx, p.y - ry, rx * 2, ry * 2); x.globalAlpha = 1;
+}
+function discOld(x, p, rgb, a, r) {
   const rx = p.s * (r || 0.32), ry = rx * 0.42;
   const g = x.createRadialGradient(p.x, p.y, 0, p.x, p.y, rx);
   g.addColorStop(0, rgba(rgb, 0.55 * a)); g.addColorStop(0.7, rgba(rgb, 0.18 * a)); g.addColorStop(1, rgba(rgb, 0));
@@ -420,15 +442,20 @@ function disc(x, p, rgb, a, r) {
   x.restore();
 }
 function beamCone(x, p, h, w, rgb, a) {
+  x.globalAlpha = a; x.drawImage(beamSprite(rgb), p.x - w * 0.55, p.y - h, w * 1.1, h); x.globalAlpha = 1;
+}
+function beamConeOld(x, p, h, w, rgb, a) {
   const g = x.createLinearGradient(0, p.y, 0, p.y - h);
   g.addColorStop(0, rgba(rgb, 0.22 * a)); g.addColorStop(1, rgba(rgb, 0));
   x.fillStyle = g; x.beginPath(); x.moveTo(p.x - w * 0.18, p.y); x.lineTo(p.x - w * 0.55, p.y - h); x.lineTo(p.x + w * 0.55, p.y - h); x.lineTo(p.x + w * 0.18, p.y); x.closePath(); x.fill();
 }
+let badgeFont = '';
 function badge(x, bx, by, txt, bgA, bgB, sz) {
-  x.font = '900 ' + sz + 'px ' + 'system-ui, sans-serif';
-  const w = Math.max(sz * 1.25, x.measureText(txt).width + sz * 0.55), h = sz * 1.25;
-  const g = x.createLinearGradient(0, by - h / 2, 0, by + h / 2); g.addColorStop(0, bgA); g.addColorStop(1, bgB);
-  rr(x, bx - w / 2, by - h / 2, w, h, h * 0.35); x.fillStyle = g; x.fill(); x.lineWidth = Math.max(1.5, sz * 0.12); x.strokeStyle = '#1b1424'; x.stroke();
+  const f = '900 ' + Math.round(sz) + 'px system-ui, sans-serif';
+  if (badgeFont !== f || x.font !== f) { x.font = f; badgeFont = f; }
+  const w = Math.max(sz * 1.25, txt.length * sz * 0.62 + sz * 0.5), h = sz * 1.25;
+  rr(x, bx - w / 2, by - h / 2, w, h, h * 0.35); x.fillStyle = bgB; x.fill(); x.lineWidth = Math.max(1.5, sz * 0.12); x.strokeStyle = '#1b1424'; x.stroke();
+  rr(x, bx - w / 2 + 1.5, by - h / 2 + 1.5, w - 3, h * 0.45, h * 0.25); x.fillStyle = bgA; x.globalAlpha = 0.55; x.fill(); x.globalAlpha = 1;
   x.fillStyle = '#fff'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(txt, bx, by + sz * 0.05);
 }
 function statusIcons(x, cx, cy, sz, c) {
@@ -677,16 +704,25 @@ R.frame = function (t, dt) {
   const x = R.x;
   x.setTransform(1, 0, 0, 1, 0, 0);
   ensureBg();
-  x.drawImage(bg, 0, 0);
+  if (R.mode === 'home' || !R.st || (R.intro && R.intro.t < 1.6)) x.drawImage(bg, 0, 0);
   x.setTransform(R.dpr, 0, 0, R.dpr, 0, 0);
   if (R.mode === 'home') { if (R.homeLive) drawHomeLive(x, t); drawParticles(x); drawTexts(x); return; }
   if (!R.st) return;
   let sx = 0, sy = 0;
   if (shakeT > 0) { shakeT -= dt; sx = (Math.random() - 0.5) * shakeA * 2; sy = (Math.random() - 0.5) * shakeA * 2; if (shakeT <= 0) shakeA = 0; }
   x.save(); x.translate(sx, sy);
-  drawBoardLayer();
+  const changed = drawBoardLayer();
   x.setTransform(1, 0, 0, 1, sx * R.dpr, sy * R.dpr);
-  if (R.intro && R.intro.t < 1.6) {
+  if (!(R.intro && R.intro.t < 1.6)) {
+    // one full-screen blit per frame: cached table + board composite
+    if (!combo || changed || comboKey !== boardKey + '|' + bgKey) {
+      combo = combo || document.createElement('canvas'); combo.width = R.cv.width; combo.height = R.cv.height;
+      const c = combo.getContext('2d'); c.drawImage(bg, 0, 0); c.drawImage(board, 0, 0); comboKey = boardKey + '|' + bgKey;
+    }
+    x.setTransform(1, 0, 0, 1, 0, 0);
+    if (sx || sy) { x.fillStyle = '#2a160a'; x.fillRect(0, 0, R.cv.width, R.cv.height); }
+    x.drawImage(combo, Math.round(sx * R.dpr), Math.round(sy * R.dpr)); x.setTransform(R.dpr, 0, 0, R.dpr, sx * R.dpr, sy * R.dpr);
+  } else if (R.intro && R.intro.t < 1.6) {
     // "Floop your land cards": landscapes flip onto the board one by one
     R.intro.t += dt;
     x.globalAlpha = 0.28; x.drawImage(board, 0, 0); x.globalAlpha = 1;
@@ -701,7 +737,7 @@ R.frame = function (t, dt) {
       if (!R.intro['p' + side + l]) { R.intro['p' + side + l] = 1; const c = P(cxp, 0, czp); R.burst(c.x, c.y, LANDC[R.st.players[side].lanes[l].land.type], 10, { speed: 90, up: 60 }); if (R.onIntroPop) R.onIntroPop(); }
     }
     x.clip(); x.setTransform(1, 0, 0, 1, sx * R.dpr, sy * R.dpr); x.drawImage(board, 0, 0); x.restore();
-  } else x.drawImage(board, 0, 0);
+  }
   x.setTransform(R.dpr, 0, 0, R.dpr, sx * R.dpr, sy * R.dpr);
   drawRubble(x);
   drawHighlights(x, t);
