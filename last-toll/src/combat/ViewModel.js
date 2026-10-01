@@ -143,9 +143,12 @@ export class ViewModel {
     // a long gun's stock sits right under your eye when you aim; tuck it away then
     this.rear = [];
     if (this.cls === 'long') {
+      // measured in the gun's own space, wherever the hands happen to be
       const bb = new THREE.Box3(), c = new THREE.Vector3();
+      this.holder.remove(m);
       m.updateMatrixWorld(true);
       m.traverse((o) => { if (o.isMesh && bb.setFromObject(o).getCenter(c).z > 0.13) this.rear.push(o); });
+      this.holder.add(m);
     }
     this.magBase = this.parts.mag ? this.parts.mag.position.clone() : null;
     this.slideBase = this.parts.slide ? this.parts.slide.position.clone() : null;
