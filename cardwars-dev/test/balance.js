@@ -1,5 +1,5 @@
 // Headless AI-vs-AI balance harness. Every faction pairing, both seats, many games, 4 worker threads.
-// node test/balance.js [--games 200] [--mirror 100] [--nodes 160] [--from src] [--diff normal] [--only corn,blue] [--json out.json]
+// node test/balance.js [--games 200] [--mirror 100] [--nodes 160] [--from src] [--diff hard] [--only corn,blue] [--json out.json]
 'use strict';
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 const os = require('os');
@@ -27,7 +27,7 @@ if (!isMainThread) {
   parentPort.postMessage({ done: res });
 } else {
   const games = +arg('games', 200), mirror = +arg('mirror', 100), nodes = +arg('nodes', 140);
-  const from = arg('from', undefined), diff = arg('diff', 'normal');
+  const from = arg('from', undefined), diff = arg('diff', 'hard');   // deck balance is measured with the clean (noise-free) AI
   const only = arg('only', null);
   const { Engine: E } = require('./load')({ from });
   let F = Object.keys(E.STARTERS);

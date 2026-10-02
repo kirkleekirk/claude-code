@@ -182,6 +182,25 @@ Cost = Actions to play = face-up landscapes of its type you need. B = building t
 - Bacon Pancakes — cost 1 — Pick up 2 cards.
 - For the Glory! — Rare, cost 1 — Your creatures get +1 ATK this turn. Pick up a card.
 
+## Balance (node test/balance.js --games 400 --mirror 100 --nodes 100)
+6,600 AI-vs-AI games with the clean (noise-free) AI: every pairing 400 times, 200 in each seat, plus 100
+mirrors per faction. Targets: factions 42-58%, first player under 54%, 8-14 rounds, stalemates under 3%.
+
+| Faction | Win % |
+|---|---|
+| Blue Plains (Finn) | 50.2 |
+| Cornfield (Jake) | 52.6 |
+| Useless Swamp | 54.6 |
+| IcyLands | 43.2 |
+| NiceLands | 51.9 |
+| LavaFlats | 47.5 |
+
+First player 52.1%, 9.51 rounds on average, 0.21% stalemates (both kingdoms wiped at once), 32.8% of
+games reach overtime. Some matchups are lopsided by design (counters): Cornfield beats NiceLands 84%
+(Archer Dan flattens a building deck), NiceLands beats IcyLands 83%, Swamp beats Lava 75%, Blue beats
+Cornfield 68% (the Pig eats the corn, as in the episode). AI difficulty (node test/difficulty.js 200): Hard
+beats Normal 58%, Normal beats Easy 67%, Hard beats Easy 76%.
+
 ## Screen flow
 Starter pick with BMO (first run) -> Home (the 3D table from the episode behind the menu): Table Tour ladder,
 Quick Match, Daily Challenge, Pass & Play, Decks, Collection, How to Play (Jake's tutorial), Settings.

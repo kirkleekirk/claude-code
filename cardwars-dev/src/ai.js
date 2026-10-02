@@ -14,8 +14,8 @@ const PERSONALITIES = {
 };
 const DIFFICULTY = {
   easy:   { width: 2, depth: 4, ms: 14, nodes: 60, noise: 6, blunder: 0.22, defend: 0.5 },
-  normal: { width: 3, depth: 6, ms: 30, nodes: 160, noise: 4.5, blunder: 0.06, defend: 1 },
-  hard:   { width: 8, depth: 9, ms: 70, nodes: 900, noise: 0, blunder: 0, defend: 1, horizon: 2 }
+  normal: { width: 3, depth: 6, ms: 30, nodes: 160, noise: 4.0, blunder: 0.05, defend: 1 },
+  hard:   { width: 6, depth: 8, ms: 60, nodes: 600, noise: 0, blunder: 0, defend: 1, horizon: 2 }
 };
 const now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
 function mkRng(seed) { let s = (seed >>> 0) || 1; return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; }

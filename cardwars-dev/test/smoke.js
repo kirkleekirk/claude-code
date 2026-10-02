@@ -16,7 +16,7 @@ try { ({ chromium } = require('playwright')); } catch (e) { ({ chromium } = requ
   // frame-time probe
   await page.evaluate(() => { window.__ft = []; let last = performance.now(); const f = t => { window.__ft.push(t - last); last = t; if (window.__ft.length < 100000) requestAnimationFrame(f); }; requestAnimationFrame(f); });
   const t0 = Date.now();
-  while (Date.now() - t0 < games * 240000) {
+  while (Date.now() - t0 < games * 480000) {   // software WebGL is slow; real GPUs are much faster
     await page.waitForTimeout(2000);
     const done = await page.evaluate(() => !!(window.CW && window.CW.done));
     if (done) break;

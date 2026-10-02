@@ -21,7 +21,7 @@ src/main.js      boot + frame loop (+ #autoplay/#match/#setup/#tutorial test hoo
 |---|---|
 | `node build.js` | Inlines everything into `../cardwars.html` |
 | `node test/engine.test.js` | Rule tests (extracts the ENGINE block from the built file) |
-| `node test/balance.js --games 200 --mirror 100` | AI-vs-AI balance table, every faction pairing, both seats |
+| `node test/balance.js --games 400 --mirror 100 --nodes 100` | AI-vs-AI balance table: every faction pairing, 200 games in each seat (clean AI) |
 | `node test/difficulty.js 300` | Checks Hard > Normal > Easy |
 | `node test/smoke.js 6` | Full matches through the real UI in headless Chromium; fails on any console error |
 | `node tools/cardstats.js --games 40` | Per-card win rates (what to tune) |
