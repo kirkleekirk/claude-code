@@ -7,8 +7,10 @@ ASSUMPTIONS / DECISIONS
 - The director's note wins: the game plays like Card Wars as seen in the show. Where the episode is silent,
   gaps are filled from the official Card Wars rules (2014). The earlier "Glowboard" theme was dropped.
 - The look: Finn and Jake's table in the Tree Fort with the props from the episode (Total Soda bottle,
-  COOL GUY and DWEEB cups, Crunch chips, card box). Physical cards lie on the table edge; small hologram
-  troops stand on big landscape tiles in front of big building holograms. Finn's side glows blue, the
+  COOL GUY and DWEEB cups, Crunch chips, card box). Physical cards lie on the table edge; tiny hologram
+  troops stand on a huge battlefield (about 4x the first 3D version in each direction) in front of big
+  building holograms, and march across it to attack. The camera starts zoomed into your side: drag to scroll,
+  pinch or the mouse wheel to zoom, and the map button (or M) shows the whole field. Finn's side glows blue, the
   opponent's orange; a stolen creature takes its new owner's colour. Models are simple low-poly cel-shaded
   shapes modelled on the episode's holograms.
 - Episode rules used as written: "floop your land cards" makes your land and buildings appear; "keep those

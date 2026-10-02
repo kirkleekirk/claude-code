@@ -54,16 +54,32 @@ no corn), Token. Exact wording is in `Engine.KEYWORDS` and on the cards.
 
 ## The 3D table
 WebGL scene with no libraries: the Tree Fort floor and wall, the green folding table and the episode's props,
-a big arena (each lane is a deep landscape tile, so small troops stand well in front of big structures) made of 8 tiles (procedural textures plus swaying hologram decor: corn stalks, blue
+a huge battlefield made of 8 landscape tiles (procedural textures plus swaying hologram decor: corn stalks, blue
 grass, swamp roots, ice spikes, candy, lava rocks), the physical cards on the table edge (they turn left when
 flooped and right when activated), decks and discard piles, and the opponent sitting behind the table holding
 a fan of red CW cards. Holograms use a cel-shaded team-tinted shader with rim light, scanlines, inverted-hull
 outlines and a bottom-up materialize band; creatures are animated with up to 8 bones (legs, arms, heads,
 tails, wings). Card art for the DOM cards is rendered from the same models into an offscreen framebuffer.
-The camera frames the arena itself and tilts to fit the free screen area: steep on portrait phones, lower on
-wide screens. Three layouts: portrait (hand along the bottom), short landscape (hand in a side column) and
-desk (big landscape screens: hand along the bottom, the arena gets the full width). Drag to orbit, pinch or
-wheel to zoom, two fingers or right-drag to pan, double-tap or the camera button to reset.
+
+**Scale.** The troops are tiny next to the field: the arena is about 4x the first 3D version in each
+direction (43 x 36 world units for 0.9-unit troops; each lane is ~12 troop-heights wide and the two creature rows
+stand ~14 troop-heights apart). Buildings are about 3x a troop's height. Melee attackers march across the
+field to their target, strike, and march back (about 1-3 s each way); shooters and flyers fire across it. The
+table, cards, props and the opponent are scaled with the arena.
+
+**Camera.** Two views plus your own scrolling:
+- *Home* (your turn): zoomed into your side, with the enemy troops facing you at the top edge. Troops never
+  start smaller than ~22-30 px, so on a phone it shows about two lanes and you scroll for the rest.
+- *Map* (the opponent's turn, battles, defending): the whole battlefield. Toggle with the map button, M, or a
+  double-tap.
+- Drag to scroll (the ground follows your finger), pinch or the mouse wheel to zoom, right-drag or
+  Shift-drag to tilt and turn, arrows or WASD to pan, + and - to zoom. When you pick a card or a target, the
+  camera pulls back just enough to show every valid spot, but never closer than the home view, and goes back
+  to where it was afterwards.
+
+The camera tilts to fit the free screen area: steep on portrait phones, lower on wide screens. There are three
+layouts: portrait (hand along the bottom), short landscape (hand in a side column) and desk (big landscape
+screens: hand along the bottom, the arena gets the full width).
 
 ## Card list (generated from the engine data table)
 Cost = Actions to play = face-up landscapes of its type you need. B = building toughness.

@@ -132,10 +132,23 @@ function show() {
   if (pt.hand) { const st = UI.M.disp || UI.M.st; const inst = st.players[0].hand.find(x => x.id === pt.hand); const el = inst && document.querySelector('#hand .card[data-uid="' + inst.uid + '"]'); if (el) { const r = el.getBoundingClientRect(); tgt = { x: r.left + r.width / 2, y: r.top }; } }
   else if (pt.btn) { const r = $(pt.btn).getBoundingClientRect(); tgt = { x: r.left + r.width / 2, y: r.top }; }
   else if (pt.prompt) { const r = $('#prompt').getBoundingClientRect(); if (r.width) tgt = { x: r.left + r.width / 2, y: r.top }; }
-  else if (pt.cell) { const p = Scene.headPos(pt.cell[0], pt.cell[1], pt.cell[2]); tgt = { x: p.x, y: p.y - 10 }; }
+  else if (pt.cell) { Scene.frameSpots([{ side: pt.cell[0], lane: pt.cell[1], slot: pt.cell[2] }]); const p = Scene.headPos(pt.cell[0], pt.cell[1], pt.cell[2]); tgt = { x: p.x, y: p.y - 10 }; }
   if (tgt && !s.wait) { arrow.style.display = 'block'; arrow.style.left = (tgt.x - 24) + 'px'; arrow.style.top = (tgt.y - 50) + 'px'; } else arrow.style.display = 'none';
+  if (pt.cell && !s.wait) followArrow(arrow, pt.cell);
   const ok = c.querySelector('#coachOk');
   if (ok) ok.onclick = () => { hide(); finishScript(); };
+}
+// The battlefield scrolls, so an arrow pointing at a troop follows it on screen.
+let followRaf = 0;
+function followArrow(arrow, cell) {
+  cancelAnimationFrame(followRaf);
+  const step = () => {
+    if (!on || !arrow.isConnected) return;
+    const p = Scene.headPos(cell[0], cell[1], cell[2]);
+    arrow.style.left = (p.x - 24) + 'px'; arrow.style.top = (p.y - 60) + 'px';
+    followRaf = requestAnimationFrame(step);
+  };
+  followRaf = requestAnimationFrame(step);
 }
 function finishScript() { on = false; const seat = UI.M.seats[1]; delete seat.plan; UI.toast('Wipe out Jake’s kingdom to finish the tutorial!'); }
 function hide() { const c = $('#coach'); c.classList.remove('on'); c.innerHTML = ''; }

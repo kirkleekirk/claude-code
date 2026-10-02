@@ -12,7 +12,7 @@ const ICON = {
   log: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 3h9l3 3v15H6z"/><path d="M9 10h6M9 14h6M9 18h4"/></svg>',
   emote: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 5h16v11H9l-5 4z"/><circle cx="9" cy="10.5" r=".8" fill="currentColor"/><circle cx="15" cy="10.5" r=".8" fill="currentColor"/></svg>',
   undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg>',
-  cam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>',
+  cam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></svg>',
   cards: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="5" width="11" height="15" rx="2" opacity=".55"/><rect x="9" y="3" width="11" height="15" rx="2"/></svg>',
   deck: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h8" stroke="#1b1424" stroke-width="2"/></svg>',
   grave: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 21V10a6 6 0 0112 0v11z"/><path d="M12 9v6M9.5 11.5h5" stroke="#1b1424" stroke-width="2"/></svg>',
@@ -125,8 +125,12 @@ function dur(ev) {
   if (ev.t === 'kingdom' && settings.reduceMotion) d = 600;
   if (ev.t === 'summon' && ev.how === 'setup') d = 60;
   if (ev.t === 'build' && ev.setup) d = 60;
+  if (ev.t === 'attack') d = S3.attackTime(ev.side, ev.lane, ev.toSide, ev.toLane, ev.kind === 'building' ? 'b' : 'c', attackKind(ev));
   return d;
 }
+function attackKind(ev) { return ev.ranged ? 'ranged' : ev.flying && ev.kind === 'building' ? 'flying' : 'melee'; }
+// The camera follows the flow of the game: your side on your turn, the whole battlefield otherwise.
+function autoView(v) { M.framedSel = null; S3.setView(v); }
 function pushEvents(evs) { for (const e of evs) D.q.push(e); }
 function directorIdle() { return !D.cur && !D.q.length; }
 function directorUpdate(dt) {
@@ -159,7 +163,7 @@ function startEvent(ev) {
     case 'setupPhase': break;
     case 'kingdom': {
       showBanner('FLOOP YOUR LAND CARDS!', pname(st.first) + ' goes first', '#ffcf3a');
-      S3.setSetup(false);
+      S3.setSetup(false); autoView('overview');
       fx.intro();
       Sound.play('floop'); setTimeout(() => Sound.play('holo'), 500); setTimeout(() => Sound.play('build'), 1100);
       logLine('Both kingdoms are set up. ' + pname(st.first) + ' goes first.', 'sys');
@@ -168,6 +172,7 @@ function startEvent(ev) {
     case 'turn': {
       M.sel = null; hideInfo(); updateHL();
       const mine = ev.side === M.viewer && M.seats[ev.side].kind === 'human';
+      autoView(mine ? 'home' : 'overview');
       showBanner(mine ? 'YOUR TURN' : (pname(ev.side) + '’S TURN').toUpperCase(), 'Round ' + ev.round, teamOf(ev.side));
       Sound.play(mine ? 'turn' : 'oppTurn');
       logLine('— ' + pname(ev.side) + ' • round ' + ev.round + ' —', 'sys');
@@ -232,9 +237,9 @@ function startEvent(ev) {
     case 'block': fx.text(ev.side, ev.lane, 'c', 'BLOCK!', teamOf(ev.side), true); Sound.play('block'); logLine(pname(ev.side) + ' steps in to block', 't' + ev.side); break;
     case 'unblock': Sound.play('click'); break;
     case 'defended': break;
-    case 'fightPhase': if (ev.n) { stamp('FIGHT!', teamOf(ev.side)); } break;
+    case 'fightPhase': if (ev.n) { stamp('FIGHT!', teamOf(ev.side)); autoView('overview'); } break;
     case 'attack': {
-      const kind = ev.ranged ? 'ranged' : ev.flying && ev.kind === 'building' ? 'flying' : 'melee';
+      const kind = attackKind(ev);
       fx.attack(ev.side, ev.lane, ev.toSide, ev.toLane, ev.kind === 'building' ? 'b' : 'c', kind);
       Sound.play(kind === 'melee' ? 'whoosh' : 'arrow');
       if (ev.storm) fx.text(ev.side, ev.lane, 'c', 'STORM THE KINGDOM!', teamOf(ev.side));
@@ -536,7 +541,10 @@ function renderHand() {
 function landsSig(st, me) { return st.players[me].lanes.map(L => L.land.type[0] + (L.land.down ? 1 : 0)).join(''); }
 
 // ------------------------------------------------------------------ selection, highlights and arrows
-function clearSel() { M.sel = null; S3.setGhost(null); hideTip(); hideInfo(); updateHL(); handSig = ''; renderHand(); updatePrompt(); }
+function clearSel() {
+  M.sel = null; S3.setGhost(null); hideTip(); hideInfo(); updateHL(); handSig = ''; renderHand(); updatePrompt();
+  if (M.framedSel) { const v = M.framedSel; M.framedSel = null; S3.setView(v); }
+}
 function attackArrows(st) {
   const out = [];
   if (!st || st.phase !== 'main') return out;
@@ -580,6 +588,12 @@ function updateHL() {
     if (sel.kind === 'creature' && isMyTurn()) { const t = E.attackTarget(st, me, sel.lane); if (t) hl.push({ side: t.side, lane: t.lane, slot: t.slot, kind: 'atk' }); }
   }
   S3.setHighlights(dedupeHL(hl));
+  // choosing where to play or what to target: make sure every option is on screen (once per choice)
+  if ((sel.kind === 'card' || sel.kind === 'target') && hl.length && sel.framed !== (sel.chosen || []).length) {
+    sel.framed = (sel.chosen || []).length;
+    const before = S3.view;
+    if (S3.frameSpots(dedupeHL(hl)) && !M.framedSel) M.framedSel = before === 'frame' ? 'home' : before;
+  }
 }
 function dedupeHL(a) { const seen = {}; return a.filter(h => { const k = h.side + ':' + h.lane + ':' + h.slot; if (seen[k]) return false; seen[k] = 1; return true; }); }
 function targetOptsFor(sel) {
@@ -664,7 +678,7 @@ function onIdle() {
   if (M.mode === 'pvp' && who !== M.viewer && !M.waitingPass) { passDevice(who); return; }
   if (st.pending && st.pending.side === who) {
     if (st.pending.kind === 'steal' && !M.choosing) humanChooseSteal(st.pending);
-    if (st.pending.kind === 'defend' && M.idleKey !== 'def' + st.turn) { M.idleKey = 'def' + st.turn; updateHL(); refreshHUD(); if (M.tutorial && M.tutorial.onIdle) M.tutorial.onIdle(); }
+    if (st.pending.kind === 'defend' && M.idleKey !== 'def' + st.turn) { M.idleKey = 'def' + st.turn; autoView('overview'); updateHL(); refreshHUD(); if (M.tutorial && M.tutorial.onIdle) M.tutorial.onIdle(); }
     if (st.pending.kind === 'discard' && M.idleKey !== 'dis' + st.turn) { M.idleKey = 'dis' + st.turn; refreshHUD(); if (M.tutorial && M.tutorial.onIdle) M.tutorial.onIdle(); }
     return;
   }
@@ -708,7 +722,7 @@ function passDevice(next) {
   const why = M.st.pending && M.st.pending.kind === 'defend' ? '<b>' + esc(pname(M.st.active)) + ' is attacking!</b> ' : M.st.phase === 'setup' ? 'Set up your kingdom in secret. ' : '';
   modal('<h2>Pass to ' + esc(P.name) + '</h2><p class="center">' + why + 'No peeking at their hand! Hand the device over, then tap ready.</p><div class="row"><button class="btn" data-ready>I’m ' + esc(P.name) + ' — ready!</button></div>', { noClose: true });
   $('#modal [data-ready]').onclick = () => {
-    closeModal(); M.waitingPass = false; M.viewer = next; S3.setViewer(next); S3.setState(M.st, { instant: true }); S3.resetView();
+    closeModal(); M.waitingPass = false; M.viewer = next; S3.setViewer(next); S3.setState(M.st, { instant: true }); autoView('home');
     buildHUD(); handSig = ''; M.idleKey = ''; refreshHUD(); updateHL(); layout();
   };
 }
@@ -855,7 +869,7 @@ function boardDown(e) {
   M.lastTouch = e.pointerType !== 'mouse';
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, t: performance.now(), btn: e.button });
   if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 }; orbiting = null; }
-  else if (ptrs.size === 1) orbiting = { x: e.clientX, y: e.clientY, moved: false, pan: e.button === 2 || e.shiftKey };
+  else if (ptrs.size === 1) orbiting = { x: e.clientX, y: e.clientY, moved: false, orbit: e.button === 2 || e.shiftKey };
 }
 function boardMove(e) {
   const p = ptrs.get(e.pointerId);
@@ -864,12 +878,12 @@ function boardMove(e) {
     const [a, b] = [...ptrs.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y);
     const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
     if (pinch.d > 0) S3.zoomBy(pinch.d / d);
-    S3.panBy(-(cx - pinch.cx) * 0.02, -(cy - pinch.cy) * 0.02);
+    S3.panPixels(cx - pinch.cx, cy - pinch.cy);
     pinch.d = d; pinch.cx = cx; pinch.cy = cy; return;
   }
   if (orbiting && p && Math.hypot(e.clientX - p.sx, e.clientY - p.sy) > 10) {
     const dx = e.clientX - orbiting.x, dy = e.clientY - orbiting.y;
-    if (orbiting.pan) S3.panBy(-dx * 0.02, -dy * 0.02); else S3.orbitBy(-dx * 0.005, dy * 0.004);
+    if (orbiting.orbit) S3.orbitBy(-dx * 0.005, dy * 0.004); else S3.panPixels(dx, dy);
     orbiting.x = e.clientX; orbiting.y = e.clientY; orbiting.moved = true; return;
   }
   if (!M.lastTouch && M.on && (canAct() || myPending('defend'))) {
@@ -886,7 +900,7 @@ function boardUp(e) {
   orbiting = null;
   if (!p || Math.hypot(e.clientX - p.sx, e.clientY - p.sy) > 12) return;
   const now = performance.now();
-  if (now - lastTap < 300 && !M.sel) { S3.resetView(); lastTap = 0; return; }
+  if (now - lastTap < 300 && !M.sel) { M.framedSel = null; S3.toggleView(); lastTap = 0; return; }
   lastTap = now;
   if (!M.on) return;
   if (!directorIdle() && M.seats[M.st.active].kind === 'ai') { D.ff = true; return; }
@@ -1136,7 +1150,7 @@ function start(cfg) {
   if (cfg.setup) cfg.setup(M.st);
   M.viewer = cfg.seats[0].kind === 'human' || cfg.seats[1].kind !== 'human' ? 0 : 1;
   M.disp = M.st;
-  S3.reset(); S3.setMode('match'); S3.setViewer(M.viewer); S3.resetView();
+  S3.reset(); S3.setMode('match'); S3.setViewer(M.viewer); M.framedSel = null; S3.setView('home');
   S3.setSetup(M.st.phase !== 'main');
   S3.setState(M.st, { instant: true });
   showScreen('match');
@@ -1221,7 +1235,7 @@ function init() {
     if (isMyTurn()) { clearSel(); humanCmd({ t: 'battle', p: M.viewer }); }
   };
   $('#undoBtn').onclick = doUndo;
-  $('#camBtn').onclick = () => { S3.resetView(); Sound.play('click'); };
+  $('#camBtn').onclick = () => { M.framedSel = null; S3.toggleView(); Sound.play('click'); };
   $('#logBtn').onclick = () => { const d = $('#logDrawer'); const on = !d.classList.contains('on'); closePanels(); if (on) { d.classList.add('on'); renderLog(); } };
   $('#emoteBtn').onclick = () => { const d = $('#emotes'); const on = !d.classList.contains('on'); closePanels(); if (on) d.classList.add('on'); };
   $('#speedBtn').onclick = () => { settings.speed = settings.speed === 1 ? 2 : 1; D.speed = settings.speed; $('#speedBtn').textContent = settings.speed + 'x'; if (UI.onSettings) UI.onSettings(); };
@@ -1235,6 +1249,17 @@ function init() {
   window.addEventListener('keydown', e => {
     if (current !== 'match') return;
     if (e.key === 'Escape') { if ($('#modal').classList.contains('on')) closeModal(); else clearSel(); }
+    // scroll the battlefield with the arrow keys / WASD, zoom with + and -, M toggles the whole map
+    const step = 48, k = e.key;
+    if (!$('#modal').classList.contains('on')) {
+      if (k === 'ArrowLeft' || k === 'a' || k === 'A') S3.panPixels(step, 0);
+      else if (k === 'ArrowRight' || k === 'd' || k === 'D') S3.panPixels(-step, 0);
+      else if (k === 'ArrowUp' || k === 'w' || k === 'W') S3.panPixels(0, step);
+      else if (k === 'ArrowDown' || k === 's' || k === 'S') S3.panPixels(0, -step);
+      else if (k === '+' || k === '=') S3.zoomBy(1 / 1.15);
+      else if (k === '-' || k === '_') S3.zoomBy(1.15);
+      else if (k === 'm' || k === 'M') { M.framedSel = null; S3.toggleView(); }
+    }
     if ((e.key === 'Enter' || e.key === ' ') && !$('#modal').classList.contains('on')) { e.preventDefault(); $('#fightBtn').click(); }
     if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) doUndo();
   });
@@ -1246,7 +1271,9 @@ function tick(dt) {
   if (M.on || D.q.length || D.cur) directorUpdate(dt);
   const idle = directorIdle();
   if (idle) { D.ff = false; if (D.wasBusy) { D.wasBusy = false; if (M.on) { refreshHUD(); updateHL(); } } } else { D.wasBusy = true; if (M.on) S3.setArrows(attackArrows(M.disp)); }
+  if (M.on) { camBtn = camBtn || $('#camBtn'); if (camBtn) camBtn.classList.toggle('on', S3.view === 'overview'); }   // lit while the whole map shows
 }
+let camBtn = null;
 
 return {
   init, start, quit, concede, tick, layout, showScreen, cardEl, modal, closeModal, toast, inspect, esc, fmtText, typeLine, lvlStats, ICON,

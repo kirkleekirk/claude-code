@@ -37,6 +37,7 @@ button{font-family:inherit;-webkit-tap-highlight-color:transparent}
 .iconbtn svg{width:1.4rem;height:1.4rem}
 .iconbtn.txt{font-weight:900;font-size:.85rem}
 .iconbtn:active{transform:scale(.92)}
+.iconbtn.on{background:rgba(255,207,58,.92);color:#2a1600}
 
 /* ---------- seats (HUD) */
 .seat{position:absolute;display:flex;align-items:center;gap:.5rem;pointer-events:auto}
@@ -92,6 +93,8 @@ body.wide #me .mebtns{width:100%;padding-left:.2rem;margin-top:.15rem}
 body.portrait #opp{top:calc(env(safe-area-inset-top) + .4rem);left:.5rem;right:10.6rem;height:3.6rem}
 body.portrait #me{bottom:calc(env(safe-area-inset-bottom) + 9.4rem);left:.5rem;right:7.6rem;height:3.6rem}
 body.portrait .fight{min-width:6.6rem;font-size:1.1rem;padding:.2rem .5rem}
+body.portrait .fight{max-width:7rem}
+body.portrait .fight small{white-space:normal;text-align:center;line-height:1.1}
 body.portrait #hand{left:0;right:0;bottom:calc(env(safe-area-inset-bottom) + .2rem);height:9rem}
 body.portrait #fightWrap{right:.5rem;bottom:calc(env(safe-area-inset-bottom) + 9.5rem)}
 body.portrait #sideBtns{top:calc(env(safe-area-inset-top) + .45rem);right:.45rem;flex-direction:row;gap:.3rem}

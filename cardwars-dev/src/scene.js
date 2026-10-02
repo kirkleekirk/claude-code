@@ -8,12 +8,19 @@ var Scene = (function () {
 const M4 = GL3.M4, rgb = GL3.hexRGB, mix = GL3.mixRGB;
 
 // ------------------------------------------------------------------ layout (world units, y up, P0 at +z)
-const LS = 2.7, BW = LS * 2, BD = 4.5, TOP = 0.2; // lane spacing, half width/depth of the board, board top height
+// A huge battlefield: the troops keep their size, while the arena (and the room, table, props, cards and
+// opponent around it) is built big, so attackers have a long march and you scroll and zoom to see it all.
+const WK = 4.0;                                   // scale of the room, the table, the props, the cards and the opponent
+const LS = 10.8, BW = LS * 2, BD = 18, TOP = 0.5;  // lane spacing, half width/depth of the arena, its top height
 const LANE_X = l => (l - 1.5) * LS;
-const SPOT = { c: 1.5, b: 3.3 };               // creature / building spot distance from the center line
-const OFF = { c: 0.38, b: 0.56 };              // sideways offsets so a creature never hides behind its building
-const CARD_Z = BD + 0.95, CARD_W = 0.78, CARD_H = 1.09, CARD_DX = 0.52;
-const TABLE_W = 18.2, TABLE_D = 13.6, OPP_Z = 7.8; // the folding table, and where the opponent sits
+const SPOT = { c: 6.0, b: 13.2 };                 // creature / building spot distance from the center line
+const OFF = { c: 1.5, b: 2.2 };                   // sideways offsets so a creature never hides behind its building
+const BSIZE = 2.0;                                // buildings tower over the troops
+const FXK = LS / 6.4;                             // board-wide spell effects grow with the arena
+const CARD_W = 0.78 * WK, CARD_H = 1.09 * WK, CARD_DX = 0.52 * WK, CARD_Z = BD + 0.6 + CARD_H / 2;
+const LANDCARD_Z = CARD_Z + CARD_H + 0.5;         // where the land cards lie until "floop your land cards"
+const TABLE_W = 2 * BW + 7 * WK, TABLE_D = 2 * (LANDCARD_Z + CARD_H / 2 + 1.2), OPP_Z = TABLE_D / 2 + WK;
+const RUN = 10, WALK = 7;                         // troop speeds in world units per second
 const TEAMHEX = ['#3d8dff', '#ff9a2a'];
 const TEAM = TEAMHEX.map(rgb);
 const LANDC = { blue: '#5a8fd0', corn: '#d8c040', swamp: '#9a6ad0', ice: '#9ae0ff', nice: '#ff9ad0', lava: '#ff6a3a', rainbow: '#ffffff' };
@@ -34,6 +41,7 @@ const BONES = new Float32Array(16 * 8);
 const cam = { yaw: 0, pitch: 0.95, dist: 14, tx: 0, ty: 0, tz: 0.4, fov: 0.72, eye: [0, 10, 10] };
 const camGoal = { yaw: 0, pitch: 0.95, dist: 14, tx: 0, ty: 0, tz: 0.4 };
 const user = { zoom: 1, yaw: 0, pitch: 0, px: 0, pz: 0 };
+let camView = 'home', framePts = null, WPP = 0.02;   // 'home' (your side) | 'overview' | 'frame'; world units per pixel
 let introT = -1, introCb = null, lost = false, ready = false, setupMode = false, artVersion = 0;
 const stats = { draws: 0, tris: 0, ms: 0 };   // per-frame counters (perf checks)
 
@@ -218,43 +226,47 @@ function texQuad(x0, y0, z0, ax, ay, az, bx, by, bz, u0, v0, u1, v1, shade) {
 function buildStatic() {
   statics = [];
   // floor and back wall (textured)
-  const fl = texMesh(texQuad(-40, -6.2, 40, 80, 0, 0, 0, 0, -80, 0, 0, 10, 10, 1));
+  const FY = -6.2 * WK, FR = 40 * WK;
+  const fl = texMesh(texQuad(-FR, FY, FR, FR * 2, 0, 0, 0, 0, -FR * 2, 0, 0, 10, 10, 1));
   statics.push({ kind: 'tex', mesh: fl, tex: GL3.texture(ctx, floorTex, { repeat: true }), mul: [1, 1, 1, 1] });
   const wv = [];
-  const WR = 22, segs = 16;
+  const WR = 22 * WK, segs = 16;
   for (let i = 0; i < segs; i++) {
     const a0 = Math.PI * (0.15 + 0.7 * i / segs), a1 = Math.PI * (0.15 + 0.7 * (i + 1) / segs);
-    const x0 = Math.cos(a0) * WR, z0 = -Math.sin(a0) * WR + 6, x1 = Math.cos(a1) * WR, z1 = -Math.sin(a1) * WR + 6;
-    wv.push(...texQuad(x0, -6.2, z0, x1 - x0, 0, z1 - z0, 0, 24, 0, i, 0, i + 1, 3, 0.9));
+    const x0 = Math.cos(a0) * WR, z0 = -Math.sin(a0) * WR + 6 * WK, x1 = Math.cos(a1) * WR, z1 = -Math.sin(a1) * WR + 6 * WK;
+    wv.push(...texQuad(x0, FY, z0, x1 - x0, 0, z1 - z0, 0, 24 * WK, 0, i, 0, i + 1, 3, 0.9));
   }
   statics.push({ kind: 'tex', mesh: texMesh(wv), tex: GL3.texture(ctx, wallTex, { repeat: true }), mul: [1, 1, 1, 1] });
   // table: dark green top with a lighter rim, grey folding legs
   const t = new Models.Builder();
   const tw = TABLE_W / 2, td = TABLE_D / 2;
-  t.c('#2f6e33').at(0, -0.14, 0, q => q.box(TABLE_W, 0.28, TABLE_D));
-  t.c('#4f9a4c').at(0, -0.02, td - 0.02, q => q.box(TABLE_W, 0.06, 0.08)).at(0, -0.02, -td + 0.02, q => q.box(TABLE_W, 0.06, 0.08)).at(tw - 0.02, -0.02, 0, q => q.box(0.08, 0.06, TABLE_D)).at(-tw + 0.02, -0.02, 0, q => q.box(0.08, 0.06, TABLE_D));
+  const K = WK;
+  t.c('#2f6e33').at(0, -0.14 * K, 0, q => q.box(TABLE_W, 0.28 * K, TABLE_D));
+  t.c('#4f9a4c').at(0, -0.02 * K, td - 0.02 * K, q => q.box(TABLE_W, 0.06 * K, 0.08 * K)).at(0, -0.02 * K, -td + 0.02 * K, q => q.box(TABLE_W, 0.06 * K, 0.08 * K)).at(tw - 0.02 * K, -0.02 * K, 0, q => q.box(0.08 * K, 0.06 * K, TABLE_D)).at(-tw + 0.02 * K, -0.02 * K, 0, q => q.box(0.08 * K, 0.06 * K, TABLE_D));
   t.c('#8f989c');
-  for (const [x, z] of [[-tw + 0.9, td - 0.8], [tw - 0.9, td - 0.8], [-tw + 0.9, -td + 0.8], [tw - 0.9, -td + 0.8]]) t.at(x, -3.2, z, q => q.cyl(0.12, 0.12, 6.0, 8));
-  t.at(-tw + 0.9, -2.6, 0, q => q.box(0.1, 0.1, TABLE_D - 1.6)).at(tw - 0.9, -2.6, 0, q => q.box(0.1, 0.1, TABLE_D - 1.6));
-  statics.push({ kind: 'mesh', mesh: meshFrom(t), outline: 0.035, outCol: [0.08, 0.12, 0.08] });
+  for (const [x, z] of [[-tw + 0.9 * K, td - 0.8 * K], [tw - 0.9 * K, td - 0.8 * K], [-tw + 0.9 * K, -td + 0.8 * K], [tw - 0.9 * K, -td + 0.8 * K]]) t.at(x, -3.2 * K, z, q => q.cyl(0.12 * K, 0.12 * K, 6.0 * K, 8));
+  t.at(-tw + 0.9 * K, -2.6 * K, 0, q => q.box(0.1 * K, 0.1 * K, TABLE_D - 1.6 * K)).at(tw - 0.9 * K, -2.6 * K, 0, q => q.box(0.1 * K, 0.1 * K, TABLE_D - 1.6 * K));
+  statics.push({ kind: 'mesh', mesh: meshFrom(t), outline: 0.035 * K, outCol: [0.08, 0.12, 0.08] });
   // board slab
   const s = new Models.Builder();
-  s.c('#3c4552').at(0, TOP / 2 - 0.01, 0, q => q.box(BW * 2 + 0.36, TOP, BD * 2 + 0.36));
-  s.c('#5b6676').at(0, TOP - 0.005, 0, q => q.box(BW * 2 + 0.3, 0.01, 0.06));
-  statics.push({ kind: 'mesh', mesh: meshFrom(s), outline: 0.03, outCol: [0.05, 0.06, 0.08] });
+  s.c('#3c4552').at(0, TOP / 2 - 0.01, 0, q => q.box(BW * 2 + 0.8, TOP, BD * 2 + 0.8));
+  s.c('#5b6676').at(0, TOP - 0.005, 0, q => q.box(BW * 2 + 0.6, 0.01, 0.16));
+  statics.push({ kind: 'mesh', mesh: meshFrom(s), outline: 0.03 * WK, outCol: [0.05, 0.06, 0.08] });
   // props, as in the episode: Total Soda, COOL GUY cup, DWEEB mug, Crunch chips, the card box, a sandwich plate
-  const props = [['soda', -7.6, -1.5, 0.9, 0.3], ['coolcup', -6.9, -2.9, 0.85, 0], ['dweeb', 7.5, -2.6, 0.9, 2.6], ['chips', -7.7, 3.0, 1.2, 0.6], ['cardbox', -7.6, 0.8, 1.15, 0.2], ['plate', 7.7, 0.6, 1.2, 0.4]];
+  const xe = d => BW + d * WK;   // just off the arena's side edge
+  const zb = z => z * BD / 15;
+  const props = [['soda', -xe(1.9), zb(-5.0), 0.9, 0.3], ['coolcup', -xe(1.4), zb(-10.0), 0.85, 0], ['dweeb', xe(1.9), zb(-9.0), 0.9, 2.6], ['chips', -xe(2.2), zb(10.0), 1.2, 0.6], ['cardbox', -xe(2.0), zb(2.6), 1.15, 0.2], ['plate', xe(2.2), zb(1.8), 1.2, 0.4]];
   const P = id => props.find(x => x[0] === id);
   for (const [id, x, z, s2, ry] of props) {
     const m = Models.build(id);
-    statics.push({ kind: 'mesh', mesh: { buf: GL3.buffer(ctx, m.data), count: m.count }, outline: 0.03, outCol: [0.1, 0.08, 0.06], m: M4.trs(M4.create(), x, 0, z, ry, 0, 0, s2, s2, s2) });
+    statics.push({ kind: 'mesh', mesh: { buf: GL3.buffer(ctx, m.data), count: m.count }, outline: 0.03 * WK, outCol: [0.1, 0.08, 0.06], m: M4.trs(M4.create(), x, 0, z, ry, 0, 0, s2 * WK, s2 * WK, s2 * WK) });
   }
   // prop labels (TOTAL SODA, COOL GUY, DWEEB, CRUNCH)
   const lab = (key, txt, col, bg, w, h, fs) => labelTex(key, w, h, (g, ww, hh) => { if (bg) { g.fillStyle = bg; g.fillRect(0, 0, ww, hh); } g.font = 'bold ' + fs + 'px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = col; txt.split('\n').forEach((t2, i, a) => g.fillText(t2, ww / 2, hh / 2 + (i - (a.length - 1) / 2) * fs * 1.05)); });
-  statics.push({ kind: 'tex', mesh: texMesh(curvedLabel(P('soda')[1], P('soda')[2], 0.9, 0.3, 0.33, 0.42, 0.95)), tex: lab('l:soda', 'TOTAL\nSODA', '#2a7a1a', '#ffffff', 128, 96, 34), mul: [1, 1, 1, 1] });
-  statics.push({ kind: 'tex', mesh: texMesh(curvedLabel(P('coolcup')[1], P('coolcup')[2], 0.85, 0, 0.27, 0.42, 0.75)), tex: lab('l:cool', 'COOL\nGUY', '#1a1a1a', null, 128, 96, 34), mul: [1, 1, 1, 1] });
-  statics.push({ kind: 'tex', mesh: texMesh(curvedLabel(P('dweeb')[1], P('dweeb')[2], 0.9, 2.6 + Math.PI, 0.33, 0.28, 0.6)), tex: lab('l:dweeb', 'DWEEB', '#1a1a1a', null, 160, 64, 40), mul: [1, 1, 1, 1] });
-  statics.push({ kind: 'tex', mesh: texMesh(texQuad(P('chips')[1] - 0.42, 0.18, P('chips')[2] + 0.18, 0.84, 0, 0.0, 0, 0.18, 0.2, 0, 1, 1, 0, 1)), tex: lab('l:chips', 'CRUNCH', '#ffe14a', null, 160, 48, 36), mul: [1, 1, 1, 1] });
+  statics.push({ kind: 'tex', mesh: texMesh(curvedLabel(P('soda')[1], P('soda')[2], 0.9 * WK, 0.3, 0.33, 0.42, 0.95)), tex: lab('l:soda', 'TOTAL\nSODA', '#2a7a1a', '#ffffff', 128, 96, 34), mul: [1, 1, 1, 1] });
+  statics.push({ kind: 'tex', mesh: texMesh(curvedLabel(P('coolcup')[1], P('coolcup')[2], 0.85 * WK, 0, 0.27, 0.42, 0.75)), tex: lab('l:cool', 'COOL\nGUY', '#1a1a1a', null, 128, 96, 34), mul: [1, 1, 1, 1] });
+  statics.push({ kind: 'tex', mesh: texMesh(curvedLabel(P('dweeb')[1], P('dweeb')[2], 0.9 * WK, 2.6 + Math.PI, 0.33, 0.28, 0.6)), tex: lab('l:dweeb', 'DWEEB', '#1a1a1a', null, 160, 64, 40), mul: [1, 1, 1, 1] });
+  statics.push({ kind: 'tex', mesh: texMesh(texQuad(P('chips')[1] - 0.42 * WK, 0.18 * WK, P('chips')[2] + 0.18 * WK, 0.84 * WK, 0, 0.0, 0, 0.18 * WK, 0.2 * WK, 0, 1, 1, 0, 1)), tex: lab('l:chips', 'CRUNCH', '#ffe14a', null, 160, 48, 36), mul: [1, 1, 1, 1] });
   buildTiles();
 }
 // A label wrapped around a cylinder (bottle/cup) facing the camera side.
@@ -280,8 +292,8 @@ function buildTiles() {
       const z0 = zs[0] + (zs[1] - zs[0]) * k / NZ, z1 = zs[0] + (zs[1] - zs[0]) * (k + 1) / NZ;
       const xl0 = lane === 0 ? -BW : waveX(lane, z0) + 0.03, xl1 = lane === 0 ? -BW : waveX(lane, z1) + 0.03;
       const xr0 = lane === 3 ? BW : waveX(lane + 1, z0) - 0.03, xr1 = lane === 3 ? BW : waveX(lane + 1, z1) - 0.03;
-      const y = TOP + 0.004;
-      const uv = (x, z) => [x / 2.4, z / 2.4];
+      const y = TOP + 0.012;
+      const uv = (x, z) => [x / (2.4 * WK), z / (2.4 * WK)];
       const A = [xl0, y, z0, ...uv(xl0, z0), 1], Bq = [xr0, y, z0, ...uv(xr0, z0), 1], C = [xr1, y, z1, ...uv(xr1, z1), 1], D = [xl1, y, z1, ...uv(xl1, z1), 1];
       v.push(...A, ...Bq, ...C, ...A, ...C, ...D);
     }
@@ -295,16 +307,17 @@ function decorMesh(type, side, lane) {
   const sz = sideZ(side);
   const exC = [sz * OFF.c, sz * SPOT.c - cz], exB = [-sz * OFF.b, sz * SPOT.b - cz];
   const spots = [];
-  const N = { corn: 80, blue: 92, swamp: 38, ice: 38, nice: 38, lava: 32 }[type] || 50;
-  for (let i = 0, tries = 0; i < N && tries < 1200; tries++) {
-    const x = (r() - 0.5) * (LS - 0.3), z = (r() - 0.5) * (BD - 0.3);
-    if (Math.hypot(x - exC[0], z - exC[1]) < 0.7 || Math.hypot(x - exB[0], z - exB[1]) < 1.0) continue;
+  const N = { corn: 220, blue: 240, swamp: 104, ice: 104, nice: 104, lava: 86 }[type] || 130;
+  const DK = 2.2;   // terrain props are big next to the troops: corn stalks, grass tufts, ice spikes, candy, rocks
+  for (let i = 0, tries = 0; i < N && tries < 4800; tries++) {
+    const x = (r() - 0.5) * (LS - 0.6), z = (r() - 0.5) * (BD - 0.6);
+    if (Math.hypot(x - exC[0], z - exC[1]) < 1.8 || Math.hypot(x - exB[0], z - exB[1]) < 3.4) continue;
     spots.push([x, z]); i++;
   }
   b.g(1);
   for (const [x, z] of spots) {
     const h = 0.12 + r() * 0.14, ry = r() * 360;
-    b.push().T(x, 0, z).R(0, ry, 0);
+    b.push().T(x, 0, z).R(0, ry, 0).S(DK);
     if (type === 'corn') {
       b.c('#e8d23a').at(0, h / 2, 0, q => q.cyl(0.01, 0.014, h, 4, { capTop: false, capBot: false }));
       b.c('#d8e04a'); for (let k = 0; k < 3; k++) b.push().T(0, h * (0.35 + k * 0.2), 0).R(0, k * 120, -55 - k * 8).box(0.012, 0.11, 0.03).pop();
@@ -349,7 +362,7 @@ function syncTiles(s) {
 // ------------------------------------------------------------------ positions
 function spotPos(side, lane, slot) { const s = sideZ(side); return slot === 'b' ? [LANE_X(lane) - s * OFF.b, TOP, s * SPOT.b] : [LANE_X(lane) + s * OFF.c, TOP, s * SPOT.c]; }
 function cardPos(side, lane, slot) { const s = sideZ(side); return [LANE_X(lane) + s * (slot === 'b' ? -CARD_DX : CARD_DX), 0.012, s * CARD_Z]; }
-function deckPos(side, which) { const s = sideZ(side); return which === 'discard' ? [s * 7.25, 0.01, s * (BD + 0.1)] : [s * 6.35, 0.01, s * (BD + 1.05)]; }
+function deckPos(side, which) { const s = sideZ(side); return which === 'discard' ? [s * (BW + 2.33 * WK), 0.01, s * (CARD_Z - 1.08 * WK)] : [s * (BW + 1.33 * WK), 0.01, s * CARD_Z]; }
 function baseYaw(side, face) {
   // a diorama: everyone is turned three-quarters toward the camera; animals show their profile
   const near = side === viewer;
@@ -364,7 +377,7 @@ function makeEnt(kind, side, lane, uid, id, how) {
   const art = cd.art || id;
   const model = Models.build(art);
   const tag = Models.tag(art);
-  const want = kind === 'b' ? (tag.h || 1.4) * 1.25 : (tag.h || 0.6) * 1.45;
+  const want = kind === 'b' ? (tag.h || 1.4) * BSIZE : (tag.h || 0.6) * 1.45;
   const sc = want / Math.max(0.2, model.h);
   const p = spotPos(side, lane, kind);
   const e = { key: entKey(kind, uid), kind, side, lane, uid, id, art, model, tag, scale: sc, pos: p.slice(), goal: p.slice(),
@@ -401,7 +414,8 @@ function setState(s, opts) {
       }
       if (e.side !== side || e.lane !== lane) {
         const from = e.pos.slice();
-        e.side = side; e.lane = lane; e.goal = spotPos(side, lane, kind); e.walking = 1;
+        e.speed = e.side !== side ? RUN : WALK;   // switching sides is a long run across the field
+        e.side = side; e.lane = lane; e.goal = spotPos(side, lane, kind); e.walking = 1; e.path = null; e.strikeDir = null;
         e.yawGoal = Math.atan2(e.goal[0] - from[0], e.goal[2] - from[2]);
       }
       if (kind === 'c') {
@@ -438,79 +452,108 @@ function setQuality(q) { quality = q; resize(W, H, window.devicePixelRatio || 1)
 function camMatrices(c, aspect, out) {
   const cp = Math.cos(c.pitch), sp = Math.sin(c.pitch);
   const eye = [c.tx + Math.sin(c.yaw) * cp * c.dist, c.ty + sp * c.dist, c.tz + Math.cos(c.yaw) * cp * c.dist];
-  M4.perspective(PROJ, c.fov, aspect, 0.5, 120);
+  M4.perspective(PROJ, c.fov, aspect, Math.max(0.4, Math.min(6, c.dist * 0.04)), c.dist + 80 * WK);   // near plane follows the distance (depth precision)
   M4.lookAt(VIEW, eye, [c.tx, c.ty, c.tz], [0, 1, 0]);
   M4.mul(out, PROJ, VIEW);
   return eye;
 }
-// Fit the board, the card rows and a little of the opponent into the free part of the screen.
+// Camera views: 'home' frames your side of the arena (close enough that troops are readable - scroll for the
+// rest), 'overview' frames the whole battlefield, 'frame' frames whatever the UI needs (e.g. every valid
+// target). The user's scroll / zoom / orbit offsets ride on top of the view.
+function viewPts(v) {
+  const sz = sideZ(viewer), view = v || camView;
+  if (mode === 'home') return [[-TABLE_W / 2, 0, TABLE_D / 2], [TABLE_W / 2, 0, TABLE_D / 2], [-TABLE_W / 2, 0, -TABLE_D / 2], [TABLE_W / 2, 0, -TABLE_D / 2], [0, 3.6 * WK, -OPP_Z - 0.3 * WK]];
+  if (view === 'frame' && framePts) return framePts;
+  const cards = [[-BW + 1.5, 0, sz * (CARD_Z + CARD_H * 0.25)], [BW - 1.5, 0, sz * (CARD_Z + CARD_H * 0.25)]];
+  if (view === 'home') return [[-BW - 0.3, TOP, sz * (BD + 0.3)], [BW + 0.3, TOP, sz * (BD + 0.3)], [-BW - 0.3, TOP, -sz * (SPOT.c + 1.0)], [BW + 0.3, TOP, -sz * (SPOT.c + 1.0)]].concat(cards);
+  return [[-BW - 0.3, TOP, BD + 0.3], [BW + 0.3, TOP, BD + 0.3], [-BW - 0.3, TOP, -BD - 0.3], [BW + 0.3, TOP, -BD - 0.3],
+    [-BW + 2, TOP + 1.4 * BSIZE + 0.6, -sz * SPOT.b], [BW - 2, TOP + 1.4 * BSIZE + 0.6, -sz * SPOT.b]].concat(cards);
+}
 function fitCamera() {
   if (!W || !H) return;
+  // a framed view only ever pulls back: it never zooms in past your home view
+  const minDist = mode !== 'home' && camView === 'frame' ? solveCam(viewPts('home'), true, 0).dist : 0;
+  const c = solveCam(viewPts(), mode !== 'home' && camView === 'home', minDist);
+  camGoal.yaw = c.yaw; camGoal.pitch = c.pitch; camGoal.dist = c.dist; camGoal.tx = c.tx; camGoal.ty = c.ty; camGoal.tz = c.tz; cam.fov = c.fov;
+  if (!cam.init) { Object.assign(cam, camGoal); cam.init = true; }
+  clampPan(user.px, user.pz);
+}
+function solveCam(pts, troopClamp, minDist) {
   const aspect = W / H;
   const vt = insets.top / H, vb = insets.bottom / H, vl = insets.left / W, vr = insets.right / W;
   // the free area's shape decides the tilt: tall phone screens look down steeply so the arena fills the height,
-  // wide desktop screens look across the table so it fills the width
+  // wide desktop screens look across the field so it fills the width
   const fa = (W * (1 - vl - vr)) / Math.max(1, H * (1 - vt - vb));
   const tall = fa < 0.9;
-  const pitch = mode === 'home' ? 0.62 : Math.max(0.8, Math.min(1.3, 1.44 - 0.22 * fa));
+  const pitch = mode === 'home' ? 0.62 : Math.max(0.8, Math.min(1.25, 1.42 - 0.22 * fa));
   const yaw = viewer === 1 ? Math.PI : 0;
-  const ex = tall ? -0.3 : 0.2;   // on tall screens the arena's outer rim may run past the screen edge
-  const pts = mode === 'home' ? [[-TABLE_W / 2, 0, TABLE_D / 2], [TABLE_W / 2, 0, TABLE_D / 2], [-TABLE_W / 2, 0, -TABLE_D / 2], [TABLE_W / 2, 0, -TABLE_D / 2], [0, 3.6, -OPP_Z - 0.3]]
-    : [[-BW - ex, TOP, BD + 0.15], [BW + ex, TOP, BD + 0.15], [-BW - ex, TOP, -BD - 0.15], [BW + ex, TOP, -BD - 0.15],
-      [-BW + 0.5, 0, sideZ(viewer) * (CARD_Z + 0.2)], [BW - 0.5, 0, sideZ(viewer) * (CARD_Z + 0.2)],
-      [-BW + 0.5, 2.1, -sideZ(viewer) * SPOT.b], [BW - 0.5, 2.1, -sideZ(viewer) * SPOT.b]];   // the arena fills the view
   const c = { yaw, pitch, tx: 0, ty: 0, tz: 0, dist: 14, fov: tall ? 0.82 : 0.66 };
   const m = M4.create();
-  // binary search the distance; then shift the target so the content is centered in the free area
-  let lo = 4, hi = 80;
-  for (let it = 0; it < 30; it++) {
-    c.dist = (lo + hi) / 2;
+  const fits = () => {
     camMatrices(c, aspect, m);
-    let ok = true;
     for (const p of pts) {
-      const q = M4.apply(m, p[0], p[1], p[2]); if (q[3] <= 0) { ok = false; break; }
+      const q = M4.apply(m, p[0], p[1], p[2]); if (q[3] <= 0) return false;
       const sx = (q[0] / q[3] + 1) / 2, sy = (1 - q[1] / q[3]) / 2;
-      if (sx < vl + 0.01 || sx > 1 - vr - 0.01 || sy < vt + 0.005 || sy > 1 - vb - 0.005) { ok = false; break; }
+      if (sx < vl + 0.01 || sx > 1 - vr - 0.01 || sy < vt + 0.005 || sy > 1 - vb - 0.005) return false;
     }
-    if (ok) hi = c.dist; else lo = c.dist;
-  }
-  c.dist = hi;
-  for (let pass = 0; pass < 3; pass++) {
-  // vertical centering: nudge target z so the projected content center sits in the middle of the free band
-  for (let k = 0; k < 6; k++) {
-    camMatrices(c, aspect, m);
-    let minY = 1, maxY = 0;
-    for (const p of pts) { const q = M4.apply(m, p[0], p[1], p[2]); const sy = (1 - q[1] / q[3]) / 2; minY = Math.min(minY, sy); maxY = Math.max(maxY, sy); }
-    const mid = (minY + maxY) / 2, want = vt + (1 - vt - vb) / 2;
-    c.tz += (mid - want) * c.dist * 0.9 * (viewer === 1 ? -1 : 1);
-    let minX = 1, maxX = 0;
-    for (const p of pts) { const q = M4.apply(m, p[0], p[1], p[2]); const sx = (q[0] / q[3] + 1) / 2; minX = Math.min(minX, sx); maxX = Math.max(maxX, sx); }
-    const midX = (minX + maxX) / 2, wantX = vl + (1 - vl - vr) / 2;
-    c.tx += (midX - wantX) * c.dist * 0.9 * aspect * (viewer === 1 ? -1 : 1);
-  }
-  lo = 4; hi = c.dist * 1.6;
-  for (let it = 0; it < 24; it++) {
-    c.dist = (lo + hi) / 2;
-    camMatrices(c, aspect, m);
-    let ok = true;
-    for (const p of pts) {
-      const q = M4.apply(m, p[0], p[1], p[2]); if (q[3] <= 0) { ok = false; break; }
-      const sx = (q[0] / q[3] + 1) / 2, sy = (1 - q[1] / q[3]) / 2;
-      if (sx < vl + 0.01 || sx > 1 - vr - 0.01 || sy < vt + 0.005 || sy > 1 - vb - 0.005) { ok = false; break; }
+    return true;
+  };
+  const search = (lo, hi, it) => { for (let i = 0; i < it; i++) { c.dist = (lo + hi) / 2; if (fits()) hi = c.dist; else lo = c.dist; } c.dist = hi; };
+  // center the points' screen box in the free area
+  const center = () => {
+    for (let k = 0; k < 6; k++) {
+      camMatrices(c, aspect, m);
+      let minY = 1, maxY = 0, minX = 1, maxX = 0;
+      for (const p of pts) { const q = M4.apply(m, p[0], p[1], p[2]); const sx = (q[0] / q[3] + 1) / 2, sy = (1 - q[1] / q[3]) / 2; minY = Math.min(minY, sy); maxY = Math.max(maxY, sy); minX = Math.min(minX, sx); maxX = Math.max(maxX, sx); }
+      const s0 = viewer === 1 ? -1 : 1;
+      c.tz += ((minY + maxY) / 2 - (vt + (1 - vt - vb) / 2)) * c.dist * 0.9 * s0;
+      c.tx += ((minX + maxX) / 2 - (vl + (1 - vl - vr) / 2)) * c.dist * 0.9 * aspect * s0;
     }
-    if (ok) hi = c.dist; else lo = c.dist;
+  };
+  // center the target on the target points first (a far view), then binary search the distance and re-center
+  let cx = 0, cz = 0; for (const p of pts) { cx += p[0]; cz += p[2]; } c.tx = cx / pts.length; c.tz = cz / pts.length;
+  search(2, 120 * WK, 32);
+  for (let pass = 0; pass < 3; pass++) { center(); search(2, c.dist * 1.6, 24); }
+  // your side: never start so far out that the troops are specks - you scroll and zoom to see the rest
+  if (troopClamp) {
+    const band = H * (1 - vt - vb);
+    const minTroopPx = Math.max(22, Math.min(30, band * 0.045));
+    const wpp = 2 * c.dist * Math.tan(c.fov / 2) / H, troopPx = 1.3 / wpp;
+    if (troopPx < minTroopPx) { c.dist *= troopPx / minTroopPx; center(); }
   }
-  c.dist = hi;
-  }
-  camGoal.yaw = c.yaw; camGoal.pitch = c.pitch; camGoal.dist = c.dist; camGoal.tx = c.tx; camGoal.ty = c.ty; camGoal.tz = c.tz; cam.fov = c.fov;
-  if (!cam.init) { Object.assign(cam, camGoal); cam.init = true; }
+  if (c.dist < minDist) { c.dist = minDist; center(); }
+  return c;
 }
 function setViewer(v) { viewer = v; fitCamera(); }
 function setMode(m) { mode = m; fitCamera(); }
-function zoomBy(f) { user.zoom = Math.max(0.55, Math.min(1.5, user.zoom * f)); }
-function orbitBy(dx, dy) { user.yaw = Math.max(-0.7, Math.min(0.7, user.yaw + dx)); user.pitch = Math.max(-0.42, Math.min(0.42, user.pitch + dy)); }
-function panBy(dx, dz) { user.px = Math.max(-5, Math.min(5, user.px + dx)); user.pz = Math.max(-4, Math.min(4, user.pz + dz)); }
+function zoomBy(f) { user.zoom = Math.max(0.28, Math.min(2.8, user.zoom * f)); }
+function orbitBy(dx, dy) { user.yaw = Math.max(-0.9, Math.min(0.9, user.yaw + dx)); user.pitch = Math.max(-0.45, Math.min(0.42, user.pitch + dy)); }
+function panBy(dx, dz) { clampPan(user.px + dx, user.pz + dz); }
+// keep the camera target over the arena
+function clampPan(px, pz) {
+  const gx = Math.max(-BW - 1, Math.min(BW + 1, camGoal.tx + px)), gz = Math.max(-BD - 3, Math.min(BD + 3, camGoal.tz + pz));
+  user.px = gx - camGoal.tx; user.pz = gz - camGoal.tz;
+}
+// Scroll by dragging: the ground under the finger follows the finger.
+function panPixels(dx, dy) {
+  const k = 2 * cam.dist * Math.tan(cam.fov / 2) / Math.max(1, H);
+  const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw), sp = Math.max(0.35, Math.sin(cam.pitch));
+  panBy(-cy * dx * k - sy * dy * k / sp, sy * dx * k - cy * dy * k / sp);
+}
 function resetView() { user.zoom = 1; user.yaw = 0; user.pitch = 0; user.px = 0; user.pz = 0; }
+function setView(v) { camView = v || 'home'; framePts = null; resetView(); fitCamera(); }
+function toggleView() { setView(camView === 'overview' ? 'home' : 'overview'); }
+// Make sure these spots are on screen. If any isn't, pull the camera back to show them all; returns true if it moved.
+function frameSpots(list) {
+  if (!list || !list.length || mode === 'home' || !W) return false;
+  const pts = list.map(h => (h.slot === 'land' ? [LANE_X(h.lane), TOP, sideZ(h.side) * BD / 2] : spotPos(h.side, h.lane, h.slot || 'c')));
+  const onScreen = p => { const q = project([p[0], p[1] + 0.8, p[2]]); return q.x > insets.left + 24 && q.x < W - insets.right - 24 && q.y > insets.top + 24 && q.y < H - insets.bottom - 24; };
+  if (pts.every(onScreen)) return false;
+  const fp = [];
+  for (const p of pts) fp.push([p[0] - 2.6, TOP, p[2] - 2.6], [p[0] + 2.6, TOP, p[2] + 2.6], [p[0], TOP + 1.4 * BSIZE, p[2]]);
+  camView = 'frame'; framePts = fp; resetView(); fitCamera();
+  return true;
+}
 
 // Project a world point to CSS pixels.
 function project(p) {
@@ -561,7 +604,7 @@ function pick(x, y) {
       const hw = (r ? CARD_H : CARD_W) / 2, hd = (r ? CARD_W : CARD_H) / 2;
       if (Math.abs(dx) < hw && Math.abs(dz) < hd) return { kind: c.slot === 'c' ? 'creature' : 'building', side: c.side, lane: c.lane, slot: c.slot, card: 1 };
     }
-    for (const side of [0, 1]) for (const which of ['deck', 'discard']) { const d = deckPos(side, which); if (Math.abs(tp[0] - d[0]) < 0.6 && Math.abs(tp[2] - d[2]) < 0.75) return { kind: which, side }; }
+    for (const side of [0, 1]) for (const which of ['deck', 'discard']) { const d = deckPos(side, which); if (Math.abs(tp[0] - d[0]) < 0.6 * WK && Math.abs(tp[2] - d[2]) < 0.75 * WK) return { kind: which, side }; }
   }
   const bp = boardPoint(x, y);
   if (bp) return { kind: 'tile', side: bp.side, lane: bp.lane, slot: bp.slot };
@@ -580,14 +623,19 @@ function entByUid(uid, kind) { return ents.get(entKey(kind || 'c', uid)); }
 // ------------------------------------------------------------------ effects API (called by the UI director)
 const fx = {
   summon(side, lane, uid) { const e = entByUid(uid, 'c'); if (e) { e.rev = 0; e.revSp = 1.6; spark(e.pos, TEAM[side], 26, 0.6); } },
-  build(side, lane, uid) { const e = entByUid(uid, 'b'); if (e) { e.rev = 0; e.revSp = 0.9; ring(e.pos, TEAM[side], 1.1); } },
+  build(side, lane, uid) { const e = entByUid(uid, 'b'); if (e) { e.rev = 0; e.revSp = 0.9; ring(e.pos, TEAM[side], 2.3); } },
+  // Melee attackers march across the battlefield, strike, and march back; shooters fire across it.
   attack(side, lane, toSide, toLane, slot, kind) {
     const e = findEnt(side, lane, 'c'); if (!e) return;
     const t = spotPos(toSide, toLane, slot || 'c');
     const d = [t[0] - e.pos[0], 0, t[2] - e.pos[2]], L = Math.hypot(d[0], d[2]) || 1;
     e.yawGoal = Math.atan2(d[0], d[2]);
     if (kind === 'ranged' || kind === 'flying') { projectile(e, t, kind === 'flying' ? TEAM[side] : [1, 0.9, 0.5]); e.hop = 1; }
-    else { e.lungeDir = [d[0] / L, 0, d[2] / L]; e.lungeDist = Math.min(L * 0.62, 2.6); e.lunge = 1; }
+    else {
+      const k = Math.max(0, L - strikeGap(slot)) / L;
+      e.path = [[e.pos[0] + d[0] * k, TOP, e.pos[2] + d[2] * k]]; e.speed = RUN; e.walking = 1; e.pathFx = null;
+      e.strikeDir = [d[0] / L, 0, d[2] / L];
+    }
     e.backYaw = baseYaw(e.side, e.tag.face);
   },
   hit(side, lane, slot, n, kind) {
@@ -606,9 +654,10 @@ const fx = {
   land(side, lane, cause) {
     const t = tileOf(side, lane); if (!t) return;
     const c = [LANE_X(lane), TOP, sideZ(side) * BD / 2];
-    if (cause === 'eat') { spark(c, [1, 0.9, 0.3], 30, 0.9, 0.5); }
-    else if (cause === 'lava') { spark(c, [1, 0.45, 0.1], 40, 1.0, 0.6); }
-    else if (cause === 'reclaim' || cause === 'convert') { ring(c, rgb(LANDC[t.type] || '#ffffff'), 1.2); }
+    const around = (col, n2, sp) => { for (let k = 0; k < 8; k++) spark([c[0] + (Math.random() - 0.5) * LS * 0.75, TOP + 0.1, c[2] + (Math.random() - 0.5) * BD * 0.75], col, n2, sp, 0.5); };
+    if (cause === 'eat') around([1, 0.9, 0.3], 10, 1.0);
+    else if (cause === 'lava') around([1, 0.45, 0.1], 14, 1.2);
+    else if (cause === 'reclaim' || cause === 'convert') { ring(c, rgb(LANDC[t.type] || '#ffffff'), 5.0); }
     t.glow = 1;
   },
   floopCard(side, lane, slot) { const c = [...cards.values()].find(x => x.side === side && x.lane === lane && x.slot === slot); if (c) c.lift = 1; const e = findEnt(side, lane, slot); if (e) { e.glow = 1; ring(e.pos, [1, 1, 1], 0.7); } },
@@ -618,33 +667,34 @@ const fx = {
     const ea = findEnt(fromSide, fromLane, fromSlot || 'c'), eb = findEnt(toSide, toLane, toSlot || 'c');
     a[1] += ea ? ea.model.h * ea.scale * 0.7 : 0.5; b[1] += eb ? eb.model.h * eb.scale * 0.5 : 0.4;
     const col = kind === 'ice' ? [0.6, 0.95, 1] : kind === 'fire' || kind === 'cannon' ? [1, 0.5, 0.1] : kind === 'arrow' ? [1, 0.9, 0.3] : kind === 'science' ? [0.5, 1, 0.6] : kind === 'raze' ? [0.5, 0.8, 1] : [1, 1, 1];
-    if (kind === 'arrow' || kind === 'cannon' || kind === 'fire') projectileP(a, b, col, kind === 'arrow' ? 0.5 : 0.6);
+    if (kind === 'arrow' || kind === 'cannon' || kind === 'fire') projectileP(a, b, col);
     else ribbons.push({ kind: 'bolt', a, b, col, t: 0, life: 0.6 });
   },
   steal(fromSide, lane, toSide, toLane, uid, kind) {
     const e = entByUid(uid, 'c');
     const a = spotPos(fromSide, lane, 'c'), b = spotPos(toSide, toLane, 'c');
     a[1] += 0.6; b[1] += 0.6;
-    ribbons.push({ kind: kind === 'spirit' ? 'bolt' : 'souls', a: kind === 'spirit' ? spotPos(toSide, lane, 'b').map((v, i) => i === 1 ? v + 1.6 : v) : a, b: kind === 'spirit' ? a : b, col: kind === 'spirit' ? [0.6, 0.9, 1] : [1, 0.35, 0.3], t: 0, life: 1.0 });
+    ribbons.push({ kind: kind === 'spirit' ? 'bolt' : 'souls', a: kind === 'spirit' ? spotPos(toSide, lane, 'b').map((v, i) => i === 1 ? v + 1.1 * BSIZE : v) : a, b: kind === 'spirit' ? a : b, col: kind === 'spirit' ? [0.6, 0.9, 1] : [1, 0.35, 0.3], t: 0, life: 1.0 });
     if (e) { e.flash = 1; e.glow = 1; }
   },
-  storm() { bigFx('bloodstorm', [0, TOP + 2.2, 0], 2.4, [1, 0.3, 0.6]); },
-  nightmares() { bigFx('nightmares', [0, TOP + 1.4, 0], 2.0, [0.6, 0.3, 1]); },
-  volcano(side, lane) { const p = spotPos(side, lane, 'b'); bigFx('volcano', [p[0], TOP, p[2]], 2.6, [1, 0.45, 0.1], { rise: 1, erupt: 1 }); shake(1.2); flash([1, 0.5, 0.15], 0.5); },
-  coldNose() { bigFx('freeze', [0, TOP + 1.6, 0], 1.6, [0.7, 0.95, 1]); flash([0.7, 0.9, 1], 0.4); },
-  silo(side, lane) { const p = spotPos(side, lane, 'b'); p[1] += 1.9; const to = [0, 1.4, sideZ(1 - side) * (OPP_Z - 1)]; ribbons.push({ kind: 'laser', a: p, b: to, col: [1, 0.9, 0.3], t: 0, life: 1.2 }); },
+  storm() { bigFx('bloodstorm', [0, TOP + 6.5 * FXK, 0], 7 * FXK, [1, 0.3, 0.6]); },
+  nightmares() { bigFx('nightmares', [0, TOP + 4 * FXK, 0], 6 * FXK, [0.6, 0.3, 1]); },
+  volcano(side, lane) { const p = spotPos(side, lane, 'b'); bigFx('volcano', [p[0], TOP, p[2]], 3.5 * BSIZE, [1, 0.45, 0.1], { rise: 1, erupt: 1 }); shake(1.2); flash([1, 0.5, 0.15], 0.5); },
+  coldNose() { bigFx('freeze', [0, TOP + 5 * FXK, 0], 5 * FXK, [0.7, 0.95, 1]); flash([0.7, 0.9, 1], 0.4); },
+  silo(side, lane) { const p = spotPos(side, lane, 'b'), e = findEnt(side, lane, 'b'); p[1] += e ? e.model.h * e.scale : 1.4 * BSIZE; const to = [0, 1.4 * WK, sideZ(1 - side) * (OPP_Z - WK)]; ribbons.push({ kind: 'laser', a: p, b: to, col: [1, 0.9, 0.3], t: 0, life: 1.2 }); },
   scare(side, lane) { const e = findEnt(side, lane, 'c'); if (e) { e.flash = 1; spark([e.pos[0], e.pos[1] + 0.5, e.pos[2]], [0.7, 0.3, 1], 30, 0.7); } },
-  study(side, lane) { const e = findEnt(side, lane, 'c'); if (e) { e.insideGoal = 1; ring(spotPos(side, lane, 'b'), [0.5, 0.8, 1], 0.9); } },
-  ring(side, lane, slot, col) { ring(spotPos(side, lane, slot || 'c'), col || [1, 1, 1], 0.8); },
+  study(side, lane) { const e = findEnt(side, lane, 'c'); if (e) { e.insideGoal = 1; ring(spotPos(side, lane, 'b'), [0.5, 0.8, 1], 2.0); } },
+  ring(side, lane, slot, col) { ring(spotPos(side, lane, slot || 'c'), col || [1, 1, 1], slot === 'b' ? 2.3 : 1.1); },
   text(side, lane, slot, txt, col, big) {
-    const p = spotPos(side, lane, slot || 'c');
     const e = findEnt(side, lane, slot || 'c');
-    p[1] += e ? e.model.h * e.scale + 0.2 : 0.8;
+    const p = e ? e.pos.slice() : spotPos(side, lane, slot || 'c');   // follows a troop that is out on the field
+    p[1] += e ? e.model.h * e.scale + 0.25 : 0.8;
     texts.push({ p, txt, col: col || '#ffffff', t: 0, life: big ? 1.6 : 1.1, big: !!big });
   },
   say(side, lane, slot, txt) {
-    const p = spotPos(side, lane, slot || 'c'); const e = findEnt(side, lane, slot || 'c');
-    p[1] += e ? e.model.h * e.scale + 0.35 : 1.0;
+    const e = findEnt(side, lane, slot || 'c');
+    const p = e ? e.pos.slice() : spotPos(side, lane, slot || 'c');
+    p[1] += e ? e.model.h * e.scale + 0.4 : 1.0;
     texts.push({ p, txt, col: '#1a1a1a', t: 0, life: 2.6, bubble: true });
   },
   shake(a) { shake(a); },
@@ -664,7 +714,7 @@ const fx = {
     if (!lanes.length) lanes.push(e.lane);
     lanes.sort((a, b) => (e.lane <= 1.5 ? a - b : b - a));
     e.path = lanes.map(l => [LANE_X(l), TOP, sideZ(toSide) * BD * 0.55]);
-    e.walking = 1;
+    e.walking = 1; e.speed = 18; e.pathFx = 'eat'; e.strikeDir = null;
   },
   pulseTile(side, lane) { const t = tileOf(side, lane); if (t) t.glow = 1; }
 };
@@ -673,10 +723,20 @@ function flash(col, a) { flashes.push({ col, a: a || 0.4, t: 0, life: 0.45 }); }
 function ring(p, col, r) { ribbons.push({ kind: 'ring', a: [p[0], TOP + 0.03, p[2]], r: r || 0.8, col, t: 0, life: 0.7 }); }
 function bigFx(id, p, s, col, o) { bigs.push(Object.assign({ id, model: Models.build(id), buf: null, p, s, col, t: 0, life: id === 'volcano' ? 3.0 : 2.4 }, o || {})); }
 function projectile(e, t, col) {
-  const a = [e.pos[0], e.pos[1] + e.model.h * e.scale * 0.7, e.pos[2]], b = [t[0], t[1] + 0.4, t[2]];
-  projectileP(a, b, col, 0.45);
+  const a = [e.pos[0], e.pos[1] + e.model.h * e.scale * 0.7, e.pos[2]], b = [t[0], t[1] + 0.6, t[2]];
+  projectileP(a, b, col);
 }
-function projectileP(a, b, col, life) { ribbons.push({ kind: 'shot', a, b, col, t: 0, life: life || 0.45 }); }
+function projectileP(a, b, col, life) { const L = Math.hypot(b[0] - a[0], b[2] - a[2]); ribbons.push({ kind: 'shot', a, b, col, t: 0, life: life || shotTime(L), arc: Math.max(0.6, L * 0.12) }); }
+const shotTime = L => Math.max(0.35, L / 26);
+const strikeGap = slot => (slot === 'b' ? 0.8 + 0.85 * BSIZE : 0.95);
+// How long (ms) an attack takes to land: the march across the field, or the shot's flight.
+function attackTime(side, lane, toSide, toLane, slot, kind) {
+  const e = findEnt(side, lane, 'c'); if (!e) return 300;
+  const t = spotPos(toSide, toLane, slot || 'c');
+  const L = Math.hypot(t[0] - e.pos[0], t[2] - e.pos[2]);
+  if (kind === 'ranged' || kind === 'flying') return 150 + 1000 * shotTime(L);
+  return 140 + 1000 * Math.max(0, L - strikeGap(slot)) / RUN;
+}
 
 // ------------------------------------------------------------------ particles
 function addP(x, y, z, vx, vy, vz, col, size, life, grav) {
@@ -739,18 +799,24 @@ function update(dt) {
     e.glow = Math.max(0, e.glow - dt * 1.5);
     if (e.shakeT > 0) e.shakeT -= dt;
     if (e.path) {
-      if (!e.path.length) { e.path = null; e.goal = spotPos(e.side, e.lane, 'c'); }
+      if (!e.path.length) { e.path = null; e.goal = spotPos(e.side, e.lane, e.kind); }
       else {
         e.goal = e.path[0];
-        if (Math.hypot(e.goal[0] - e.pos[0], e.goal[2] - e.pos[2]) < 0.08) { spark([e.pos[0], TOP + 0.1, e.pos[2]], [1, 0.9, 0.35], 16, 0.5); e.path.shift(); }
+        if (Math.hypot(e.goal[0] - e.pos[0], e.goal[2] - e.pos[2]) < 0.08) {
+          if (e.pathFx === 'eat') spark([e.pos[0], TOP + 0.1, e.pos[2]], [1, 0.9, 0.35], 16, 0.5);
+          e.path.shift();
+          // reached the enemy: strike, hold a moment, then march home
+          if (!e.path.length && e.strikeDir) { e.lungeDir = e.strikeDir; e.lungeDist = 0.7; e.lunge = 1; e.strikeDir = null; e.pause = 0.45; e.speed = RUN * 0.8; }
+        }
       }
     }
+    if (e.pause > 0) e.pause -= dt;
     const dx = e.goal[0] - e.pos[0], dz = e.goal[2] - e.pos[2], d = Math.hypot(dx, dz);
-    if (d > 0.01) {
-      const sp = Math.min(d, dt * (e.path ? 7.5 : 3.2));
-      e.pos[0] += dx / d * sp; e.pos[2] += dz / d * sp; e.walk += dt * 6;
+    if (d > 0.01 && !(e.pause > 0)) {
+      const v = e.speed || WALK, sp = Math.min(d, dt * v);
+      e.pos[0] += dx / d * sp; e.pos[2] += dz / d * sp; e.walk += dt * (v > WALK ? 11 : 6);
       e.yawGoal = Math.atan2(dx, dz);
-    } else if (e.walking) { e.walking = 0; e.yawGoal = baseYaw(e.side, e.tag.face); }
+    } else if (d <= 0.01 && e.walking && !e.path) { e.walking = 0; e.speed = 0; e.pathFx = null; e.yawGoal = baseYaw(e.side, e.tag.face); }
     if (e.lunge > 0) { e.lunge = Math.max(0, e.lunge - dt * 2.4); if (e.lunge === 0) e.yawGoal = baseYaw(e.side, e.tag.face); }
     if (e.hop > 0) e.hop = Math.max(0, e.hop - dt * 3);
     e.yaw = angApproach(e.yaw, e.yawGoal, 7, dt);
@@ -778,9 +844,9 @@ function update(dt) {
   for (let i = flashes.length - 1; i >= 0; i--) { flashes[i].t += dt; if (flashes[i].t >= flashes[i].life) flashes.splice(i, 1); }
   for (let i = bigs.length - 1; i >= 0; i--) {
     const b = bigs[i]; b.t += dt;
-    if (b.id === 'volcano' && b.t > 0.9 && b.t < 2.2 && Math.random() < 0.9) for (let k = 0; k < 4; k++) addP(b.p[0], b.p[1] + 1.6 * b.s * 0.7, b.p[2], (Math.random() - 0.5) * 9, 4 + Math.random() * 5, (Math.random() - 0.5) * 9, [1, 0.3 + Math.random() * 0.4, 0.05], 10 + Math.random() * 8, 1.4, 1);
-    if (b.id === 'bloodstorm' && b.t > 0.3) for (let k = 0; k < 3; k++) addP((Math.random() - 0.5) * 7, b.p[1], (Math.random() - 0.5) * 4, 0, -6, 0, [0.9, 0.08, 0.2], 5, 0.6, 0.3);
-    if (b.id === 'freeze' || b.id === 'nightmares') for (let k = 0; k < 2; k++) addP((Math.random() - 0.5) * 9, b.p[1] + Math.random(), (Math.random() - 0.5) * 5, 0, b.id === 'freeze' ? -1.5 : 0.4, 0, b.col, 6, 1.2, 0.1);
+    if (b.id === 'volcano' && b.t > 0.9 && b.t < 2.2 && Math.random() < 0.9) for (let k = 0; k < 8; k++) addP(b.p[0], b.p[1] + 1.6 * b.s * 0.7, b.p[2], (Math.random() - 0.5) * 20, 6 + Math.random() * 9, (Math.random() - 0.5) * 9, [1, 0.3 + Math.random() * 0.4, 0.05], 10 + Math.random() * 8, 1.4, 1);
+    if (b.id === 'bloodstorm' && b.t > 0.3) for (let k = 0; k < 14; k++) addP((Math.random() - 0.5) * BW * 1.6, b.p[1], (Math.random() - 0.5) * BD * 1.6, 0, -9, 0, [0.9, 0.08, 0.2], 6, 0.75, 0.3);
+    if (b.id === 'freeze' || b.id === 'nightmares') for (let k = 0; k < 9; k++) addP((Math.random() - 0.5) * BW * 1.7, b.p[1] + Math.random() * 3, (Math.random() - 0.5) * BD * 1.7, 0, b.id === 'freeze' ? -1.5 : 0.4, 0, b.col, 6, 1.2, 0.1);
     if (b.t >= b.life) { if (b.buf) GL3.freeBuffer(ctx, b.buf); bigs.splice(i, 1); }
   }
   if (shakeT > 0) shakeT -= dt;
@@ -794,6 +860,7 @@ function render() {
   const c = { yaw: cam.yaw, pitch: cam.pitch, dist: cam.dist, tx: cam.tx, ty: cam.ty, tz: cam.tz, fov: cam.fov };
   if (shakeT > 0) { const k = shakeA * (shakeT / 0.4); c.tx += (Math.random() - 0.5) * k; c.tz += (Math.random() - 0.5) * k; c.ty += (Math.random() - 0.5) * k; }
   cam.eye = camMatrices(c, aspect, VP);
+  WPP = 2 * c.dist * Math.tan(c.fov / 2) / Math.max(1, H);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, canvas.width, canvas.height);
   gl.clearColor(0.78, 0.76, 0.55, 1);
@@ -921,7 +988,7 @@ function drawEnt(e) {
   if (e.kind === 'c') {
     if (e.tag.float) y += 0.12 + Math.sin(time * 2.2 + e.bob) * 0.05;
     else if (!e.walking && !e.lunge) y += Math.max(0, Math.sin(time * 2.4 + e.bob)) * 0.015;
-    if (e.act && !e.lunge && !e.walking) { const f = sideZ(e.side) * -0.32; z += f; }
+    if (e.act && !e.lunge && !e.walking) { const f = sideZ(e.side) * -0.6; z += f; }
     if (e.inside > 0.01) { const bp = spotPos(e.side, e.lane, 'b'); x += (bp[0] - x) * e.inside; z += (bp[2] - z) * e.inside; s *= 1 - e.inside * 0.75; }
   }
   if (e.shakeT > 0) { x += Math.sin(time * 70) * 0.04 * e.shakeT; }
@@ -940,7 +1007,7 @@ function drawEnt(e) {
   const rev = e.rev < 1 ? [e.rev * h * 1.12 - 0.02, 0.18 * h, 1] : [0, 0, 0];
   const glow = e.glow > 0 ? e.glow : 0;
   if (alpha < 0.99) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); }
-  drawMesh(e.buf, e.count, MOD, { holo: true, outline: (isB ? 0.028 : 0.022) / s, outCol, glowCol: mix(outCol, [1, 1, 1], 0.3), tint, alpha, flash: Math.max(e.flash * 0.75, glow * 0.25), rev, bones: boneAngles(e) });
+  drawMesh(e.buf, e.count, MOD, { holo: true, outline: Math.max(isB ? 0.03 : 0.022, WPP * (isB ? 1.5 : 1.2)) / s, outCol, glowCol: mix(outCol, [1, 1, 1], 0.3), tint, alpha, flash: Math.max(e.flash * 0.75, glow * 0.25), rev, bones: boneAngles(e) });
   if (alpha < 0.99) gl.disable(gl.BLEND);
 }
 function entAlpha(e) { return setupMode ? 0.5 : e.dying ? Math.max(0, 1 - e.dying) : e.nap ? 0.72 : 1; }
@@ -958,7 +1025,7 @@ function drawBig(b) {
   if (!b.buf) b.buf = GL3.buffer(ctx, b.model.data);
   let y = b.p[1], s = b.s / Math.max(0.3, b.model.h) * 1.4;
   let k = Math.min(1, b.t / 0.6), out = Math.max(0, (b.t - (b.life - 0.6)) / 0.6);
-  if (b.rise) y += (k - 1) * 1.6 - out * 1.8;
+  if (b.rise) y += ((k - 1) * 1.6 - out * 1.8) * b.s / 2.6;
   const sc = s * (b.rise ? 1 : (0.6 + 0.4 * k) * (1 - out * 0.6));
   M4.trs(MOD, b.p[0], y, b.p[2], time * (b.rise ? 0 : 0.4), 0, 0, sc, sc, sc);
   drawMesh(b.buf, b.model.count, MOD, { holo: true, outline: 0.03 / sc, outCol: mix(b.col, [1, 1, 1], 0.4), glowCol: b.col, tint: [b.col[0], b.col[1], b.col[2], 0.25], alpha: 1, rev: b.rise ? [0, 0, 0] : [0, 0, 0] });
@@ -966,14 +1033,14 @@ function drawBig(b) {
 // Glowing spot marks on the board: valid targets, selection, hover, attack declarations.
 function drawSpotMarks() {
   const rings = [];
-  for (const h of hl) rings.push({ p: spotPos(h.side, h.lane, h.slot || 'c'), r: h.slot === 'b' ? 0.95 : 0.68, col: h.kind === 'bad' ? [1, 0.3, 0.3] : h.kind === 'tgt' ? [1, 0.45, 0.35] : h.kind === 'atk' ? [1, 0.85, 0.3] : [0.45, 1, 0.55], pulse: 1 });
-  if (sel) rings.push({ p: spotPos(sel.side, sel.lane, sel.slot || 'c'), r: sel.slot === 'b' ? 1.0 : 0.76, col: [1, 0.95, 0.4], pulse: 2 });
-  if (hoverPt) rings.push({ p: spotPos(hoverPt.side, hoverPt.lane, hoverPt.slot || 'c'), r: hoverPt.slot === 'b' ? 0.97 : 0.72, col: [1, 1, 1], pulse: 0 });
+  for (const h of hl) rings.push({ p: spotPos(h.side, h.lane, h.slot || 'c'), r: h.slot === 'b' ? 2.0 : 1.05, col: h.kind === 'bad' ? [1, 0.3, 0.3] : h.kind === 'tgt' ? [1, 0.45, 0.35] : h.kind === 'atk' ? [1, 0.85, 0.3] : [0.45, 1, 0.55], pulse: 1 });
+  if (sel) rings.push({ p: spotPos(sel.side, sel.lane, sel.slot || 'c'), r: sel.slot === 'b' ? 2.15 : 1.15, col: [1, 0.95, 0.4], pulse: 2 });
+  if (hoverPt) rings.push({ p: spotPos(hoverPt.side, hoverPt.lane, hoverPt.slot || 'c'), r: hoverPt.slot === 'b' ? 2.08 : 1.1, col: [1, 1, 1], pulse: 0 });
   if (!rings.length) return;
   const verts = [];
   for (const r of rings) {
     const a = 0.55 + 0.35 * (r.pulse ? Math.sin(time * 5 * r.pulse) * 0.5 + 0.5 : 1);
-    const n = 28, w = 0.07;
+    const n = 32, w = Math.max(0.09, WPP * 3);
     for (let i = 0; i < n; i++) {
       const a0 = i / n * 6.2832, a1 = (i + 1) / n * 6.2832;
       const p = (aa, rr) => [r.p[0] + Math.cos(aa) * rr, TOP + 0.03, r.p[2] + Math.sin(aa) * rr];
@@ -1011,34 +1078,38 @@ function drawRibbons() {
   for (const r of ribbons) {
     const k = r.t / r.life, al = 1 - k;
     if (r.kind === 'ring') {
-      const rr = r.r * (0.3 + k * 1.2), n = 24;
-      for (let i = 0; i < n; i++) { const a0 = i / n * 6.283, a1 = (i + 1) / n * 6.283; quadTo([r.a[0] + Math.cos(a0) * rr, r.a[1], r.a[2] + Math.sin(a0) * rr], [r.a[0] + Math.cos(a1) * rr, r.a[1], r.a[2] + Math.sin(a1) * rr], 0.05, r.col, al); }
+      const rr = r.r * (0.3 + k * 1.2), n = 24, rw = Math.max(0.05, WPP * 2);
+      for (let i = 0; i < n; i++) { const a0 = i / n * 6.283, a1 = (i + 1) / n * 6.283; quadTo([r.a[0] + Math.cos(a0) * rr, r.a[1], r.a[2] + Math.sin(a0) * rr], [r.a[0] + Math.cos(a1) * rr, r.a[1], r.a[2] + Math.sin(a1) * rr], rw, r.col, al); }
     } else if (r.kind === 'shot') {
-      const p = lerp3(r.a, r.b, Math.min(1, k * 1.1)); p[1] += Math.sin(Math.min(1, k * 1.1) * Math.PI) * 0.6;
-      const q = lerp3(r.a, r.b, Math.max(0, k * 1.1 - 0.12)); q[1] += Math.sin(Math.max(0, k * 1.1 - 0.12) * Math.PI) * 0.6;
-      vquad(q, p, 0.06, r.col, 1); quadTo(q, p, 0.06, r.col, 1);
+      const arc = r.arc || 0.6, sw = Math.max(0.06, WPP * 2.5);
+      const p = lerp3(r.a, r.b, Math.min(1, k * 1.1)); p[1] += Math.sin(Math.min(1, k * 1.1) * Math.PI) * arc;
+      const q = lerp3(r.a, r.b, Math.max(0, k * 1.1 - 0.12)); q[1] += Math.sin(Math.max(0, k * 1.1 - 0.12) * Math.PI) * arc;
+      vquad(q, p, sw, r.col, 1); quadTo(q, p, sw, r.col, 1);
     } else if (r.kind === 'bolt' || r.kind === 'beam' || r.kind === 'laser') {
       const segs = 8; let prev = r.a;
       for (let i = 1; i <= segs; i++) {
         const p = lerp3(r.a, r.b, i / segs);
         if (r.kind === 'bolt' && i < segs) { p[0] += (Math.random() - 0.5) * 0.3; p[1] += (Math.random() - 0.5) * 0.3; p[2] += (Math.random() - 0.5) * 0.3; }
-        vquad(prev, p, r.kind === 'laser' ? 0.08 : 0.05, r.col, al); quadTo(prev, p, r.kind === 'laser' ? 0.08 : 0.05, r.col, al);
+        const bw = Math.max(r.kind === 'laser' ? 0.08 : 0.05, WPP * (r.kind === 'laser' ? 3 : 2));
+        vquad(prev, p, bw, r.col, al); quadTo(prev, p, bw, r.col, al);
         prev = p;
       }
     } else if (r.kind === 'souls') {
-      for (let i = 0; i < 3; i++) { const kk = Math.min(1, Math.max(0, k * 1.3 - i * 0.12)); const p = lerp3(r.a, r.b, kk); p[1] += Math.sin(kk * Math.PI) * 1.2; spark(p, r.col, 1, 0.1, 0); }
+      const arc = Math.max(1.2, Math.hypot(r.b[0] - r.a[0], r.b[2] - r.a[2]) * 0.15);
+      for (let i = 0; i < 3; i++) { const kk = Math.min(1, Math.max(0, k * 1.3 - i * 0.12)); const p = lerp3(r.a, r.b, kk); p[1] += Math.sin(kk * Math.PI) * arc; spark(p, r.col, 1, 0.1, 0); }
     }
   }
   // attack declarations: arcs from attackers to their targets
   for (const a of arrows) {
     const A = spotPos(a.side, a.lane, 'c'), B2 = spotPos(a.toSide, a.toLane, a.toSlot || 'c');
     A[1] += 0.1; B2[1] += 0.1;
-    const n = 14; let prev = A;
+    const arcH = Math.max(0.9, Math.hypot(B2[0] - A[0], B2[2] - A[2]) * 0.14), w1 = Math.max(0.035, WPP * 1.6), w2 = Math.max(0.05, WPP * 2.2);
+    const n = 20; let prev = A;
     const col = a.col || (a.side === 0 ? [0.5, 0.75, 1] : [1, 0.65, 0.3]);
     for (let i = 1; i <= n; i++) {
-      const t2 = i / n; const p = lerp3(A, B2, t2); p[1] += Math.sin(t2 * Math.PI) * 0.9;
+      const t2 = i / n; const p = lerp3(A, B2, t2); p[1] += Math.sin(t2 * Math.PI) * arcH;
       const al = 0.35 + 0.45 * (0.5 + 0.5 * Math.sin(time * 6 - t2 * 6));
-      vquad(prev, p, 0.035, col, al); quadTo(prev, p, 0.05, col, al);
+      vquad(prev, p, w1, col, al); quadTo(prev, p, w2, col, al);
       prev = p;
     }
   }
@@ -1064,7 +1135,7 @@ function drawParticles() {
 let cardMeshFront = null, cardMeshBack = null, cardEdge = null, backTex = null;
 function cardMeshes() {
   if (cardMeshFront) return;
-  const w = CARD_W / 2, h = CARD_H / 2, t = 0.008;
+  const w = CARD_W / 2, h = CARD_H / 2, t = 0.008 * WK;
   cardMeshFront = texMesh(texQuad(-w, t, h, 2 * w, 0, 0, 0, 0, -2 * h, 0, 1, 1, 0, 1));
   cardMeshBack = texMesh(texQuad(w, -0.001, h, -2 * w, 0, 0, 0, 0, -2 * h, 0, 1, 1, 0, 1));
   const e = new Models.Builder(); e.c('#f4f4ee').box(CARD_W, t, CARD_H);
@@ -1087,25 +1158,25 @@ function drawCards() {
   const list = [...cards.values()];
   meshBegin(false);
   for (const c of list) {
-    const y = c.pos[1] + c.lift * 0.25;
+    const y = c.pos[1] + c.lift * 0.25 * WK;
     const yaw = (c.side === 0 ? 0 : Math.PI) + c.rot;
     M4.trs(MOD, c.pos[0], y, c.pos[2], yaw, 0, 0, 1, 1, 1);
-    drawMesh(cardEdge.buf, cardEdge.count, MOD, { outline: 0.012, outCol: [0.15, 0.15, 0.15] });
+    drawMesh(cardEdge.buf, cardEdge.count, MOD, { outline: 0.012 * WK, outCol: [0.15, 0.15, 0.15] });
   }
   for (const side of [0, 1]) {
     if (!st) continue;
     const P = st.players[side];
     for (const which of ['deck', 'discard']) {
       const n = which === 'deck' ? P.deck.length : P.discard.length; if (!n) continue;
-      const d = deckPos(side, which), hgt = Math.min(0.35, n * 0.018);
-      M4.trs(MOD, d[0], hgt / 2, d[2], side === 0 ? 0 : Math.PI, 0, 0, 1, hgt / 0.008, 1);
-      drawMesh(cardEdge.buf, cardEdge.count, MOD, { outline: 0.012, outCol: [0.15, 0.15, 0.15] });
+      const d = deckPos(side, which), hgt = Math.min(0.35, n * 0.018) * WK;
+      M4.trs(MOD, d[0], hgt / 2, d[2], side === 0 ? 0 : Math.PI, 0, 0, 1, hgt / (0.008 * WK), 1);
+      drawMesh(cardEdge.buf, cardEdge.count, MOD, { outline: 0.012 * WK, outCol: [0.15, 0.15, 0.15] });
     }
   }
   const p = progs.tex;
   GL3.use(ctx, p); gl.uniformMatrix4fv(p.u.uVP, false, VP); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
   for (const c of list) {
-    const y = c.pos[1] + c.lift * 0.25;
+    const y = c.pos[1] + c.lift * 0.25 * WK;
     const yaw = (c.side === 0 ? 0 : Math.PI) + c.rot;
     M4.trs(MOD, c.pos[0], y + 0.001, c.pos[2], yaw, 0, 0, 1, 1, 1);
     const tex = c.faceUp ? faceTexture(c.id).tex : backTex;
@@ -1114,15 +1185,15 @@ function drawCards() {
   for (const side of [0, 1]) {
     if (!st) continue;
     const P = st.players[side];
-    if (P.deck.length) { const d = deckPos(side, 'deck'), hgt = Math.min(0.35, P.deck.length * 0.018); M4.trs(MOD, d[0], hgt + 0.002, d[2], side === 0 ? 0 : Math.PI, 0, 0, 1, 1, 1); drawTex(cardMeshFront, backTex, MOD, [1, 1, 1, 1]); }
-    if (P.discard.length) { const d = deckPos(side, 'discard'), hgt = Math.min(0.35, P.discard.length * 0.018); M4.trs(MOD, d[0], hgt + 0.002, d[2], side === 0 ? 0.08 : Math.PI + 0.08, 0, 0, 1, 1, 1); drawTex(cardMeshFront, faceTexture(P.discard[P.discard.length - 1].id).tex, MOD, [1, 1, 1, 1]); }
+    if (P.deck.length) { const d = deckPos(side, 'deck'), hgt = Math.min(0.35, P.deck.length * 0.018) * WK; M4.trs(MOD, d[0], hgt + 0.002, d[2], side === 0 ? 0 : Math.PI, 0, 0, 1, 1, 1); drawTex(cardMeshFront, backTex, MOD, [1, 1, 1, 1]); }
+    if (P.discard.length) { const d = deckPos(side, 'discard'), hgt = Math.min(0.35, P.discard.length * 0.018) * WK; M4.trs(MOD, d[0], hgt + 0.002, d[2], side === 0 ? 0.08 : Math.PI + 0.08, 0, 0, 1, 1, 1); drawTex(cardMeshFront, faceTexture(P.discard[P.discard.length - 1].id).tex, MOD, [1, 1, 1, 1]); }
   }
   // the land cards, flooped at the start ("floop your land cards")
   if (introT >= 0 || setupMode) {
     for (let side = 0; side < 2; side++) for (let l = 0; l < 4; l++) {
       const k = introT >= 0 ? Math.min(1, Math.max(0, (introT - l * 0.12 - side * 0.3) / 0.5)) : 0;
-      const x = LANE_X(l), z = sideZ(side) * (BD + 0.45);
-      M4.trs(MOD, x, 0.02 + Math.sin(k * Math.PI) * 0.4, z, (side === 0 ? 0 : Math.PI) + k * Math.PI / 2, 0, 0, 1, 1, 1);
+      const x = LANE_X(l), z = sideZ(side) * LANDCARD_Z;
+      M4.trs(MOD, x, 0.02 + Math.sin(k * Math.PI) * 0.4 * WK, z, (side === 0 ? 0 : Math.PI) + k * Math.PI / 2, 0, 0, 1, 1, 1);
       const L = st ? st.players[side].lanes[l].land : { type: 'blue' };
       drawTex(cardMeshFront, k > 0.5 ? landCardTex(L.orig || L.type) : backTex, MOD, [1, 1, 1, 1 - Math.max(0, k - 0.8) * 5]);
     }
@@ -1146,7 +1217,7 @@ function setOpponent(id) {
   const mid = Models.OPPONENT[id] || 'jake';
   const m = Models.build(mid);
   const tag = Models.tag(mid);
-  oppEnt = { model: m, buf: GL3.buffer(ctx, m.data), scale: (tag.h || 2.4) / m.h * 1.55, hold: tag.hold || [0, 0.55, 0.8], bob: 0, react: 0 };
+  oppEnt = { model: m, buf: GL3.buffer(ctx, m.data), scale: (tag.h || 2.4) / m.h * 1.55 * WK, hold: tag.hold || [0, 0.55, 0.8], bob: 0, react: 0 };
 }
 function oppReact(kind) { if (oppEnt) { oppEnt.react = 1; oppEnt.kind = kind; } }
 function drawOpponent() {
@@ -1155,10 +1226,10 @@ function drawOpponent() {
   const s = oppEnt.scale, far = viewer === 0 ? -1 : 1, z = far * OPP_Z;
   oppEnt.react = Math.max(0, oppEnt.react - 1 / 60);
   const hop = oppEnt.kind === 'win' ? Math.abs(Math.sin(time * 9)) * 0.3 * oppEnt.react : oppEnt.react * Math.sin(time * 20) * 0.05;
-  const y0 = -0.75 + Math.sin(time * 1.4) * 0.03 + hop, yaw = viewer === 0 ? 0 : Math.PI;
+  const y0 = (-0.75 + Math.sin(time * 1.4) * 0.03 + hop) * WK, yaw = viewer === 0 ? 0 : Math.PI;
   M4.trs(MOD, 0, y0, z, yaw, 0, 0, s, s, s);
   const b = boneAngles({ model: oppEnt.model, walking: 0, lunge: 0, walk: 0, bob: 0 });
-  drawMesh(oppEnt.buf, oppEnt.model.count, MOD, { outline: 0.028 / s, outCol: [0.12, 0.08, 0.03], bones: b });
+  drawMesh(oppEnt.buf, oppEnt.model.count, MOD, { outline: 0.028 * WK / s, outCol: [0.12, 0.08, 0.03], bones: b });
   // the fan of cards they hold up in front of their face (red backs toward us)
   if (st) {
     const n = Math.min(8, st.players[1 - viewer].hand.length);
@@ -1168,7 +1239,7 @@ function drawOpponent() {
     const hx = oppEnt.hold[0] * s, hy = y0 + oppEnt.hold[1] * s, hz = z - far * oppEnt.hold[2] * s;
     for (let i = 0; i < n; i++) {
       const a = (i - (n - 1) / 2) * 0.17;
-      M4.trs(MOD, hx + Math.sin(a) * 0.55, hy + Math.cos(a) * 0.12 - 0.12, hz - far * (0.02 * i), yaw - a * 0.25, Math.PI / 2 - 0.25, -a, 0.95, 0.95, 0.95);
+      M4.trs(MOD, hx + Math.sin(a) * 0.55 * WK, hy + (Math.cos(a) * 0.12 - 0.12) * WK, hz - far * (0.02 * i) * WK, yaw - a * 0.25, Math.PI / 2 - 0.25, -a, 0.95, 0.95, 0.95);
       drawTex(cardMeshFront, backTex, MOD, [1, 1, 1, 1]);
     }
   }
@@ -1276,8 +1347,8 @@ function drawOverlay(dt) {
   const fs = Math.max(11, Math.min(16, W / 32));
   ents.forEach(e => {
     if (e.dying || e.rev < 0.6) return;
-    const base = project([e.pos[0], e.pos[1], e.pos[2] + sideZ(e.side) * (e.kind === 'b' ? 0.55 : 0.4)]);
-    if (base.x < -50) return;
+    const base = project([e.pos[0], e.pos[1], e.pos[2] + sideZ(e.side) * (e.kind === 'b' ? 1.5 : 0.5)]);
+    if (base.x < -60 || base.x > W + 60 || base.y < -40 || base.y > H + 40) return;
     if (e.kind === 'c' && e.stats) {
       const s = e.stats, cd = Engine.CARDS[e.id] || {};
       const txt = s.atk + '/' + Math.max(0, s.hp);
@@ -1305,7 +1376,7 @@ function drawOverlay(dt) {
   });
   // during setup: name your own (still face-down) landscapes, and mark the enemy's as unknown
   if (setupMode && st) for (const t of tiles) {
-    const p = project([LANE_X(t.lane), TOP, sideZ(t.side) * (BD - 0.32)]);
+    const p = project([LANE_X(t.lane), TOP, sideZ(t.side) * (BD - 1.0)]);
     const L = st.players[t.side].lanes[t.lane].land;
     pill(p.x, p.y, t.side === viewer ? (Engine.LANDS[L.type] || { name: L.type }).name : '?', t.side === viewer ? LANDC[L.type] || '#ffffff' : '#7a8496', '#ffffff', fs * 0.8);
   }
@@ -1355,10 +1426,10 @@ function landColor(t) { return LANDC[t] || '#ffffff'; }
 
 return {
   init, resize, setQuality, frame, setState, setViewer, setMode, setInsets, setOptions, setOpponent, oppReact, reset, clearFx, busy,
-  pick, boardPoint, screenPos, headPos, project, zoomBy, orbitBy, panBy, resetView,
+  pick, boardPoint, screenPos, headPos, project, zoomBy, orbitBy, panBy, panPixels, resetView, setView, toggleView, frameSpots, attackTime,
   setHighlights, setSelection, setArrows, setPreview, setHover, setGhost, setKingdomShown, setSetup,
   fx, cardArtURL, artCanvas, queueArt, onArt, landColor, TEAMHEX, LANDC, cardBackCanvas,
-  get ready() { return ready; }, get viewer() { return viewer; }, get artVersion() { return artVersion; }, get setupMode() { return setupMode; }, stats
+  get ready() { return ready; }, get viewer() { return viewer; }, get artVersion() { return artVersion; }, get setupMode() { return setupMode; }, get view() { return camView; }, stats
 };
 })();
 /* END SCENE */
