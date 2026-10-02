@@ -9,14 +9,9 @@ const fs = require('fs');
 function arg(name, def) { const i = process.argv.indexOf('--' + name); return i >= 0 ? process.argv[i + 1] : def; }
 
 function playGame(E, AI, d0, d1, seed, first, opts) {
-  let st = E.newGame({ seed, first, players: [{ deck: d0 }, { deck: d1 }] }).state;
-  for (const p of [0, 1]) st = E.apply(st, AI.decide(st, p, opts)).state;
-  let guard = 0;
-  while (st.winner == null && guard++ < 200) {
-    const me = st.active;
-    st = AI.playTurn(st, me, Object.assign({}, opts, { seed: (E.hashSeed(seed) + st.turn * 7919) >>> 0 })).state;
-  }
-  return { winner: st.winner, rounds: st.round, first: st.first, hp: [st.players[0].hp, st.players[1].hp], reason: st.reason };
+  const st0 = E.newGame({ seed, first, players: [{ deck: d0 }, { deck: d1 }] }).state;
+  const st = AI.playGame(st0, Object.assign({ seed: E.hashSeed(seed) }, opts), null, 4000);
+  return { winner: st.winner, rounds: st.round, first: st.first, reason: st.reason, k: [E.kingdomSize(st, 0), E.kingdomSize(st, 1)] };
 }
 
 if (!isMainThread) {
@@ -31,7 +26,7 @@ if (!isMainThread) {
   }
   parentPort.postMessage({ done: res });
 } else {
-  const games = +arg('games', 200), mirror = +arg('mirror', 100), nodes = +arg('nodes', 160);
+  const games = +arg('games', 200), mirror = +arg('mirror', 100), nodes = +arg('nodes', 140);
   const from = arg('from', undefined), diff = arg('diff', 'normal');
   const only = arg('only', null);
   const { Engine: E } = require('./load')({ from });
@@ -59,10 +54,11 @@ if (!isMainThread) {
   function report(R) {
     const fac = {}; F.forEach(f => (fac[f] = { w: 0, g: 0 }));
     const pair = {};
-    let firstWins = 0, decided = 0, rounds = 0, stale = 0, ot = 0;
+    let firstWins = 0, decided = 0, rounds = 0, stale = 0, ot = 0; const reasons = {};
     for (const r of R) {
       rounds += r.rounds;
-      if (r.winner === -1 || r.reason === 'rounds') stale++;
+      reasons[r.reason] = (reasons[r.reason] || 0) + 1;
+      if (r.winner === -1 || r.reason === 'points' || r.reason === 'cats') stale++;
       if (r.rounds >= E.OVERTIME) ot++;
       if (r.winner === 0 || r.winner === 1) { decided++; if (r.winner === r.first) firstWins++; }
       if (r.a === r.b) continue;
@@ -76,6 +72,7 @@ if (!isMainThread) {
     console.log('\nPairings (row faction win %):');
     for (const k in pair) { out.pairs[k] = pair[k].w / pair[k].g; console.log('  ' + k.padEnd(16) + (100 * out.pairs[k]).toFixed(1).padStart(6) + '%'); }
     console.log('\nFirst player wins: ' + (100 * out.firstPlayer).toFixed(1) + '%   Avg rounds: ' + out.avgRounds.toFixed(2) + '   Stalemates: ' + (100 * out.stalemates).toFixed(2) + '%   Reached overtime: ' + (100 * out.overtime).toFixed(1) + '%');
+    console.log('Endings: ' + JSON.stringify(reasons));
     console.log('Games: ' + R.length + ' in ' + out.secs.toFixed(0) + 's');
     const j = arg('json', null); if (j) fs.writeFileSync(j, JSON.stringify(out, null, 2));
   }

@@ -1,0 +1,29 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#222}#gl,#ov{position:absolute;left:0;top:0}#ov{pointer-events:none}</style></head>
+<body><canvas id="gl"></canvas><canvas id="ov"></canvas>
+<script src="../src/engine.js"></script><script src="../src/gl.js"></script><script src="../src/models.js"></script><script src="../src/scene.js"></script>
+<script>
+const E = Engine;
+const q = new URLSearchParams(location.hash.slice(1));
+const ok = Scene.init(document.getElementById('gl'), document.getElementById('ov'));
+window.SCENE_OK = ok;
+const g = E.newGame({ seed: 'v', first: 0, noMulligan: true, noSetup: true, noDiscard: true, players: [{ deck: E.STARTERS.blue }, { deck: E.STARTERS.corn }] });
+const st = g.state;
+const K = E.kit;
+K.put(st, 0, 0, 'b_cooldog'); K.put(st, 0, 1, 'r_pig'); K.put(st, 0, 2, 'b_scholar'); K.put(st, 0, 3, 'c_maize');
+K.put(st, 1, 0, 'c_husker'); K.put(st, 1, 1, 'c_earlings'); K.put(st, 1, 2, 'r_baldman'); K.put(st, 1, 3, 'c_reaper');
+K.build(st, 0, 1, 'b_spirit'); K.build(st, 0, 3, 'b_cave');
+K.build(st, 1, 1, 'c_silo'); K.build(st, 1, 3, 'c_henge');
+st.players[1].lanes[3].land = { type: 'swamp', orig: 'swamp', down: false, by: null };
+st.players[0].lanes[3].creature.act = true; st.players[0].lanes[1].creature.fl = true;
+Scene.setOpponent(q.get('opp') || 'jake');
+function size() { Scene.resize(innerWidth, innerHeight, devicePixelRatio || 1); }
+size(); addEventListener('resize', size);
+Scene.setInsets({ top: +(q.get('top') || 60), bottom: +(q.get('bottom') || 150) });
+Scene.setState(st, { instant: true });
+if (q.get('arrows')) Scene.setArrows([{ side: 0, lane: 3, toSide: 1, toLane: 3 }]);
+let last = performance.now();
+function loop(t) { const dt = Math.min(0.05, (t - last) / 1000); last = t; Scene.frame(t, dt); requestAnimationFrame(loop); }
+requestAnimationFrame(loop);
+window.ZOOM = (z, yaw, pitch) => { Scene.zoomBy(z); Scene.orbitBy(yaw || 0, pitch || 0); };
+</script></body></html>

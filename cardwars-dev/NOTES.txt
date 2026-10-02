@@ -1,0 +1,41 @@
+CARD WARS  (cardwars.html)
+A fan-made, offline, single-file tribute to the Adventure Time episode "Card Wars" (S4E14). Not affiliated
+with Cartoon Network. Vanilla JS + WebGL (3D table) + Canvas 2D (labels, art) + DOM/CSS (UI). No libraries,
+fonts, images, audio files or network requests: every model, texture and sound is generated in code.
+
+ASSUMPTIONS / DECISIONS
+- The director's note wins: the game plays like Card Wars as seen in the show. Where the episode is silent,
+  gaps are filled from the official Card Wars rules (2014). The earlier "Glowboard" theme was dropped.
+- The look: Finn and Jake's table in the Tree Fort with the props from the episode (Total Soda bottle,
+  COOL GUY and DWEEB cups, Crunch chips, card box). Physical cards lie on the table edge; small hologram
+  troops stand on big landscape tiles in front of big building holograms. Finn's side glows blue, the
+  opponent's orange; a stolen creature takes its new owner's colour. Models are simple low-poly cel-shaded
+  shapes modelled on the episode's holograms.
+- Episode rules used as written: "floop your land cards" makes your land and buildings appear; "keep those
+  honeys hidden"; the first player starts; "discard a card and pick up a new one" at the start of a turn;
+  you FLOOP a card (turn it left) to use its ability and ACTIVATE a creature (turn it right) to attack;
+  "what'll you use to defend?" after the attacker calls battle; the loser is the Dweeb, the winner the
+  Cool Guy. Show cards behave as in the episode (Silo of Truth, the Pig eating Cornfields, Husker Knights
+  drawing energy from corn, Ancient Scholar studying Raise the Dead in the Schoolhouse, Cave of Solitude,
+  Spirit Tower, Cerebral Bloodstorm, Field of Nightmares + Legion of Earlings, Volcano, Reclaim Landscape,
+  Immortal Maize Walker, Summon Archer Dan, the Pig stuck in the mud, Field Reaper).
+- Win condition: wipe out the other kingdom (every creature and building). A player whose side is empty at
+  the end of any turn loses (both empty = draw). Kingdom landmarks start on the board. From round 13 the
+  kingdoms crumble (overtime damage); at round 24 the judges compare kingdoms, so games always end.
+- Assumed numbers (not stated in the show): 4 lanes; 2 Actions per turn; a card's cost is both its Actions
+  and how many face-up landscapes of its type you need (official rule); hand refills to 5 after the discard;
+  secret setup budget of 2 Actions (the second player gets 3 and one extra card, which keeps first-player
+  wins under 54%); 20-card decks, max 2 copies (brief).
+- Four extra landscapes (Useless Swamp, IcyLands, NiceLands, LavaFlats) and their characters fill out a
+  six-faction game; their cards are inventions in the show's spirit. Card levels: L2 +1 DEF, L3 +1 ATK,
+  L4 +1 DEF. Balance sims use level 1.
+- The AI plans on Engine.redact(state): it never sees hidden hands, deck order or face-down buildings.
+- If WebGL is unavailable the game shows a message instead of the board.
+
+STRUCTURE (one <script>)
+  /* ENGINE */ ... /* END ENGINE */  pure deterministic rules + card data (no DOM)   <- extract for tests
+  /* AI */     ... /* END AI */      beam-search opponent using only redacted states
+  /* GL */ /* MODELS */ /* SCENE */  WebGL helpers, procedural 3D models, the 3D table and effects
+  /* ART */ /* AUDIO */ /* UI */ /* META */ /* TUTORIAL */ /* MAIN */
+Dev sources, rule tests (node test/engine.test.js) and the balance harness (node test/balance.js) live in
+cardwars-dev/ next to this file; build with: node cardwars-dev/build.js

@@ -1,13 +1,13 @@
 /* META */
 // Progression and screens: save/load, starter pick, home, Table Tour ladder, quick match, daily challenge,
-// pass-and-play, deck builder, collection with levels, card packs, settings, results.
+// pass-and-play, deck builder, collection with levels, card packs, settings, results (the DWEEB / COOL GUY cups).
 var Meta = (function () {
 'use strict';
-const E = Engine, R = Render;
+const E = Engine, S3 = Scene;
 const $ = s => document.querySelector(s);
 const esc = s => UI.esc(s);
-const KEY = 'cardwars.glowboard.save.v1';
-const LANDC = R.LANDC;
+const KEY = 'cardwars.save.v2', OLD_KEY = 'cardwars.glowboard.save.v1';
+const LANDC = S3.LANDC;
 let memStore = null;
 
 // ------------------------------------------------------------------ persistence
@@ -21,11 +21,25 @@ function defaults() {
 }
 let S = defaults();
 function load() {
-  let raw = null;
-  try { raw = window.localStorage.getItem(KEY); } catch (e) { raw = memStore; }
+  let raw = null, old = null;
+  try { raw = window.localStorage.getItem(KEY); if (raw == null) old = window.localStorage.getItem(OLD_KEY); } catch (e) { raw = memStore; }
   if (raw == null) raw = memStore;
   if (raw) { try { const d = JSON.parse(raw); S = Object.assign(defaults(), d); S.settings = Object.assign(defaults().settings, d.settings || {}); S.stats = Object.assign(defaults().stats, d.stats || {}); } catch (e) { S = defaults(); } }
+  else if (old) {
+    // a save from the earlier prototype: the cards changed completely, so keep only settings, name and record
+    try { const d = JSON.parse(old); S = defaults(); S.settings = Object.assign(S.settings, d.settings || {}); S.stats = Object.assign(S.stats, d.stats || {}); if (d.name) S.name = d.name; } catch (e) { S = defaults(); }
+  }
+  sanitize();
   return S;
+}
+// Drop anything that no longer exists (renamed cards, broken decks) so old saves can't crash the game.
+function sanitize() {
+  for (const id in S.cards) if (!E.CARDS[id] || !E.COLLECTIBLE.includes(id)) delete S.cards[id];
+  S.decks = (S.decks || []).filter(d => d && Array.isArray(d.lands) && d.lands.length === 4 && d.lands.every(t => E.LAND_TYPES.includes(t)) && Array.isArray(d.cards));
+  S.decks.forEach(d => { d.cards = d.cards.filter(id => E.CARDS[id] && E.COLLECTIBLE.includes(id)); });
+  if (S.started && !S.decks.length) { S.started = false; S.unlocked = {}; }
+  if (S.active >= S.decks.length) S.active = 0;
+  S.tour.beaten = (S.tour.beaten || []).filter(id => TOUR.some(o => o.id === id));
 }
 function save() {
   const raw = JSON.stringify(S);
@@ -35,7 +49,7 @@ function save() {
 
 // ------------------------------------------------------------------ data: opponents
 const ex = E.expand;
-const LSP_DECK = { lands: ['swamp', 'swamp', 'blue', 'blue'], cards: ex([['s_wisp', 2], ['s_slinger', 2], ['s_digger', 1], ['s_witch', 1], ['s_breath', 2], ['s_reaper', 1], ['b_hotdog', 2], ['b_cooldog', 2], ['b_skypup', 2], ['b_math', 1], ['b_ride', 1], ['r_pancakes', 1], ['r_teleport', 1], ['r_booby', 1]]) };
+const LSP_DECK = { lands: ['swamp', 'swamp', 'blue', 'blue'], cards: ex([['s_wisp', 2], ['s_slinger', 2], ['s_digger', 1], ['s_witch', 1], ['s_breath', 2], ['s_gobbler', 1], ['r_hotdog', 2], ['b_cooldog', 2], ['b_skypup', 2], ['b_math', 1], ['b_ride', 1], ['r_pancakes', 1], ['r_teleport', 1], ['r_booby', 1]]) };
 const TREE_DECK = { lands: ['nice', 'nice', 'nice', 'nice'], cards: ex([['n_banana', 2], ['n_butler', 2], ['n_tart', 2], ['n_guardian', 2], ['n_cupcake', 1], ['n_pb', 1], ['n_tower', 2], ['n_wall', 2], ['n_bubble', 1], ['n_science', 1], ['r_treefort', 2], ['r_pancakes', 2]]) };
 const BUN_DECK = { lands: ['lava', 'lava', 'lava', 'lava'], cards: ex([['l_pup', 2], ['l_bun', 2], ['l_flambo', 1], ['l_elemental', 2], ['l_golem', 2], ['l_fp', 1], ['l_forge', 1], ['l_pit', 2], ['l_fireball', 2], ['l_heatwave', 2], ['r_glory', 1], ['r_baldman', 2]]) };
 const TOUR = [
@@ -49,16 +63,16 @@ const TOUR = [
   { id: 'fp', name: 'Flame Princess', hero: 'fp', land: 'lava', diff: 'hard', pers: 'aggro', lvl: 2, deck: E.STARTERS.lava, quote: 'I’m not evil. I’m just FIRE.', lines: ['Burn!', 'You can’t handle the heat.', 'I’m just fire!', 'Flambo, light ’em up.'] },
   { id: 'iceking', name: 'Ice King', hero: 'iceking', land: 'ice', diff: 'hard', pers: 'control', lvl: 2, deck: E.STARTERS.ice, quote: 'Finally someone who’ll play with me! Gunter, fetch my crown!', lines: ['Ice ice, baby!', 'Gunter, look! I’m winning!', 'Why won’t anyone play with me?', 'Freeze, you!'] },
   { id: 'marceline', name: 'Marceline', hero: 'marceline', land: 'swamp', diff: 'hard', pers: 'turtle', lvl: 2, deck: E.STARTERS.swamp, quote: 'I’m the Vampire Queen of this table. Deal me in.', lines: ['Boo!', 'Let’s make it spooky.', 'I’ve had a thousand years to practice.', 'Heh. Nice try.'] },
-  { id: 'jake', name: 'Jake', hero: 'jake', land: 'corn', diff: 'hard', pers: 'aggro', lvl: 3, boss: true, deck: E.STARTERS.corn, quote: 'Card Wars is the greatest game ever! FOR THE GLORY OF JAKORIA!', lines: ['FOR THE GLORY OF JAKORIA!', 'Cornfields are AWESOME!', 'I floop the... uh... everything!', 'Babe in the woods, man.', 'Your beginner’s luck ends this round!'] }
+  { id: 'jake', name: 'Jake', hero: 'jake', land: 'corn', diff: 'hard', pers: 'aggro', lvl: 3, boss: true, deck: E.STARTERS.corn, quote: 'Keep those honeys hidden, or I’ll get a strategic advantage!', lines: ['For the glory of Jakoria!', 'Cornfields are AWESOME!', 'Look at you. You’re a babe in the woods.', 'Your beginner’s luck ends this round!', 'Heh heh heh heh…', 'In yo’ face!'] }
 ];
 const HEROES = { blue: 'finn', corn: 'jake', swamp: 'marceline', ice: 'iceking', nice: 'pb', lava: 'fp' };
 const DESC = {
-  blue: 'Finn’s deck. Free moves on Blue Plains, the landscape-eating Pig, Spirit Tower mind control.',
-  corn: 'Jake’s deck. Swarms of Earlings, Husker Knights that Ripen, the Immortal Maize Walker.',
-  swamp: 'Rot, Zombies that keep coming back, and The Reaper stealing souls.',
-  ice: 'Chill and Freeze enemies, push them around, then smash with the Abominable Snowman.',
-  nice: 'Shields, healing, Guards and buildings; Princess Bubblegum zaps with SCIENCE!',
-  lava: 'Burn everything. Siege golems, the Lava Cannon and Flame Princess herself.'
+  blue: 'Finn’s deck. Cool Dog, the Ancient Scholar and his Schoolhouse, the Spirit Tower and the corn-eating Pig.',
+  corn: 'Jake’s deck. Husker Knights powered by Cornfields, Earlings, the Field Reaper, the Silo of Truth and Archer Dan.',
+  swamp: 'Marceline’s deck. Rot, Zombies that keep coming back, the Lich and Soul Harvest.',
+  ice: 'Ice King’s deck. Chill and Freeze, Gunter, the Abominable Snowman and the Ice King himself.',
+  nice: 'Bubblegum’s deck. Shields, healing, Guards and Candy Walls; Princess Bubblegum zaps with SCIENCE!',
+  lava: 'Flame Princess’s deck. Burn everything: Flambo, the Lava Cannon, golems and Flame Princess herself.'
 };
 
 // ------------------------------------------------------------------ collection helpers
@@ -101,13 +115,25 @@ function landChip(t) { const c = document.createElement('canvas'); c.width = 40;
 function portraitImg(id, size) { return '<img src="' + Art.portraitURL(id, 96) + '" style="width:' + size + ';height:' + size + ';border-radius:50%;background:#2a2140">'; }
 
 // ------------------------------------------------------------------ home
+// The table behind the menus: the board from the episode, Finn's side against Jake's.
+function homeBoard() {
+  try {
+    const g = E.newGame({ seed: 'home', first: 1, noMulligan: true, noSetup: true, players: [{ name: 'Finn', hero: 'finn', deck: E.STARTERS.blue }, { name: 'Jake', hero: 'jake', deck: E.STARTERS.corn }] });
+    const st = g.state, K = E.kit;
+    K.put(st, 0, 0, 'b_scholar'); K.put(st, 0, 1, 'b_cooldog'); K.put(st, 0, 3, 'r_pig');
+    K.put(st, 1, 0, 'c_husker'); K.put(st, 1, 2, 'c_maize'); K.put(st, 1, 3, 'c_earlings');
+    K.build(st, 1, 1, 'c_barn'); K.build(st, 1, 3, 'c_silo');
+    S3.reset(); S3.setViewer(0); S3.setOpponent('jake'); S3.setState(st, { instant: true });
+  } catch (e) { console.error(e); }
+}
+let homeShown = false;
 function home() {
-  R.mode = 'home';
+  if (!homeShown || UI.M.on || UI.screen === 'match' || UI.screen === 'result') { homeBoard(); homeShown = true; }
   if (!S.started) { starterPick(); return; }
   const st = S.stats;
   const next = TOUR.find(o => !S.tour.beaten.includes(o.id));
   const el = screen('home', '<div style="position:absolute;right:.8rem;top:calc(env(safe-area-inset-top) + .7rem);z-index:2">' + sparksHTML() + '</div><div class="homewrap"><div>' +
-    '<div class="logo"><div class="cw">CARD<br>WARS</div><div class="sub">GLOWBOARD</div><div class="fan">a fan-made tribute to the Adventure Time episode</div></div></div>' +
+    '<div class="logo"><div class="cw">CARD<br>WARS</div><div class="fan">a fan-made tribute to the Adventure Time episode “Card Wars”</div></div></div>' +
     '<div><div class="menu">' +
     '<button class="btn" data-go="tour">Table Tour' + (next ? '<br><small style="font-size:.6rem;opacity:.8">next: ' + esc(next.name) + '</small>' : '<br><small style="font-size:.6rem">champion!</small>') + '</button>' +
     '<div class="two"><button class="btn blue" data-go="quick">Quick Match</button><button class="btn blue" data-go="daily">Daily Challenge' + (S.daily.date === today() && S.daily.done ? ' ✓' : '') + '</button></div>' +
@@ -123,7 +149,7 @@ function home() {
   });
 }
 function starterPick() {
-  const el = screen('starter', '<div class="logo"><div class="cw">CARD<br>WARS</div><div class="sub">GLOWBOARD</div></div>' +
+  const el = screen('starter', '<div class="logo"><div class="cw">CARD<br>WARS</div></div>' +
     '<div class="center" style="margin:.6rem 0 1rem;display:flex;gap:.6rem;align-items:center;justify-content:center">' + portraitImg('bmo', '3rem') + '<div style="text-align:left;max-width:20rem;font-size:.85rem;line-height:1.35"><b>BMO:</b> Who wants to play Card Wars? Pick your first deck! You can unlock the others by beating their players on the Table Tour.</div></div>' +
     '<div class="starter" id="picks"></div>');
   const box = el.querySelector('#picks');
@@ -145,7 +171,7 @@ function starterPick() {
   }
 }
 function offerTutorial() {
-  UI.modal('<h2>New to Card Wars?</h2><p class="center">' + portraitImg('bmo', '3rem') + '</p><p class="center">BMO can teach you in a quick practice game: play a card, floop, fight, move and use a building.</p><div class="row"><button class="btn" data-tut>Teach me, BMO!</button><button class="btn ghost" data-skip>I know the rules</button></div>', { noClose: true });
+  UI.modal('<h2>New to Card Wars?</h2><p class="center">' + portraitImg('bmo', '3rem') + '</p><p class="center">Jake can explain the rules in a practice game, just like he did for Finn: floop your land cards, play creatures, floop, activate, BATTLE and defend.</p><div class="row"><button class="btn" data-tut>Explain the rules!</button><button class="btn ghost" data-skip>Let’s just play</button></div>', { noClose: true });
   $('#modal [data-tut]').onclick = () => { UI.closeModal(); Tutorial.start(); };
   $('#modal [data-skip]').onclick = () => { UI.closeModal(); S.tutorialDone = true; save(); home(); };
 }
@@ -203,10 +229,9 @@ function quick() {
 }
 function today() { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
 const HANDICAPS = [
-  { name: 'Short on HP', text: 'You start with 18 HP.', apply: (me) => { me.hp = 18; } },
-  { name: 'Overtime Early', text: 'The board overheats from round 8.', overtime: 8 },
+  { name: 'Crumbling Early', text: 'Overtime starts at round 9: the kingdoms crumble sooner.', overtime: 9 },
   { name: 'Second Fiddle', text: 'You always go second.', first: 1 },
-  { name: 'Fortified Foe', text: 'Your opponent starts with two Candy Walls.', apply: (me, ai) => { ai.startBuildings = [{ id: 'n_wall', lane: 1 }, { id: 'n_wall', lane: 2 }]; } },
+  { name: 'Fortified Foe', text: 'Your opponent’s kingdom starts with an extra Candy Wall.', apply: (me, ai) => { const k = (E.kingdomOf(ai.deck) || []).slice(); const free = [1, 2, 0, 3].find(l => !k.some(x => x.lane === l)); if (free != null) k.push({ id: 'n_wall', lane: free }); ai.kingdom = k; } },
   { name: 'Head Start', text: 'Your opponent gets +1 Action on their first turn.', apply: (me, ai) => { ai.bonusActions = 1; } },
   { name: 'Pig Ate It', text: 'One of your landscapes starts eaten (face-down).', setup: st => { st.players[0].lanes[2].land.down = true; } }
 ];
@@ -257,11 +282,17 @@ function results(res, o, ctx) {
     if (unlocked) unlockLand(unlocked, true);
     save();
   }
-  const title = ctx.pvp ? (res.winner >= 0 ? esc(res.names[res.winner]) + ' is the COOL GUY!' : 'Both dweebs! (draw)') : (won ? 'YOU’RE THE COOL GUY!' : 'DWEEB!');
-  const sub = ctx.pvp ? '' : (won ? 'You win! Drink from the Cool Guy cup.' : 'You lose… drink the Dweeb cup (coffee grounds, kimchi, ham chunk juice).');
-  const el = screen('result', '<div class="result"><div class="big" style="--rc:' + (won === false ? '#ff6a6a' : '#ffcf3a') + '">' + title + '</div><p>' + esc(sub) + '</p>' +
-    '<div class="cups"><div class="cup ' + (won === false ? 'lose' : 'win') + '" style="--liq:' + (won === false ? '#6a7b2a' : '#5b2d0e') + '">' + (won === false ? 'DWEEB' : 'COOL GUY') + '</div></div>' +
-    '<div class="rewards"><div class="rw"><span>Rounds</span><b>' + res.rounds + '</b></div><div class="rw"><span>Damage dealt</span><b>' + (res.stats ? res.stats.dealt : 0) + '</b></div><div class="rw"><span>Creatures destroyed</span><b>' + (res.stats ? res.stats.killed : 0) + '</b></div>' +
+  const draw = !(res.winner >= 0);
+  const title = ctx.pvp || draw ? (!draw ? esc(res.names[res.winner]) + ' is the COOL GUY!' : 'Both dweebs! (draw)') : (won ? 'YOU’RE THE COOL GUY!' : 'YOU’RE THE DWEEB!');
+  const sub = draw ? 'Nobody gets the Cool Guy cup.' : ctx.pvp ? esc(res.names[1 - res.winner]) + ' drinks from the Dweeb cup.' : (won ? 'Drink from the COOL GUY cup!' : 'Drink up from the DWEEB cup (coffee grounds, kimchi, ham chunk juice)… it’s actually not that bad?');
+  const opp = res.names[1 - res.viewer];
+  const why = { wipe: draw ? '' : won || ctx.pvp ? (ctx.pvp ? esc(res.names[res.winner]) + ' wiped out the other kingdom!' : 'You wiped out ' + esc(opp) + '’s whole kingdom!') : esc(opp) + ' wiped out your whole kingdom!',
+    both: 'Both kingdoms fell at the same time!', points: 'Time! The judges counted kingdoms: ' + res.kingdom[res.viewer] + ' to ' + res.kingdom[1 - res.viewer] + '.',
+    cats: 'Time! Dead even kingdoms. Cat’s game.', concede: draw ? '' : won ? esc(opp) + ' gave up!' : 'You gave up.' }[res.reason] || '';
+  const myCup = draw ? '' : ctx.pvp ? 'win' : won ? 'win' : 'lose';
+  const el = screen('result', '<div class="result"><div class="big" style="--rc:' + (won === false ? '#ff6a6a' : '#ffcf3a') + '">' + title + '</div><p>' + why + '</p><p style="font-size:.85rem;color:#e8e1ff">' + sub + '</p>' +
+    '<div class="cups"><div class="cup' + (myCup === 'lose' ? ' lose mine' : '') + '" style="--liq:#6a7b2a">DWEEB</div><div class="cup' + (myCup === 'win' ? ' win mine' : '') + '" style="--liq:#5b2d0e">COOL<br>GUY</div></div>' +
+    '<div class="rewards"><div class="rw"><span>Rounds</span><b>' + res.rounds + '</b></div><div class="rw"><span>Kingdom left</span><b>' + res.kingdom[res.viewer] + '</b></div><div class="rw"><span>Creatures destroyed</span><b>' + (res.stats ? res.stats.killed : 0) + '</b></div>' +
     (sparks ? '<div class="rw"><span>Sparks</span><b id="sparkCount">0</b></div>' : '') + '</div>' +
     (first ? '<p class="center" style="color:#7dff9a;font-weight:900">First win against ' + esc(o.name) + '! +20 bonus Sparks</p>' : '') +
     (unlocked ? '<p class="center" style="color:#ffcf3a;font-weight:900">New deck unlocked: ' + esc(E.STARTERS[unlocked].name) + '!</p>' : '') +
@@ -269,18 +300,26 @@ function results(res, o, ctx) {
     (o && !ctx.daily ? '<button class="btn blue" data-again>Rematch</button>' : '') +
     (ctx.tour != null && won && ctx.tour + 1 < TOUR.length ? '<button class="btn green" data-next>Next opponent</button>' : '') +
     '<button class="btn ghost" data-home>Home</button></div></div>');
-  if (won !== false) {
-    // confetti in the colours of all six landscapes
-    const cols = Object.values(LANDC);
-    for (let k = 0; k < 5; k++) setTimeout(() => { for (const c of cols) R.burst(window.innerWidth * (0.15 + Math.random() * 0.7), window.innerHeight * (0.1 + Math.random() * 0.2), c, 7, { speed: 220, up: 160, g: 320, life: 1.8, size: 7, add: false }); }, k * 260);
-  }
+  if (won !== false && !draw) confetti();
   if (sparks) { let n = 0; const tgt = sparks; const t = setInterval(() => { n = Math.min(tgt, n + Math.ceil(tgt / 25)); const s = el.querySelector('#sparkCount'); if (s) s.textContent = '+' + n; if (n % 3 === 0) Sound.play('coin'); if (n >= tgt) clearInterval(t); }, 40); }
   const pk = el.querySelector('[data-pack]'); if (pk) pk.onclick = () => openPack(packN, () => results(res, o, Object.assign({}, ctx, { opened: true })));
   if (ctx.opened && pk) pk.remove();
   const ag = el.querySelector('[data-again]'); if (ag) ag.onclick = () => playVs(o, ctx);
   const nx = el.querySelector('[data-next]'); if (nx) nx.onclick = () => prematch(TOUR[ctx.tour + 1], ctx.tour + 1);
   el.querySelector('[data-home]').onclick = () => home();
-  if (S.tour.beaten.length === TOUR.length && first && o && o.boss) setTimeout(() => UI.modal('<h2>Card Wars Champion!</h2><div class="center">' + portraitImg('jake', '4.5rem') + '</div><p class="center">“You beat me... fair and square. That’s... that’s cool, man. Want a sip of the Dweeb cup? It’s actually not that bad.”</p><div class="row"><button class="btn" data-close>Mathematical!</button></div>'), 900);
+  if (S.tour.beaten.length === TOUR.length && first && o && o.boss) setTimeout(() => UI.modal('<h2>Card Wars Champion!</h2><div class="center">' + portraitImg('jake', '4.5rem') + '</div><p class="center">“Heh. You got me. That’s cool, man… you’re the cool guy. Wanna sip the Dweeb cup with me anyway? It’s actually not that bad.”</p><div class="row"><button class="btn" data-close>Mathematical!</button></div>'), 900);
+}
+// Confetti in the colours of all six landscapes.
+function confetti() {
+  if (S.settings.reduceMotion) return;
+  const cols = E.LAND_TYPES.map(t => LANDC[t]);
+  for (let i = 0; i < 64; i++) {
+    const d = document.createElement('i'); d.className = 'confetti';
+    d.style.left = (Math.random() * 100) + 'vw'; d.style.background = cols[i % cols.length];
+    d.style.animationDelay = (Math.random() * 0.9) + 's'; d.style.animationDuration = (1.8 + Math.random() * 1.4) + 's';
+    d.style.setProperty('--dx', ((Math.random() - 0.5) * 30) + 'vw'); d.style.setProperty('--r', (Math.random() * 1080 - 540) + 'deg');
+    document.body.appendChild(d); setTimeout(() => d.remove(), 3800);
+  }
 }
 function rollCard() {
   const pool = E.COLLECTIBLE.filter(id => { const cd = E.CARDS[id]; return cd.land === 'rainbow' || S.unlocked[cd.land]; });
@@ -346,7 +385,7 @@ function editDeck(i, back) {
   let filter = 'all';
   const el = screen('deckedit', topbar('Edit Deck', true) +
     '<div class="editor"><div><input id="dn" value="' + esc(d.name) + '" maxlength="24" style="width:100%;padding:.45rem;border-radius:.6rem;border:0;font-weight:900;font-size:.95rem">' +
-    '<p style="font-size:.75rem;margin:.5rem 0 .25rem;color:#b6a9d6">Landscapes (tap to change). A card of cost N needs N face-up landscapes of its type; Champions need 3.</p><div class="lands" id="ld"></div>' +
+    '<p style="font-size:.75rem;margin:.5rem 0 .25rem;color:#b6a9d6">Land cards (tap to change). A card’s cost is the Actions it takes to play and how many face-up landscapes of its type you need. Rainbow cards fit anywhere.</p><div class="lands" id="ld"></div><p id="kdm" style="font-size:.72rem;margin:.35rem 0 0;color:#ffe9a6"></p>' +
     '<div class="tabs" id="tabs" style="margin-top:.6rem"></div><div class="cgrid" id="pool"></div></div>' +
     '<div><div style="display:flex;justify-content:space-between;align-items:center"><b id="cnt"></b><span><button class="btn ghost small" data-auto>Auto-fill</button> <button class="btn ghost small" data-clear>Clear</button></span></div>' +
     '<div class="dl" id="list" style="margin-top:.4rem"></div><div id="msgs" style="margin-top:.5rem;display:flex;flex-direction:column;gap:.3rem"></div>' +
@@ -356,6 +395,8 @@ function editDeck(i, back) {
   const avail = E.LAND_TYPES.filter(t => S.unlocked[t]);
   function renderLands() {
     ld.innerHTML = '';
+    const kd = E.kingdomOf(d) || [];
+    el.querySelector('#kdm').textContent = 'Kingdom: ' + (kd.map(k => E.CARDS[k.id].name).join(' + ') || 'none') + ' (from your main landscape)';
     d.lands.forEach((t, k) => {
       const b = document.createElement('button'); b.className = 'landchip'; b.style.cssText = 'width:2.6rem;height:2.6rem;border:0;cursor:pointer;background:' + LANDC[t];
       b.innerHTML = landChip(t).replace('landchip', 'x'); b.title = E.LANDS[t].name;
@@ -388,8 +429,7 @@ function editDeck(i, back) {
   }
   function add(id) {
     if (d.cards.length >= E.DECK_SIZE) { UI.toast('Deck is full (20)'); Sound.play('error'); return; }
-    if (count(id) >= Math.min(own(id), maxCopies(id))) { UI.toast(E.CARDS[id].r === 'L' ? 'Only 1 copy of a Champion' : 'No more copies'); Sound.play('error'); return; }
-    if (E.CARDS[id].r === 'L' && d.cards.some(x => E.CARDS[x].r === 'L' && x !== id)) { UI.toast('Only 1 Champion per deck'); Sound.play('error'); return; }
+    if (count(id) >= Math.min(own(id), maxCopies(id))) { UI.toast(E.CARDS[id].r === 'L' ? 'Only 1 copy of a Legendary card' : 'No more copies'); Sound.play('error'); return; }
     d.cards.push(id); Sound.play('select'); renderAll();
   }
   function renderList() {
@@ -414,7 +454,7 @@ function editDeck(i, back) {
     const ids = E.COLLECTIBLE.filter(id => own(id) > 0 && (E.CARDS[id].land === 'rainbow' || types.has(E.CARDS[id].land)) && E.meetsReq({ players: [{ lanes: d.lands.map(t => ({ land: { type: t, down: false } })) }] }, 0, E.CARDS[id]));
     ids.sort((a, b) => (E.CARDS[b].land !== 'rainbow') - (E.CARDS[a].land !== 'rainbow') || E.CARDS[a].cost - E.CARDS[b].cost);
     let guard = 0;
-    while (d.cards.length < E.DECK_SIZE && guard++ < 200) { let added = false; for (const id of ids) { if (d.cards.length >= E.DECK_SIZE) break; if (count(id) < Math.min(own(id), maxCopies(id)) && !(E.CARDS[id].r === 'L' && d.cards.some(x => E.CARDS[x].r === 'L'))) { d.cards.push(id); added = true; } } if (!added) break; }
+    while (d.cards.length < E.DECK_SIZE && guard++ < 200) { let added = false; for (const id of ids) { if (d.cards.length >= E.DECK_SIZE) break; if (count(id) < Math.min(own(id), maxCopies(id))) { d.cards.push(id); added = true; } } if (!added) break; }
     Sound.play('select'); renderAll();
   };
   el.querySelector('[data-clear]').onclick = () => { d.cards = []; renderAll(); };
@@ -460,7 +500,8 @@ function applySettings() {
   Sound.setVolume(st.sfx, st.music);
   UI.settings.haptics = st.haptics; UI.settings.reduceMotion = st.reduceMotion; UI.settings.timer = st.timer; UI.settings.confirmTouch = st.confirm;
   UI.settings.speed = st.speed; UI.D.speed = st.speed; const sb = document.getElementById('speedBtn'); if (sb) sb.textContent = st.speed + 'x';
-  R.reduceMotion = st.reduceMotion; R.cbIcons = st.cbIcons; R.quality = st.quality; R.invalidate();
+  S3.setOptions({ reduceMotion: st.reduceMotion, cbIcons: st.cbIcons });
+  if (S3.ready) S3.setQuality(st.quality);
   document.body.classList.toggle('rm', st.reduceMotion);
   document.documentElement.style.setProperty('--ts', st.text);
   UI.layout();
@@ -471,7 +512,7 @@ function settingsScreen(back, inMatch) {
   const seg = (k, label, opts) => '<div class="set">' + label + '<div class="seg">' + opts.map(([v, l]) => '<button data-s="' + k + '" data-v="' + v + '"' + (String(st[k]) === String(v) ? ' class="on"' : '') + '>' + l + '</button>').join('') + '</div></div>';
   const html = '<div class="set">Sound effects<input type="range" min="0" max="1" step="0.05" value="' + st.sfx + '" data-r="sfx"></div>' +
     '<div class="set">Music<input type="range" min="0" max="1" step="0.05" value="' + st.music + '" data-r="music"></div>' +
-    tg('haptics', 'Haptics (vibration)') + tg('reduceMotion', 'Reduce motion') + tg('cbIcons', 'Colour-blind icons on landscapes') +
+    tg('haptics', 'Haptics (vibration)') + tg('reduceMotion', 'Reduce motion') + tg('cbIcons', 'Colour-blind team markers') +
     seg('text', 'Text size', [[0.9, 'S'], [1, 'M'], [1.12, 'L']]) + seg('speed', 'Game speed', [[1, '1x'], [2, '2x']]) +
     tg('timer', '45-second turn timer') + tg('confirm', 'Confirm targeted actions on touch') + seg('quality', 'Graphics', [[1, 'Crisp'], [0.75, 'Battery saver']]) +
     (inMatch ? '' : '<div class="set">Replay the tutorial<button class="btn small" data-tut>Start</button></div><div class="set">Reset all progress<button class="btn red small" data-reset>Reset</button></div>');
@@ -491,14 +532,14 @@ UI.onSettings = () => { S.settings.speed = UI.settings.speed; save(); };
 
 // ------------------------------------------------------------------ rules / pause menu
 const RULES = '<div style="font-size:.82rem;line-height:1.45">' +
-  '<p><b>Goal:</b> knock the other hero from <b>25 HP to 0</b>. Winner is the Cool Guy, loser is the Dweeb.</p>' +
-  '<p><b>Board:</b> 4 lanes. You own a <b>Landscape</b> in each lane. Each lane holds one Creature (front) and one Building (back).</p>' +
-  '<p><b>Your turn:</b> draw a card, then spend <b>2 Actions</b>: play cards (cost 0-2), <b>draw</b> an extra card (1), or <b>move</b> a creature one lane (1, free for Blue Plains creatures on Blue Plains).</p>' +
-  '<p><b>Landscapes:</b> a card of cost N needs N face-up landscapes of its type. Champions need 3. Rainbow cards need none. The Pig can eat landscapes!</p>' +
-  '<p><b>FLOOP:</b> many cards have a FLOOP ability. Flooping turns the card sideways: the creature skips its attack this turn but still defends.</p>' +
-  '<p><b>FIGHT!</b> When you end your turn, every ready creature attacks the lane across. Both creatures deal damage at once. An empty lane hits the enemy building first (extra spills over) or the hero.</p>' +
-  '<p><b>Home Advantage:</b> creatures standing on their own landscape type get a bonus (see each landscape).</p>' +
-  '<p>The first player can’t floop or fight on the very first turn. From round 15 the board overheats and both heroes take growing damage.</p></div>';
+  '<p><b>Goal:</b> wipe out your opponent’s whole <b>kingdom</b>: every creature and building on their side. Anyone whose side is empty at the end of a turn loses. The winner is the <b>Cool Guy</b>; the loser drinks from the <b>Dweeb</b> cup.</p>' +
+  '<p><b>Setup:</b> your 4 land cards make 4 lanes, and your kingdom landmarks stand on them. Secretly put a few cards on your lands (2 setup Actions; the player going second gets 3 and one extra card). Keep those honeys hidden! Then: <b>“Floop your land cards!”</b> and the whole board appears.</p>' +
+  '<p><b>Your turn:</b> first <b>discard a card and pick up a new one</b> (your hand refills to 5). Then spend <b>2 Actions</b>: play cards (a card’s cost is its Actions and how many face-up landscapes of its type you need), pick up another card (1), or move a creature to an empty lane next to it (1; free for Blue Plains creatures on Blue Plains).</p>' +
+  '<p><b>FLOOP</b> a card (turn it left) to use its ability. You don’t floop a creature to make it fight: you <b>ACTIVATE</b> it (turn it right). Then call <b>BATTLE!</b></p>' +
+  '<p><b>Defending:</b> when your opponent calls battle you choose what you’ll use to defend: floop ready cards, or activate a ready creature to <b>block</b> an attack into its lane or the lane next to it.</p>' +
+  '<p><b>Attacks</b> hit the creature across, else the building across, else they <b>storm the kingdom</b> and hit the nearest building. Flying creatures fly over creatures to buildings. Damage stays until it’s healed.</p>' +
+  '<p><b>Home Advantage:</b> creatures standing on their own landscape type get a bonus. Watch out: the Pig eats Cornfields, and Volcanos destroy everything.</p>' +
+  '<p>From round 13 the kingdoms start crumbling (overtime). At round 24 the judges count kingdoms.</p></div>';
 function learn() {
   UI.modal('<h2>How to Play</h2>' + RULES + '<div class="row"><button class="btn" data-tut>Play the tutorial</button><button class="btn ghost" data-close>Got it</button></div>', { wide: true });
   $('#modal [data-tut]').onclick = () => { UI.closeModal(); Tutorial.start(); };
@@ -513,6 +554,6 @@ UI.onMenu = () => {
   $('#modal [data-quit]').onclick = () => { UI.closeModal(); if (inTut) { Tutorial.skip(); return; } if (!UI.M.ended && UI.M.mode === 'ai') { S.stats.losses++; S.stats.games++; S.stats.streak = 0; save(); } UI.quit(); home(); };
 };
 
-return { load, save, home, applySettings, get S() { return S; }, TOUR, HEROES, unlockLand, results, mySeat, deckHero, levelsFor, activeDeck, learn };
+return { load, save, home, homeBoard, applySettings, get S() { return S; }, TOUR, HEROES, unlockLand, results, mySeat, deckHero, levelsFor, activeDeck, learn, RULES };
 })();
 /* END META */

@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const HTML = path.join(ROOT, '..', 'glowboard.html');
+const HTML = path.join(ROOT, '..', 'cardwars.html');
 
 function block(text, name) {
   const open = '/* ' + name + ' */', close = '/* END ' + name + ' */';

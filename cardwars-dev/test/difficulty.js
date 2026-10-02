@@ -11,13 +11,9 @@ if (!isMainThread) {
   for (const job of workerData.jobs) {
     const [da, db] = job.pair;
     const fa = F[job.i % F.length], fb = F[(job.i * 7 + 3) % F.length];
-    let st = E.newGame({ seed: 'diff' + job.i, first: job.i % 2, players: [{ deck: E.STARTERS[fa] }, { deck: E.STARTERS[fb] }] }).state;
-    for (const p of [0, 1]) st = E.apply(st, AI.decide(st, p, {})).state;
-    let g = 0;
-    while (st.winner == null && g++ < 200) {
-      const me = st.active, d = me === 0 ? da : db;
-      st = AI.playTurn(st, me, { difficulty: d, useTime: false, seed: (E.hashSeed('d' + job.i) + st.turn) >>> 0 }).state;
-    }
+    const st0 = E.newGame({ seed: 'diff' + job.i, first: job.i % 2, players: [{ deck: E.STARTERS[fa] }, { deck: E.STARTERS[fb] }] }).state;
+    const seed = E.hashSeed('d' + job.i);
+    const st = AI.playGame(st0, { difficulty: da, useTime: false, seed }, { difficulty: db, useTime: false, seed: seed + 1 }, 4000);
     out.push({ pair: job.pair.join('>'), aWon: st.winner === 0 ? 1 : st.winner === 1 ? 0 : 0.5 });
   }
   parentPort.postMessage(out);
@@ -31,7 +27,7 @@ if (!isMainThread) {
   let res = [], done = 0;
   const t0 = Date.now();
   for (const ch of chunks) {
-    const w = new Worker(__filename, { workerData: { jobs: ch } });
+    const w = new Worker(__filename, { workerData: { jobs: ch, from: process.env.FROM } });
     w.on('message', m => { res = res.concat(m); if (++done === W) {
       for (const p of pairs) { const k = p.join('>'), r = res.filter(x => x.pair === k); console.log(k.padEnd(14) + (100 * r.reduce((a, x) => a + x.aWon, 0) / r.length).toFixed(1) + '% for ' + p[0] + ' (' + r.length + ' games)'); }
       console.log('secs', ((Date.now() - t0) / 1000).toFixed(0));

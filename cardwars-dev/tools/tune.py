@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Tweak card numbers in src/engine.js: tune.py b_cooldog atk=3 def=5 cost=1 n=2
 import re, sys
-p = '/home/user/claude-code/glowboard-dev/src/engine.js'
+p = '/home/user/claude-code/cardwars-dev/src/engine.js'
 s = open(p).read()
 args = sys.argv[1:]
 i = 0

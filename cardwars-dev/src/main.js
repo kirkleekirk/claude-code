@@ -1,15 +1,15 @@
 /* MAIN */
-// Boot: load save, wire resize/orientation/visibility, run the frame loop.
+// Boot: load save, start the 3D table, wire resize/orientation/visibility, run the frame loop.
 (function () {
 'use strict';
-const cv = document.getElementById('cv');
+const cv = document.getElementById('cv'), ov = document.getElementById('ov');
 let last = 0, running = true, raf = 0;
 function frame(ts) {
   raf = 0;
   if (!running) return;
   const t = ts / 1000, dt = Math.min(0.05, last ? t - last : 0.016);
   last = t;
-  try { UI.tick(dt); Render.frame(t, dt); } catch (e) { console.error(e); }
+  try { UI.tick(dt); Scene.frame(ts, dt); } catch (e) { console.error(e); }
   adapt(dt);
   raf = requestAnimationFrame(frame);
 }
@@ -23,9 +23,14 @@ function adapt(dt) {
     slowAcc = 0; slowN = 0;
   }
 }
+function noGL() {
+  document.getElementById('app').innerHTML = '<div style="position:fixed;inset:0;display:grid;place-items:center;padding:2rem;text-align:center;background:#2f6e33;color:#fff;font:600 1rem system-ui,sans-serif">' +
+    '<div><div style="font:900 2.4rem Georgia,serif;color:#ffe14a;text-shadow:0 .2rem 0 #5a0606">CARD WARS</div><p>This game draws its holographic board with WebGL, and this browser has WebGL turned off or unavailable.</p>' +
+    '<p>Try a current Chrome, Safari, Firefox or Edge, or switch hardware acceleration on.</p></div></div>';
+}
 function boot() {
   Meta.load();
-  Render.init(cv);
+  if (!Scene.init(cv, ov)) { noGL(); return; }
   UI.init();
   Meta.applySettings();
   UI.layout();
@@ -33,13 +38,14 @@ function boot() {
   raf = requestAnimationFrame(frame);
   testHooks();
 }
-// Test hooks (used by the automated smoke test and screenshots): #match, #autoplay[=N], #tutorial
+// Test hooks (used by the automated smoke test and screenshots): #match, #autoplay[=N], #tutorial, #setup
 function testHooks() {
   const h = location.hash || '';
   const E = Engine, S = Meta.S;
   const ensure = () => { if (!S.started) { S.started = true; S.starter = 'blue'; Meta.unlockLand('blue', true); Meta.unlockLand('corn', true); Meta.save(); } };
   window.CW = {
-    stats: { games: 0, errors: 0, rounds: [] },
+    stats: { games: 0, errors: 0, rounds: [], reasons: [] },
+    state: () => UI.M.st,
     autoplay(n, speed) {
       ensure();
       const keys = E.LAND_TYPES; let i = 0;
@@ -47,8 +53,8 @@ function testHooks() {
       const one = () => {
         if (i >= n) { window.CW.done = true; return; }
         const a = keys[i % keys.length], b = keys[(i * 5 + 2) % keys.length]; i++;
-        const seat = (land, k) => ({ kind: 'ai', name: E.STARTERS[land].name.split('\u2019')[0], hero: Meta.HEROES[land], deck: E.STARTERS[land], difficulty: k ? 'normal' : 'hard', personality: 'balanced', lines: ['Mathematical!'] });
-        UI.start({ seed: 'auto' + i, mode: 'ai', seats: [seat(a, 0), seat(b, 1)], onEnd: res => { window.CW.stats.games++; window.CW.stats.rounds.push(res.rounds); setTimeout(one, 300); } });
+        const seat = (land, k) => ({ kind: 'ai', name: E.STARTERS[land].name.split('’')[0], hero: Meta.HEROES[land], deck: E.STARTERS[land], difficulty: k ? 'normal' : 'hard', personality: 'balanced', lines: ['Mathematical!'] });
+        UI.start({ seed: 'auto' + i, mode: 'ai', seats: [seat(a, 0), seat(b, 1)], onEnd: res => { window.CW.stats.games++; window.CW.stats.rounds.push(res.rounds); window.CW.stats.reasons.push(res.reason); setTimeout(one, 300); } });
       };
       one();
     }
@@ -56,19 +62,22 @@ function testHooks() {
   window.CW.custom = function (o) {
     ensure();
     const K = E.kit;
-    o = Object.assign({ hand: [], mine: [], theirs: [], bmine: [], btheirs: [], lands0: ['blue', 'blue', 'blue', 'blue'], lands1: ['corn', 'corn', 'corn', 'corn'], ohand: ['c_bloodstorm', 'r_pancakes', 'c_husker'] }, o || {});
-    UI.start({ seed: 'custom', mode: 'ai', first: 0, noMulligan: true,
+    o = Object.assign({ hand: [], mine: [], theirs: [], bmine: [], btheirs: [], lands0: ['blue', 'blue', 'blue', 'blue'], lands1: ['corn', 'corn', 'corn', 'swamp'], ohand: ['r_bloodstorm', 'r_pancakes', 'c_husker'], keep: false }, o || {});
+    UI.start({ seed: 'custom', mode: 'ai', first: 0, noMulligan: true, noSetup: true,
       seats: [Meta.mySeat({ lands: o.lands0, cards: E.STARTERS.blue.cards }), { kind: 'ai', name: 'Jake', hero: 'jake', deck: E.STARTERS.corn, difficulty: 'normal', personality: 'aggro', lines: ['Hmph.'] }],
       setup: st => {
-        K.clear(st); K.lands(st, 0, o.lands0); K.lands(st, 1, o.lands1);
+        if (!o.keep) K.clear(st);
+        K.lands(st, 0, o.lands0); K.lands(st, 1, o.lands1);
         K.hand(st, 0, o.hand); K.hand(st, 1, o.ohand);
         o.mine.forEach(([l, id, x]) => K.put(st, 0, l, id, x)); o.theirs.forEach(([l, id, x]) => K.put(st, 1, l, id, x));
         o.bmine.forEach(([l, id, x]) => K.build(st, 0, l, id, x)); o.btheirs.forEach(([l, id, x]) => K.build(st, 1, l, id, x));
-        st.turn = 3; st.round = 2; st.players[0].actions = 2;
+        st.players[0].actions = 2;
       }, onEnd: () => Meta.home() });
   };
+  const vsJake = extra => { ensure(); const o = Meta.TOUR[Meta.TOUR.length - 1]; UI.start(Object.assign({ seed: 'shot', mode: 'ai', first: 0, seats: [Meta.mySeat(Meta.activeDeck()), { kind: 'ai', name: o.name, hero: o.hero, deck: o.deck, difficulty: 'normal', personality: o.pers, lines: o.lines }], onEnd: () => Meta.home() }, extra || {})); };
   if (h.indexOf('#autoplay') === 0) { const n = +(h.split('=')[1] || 3); window.CW.autoplay(n, 6); }
-  else if (h === '#match') { ensure(); const o = Meta.TOUR[3]; UI.start({ seed: 'shot', mode: 'ai', first: 0, seats: [Meta.mySeat(Meta.activeDeck()), { kind: 'ai', name: o.name, hero: o.hero, deck: o.deck, difficulty: 'normal', personality: o.pers, lines: o.lines }], onEnd: () => Meta.home() }); }
+  else if (h === '#match') vsJake({ noMulligan: true, noSetup: true });
+  else if (h === '#setup') vsJake({ noMulligan: true });
   else if (h === '#tutorial') { ensure(); Tutorial.start(); }
 }
 let rt = 0;
