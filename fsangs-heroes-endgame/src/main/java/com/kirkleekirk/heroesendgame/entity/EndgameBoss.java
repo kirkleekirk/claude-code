@@ -694,7 +694,7 @@ public abstract class EndgameBoss extends Monster {
         return source.is(DamageTypes.IN_WALL) || source.is(DamageTypes.FALL) || source.is(DamageTypes.DROWN)
                 || source.is(DamageTypes.CRAMMING) || source.is(DamageTypes.FLY_INTO_WALL) || source.is(DamageTypes.CACTUS)
                 || source.is(DamageTypes.SWEET_BERRY_BUSH) || source.is(DamageTypes.FREEZE) || source.is(DamageTypes.STALAGMITE)
-                || source.is(DamageTypes.FALLING_STALACTITE) || source.is(DamageTypes.OUT_OF_WORLD)
+                || source.is(DamageTypes.FALLING_STALACTITE) || source.is(DamageTypes.FELL_OUT_OF_WORLD)
                 || super.isInvulnerableTo(source);
     }
 

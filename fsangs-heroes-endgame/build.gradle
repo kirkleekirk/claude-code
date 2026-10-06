@@ -92,4 +92,7 @@ tasks.named('jar', Jar).configure {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+    // Forge 47.4 deprecates the ResourceLocation constructors in favour of 1.21-style factories that older 47.x
+    // builds don't have; the constructors are kept on purpose for compatibility.
+    options.compilerArgs << '-Xlint:-removal' << '-Xmaxerrs' << '500'
 }

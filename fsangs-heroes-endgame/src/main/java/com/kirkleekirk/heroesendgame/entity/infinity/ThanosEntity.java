@@ -299,7 +299,7 @@ public class ThanosEntity extends EndgameBoss implements InfinityVillain {
             say("snap");
             playSound(SoundEvents.LIGHTNING_BOLT_THUNDER, 4.0F, 0.5F);
             for (ServerPlayer player : playersInRange(40)) {
-                strike(player, 4.0F, ModDamageTypes.SNAP);
+                strike(player, 4.0F, ModDamageTypes.INFINITY);
                 FsangCompat.dampen(player, FsangCompat.Dampening.ALL, 200);
                 Messages.title(player, Component.translatable("message.heroes_endgame.snap.title").withStyle(ChatFormatting.LIGHT_PURPLE),
                         Component.translatable("message.heroes_endgame.snap.subtitle").withStyle(ChatFormatting.GRAY));
