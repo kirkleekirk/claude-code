@@ -36,4 +36,10 @@ public class ViltrumiteEnforcerEntity extends AbstractViltrumiteEntity {
     protected Component getTypeName() {
         return Component.translatable("entity.heroes_endgame.viltrumite_enforcer." + (getVariant() == 1 ? "scout" : "soldier"));
     }
+
+    @Override
+    protected void sayArrival() {
+        // The pair always arrives together: one line each.
+        say("arrival." + (getVariant() & 1));
+    }
 }

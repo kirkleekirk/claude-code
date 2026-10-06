@@ -35,6 +35,7 @@ public abstract class AbstractViltrumiteEntity extends EndgameBoss {
     private static final ResourceLocation SCOURGE = new ResourceLocation(FsangCompat.MOD_ID, "scourge_virus");
     private boolean diving;
     private int diveTicks;
+    private int punches;
 
     protected AbstractViltrumiteEntity(EntityType<? extends AbstractViltrumiteEntity> type, Level level) {
         super(type, level);
@@ -70,7 +71,7 @@ public abstract class AbstractViltrumiteEntity extends EndgameBoss {
 
     @Override
     protected double meleeKnockback() {
-        return 1.6;
+        return 0.9;
     }
 
     @Override
@@ -104,9 +105,12 @@ public abstract class AbstractViltrumiteEntity extends EndgameBoss {
 
     @Override
     protected void onMeleeHit(LivingEntity target) {
-        // Viltrumite punches send people flying.
-        Vec3 push = target.position().subtract(position()).normalize().scale(1.2);
-        launch(target, target.getDeltaMovement().add(push.x, 0.35, push.z));
+        // Every third punch is a haymaker that sends you flying. Not every hit, or melee fighters could never hit back.
+        if (++punches % 3 == 0) {
+            Vec3 push = target.position().subtract(position()).normalize().scale(1.3);
+            launch(target, target.getDeltaMovement().add(push.x, 0.4, push.z));
+            playSound(SoundEvents.PLAYER_ATTACK_KNOCKBACK, 1.5F, 0.6F);
+        }
     }
 
     @Override
@@ -174,8 +178,13 @@ public abstract class AbstractViltrumiteEntity extends EndgameBoss {
             if (level() instanceof ServerLevel serverLevel) {
                 serverLevel.sendParticles(ParticleTypes.EXPLOSION_EMITTER, getX(), getY(), getZ(), 1, 0, 0, 0, 0);
             }
-            sayRandom("arrival", 2);
+            sayArrival();
         }
+    }
+
+    /** Spoken on impact. */
+    protected void sayArrival() {
+        sayRandom("arrival", 2);
     }
 
     @Override

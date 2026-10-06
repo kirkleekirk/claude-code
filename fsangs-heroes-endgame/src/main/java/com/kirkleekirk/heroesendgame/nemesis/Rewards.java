@@ -42,7 +42,7 @@ public final class Rewards {
                 continue;
             }
             award(player, nemesis.advancement());
-            Messages.send(player, "victory", nemesis.color(), nemesis.displayName());
+            Messages.send(player, "victory." + nemesis.id(), nemesis.color());
             if (EndgameConfig.SKILL_POINT_REWARDS.get() && nemesis.skillPoints() > 0 && FsangCompat.addSkillPoints(player, nemesis.skillPoints())) {
                 Messages.send(player, "skill_points", ChatFormatting.AQUA, nemesis.skillPoints());
             }

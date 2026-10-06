@@ -131,7 +131,7 @@ public class ZoomEntity extends EndgameBoss {
                 }
                 remnant.setVariant(IllusionEntity.ZOOM);
                 remnant.moveTo(getX(), getY(), getZ(), getYRot(), 0);
-                remnant.markSummoned();
+                remnant.markSummoned(this);
                 remnant.setupFor(getHuntedPlayer(), null, getEncounterId(), 1, 1.0F, 0);
                 remnant.setTarget(getTarget());
                 remnant.copyLook(this);

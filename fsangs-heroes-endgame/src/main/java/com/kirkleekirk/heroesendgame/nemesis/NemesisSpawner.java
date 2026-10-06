@@ -53,7 +53,7 @@ public final class NemesisSpawner {
             case THRAGG -> add(bosses, place(create(ModEntities.THRAGG.get(), level), player, Entrance.SKY, 14, 22), player, nemesis, record, players, health, encounterLevel);
             case LOKI -> {
                 add(bosses, place(create(ModEntities.LOKI.get(), level), player, Entrance.GROUND, 10, 16), player, nemesis, record, players, health, encounterLevel);
-                minions(ModEntities.CHITAURI.get(), 3, player, record, Entrance.GROUND);
+                minions(ModEntities.CHITAURI.get(), 3, player, record, Entrance.GROUND, bosses);
             }
             case BLACK_ORDER -> {
                 boolean first = InfinityCampaign.get(level.getServer()).blackOrderRaids() % 2 == 0;
@@ -65,7 +65,7 @@ public final class NemesisSpawner {
             case THANOS -> {
                 add(bosses, place(create(ModEntities.THANOS.get(), level), player, Entrance.GROUND, 12, 18), player, nemesis, record, players, health,
                         InfinityCampaign.get(level.getServer()).thanosDefeats());
-                minions(ModEntities.CHITAURI.get(), 2, player, record, Entrance.GROUND);
+                minions(ModEntities.CHITAURI.get(), 2, player, record, Entrance.GROUND, bosses);
             }
             case DOOMBOTS -> {
                 int count = EndgameConfig.DOOM_DOOMBOT_COUNT.get();
@@ -115,13 +115,20 @@ public final class NemesisSpawner {
         list.add(boss);
     }
 
-    private static void minions(EntityType<? extends EndgameBoss> type, int count, ServerPlayer player, NemesisRecord record, Entrance entrance) {
+    /** Minions arriving with {@code leader} (they disband if it falls). Nothing spawns if the leader couldn't be placed. */
+    private static void minions(EntityType<? extends EndgameBoss> type, int count, ServerPlayer player, NemesisRecord record,
+                                Entrance entrance, List<EndgameBoss> bosses) {
+        if (bosses.isEmpty()) {
+            return;
+        }
+        EndgameBoss leader = bosses.get(bosses.size() - 1);
         ServerLevel level = player.serverLevel();
         for (int i = 0; i < count; i++) {
             EndgameBoss minion = type.create(level);
             if (minion == null || place(minion, player, entrance, 8, 14) == null) {
                 continue;
             }
+            minion.markSummoned(leader);
             minion.finalizeSpawn(level, level.getCurrentDifficultyAt(minion.blockPosition()), MobSpawnType.EVENT, null, null);
             minion.setupFor(player, null, record.encounterId, 1, 1.0F, record.victories);
             level.addFreshEntity(minion);

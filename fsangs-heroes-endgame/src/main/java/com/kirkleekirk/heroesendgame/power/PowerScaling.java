@@ -3,6 +3,8 @@ package com.kirkleekirk.heroesendgame.power;
 import com.kirkleekirk.heroesendgame.compat.FsangCompat;
 import com.kirkleekirk.heroesendgame.config.EndgameConfig;
 import com.kirkleekirk.heroesendgame.entity.BossStats;
+import net.minecraft.tags.DamageTypeTags;
+import net.minecraft.util.Mth;
 import net.minecraft.world.damagesource.CombatRules;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.LivingEntity;
@@ -26,36 +28,43 @@ public final class PowerScaling {
     /**
      * Pre-mitigation damage that makes {@code source} take about {@code 1 / hitsToKill} of the target's max health
      * (before the config damage multiplier). Non-players just get {@code floor}.
+     * <p>
+     * The player's damage reduction (armor, Protection, FSang's damage_resistance) is mostly pierced so durable heroes
+     * still feel every hit, but {@code 1 - durabilityPierce} of it still counts, so defence is never worthless. The
+     * floor makes weak, unarmored targets take up to twice the tuned damage, never more.
      */
     public static float hitDamage(LivingEntity target, DamageSource source, float hitsToKill, float floor) {
         if (!(target instanceof Player player)) {
             return floor;
         }
         float maxHealth = player.getMaxHealth();
-        double resistance = FsangCompat.damageResistance(player);
-        double pierce = EndgameConfig.DURABILITY_PIERCE.get();
-        double effectiveResistance = resistance * (1.0 - pierce);
+        float tuned = maxHealth / Math.max(0.5F, hitsToKill);
+        double mitigation = 1.0 - tuned / Math.max(0.0001F, rawFor(player, source, tuned));
+        double kept = Mth.clamp(mitigation, 0.0, 1.0) * (1.0 - EndgameConfig.DURABILITY_PIERCE.get());
+        float damage = rawFor(player, source, (float) (tuned * (1.0 - kept)));
+        damage = Math.max(damage, Math.min(floor, damage * 2.0F));
+        return Math.min(damage, maxHealth * 6.0F);
+    }
 
-        float desiredFinal = (float) (maxHealth / Math.max(0.5F, hitsToKill) * (1.0 - effectiveResistance));
-
-        // Protection enchantments (applied after armor)
-        int protection = EnchantmentHelper.getDamageProtection(player.getArmorSlots(), source);
-        float enchantFactor = CombatRules.getDamageAfterMagicAbsorb(1.0F, protection);
-        float beforeEnchants = desiredFinal / Math.max(0.2F, enchantFactor);
-
-        // Armor (the reduction shrinks as damage grows, so iterate)
-        float armor = player.getArmorValue();
-        float toughness = (float) player.getAttributeValue(Attributes.ARMOR_TOUGHNESS);
-        float damage = beforeEnchants;
-        for (int i = 0; i < 12; i++) {
-            float factor = CombatRules.getDamageAfterAbsorb(damage, armor, toughness) / Math.max(0.0001F, damage);
-            damage = beforeEnchants / Math.max(0.2F, factor);
+    /** Raw damage that is left at {@code finalDamage} after FSang's resistance, armor and Protection. */
+    private static float rawFor(Player player, DamageSource source, float finalDamage) {
+        float damage = finalDamage;
+        if (!source.is(DamageTypeTags.BYPASSES_ENCHANTMENTS)) {
+            int protection = EnchantmentHelper.getDamageProtection(player.getArmorSlots(), source);
+            damage /= Math.max(0.2F, CombatRules.getDamageAfterMagicAbsorb(1.0F, protection));
         }
-
+        if (!source.is(DamageTypeTags.BYPASSES_ARMOR)) {
+            // The armor reduction shrinks as damage grows, so iterate.
+            float armor = player.getArmorValue();
+            float toughness = (float) player.getAttributeValue(Attributes.ARMOR_TOUGHNESS);
+            float target = damage;
+            for (int i = 0; i < 12; i++) {
+                float factor = CombatRules.getDamageAfterAbsorb(damage, armor, toughness) / Math.max(0.0001F, damage);
+                damage = target / Math.max(0.2F, factor);
+            }
+        }
         // FSang's damage_resistance runs in LivingHurtEvent, before armor
-        damage = (float) (damage / Math.max(0.05, 1.0 - resistance));
-
-        return Math.min(Math.max(damage, floor), maxHealth * 6.0F);
+        return (float) (damage / Math.max(0.05, 1.0 - FsangCompat.damageResistance(player)));
     }
 
     /** Health a boss should have against this player (and its allies). */

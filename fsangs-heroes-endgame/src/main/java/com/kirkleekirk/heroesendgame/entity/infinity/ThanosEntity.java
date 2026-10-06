@@ -430,7 +430,6 @@ public class ThanosEntity extends EndgameBoss implements InfinityVillain {
             }
             for (ServerPlayer player : boss.playersInRange(14)) {
                 FsangCompat.applyMindControl(player, 60);
-                player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 60, 1));
                 for (Mob mob : boss.level().getEntitiesOfClass(Mob.class, player.getBoundingBox().inflate(16),
                         m -> m instanceof Enemy && !(m instanceof EndgameBoss))) {
                     mob.setTarget(player);

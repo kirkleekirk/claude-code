@@ -128,7 +128,35 @@ public final class EndgameCommand {
                                     ServerPlayer player = EntityArgument.getPlayer(ctx, "player");
                                     ctx.getSource().sendSuccess(() -> Component.literal(String.valueOf(PalladiumCompat.powerIds(player))), false);
                                     return 1;
-                                })))));
+                                })))
+                        .then(Commands.literal("bosses").executes(EndgameCommand::listBosses))
+                        .then(Commands.literal("dormammu").then(Commands.argument("player", EntityArgument.player())
+                                .executes(ctx -> com.kirkleekirk.heroesendgame.infinity.DormammuBargain.summon(EntityArgument.getPlayer(ctx, "player")) ? 1 : 0)))));
+    }
+
+    /** Every nemesis currently in the world, with what it is doing. */
+    private static int listBosses(CommandContext<CommandSourceStack> ctx) {
+        int count = 0;
+        for (net.minecraft.server.level.ServerLevel level : ctx.getSource().getServer().getAllLevels()) {
+            for (Entity entity : level.getAllEntities()) {
+                if (!(entity instanceof EndgameBoss boss) || !boss.isAlive()) {
+                    continue;
+                }
+                count++;
+                String target = boss.getTarget() == null ? "-" : boss.getTarget().getName().getString();
+                ServerPlayer hunted = boss.getHuntedPlayer();
+                String ability = boss.getActiveAbility() == null ? "-" : boss.getActiveAbility().getClass().getSimpleName();
+                String line = String.format(Locale.ROOT, "%s @ %s %.0f %.0f %.0f | hp %.0f/%.0f | phase %d | target %s | hunting %s | nemesis %s | ability %s%s",
+                        boss.getName().getString(), level.dimension().location(), boss.getX(), boss.getY(), boss.getZ(),
+                        boss.effectiveHealth(), boss.effectiveMaxHealth(), boss.getPhase(), target,
+                        hunted == null ? "-" : hunted.getGameProfile().getName(),
+                        boss.getNemesis() == null ? "-" : boss.getNemesis().id(), ability, boss.isMinion() ? " (minion)" : "");
+                ctx.getSource().sendSuccess(() -> Component.literal(line), false);
+            }
+        }
+        int total = count;
+        ctx.getSource().sendSuccess(() -> Component.literal(total + " nemesis entities"), false);
+        return count;
     }
 
     private static Nemesis nemesis(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {

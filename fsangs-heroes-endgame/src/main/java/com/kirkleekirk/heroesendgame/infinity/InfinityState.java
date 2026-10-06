@@ -1,6 +1,8 @@
 package com.kirkleekirk.heroesendgame.infinity;
 
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.EnumMap;
@@ -37,6 +39,9 @@ public final class InfinityState {
     public int blackOrderRaids;
     public int thanosDefeats;
     public boolean snapActive;
+    /** Creatures turned to dust by Thanos' snap, kept so they can be brought back ({Dim, Entity}). */
+    public final ListTag dusted = new ListTag();
+    public static final int MAX_DUSTED = 1000;
     @Nullable
     public UUID heraldTarget;
 
@@ -67,6 +72,7 @@ public final class InfinityState {
         tag.putInt("BlackOrderRaids", blackOrderRaids);
         tag.putInt("ThanosDefeats", thanosDefeats);
         tag.putBoolean("SnapActive", snapActive);
+        tag.put("Dusted", dusted.copy());
         if (heraldTarget != null) {
             tag.putUUID("HeraldTarget", heraldTarget);
         }
@@ -95,6 +101,7 @@ public final class InfinityState {
         state.blackOrderRaids = tag.getInt("BlackOrderRaids");
         state.thanosDefeats = tag.getInt("ThanosDefeats");
         state.snapActive = tag.getBoolean("SnapActive");
+        state.dusted.addAll(tag.getList("Dusted", Tag.TAG_COMPOUND));
         state.heraldTarget = tag.hasUUID("HeraldTarget") ? tag.getUUID("HeraldTarget") : null;
         return state;
     }

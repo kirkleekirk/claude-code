@@ -73,7 +73,7 @@ public class SummonAbility extends BossAbility {
             if (!minion.randomTeleport(x, boss.getY() + 2, z, false)) {
                 minion.moveTo(boss.getX(), boss.getY(), boss.getZ(), boss.getYRot(), 0);
             }
-            minion.markSummoned();
+            minion.markSummoned(boss);
             minion.finalizeSpawn(level, level.getCurrentDifficultyAt(minion.blockPosition()), MobSpawnType.MOB_SUMMONED, null, null);
             minion.setupFor(boss.getHuntedPlayer(), null, boss.getEncounterId(), 1, 1.0F, boss.getEncounterLevel());
             minion.setTarget(target);

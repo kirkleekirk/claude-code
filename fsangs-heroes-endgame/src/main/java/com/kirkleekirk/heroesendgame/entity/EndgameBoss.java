@@ -112,10 +112,12 @@ public abstract class EndgameBoss extends Monster {
     private int meleeCooldown;
     private int noTargetTicks;
     private int stuckTicks;
-    private Vec3 lastProgressPos = Vec3.ZERO;
+    private double lastTargetDistance = Double.MAX_VALUE;
     private boolean defeated;
     private boolean retreating;
     private boolean summoned;
+    @Nullable
+    private UUID summonerId;
 
     protected EndgameBoss(EntityType<? extends EndgameBoss> type, Level level) {
         super(type, level);
@@ -166,10 +168,14 @@ public abstract class EndgameBoss extends Monster {
         return summoned;
     }
 
-    /** Marks this entity as summoned by another boss (call before adding it to the level). */
-    public void markSummoned() {
+    /**
+     * Marks this entity as summoned by another boss (call before adding it to the level). It disbands when that boss
+     * dies or leaves, like the Chitauri dropping when the mothership goes down.
+     */
+    public void markSummoned(@Nullable EndgameBoss summoner) {
         this.summoned = true;
         this.xpReward = 10;
+        this.summonerId = summoner == null ? null : summoner.getUUID();
     }
 
     protected ChatFormatting nameColor() {
@@ -360,7 +366,7 @@ public abstract class EndgameBoss extends Monster {
         Set<UUID> result = new HashSet<>(participants.keySet());
         if (level() instanceof ServerLevel serverLevel) {
             for (ServerPlayer player : serverLevel.players()) {
-                if (player.distanceToSqr(this) < 64 * 64 && !player.isSpectator()) {
+                if (player.distanceToSqr(this) < 64 * 64 && !player.isSpectator() && !player.isCreative()) {
                     result.add(player.getUUID());
                 }
             }
@@ -444,6 +450,12 @@ public abstract class EndgameBoss extends Monster {
     protected void customServerAiStep() {
         super.customServerAiStep();
         ServerLevel level = (ServerLevel) level();
+        if (summonerId != null && tickCount % 20 == 0
+                && !(level.getEntity(summonerId) instanceof EndgameBoss summoner && summoner.isAlive())) {
+            burst(ParticleTypes.POOF, 20, 0.6);
+            discard();
+            return;
+        }
 
         if (!scaled) {
             Player nearest = level.getNearestPlayer(this, 64);
@@ -469,13 +481,22 @@ public abstract class EndgameBoss extends Monster {
         // Leftovers from an encounter that already ended (e.g. a chunk that was unloaded mid-fight) quietly leave.
         if (tickCount > 40 && tickCount % 100 == 0 && !isMinion() && !NemesisDirector.isCurrent(this)) {
             discard();
-            return;
         }
+    }
 
-        if (!isMinion()) {
-            bossEvent.setName(getDisplayName());
+    @Override
+    public void tick() {
+        super.tick();
+        // Boss bar updated here rather than in the AI step so it also works for NoAI bosses.
+        if (!level().isClientSide && !isMinion()) {
+            bossEvent.setName(bossBarName());
             bossEvent.setProgress(getHealth() / getMaxHealth());
         }
+    }
+
+    /** Text on the boss bar. */
+    protected Component bossBarName() {
+        return getDisplayName();
     }
 
     private void updateTarget() {
@@ -763,14 +784,15 @@ public abstract class EndgameBoss extends Monster {
             return;
         }
         if (target == null || isMovementLocked()) {
-            lastProgressPos = position();
+            lastTargetDistance = Double.MAX_VALUE;
             stuckTicks = 0;
             return;
         }
+        // "Stuck" means not closing in on the target - also when shuffling around under a pillar or a flying hero.
         double distance = distanceTo(target);
-        boolean progressing = position().distanceToSqr(lastProgressPos) > 1.0;
-        lastProgressPos = position();
-        if (distance > 4 && !progressing) {
+        boolean closing = distance < lastTargetDistance - 0.75;
+        lastTargetDistance = distance;
+        if (distance > Math.max(4.0, preferredRange() + 3.0) && !closing) {
             stuckTicks += 20;
             if (stuckTicks >= 40) {
                 smashObstacles(target);
@@ -1096,6 +1118,9 @@ public abstract class EndgameBoss extends Monster {
         tag.putInt("Variant", getVariant());
         tag.putBoolean("Flying", isFlying());
         tag.putBoolean("Summoned", summoned);
+        if (summonerId != null) {
+            tag.putUUID("Summoner", summonerId);
+        }
     }
 
     @Override
@@ -1111,6 +1136,7 @@ public abstract class EndgameBoss extends Monster {
         setVariant(tag.getInt("Variant"));
         setFlying(tag.getBoolean("Flying"));
         summoned = tag.getBoolean("Summoned");
+        summonerId = tag.hasUUID("Summoner") ? tag.getUUID("Summoner") : null;
     }
 
     // =================================================================================================================

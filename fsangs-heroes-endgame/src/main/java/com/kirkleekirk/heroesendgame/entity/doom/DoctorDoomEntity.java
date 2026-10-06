@@ -207,15 +207,17 @@ public class DoctorDoomEntity extends EndgameBoss {
                 say("shield_up");
             }
         }
-        if (!isMinion()) {
-            Component name = getDisplayName();
-            if (shield > 0) {
-                name = name.copy().append(Component.literal(" [")
-                        .append(Component.translatable("boss.heroes_endgame.doom.force_field", Math.round(100 * shield / Math.max(1, maxShield()))))
-                        .append("]").withStyle(ChatFormatting.AQUA));
-            }
-            bossEvent.setName(name);
+    }
+
+    @Override
+    protected Component bossBarName() {
+        Component name = getDisplayName();
+        if (shield > 0) {
+            name = name.copy().append(Component.literal(" [")
+                    .append(Component.translatable("boss.heroes_endgame.doom.force_field", Math.round(100 * shield / Math.max(1, maxShield()))))
+                    .append("]").withStyle(ChatFormatting.AQUA));
         }
+        return name;
     }
 
     @Override

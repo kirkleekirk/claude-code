@@ -128,8 +128,8 @@ public class LokiEntity extends EndgameBoss {
         super.dropCustomDeathLoot(source, looting, recentlyHit);
         if (level() instanceof ServerLevel serverLevel) {
             InfinityCampaign campaign = InfinityCampaign.get(serverLevel.getServer());
-            if (campaign.owner(InfinityStone.MIND) != InfinityState.Owner.THANOS) {
-                // The scepter shatters, leaving the Mind Stone behind.
+            if (campaign.owner(InfinityStone.MIND) == InfinityState.Owner.UNCLAIMED) {
+                // The scepter shatters, leaving the Mind Stone behind (only once: there is just one Mind Stone).
                 spawnAtLocation(new ItemStack(ModItems.stone(InfinityStone.MIND)));
                 campaign.markFound(InfinityStone.MIND, null);
             }
@@ -185,7 +185,7 @@ public class LokiEntity extends EndgameBoss {
                     continue;
                 }
                 illusion.setVariant(IllusionEntity.LOKI);
-                illusion.markSummoned();
+                illusion.markSummoned(boss);
                 illusion.setupFor(boss.getHuntedPlayer(), null, boss.getEncounterId(), 1, 1.0F, 0);
                 illusion.setTarget(target);
                 illusion.copyLook(boss);

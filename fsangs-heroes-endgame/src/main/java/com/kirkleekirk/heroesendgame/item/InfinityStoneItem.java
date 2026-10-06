@@ -63,7 +63,8 @@ public class InfinityStoneItem extends Item {
         if (level.isClientSide || !(entity instanceof ServerPlayer player)) {
             return;
         }
-        if (!stack.getOrCreateTag().getBoolean("Claimed")) {
+        // Creative players (admins, map makers) can carry stones around without waking the Mad Titan.
+        if (!player.isCreative() && !stack.getOrCreateTag().getBoolean("Claimed")) {
             stack.getOrCreateTag().putBoolean("Claimed", true);
             InfinityCampaign.get(player.server).onStoneHeld(player, stone);
         }

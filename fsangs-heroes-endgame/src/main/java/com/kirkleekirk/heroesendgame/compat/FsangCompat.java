@@ -144,12 +144,17 @@ public final class FsangCompat {
         return hasEffect(entity, "scourge_virus");
     }
 
-    /** FSang's "uncontrollable movement" effect - used for mind control. */
-    public static boolean applyMindControl(LivingEntity target, int ticks) {
-        Optional<MobEffect> effect = effect("uncontrollable_movement");
-        effect.ifPresent(e -> target.addEffect(new MobEffectInstance(e, ticks, 0, false, true, true)));
-        target.addEffect(new MobEffectInstance(MobEffects.CONFUSION, ticks + 40, 0));
-        return effect.isPresent();
+    /**
+     * Scepter / Mind Stone control: the victim's thoughts fog over (nausea, slowness) and powers drawn from the mind or
+     * the cosmos falter (FSang's metaphysical dampening). Doesn't stack while the nausea from the last one lingers.
+     */
+    public static void applyMindControl(LivingEntity target, int ticks) {
+        if (target.hasEffect(MobEffects.CONFUSION)) {
+            return;
+        }
+        target.addEffect(new MobEffectInstance(MobEffects.CONFUSION, ticks + 60, 0));
+        target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, ticks, 1));
+        dampen(target, Dampening.METAPHYSICAL, ticks);
     }
 
     // ---------------------------------------------------------------------------------------------------------------

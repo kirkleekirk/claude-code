@@ -14,6 +14,14 @@ import com.kirkleekirk.heroesendgame.registry.ModEffects;
 import com.kirkleekirk.heroesendgame.registry.ModItems;
 import com.kirkleekirk.heroesendgame.util.Messages;
 import net.minecraft.ChatFormatting;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -22,6 +30,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.OwnableEntity;
 import net.minecraft.world.entity.player.Inventory;
@@ -170,6 +179,9 @@ public final class InfinityCampaign {
     }
 
     public void tick(long now) {
+        if (!state.snapActive && !state.dusted.isEmpty()) {
+            restoreDusted();
+        }
         if (!enabled()) {
             return;
         }
@@ -334,13 +346,64 @@ public final class InfinityCampaign {
                     victims.add(living);
                 }
             }
-            victims.forEach(victim -> StonePowers.dust(level, victim));
+            for (LivingEntity victim : victims) {
+                remember(level, victim);
+                StonePowers.dust(level, victim);
+            }
         }
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             applySnapped(player);
             if (EndgameConfig.INFINITY_SNAP_KILLS_PLAYERS.get() && player.getRandom().nextBoolean() && !player.isCreative() && !player.isSpectator()) {
                 player.hurt(ModDamageTypes.source(player.level(), ModDamageTypes.SNAP), player.getMaxHealth() * 10.0F);
             }
+        }
+    }
+
+    /** Keeps a dusted creature so that reversing the snap can bring it back. */
+    private void remember(ServerLevel level, LivingEntity victim) {
+        if (state.dusted.size() >= InfinityState.MAX_DUSTED) {
+            return;
+        }
+        CompoundTag entity = new CompoundTag();
+        if (victim.saveAsPassenger(entity)) {
+            entity.remove("Passengers");
+            CompoundTag entry = new CompoundTag();
+            entry.putString("Dim", level.dimension().location().toString());
+            entry.put("Entity", entity);
+            state.dusted.add(entry);
+        }
+    }
+
+    /**
+     * After the snap is reversed, the dusted come back - a few at a time, and only once someone is near enough for
+     * their chunk to be loaded again.
+     */
+    private void restoreDusted() {
+        int restored = 0;
+        for (int i = state.dusted.size() - 1; i >= 0 && restored < 64; i--) {
+            CompoundTag entry = state.dusted.getCompound(i);
+            ResourceLocation dimension = ResourceLocation.tryParse(entry.getString("Dim"));
+            ServerLevel level = dimension == null ? null : server.getLevel(ResourceKey.create(Registries.DIMENSION, dimension));
+            CompoundTag entityTag = entry.getCompound("Entity");
+            ListTag pos = entityTag.getList("Pos", Tag.TAG_DOUBLE);
+            if (level == null || pos.size() < 3) {
+                state.dusted.remove(i);
+                continue;
+            }
+            BlockPos blockPos = BlockPos.containing(pos.getDouble(0), pos.getDouble(1), pos.getDouble(2));
+            if (!level.isLoaded(blockPos)) {
+                continue;
+            }
+            state.dusted.remove(i);
+            restored++;
+            Entity entity = EntityType.loadEntityRecursive(entityTag, level, e -> e);
+            if (entity != null && level.tryAddFreshEntityWithPassengers(entity)) {
+                level.sendParticles(ParticleTypes.END_ROD, entity.getX(), entity.getY() + entity.getBbHeight() / 2, entity.getZ(), 12,
+                        entity.getBbWidth() * 0.4, entity.getBbHeight() * 0.4, entity.getBbWidth() * 0.4, 0.02);
+            }
+        }
+        if (restored > 0) {
+            data.setDirty();
         }
     }
 

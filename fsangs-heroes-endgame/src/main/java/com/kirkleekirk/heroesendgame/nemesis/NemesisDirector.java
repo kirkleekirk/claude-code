@@ -300,7 +300,8 @@ public final class NemesisDirector {
             record.bosses.add(boss.getUUID());
         }
         record.lastEncounter = now;
-        Messages.title(player, nemesis.displayName().copy().withStyle(ChatFormatting.BOLD),
+        // Short headline: long names don't fit on screen at the 'auto' GUI scale.
+        Messages.title(player, Messages.key("arrival." + nemesis.id() + ".title").copy().withStyle(nemesis.color()),
                 Messages.key("arrival." + nemesis.id() + ".subtitle").copy().withStyle(ChatFormatting.GRAY));
         Messages.announce(server, player, Messages.key("arrival." + nemesis.id(), player.getDisplayName()).copy().withStyle(nemesis.color()));
         return true;

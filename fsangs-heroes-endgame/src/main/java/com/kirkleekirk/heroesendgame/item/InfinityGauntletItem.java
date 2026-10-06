@@ -235,7 +235,7 @@ public class InfinityGauntletItem extends Item {
         CompoundTag tag = stack.getOrCreateTag();
         int claimed = tag.getInt(TAG_CLAIMED);
         int mask = mask(stack);
-        if ((claimed & mask) != mask) {
+        if ((claimed & mask) != mask && !player.isCreative()) {
             for (InfinityStone stone : getStones(stack)) {
                 if ((claimed & (1 << stone.ordinal())) == 0) {
                     InfinityCampaign.get(player.server).onStoneHeld(player, stone);

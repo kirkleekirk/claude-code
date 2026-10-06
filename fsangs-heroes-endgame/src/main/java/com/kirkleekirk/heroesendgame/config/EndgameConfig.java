@@ -115,8 +115,8 @@ public final class EndgameConfig {
                 .define("globalAnnouncements", true);
         SKILL_POINT_REWARDS = b.comment("Defeating a nemesis grants FSang18's Heroes skill points (fsang_skill_points).")
                 .define("skillPointRewards", true);
-        DURABILITY_PIERCE = b.comment("How much of FSang's generic 'damage_resistance' ability the nemesis attacks pierce (0 = none, 1 = all).",
-                        "Nemesis hits are tuned to take a fixed share of your health no matter how durable your powers make you.")
+        DURABILITY_PIERCE = b.comment("How much of your damage reduction (armor, Protection, FSang's 'damage_resistance' abilities) nemesis attacks ignore.",
+                        "1 = every hit takes the same share of your health however durable your powers make you; 0 = your defences work as normal.")
                 .defineInRange("durabilityPierce", 0.75, 0.0, 1.0);
         LEASH_DISTANCE = b.comment("If the hunted player gets further than this from a ground nemesis it will teleport after them.")
                 .defineInRange("leashDistance", 48, 16, 256);
