@@ -50,14 +50,23 @@ public final class Rewards {
         }
     }
 
-    /** "Endgame": every major nemesis advancement done. */
+    /**
+     * "Endgame": Thanos, Doctor Doom and three other major nemeses. Reachable with any powers - heroes outside the
+     * Viltrumite / Kryptonian / speedster / mutant lines still have Loki, the Black Order and Dormammu.
+     */
     public static void checkEndgame(ServerPlayer player) {
+        if (!isDone(player, Nemesis.THANOS.advancement()) || !isDone(player, Nemesis.DOCTOR_DOOM.advancement())) {
+            return;
+        }
+        int others = 0;
         for (Nemesis nemesis : Nemesis.values()) {
-            if (nemesis.isMajor() && !isDone(player, nemesis.advancement())) {
-                return;
+            if (nemesis.isMajor() && nemesis != Nemesis.THANOS && nemesis != Nemesis.DOCTOR_DOOM && isDone(player, nemesis.advancement())) {
+                others++;
             }
         }
-        award(player, HeroesEndgame.id("endgame"));
+        if (others >= 3) {
+            award(player, HeroesEndgame.id("endgame"));
+        }
     }
 
     public static boolean isDone(ServerPlayer player, ResourceLocation id) {

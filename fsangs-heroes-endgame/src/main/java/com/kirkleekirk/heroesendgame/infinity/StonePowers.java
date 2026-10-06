@@ -374,8 +374,13 @@ public final class StonePowers {
                 dust(level, mob);
                 dusted++;
             }
+            // "And I... am... Iron Man." Every nemesis in range loses half its health; minions turn to dust.
             for (EndgameBoss boss : level.getEntitiesOfClass(EndgameBoss.class, player.getBoundingBox().inflate(128), EndgameBoss::isAlive)) {
-                boss.hurt(ModDamageTypes.source(level, ModDamageTypes.INFINITY, player), boss.getMaxHealth());
+                if (boss.isMinion()) {
+                    dust(level, boss);
+                } else {
+                    boss.hurt(ModDamageTypes.source(level, ModDamageTypes.SNAP, player), boss.getMaxHealth() * 0.5F);
+                }
             }
             Messages.title(player, Component.translatable("message.heroes_endgame.snap.title").withStyle(ChatFormatting.LIGHT_PURPLE),
                     Component.translatable("message.heroes_endgame.snap.player_subtitle", dusted).withStyle(ChatFormatting.GRAY));

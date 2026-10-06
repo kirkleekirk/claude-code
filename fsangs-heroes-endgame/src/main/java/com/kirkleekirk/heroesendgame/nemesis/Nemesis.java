@@ -54,7 +54,7 @@ public enum Nemesis {
         return color;
     }
 
-    /** Major nemeses count towards Doctor Doom's "rival" trigger and the final advancement. */
+    /** Major nemeses count towards Doctor Doom's "rival" trigger and the "Endgame" advancement. */
     public boolean isMajor() {
         return major;
     }

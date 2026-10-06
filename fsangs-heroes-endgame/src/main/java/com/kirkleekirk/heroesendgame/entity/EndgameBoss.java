@@ -693,7 +693,8 @@ public abstract class EndgameBoss extends Monster {
         if (attacker instanceof EndgameBoss) {
             return false;
         }
-        if (!source.is(DamageTypeTags.BYPASSES_INVULNERABILITY)) {
+        // Nothing resists a snap of the Infinity Gauntlet: no shields, adaptation or per-hit cap.
+        if (!source.is(DamageTypeTags.BYPASSES_INVULNERABILITY) && !source.is(ModDamageTypes.SNAP)) {
             amount = modifyIncomingDamage(source, amount);
             if (amount <= 0.0F) {
                 return false;
