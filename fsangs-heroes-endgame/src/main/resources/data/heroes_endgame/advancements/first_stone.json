@@ -1,0 +1,26 @@
+{
+  "display": {
+    "icon": {
+      "item": "heroes_endgame:space_stone"
+    },
+    "title": {
+      "translate": "advancements.heroes_endgame.first_stone.title"
+    },
+    "description": {
+      "translate": "advancements.heroes_endgame.first_stone.description"
+    },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "granted_by_code": {
+      "trigger": "minecraft:impossible"
+    }
+  },
+  "parent": "heroes_endgame:root",
+  "rewards": {
+    "experience": 50
+  }
+}

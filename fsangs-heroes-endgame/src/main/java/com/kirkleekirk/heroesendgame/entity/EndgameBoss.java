@@ -238,7 +238,9 @@ public abstract class EndgameBoss extends Monster {
     }
 
     protected void onDefeated(DamageSource source) {
-        sayRandom("defeat", 1);
+        if (!isMinion()) {
+            sayRandom("defeat", 1);
+        }
     }
 
     /** Entrance effects when the director brings this boss in. */

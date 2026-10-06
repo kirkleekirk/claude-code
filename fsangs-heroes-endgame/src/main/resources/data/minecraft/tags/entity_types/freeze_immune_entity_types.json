@@ -1,0 +1,26 @@
+{
+  "replace": false,
+  "values": [
+    "heroes_endgame:viltrumite_enforcer",
+    "heroes_endgame:conquest",
+    "heroes_endgame:thragg",
+    "heroes_endgame:loki",
+    "heroes_endgame:illusion",
+    "heroes_endgame:chitauri",
+    "heroes_endgame:ebony_maw",
+    "heroes_endgame:cull_obsidian",
+    "heroes_endgame:proxima_midnight",
+    "heroes_endgame:corvus_glaive",
+    "heroes_endgame:thanos",
+    "heroes_endgame:stonekeeper",
+    "heroes_endgame:dormammu",
+    "heroes_endgame:mindless_one",
+    "heroes_endgame:doombot",
+    "heroes_endgame:doctor_doom",
+    "heroes_endgame:doomsday",
+    "heroes_endgame:zoom",
+    "heroes_endgame:sentinel",
+    "heroes_endgame:master_mold",
+    "heroes_endgame:ghost_rider"
+  ]
+}

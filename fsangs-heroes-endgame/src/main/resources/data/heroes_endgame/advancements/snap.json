@@ -1,0 +1,26 @@
+{
+  "display": {
+    "icon": {
+      "item": "heroes_endgame:reality_stone"
+    },
+    "title": {
+      "translate": "advancements.heroes_endgame.snap.title"
+    },
+    "description": {
+      "translate": "advancements.heroes_endgame.snap.description"
+    },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "granted_by_code": {
+      "trigger": "minecraft:impossible"
+    }
+  },
+  "parent": "heroes_endgame:perfectly_balanced",
+  "rewards": {
+    "experience": 200
+  }
+}

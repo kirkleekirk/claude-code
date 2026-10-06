@@ -1,0 +1,11 @@
+{
+  "type": "heroes_endgame:infinity_loot",
+  "conditions": [
+    {
+      "condition": "forge:loot_table_id",
+      "loot_table_id": "minecraft:chests/ancient_city"
+    }
+  ],
+  "reward": "reality_stone",
+  "chance": "reality"
+}

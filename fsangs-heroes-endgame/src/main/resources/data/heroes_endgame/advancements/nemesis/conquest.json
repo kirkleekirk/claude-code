@@ -1,0 +1,26 @@
+{
+  "display": {
+    "icon": {
+      "item": "heroes_endgame:conquest_medal"
+    },
+    "title": {
+      "translate": "advancements.heroes_endgame.nemesis.conquest.title"
+    },
+    "description": {
+      "translate": "advancements.heroes_endgame.nemesis.conquest.description"
+    },
+    "frame": "goal",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "granted_by_code": {
+      "trigger": "minecraft:impossible"
+    }
+  },
+  "parent": "heroes_endgame:nemesis/viltrumite_trial",
+  "rewards": {
+    "experience": 400
+  }
+}

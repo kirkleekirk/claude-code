@@ -1,0 +1,20 @@
+{
+  "parent": "minecraft:item/handheld",
+  "textures": {
+    "layer0": "heroes_endgame:item/infinity_gauntlet"
+  },
+  "overrides": [
+    {
+      "predicate": {
+        "heroes_endgame:stones": 0.1
+      },
+      "model": "heroes_endgame:item/infinity_gauntlet_partial"
+    },
+    {
+      "predicate": {
+        "heroes_endgame:stones": 1.0
+      },
+      "model": "heroes_endgame:item/infinity_gauntlet_full"
+    }
+  ]
+}

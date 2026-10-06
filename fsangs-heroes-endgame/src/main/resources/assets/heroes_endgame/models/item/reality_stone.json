@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "heroes_endgame:item/reality_stone"
+  }
+}
