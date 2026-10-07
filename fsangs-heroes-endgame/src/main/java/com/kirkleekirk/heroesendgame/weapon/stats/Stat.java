@@ -56,7 +56,11 @@ public enum Stat {
     /** Extra reach for melee weapons, blocks. */
     REACH(true, -2.0, 4.0),
     /** Time to switch to this weapon, ticks. */
-    EQUIP_TIME(false, 1.0, 60.0);
+    EQUIP_TIME(false, 1.0, 60.0),
+    /** Launchers / explosive rounds: blast radius in blocks. */
+    BLAST_RADIUS(true, 0.0, 12.0),
+    /** Launchers: projectile speed in blocks per tick. */
+    PROJECTILE_SPEED(true, 0.1, 20.0);
 
     private final boolean higherIsBetter;
     private final double min;
