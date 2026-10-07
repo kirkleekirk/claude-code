@@ -36,6 +36,10 @@ minecraft {
             property 'forge.enabledGameTestNamespaces', mod_id
             args '--nogui'
         }
+        // ./gradlew runGameTestServer - boots a server, runs every @GameTest in heroes_endgame and exits (non-zero on failure)
+        gameTestServer {
+            property 'forge.enabledGameTestNamespaces', mod_id
+        }
     }
 }
 
