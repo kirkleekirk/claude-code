@@ -1,6 +1,8 @@
 package com.kirkleekirk.heroesendgame.weapon;
 
-import com.kirkleekirk.heroesendgame.power.PowerItems;
+import com.kirkleekirk.heroesendgame.power.CosmicPowerItems;
+import com.kirkleekirk.heroesendgame.power.MartialPowerItems;
+import com.kirkleekirk.heroesendgame.power.MysticPowerItems;
 import com.kirkleekirk.heroesendgame.weapon.bench.BenchRegistry;
 import com.kirkleekirk.heroesendgame.weapon.melee.MeleeItems;
 import com.kirkleekirk.heroesendgame.weapon.net.WeaponNetwork;
@@ -25,7 +27,9 @@ public final class WeaponRegistry {
         BenchRegistry.MENUS.register(modBus);
         BenchRegistry.RECIPE_TYPES.register(modBus);
         BenchRegistry.RECIPE_SERIALIZERS.register(modBus);
-        PowerItems.ITEMS.register(modBus);
+        CosmicPowerItems.ITEMS.register(modBus);
+        MartialPowerItems.ITEMS.register(modBus);
+        MysticPowerItems.ITEMS.register(modBus);
         WeaponTab.TABS.register(modBus);
         modBus.addListener((FMLCommonSetupEvent event) -> event.enqueueWork(WeaponNetwork::register));
     }

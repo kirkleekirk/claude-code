@@ -1,7 +1,9 @@
 package com.kirkleekirk.heroesendgame.weapon;
 
 import com.kirkleekirk.heroesendgame.HeroesEndgame;
-import com.kirkleekirk.heroesendgame.power.PowerItems;
+import com.kirkleekirk.heroesendgame.power.CosmicPowerItems;
+import com.kirkleekirk.heroesendgame.power.MartialPowerItems;
+import com.kirkleekirk.heroesendgame.power.MysticPowerItems;
 import com.kirkleekirk.heroesendgame.weapon.bench.BenchRegistry;
 import com.kirkleekirk.heroesendgame.weapon.melee.MeleeItems;
 import net.minecraft.core.registries.Registries;
@@ -35,7 +37,9 @@ public final class WeaponTab {
                 for (RegistryObject<AttachmentItem> attachment : WeaponItems.ATTACHMENTS.values()) {
                     output.accept(attachment.get());
                 }
-                accept(output, PowerItems.ITEMS.getEntries());
+                accept(output, CosmicPowerItems.ITEMS.getEntries());
+                accept(output, MartialPowerItems.ITEMS.getEntries());
+                accept(output, MysticPowerItems.ITEMS.getEntries());
             })
             .build());
 
