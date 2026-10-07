@@ -49,7 +49,7 @@ public final class WeaponCalc {
         Set<Trait> traits = EnumSet.noneOf(Trait.class);
         traits.addAll(gun.traits());
         List<FireMode> modes = gun.fireModes();
-        AmmoEffect effect = AmmoEffect.NONE;
+        AmmoEffect effect = gun.defaultEffect();
         for (AttachmentSlot slot : AttachmentSlot.values()) {
             AttachmentDefinition attachment = attachments.get(slot);
             if (attachment == null) {

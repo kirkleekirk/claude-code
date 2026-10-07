@@ -11,12 +11,13 @@ import java.util.Set;
 /**
  * A gun: base stats, fire modes, ammo, which gunsmith slots it takes and where attachments sit on its model.
  *
+ * @param defaultEffect what its rounds do without an Ammo Type attachment (e.g. the I.C.E.R. stuns)
  * @param soundSet sound family: sounds are heroes_endgame:gun.&lt;soundSet&gt;.{fire,fire_suppressed,reload,
  *                 reload_empty,dry,mech} (see WeaponSounds)
  */
 public record GunDefinition(String id, WeaponClass weaponClass, List<FireMode> fireModes, AmmoType ammo, WeaponStats base,
                             Set<Trait> traits, Set<AttachmentSlot> slots, Set<String> excluded, String soundSet,
-                            String character, GunVisual visual) implements WeaponDefinition {
+                            String character, GunVisual visual, AmmoEffect defaultEffect) implements WeaponDefinition {
 
     public static Builder builder(String id, WeaponClass weaponClass) {
         return new Builder(id, weaponClass);
@@ -39,6 +40,7 @@ public record GunDefinition(String id, WeaponClass weaponClass, List<FireMode> f
         private boolean separateMagazine = true;
         private boolean separateStock = false;
         private boolean twoHanded = true;
+        private AmmoEffect defaultEffect = AmmoEffect.NONE;
 
         private Builder(String id, WeaponClass weaponClass) {
             this.id = id;
@@ -112,6 +114,11 @@ public record GunDefinition(String id, WeaponClass weaponClass, List<FireMode> f
             return this;
         }
 
+        public Builder effect(AmmoEffect effect) {
+            this.defaultEffect = effect;
+            return this;
+        }
+
         public Builder oneHanded() {
             this.twoHanded = false;
             return this;
@@ -128,7 +135,7 @@ public record GunDefinition(String id, WeaponClass weaponClass, List<FireMode> f
             GunVisual visual = new GunVisual(muzzle, Map.copyOf(sockets), sightLine, separateMagazine, separateStock, twoHanded);
             return new GunDefinition(id, weaponClass, List.copyOf(fireModes), ammo, stats.build(),
                     traits.isEmpty() ? Set.of() : EnumSet.copyOf(traits), finalSlots, Set.copyOf(excluded), soundSet,
-                    character, visual);
+                    character, visual, defaultEffect);
         }
     }
 }
