@@ -14,9 +14,10 @@ import java.util.Map;
  * @param separateMagazine the magazine is its own model ({@code item/gun/<id>_mag}) so reloads can animate it
  * @param separateStock    the stock is its own model ({@code item/gun/<id>_stock}) so stock attachments can replace it
  * @param twoHanded        held with both hands (everything but pistols)
+ * @param grip             where the trigger hand holds the pistol grip (the off hand goes to the UNDERBARREL socket)
  */
 public record GunVisual(Vec3f muzzle, Map<AttachmentSlot, Vec3f> sockets, Vec3f sightLine, boolean separateMagazine,
-                        boolean separateStock, boolean twoHanded) {
+                        boolean separateStock, boolean twoHanded, Vec3f grip) {
     public Vec3f socket(AttachmentSlot slot) {
         if (slot == AttachmentSlot.MUZZLE) {
             return muzzle;

@@ -41,6 +41,7 @@ public record GunDefinition(String id, WeaponClass weaponClass, List<FireMode> f
         private boolean separateStock = false;
         private boolean twoHanded = true;
         private AmmoEffect defaultEffect = AmmoEffect.NONE;
+        private Vec3f grip;
 
         private Builder(String id, WeaponClass weaponClass) {
             this.id = id;
@@ -119,6 +120,12 @@ public record GunDefinition(String id, WeaponClass weaponClass, List<FireMode> f
             return this;
         }
 
+        /** Trigger-hand position; defaults to just behind the mag well, below the sight line. */
+        public Builder grip(double x, double y, double z) {
+            this.grip = Vec3f.of(x, y, z);
+            return this;
+        }
+
         public Builder oneHanded() {
             this.twoHanded = false;
             return this;
@@ -132,7 +139,9 @@ public record GunDefinition(String id, WeaponClass weaponClass, List<FireMode> f
                     AttachmentSlot.OPTIC, AttachmentSlot.STOCK, AttachmentSlot.UNDERBARREL, AttachmentSlot.MAGAZINE,
                     AttachmentSlot.AMMO_TYPE, AttachmentSlot.REAR_GRIP, AttachmentSlot.PROFICIENCY, AttachmentSlot.KIT)
                     : EnumSet.copyOf(slots);
-            GunVisual visual = new GunVisual(muzzle, Map.copyOf(sockets), sightLine, separateMagazine, separateStock, twoHanded);
+            Vec3f mag = sockets.getOrDefault(AttachmentSlot.MAGAZINE, sightLine);
+            Vec3f finalGrip = grip != null ? grip : new Vec3f(8, sightLine.y() - 5, mag.z() + 4);
+            GunVisual visual = new GunVisual(muzzle, Map.copyOf(sockets), sightLine, separateMagazine, separateStock, twoHanded, finalGrip);
             return new GunDefinition(id, weaponClass, List.copyOf(fireModes), ammo, stats.build(),
                     traits.isEmpty() ? Set.of() : EnumSet.copyOf(traits), finalSlots, Set.copyOf(excluded), soundSet,
                     character, visual, defaultEffect);

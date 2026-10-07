@@ -7,7 +7,8 @@ package com.kirkleekirk.heroesendgame.weapon.stats;
  *                     (ammo types, proficiencies, kits, grips). Authored with the attach point at (8, 8, 8) and the
  *                     same axes as guns (forward = -Z, up = +Y): muzzle parts extend towards -Z, optics upwards,
  *                     underbarrel parts and magazines downwards, stocks towards +Z.
- * @param lengthOffset barrels: how many pixels the barrel moves the muzzle forward (negative = shorter)
+ * @param lengthOffset barrels and muzzle devices: how many pixels they move the muzzle point forward (towards -Z) -
+ *                     the muzzle flash and muzzle attachments move with it (negative = shorter)
  * @param sightHeight  optics: height of the reticle above the attach point (aiming lines it up)
  */
 public record AttachmentVisual(String model, float lengthOffset, float sightHeight) {
