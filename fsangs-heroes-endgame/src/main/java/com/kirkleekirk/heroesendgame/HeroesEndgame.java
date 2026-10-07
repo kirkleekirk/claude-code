@@ -6,6 +6,7 @@ import com.kirkleekirk.heroesendgame.registry.ModEffects;
 import com.kirkleekirk.heroesendgame.registry.ModEntities;
 import com.kirkleekirk.heroesendgame.registry.ModItems;
 import com.kirkleekirk.heroesendgame.registry.ModLootModifiers;
+import com.kirkleekirk.heroesendgame.weapon.WeaponRegistry;
 import com.mojang.logging.LogUtils;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.eventbus.api.IEventBus;
@@ -34,6 +35,7 @@ public class HeroesEndgame {
         ModEffects.EFFECTS.register(modBus);
         ModLootModifiers.SERIALIZERS.register(modBus);
         ModCreativeTab.TABS.register(modBus);
+        WeaponRegistry.init(modBus);
 
         ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, EndgameConfig.SPEC, MOD_ID + "-server.toml");
     }

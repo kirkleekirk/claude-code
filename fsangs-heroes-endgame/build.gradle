@@ -58,6 +58,10 @@ dependencies {
     // Palladium is the superpower framework FSang18's Heroes is built on. It is optional at runtime:
     // every call into it goes through PalladiumCompat, which is only touched when the mod is loaded.
     compileOnly fg.deobf("maven.modrinth:threetag-palladium:${palladium_version}")
+
+    // Plain unit tests for the pure-Java parts (weapon stats, gunsmith maths).
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 tasks.named('processResources', ProcessResources).configure {
@@ -95,4 +99,12 @@ tasks.withType(JavaCompile).configureEach {
     // Forge 47.4 deprecates the ResourceLocation constructors in favour of 1.21-style factories that older 47.x
     // builds don't have; the constructors are kept on purpose for compatibility.
     options.compilerArgs << '-Xlint:-removal' << '-Xmaxerrs' << '500'
+}
+
+tasks.named('test', Test).configure {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+        exceptionFormat 'full'
+    }
 }

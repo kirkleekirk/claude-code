@@ -1,5 +1,6 @@
 {
   "itemGroup.heroes_endgame": "Heroes Endgame",
+
   "entity.heroes_endgame.viltrumite_enforcer": "Viltrumite Enforcer",
   "entity.heroes_endgame.viltrumite_enforcer.soldier": "Viltrumite Soldier",
   "entity.heroes_endgame.viltrumite_enforcer.scout": "Viltrumite Scout",
@@ -24,6 +25,7 @@
   "entity.heroes_endgame.master_mold": "Master Mold",
   "entity.heroes_endgame.ghost_rider": "Ghost Rider",
   "entity.heroes_endgame.energy_bolt": "Energy Bolt",
+
   "item.heroes_endgame.space_stone": "Tesseract (Space Stone)",
   "item.heroes_endgame.mind_stone": "Mind Stone",
   "item.heroes_endgame.reality_stone": "Reality Stone (Aether)",
@@ -50,6 +52,7 @@
   "item.heroes_endgame.soul_stone.lore": "Vormir's price was paid in full.",
   "item.heroes_endgame.soul_stone.passive": "Held: Regeneration",
   "item.heroes_endgame.infinity_stone.gauntlet_hint": "Socket it into an Infinity Gauntlet to unlock its true power",
+
   "item.heroes_endgame.infinity_gauntlet": "Infinity Gauntlet",
   "item.heroes_endgame.infinity_gauntlet.lore": "Forged from Uru in the heart of a dying star. It hungers for six stones.",
   "item.heroes_endgame.infinity_gauntlet.help": "Gauntlet in main hand + stone in off hand, use: socket it. Sneak + use: choose a power. Use: unleash it.",
@@ -111,8 +114,10 @@
   "item.heroes_endgame.sentinel_spawn_egg": "Sentinel Spawn Egg",
   "item.heroes_endgame.master_mold_spawn_egg": "Master Mold Spawn Egg",
   "item.heroes_endgame.ghost_rider_spawn_egg": "Ghost Rider Spawn Egg",
+
   "effect.heroes_endgame.snapped": "Unbalanced (Snapped)",
   "effect.heroes_endgame.hellfire": "Hellfire",
+
   "death.attack.heroes_endgame.nemesis": "%1$s was defeated by %2$s",
   "death.attack.heroes_endgame.nemesis.player": "%1$s was defeated whilst fighting %2$s",
   "death.attack.heroes_endgame.viltrumite": "%1$s was deemed too weak by %2$s",
@@ -141,6 +146,7 @@
   "death.attack.heroes_endgame.dark_dimension.player": "%1$s was consumed by the Dark Dimension whilst fighting %2$s",
   "death.attack.heroes_endgame.telekinesis": "%1$s was torn apart by the mind of %2$s",
   "death.attack.heroes_endgame.telekinesis.player": "%1$s was torn apart whilst fighting %2$s",
+
   "nemesis.heroes_endgame.viltrumite_trial": "The Viltrumite Trial",
   "nemesis.heroes_endgame.conquest": "Conquest",
   "nemesis.heroes_endgame.thragg": "Grand Regent Thragg",
@@ -155,12 +161,14 @@
   "nemesis.heroes_endgame.sentinels": "The Sentinels",
   "nemesis.heroes_endgame.master_mold": "Master Mold",
   "nemesis.heroes_endgame.ghost_rider": "The Spirit of Vengeance",
+
   "power_family.heroes_endgame.viltrumite": "Viltrumite",
   "power_family.heroes_endgame.kryptonian": "Kryptonian",
   "power_family.heroes_endgame.speedster": "Speedster",
   "power_family.heroes_endgame.mutant": "Mutant",
   "power_family.heroes_endgame.spirit_of_vengeance": "Spirit of Vengeance",
   "power_family.heroes_endgame.hulk": "Hulk",
+
   "infinity_stage.heroes_endgame.dormant": "Dormant - the Mad Titan is unaware of this world",
   "infinity_stage.heroes_endgame.herald": "Act I - Loki and the Chitauri",
   "infinity_stage.heroes_endgame.clock": "Act II - the Infinity clock is ticking",
@@ -170,6 +178,7 @@
   "infinity_owner.heroes_endgame.unclaimed": "still hidden",
   "infinity_owner.heroes_endgame.found": "claimed by heroes",
   "infinity_owner.heroes_endgame.thanos": "held by Thanos",
+
   "damage_category.heroes_endgame.melee": "melee attacks",
   "damage_category.heroes_endgame.projectile": "projectiles",
   "damage_category.heroes_endgame.fire": "fire",
@@ -178,6 +187,7 @@
   "damage_category.heroes_endgame.magic": "magic",
   "damage_category.heroes_endgame.cold": "cold",
   "damage_category.heroes_endgame.powers": "superpowers",
+
   "status.heroes_endgame.dormant": "dormant",
   "status.heroes_endgame.cooldown": "regrouping",
   "status.heroes_endgame.warned": "stirring",
@@ -194,6 +204,7 @@
   "status.heroes_endgame.hint.karma": "(karma %s, threshold %s)",
   "status.heroes_endgame.hint.doom": "(skill %s / %s or %s / %s nemeses defeated)",
   "status.heroes_endgame.infinity": "The Infinity Saga",
+
   "message.heroes_endgame.viltrumite_trial.omen": "Tomorrow you come of age by Viltrumite reckoning. Somewhere far above, two Viltrumites are already on their way.",
   "message.heroes_endgame.viltrumite_trial.incoming": "Two sonic booms rattle the sky. The Viltrumite Empire has come to test you.",
   "message.heroes_endgame.conquest.omen": "A Viltrumite veteran has been dispatched to bring you to heel. He is close.",
@@ -223,6 +234,7 @@
   "message.heroes_endgame.infinity.loki_incoming": "Space itself folds open above you. Thanos has sent his herald for the stone you carry.",
   "message.heroes_endgame.infinity.black_order_incoming": "Portals tear open nearby. The Children of Thanos have come for your stones.",
   "message.heroes_endgame.infinity.thanos_incoming": "The air grows heavy. The Mad Titan is coming for you.",
+
   "message.heroes_endgame.arrival.viltrumite_trial": "%s is facing the Viltrumite coming-of-age trial!",
   "message.heroes_endgame.arrival.viltrumite_trial.title": "Coming of Age",
   "message.heroes_endgame.arrival.viltrumite_trial.subtitle": "Prove you are not weak",
@@ -265,6 +277,7 @@
   "message.heroes_endgame.arrival.ghost_rider": "The Spirit of Vengeance has come for %s!",
   "message.heroes_endgame.arrival.ghost_rider.title": "Ghost Rider",
   "message.heroes_endgame.arrival.ghost_rider.subtitle": "Look into my eyes",
+
   "message.heroes_endgame.viltrumite.failed": "You were found wanting. The Empire will test you again once you have come of age once more.",
   "message.heroes_endgame.zoom.stole_speed": "Zoom stole your speed. It will take half a day to come back.",
   "message.heroes_endgame.ghost_rider.judged": "Your soul has been judged. Part of your debt is paid.",
@@ -289,6 +302,7 @@
   "message.heroes_endgame.power_stone.burn": "The Power Stone is burning through you! Share the load with another player or put it in a gauntlet.",
   "message.heroes_endgame.reality.used": "%s creatures turned into bubbles",
   "message.heroes_endgame.mind.controlled": "%s now serves you",
+
   "message.heroes_endgame.snap.title": "SNAP",
   "message.heroes_endgame.snap.subtitle": "Half of your power fades to dust",
   "message.heroes_endgame.snap.world_subtitle": "Thanos has completed the Infinity Gauntlet",
@@ -298,6 +312,7 @@
   "message.heroes_endgame.snap.too_weak": "Your body was never strong enough to hold the power of all six stones.",
   "message.heroes_endgame.snap.reversed_title": "They're back",
   "message.heroes_endgame.snap.reversed_subtitle": "The snap has been undone",
+
   "message.heroes_endgame.infinity.awakened": "Somewhere beyond the stars, the Mad Titan turns his gaze toward this world. Someone has claimed the %s.",
   "message.heroes_endgame.infinity.a_stone": "an Infinity Stone",
   "message.heroes_endgame.infinity.claimed.power": "Thanos has decimated Xandar and taken the Power Stone.",
@@ -321,6 +336,7 @@
   "message.heroes_endgame.dormammu.loop_title": "Time loops",
   "message.heroes_endgame.dormammu.loop_subtitle": "Loop %s - Dormammu grows weary",
   "message.heroes_endgame.dormammu.won_subtitle": "Dormammu accepted the bargain",
+
   "boss.heroes_endgame.viltrumite.arrival.0": "Every Viltrumite is tested when they come of age. Show us you are not weak.",
   "boss.heroes_endgame.viltrumite.arrival.1": "The Empire tolerates no weakness. If you cannot survive us, you were never Viltrumite.",
   "boss.heroes_endgame.viltrumite.victory.0": "Weak. As we suspected. The Empire purges what it does not need.",
@@ -328,6 +344,7 @@
   "boss.heroes_endgame.viltrumite.defeat": "You... are Viltrumite after all. The Empire will hear of this.",
   "boss.heroes_endgame.viltrumite.retreat": "We will find you again, child of Viltrum.",
   "boss.heroes_endgame.viltrumite.grab_broken": "Strong. Stronger than you look.",
+
   "boss.heroes_endgame.conquest.arrival.0": "I am Conquest. I was promised a fight - don't you dare disappoint me!",
   "boss.heroes_endgame.conquest.arrival.1": "The Empire sent me to bring you in. I hope you refuse.",
   "boss.heroes_endgame.conquest.phase_bleed": "Ha! You made me bleed! Finally, a real fight!",
@@ -338,6 +355,7 @@
   "boss.heroes_endgame.conquest.victory.0": "Is that it? I've had better fights with my own reflection.",
   "boss.heroes_endgame.conquest.victory.1": "Pathetic. Viltrum is better off without you.",
   "boss.heroes_endgame.conquest.retreat": "Run while you can. I'll enjoy hunting you down.",
+
   "boss.heroes_endgame.thragg.arrival.0": "I am Thragg, Grand Regent of the Viltrumite Empire. You have become a problem.",
   "boss.heroes_endgame.thragg.arrival.1": "I was bred to be the perfect warrior. You were bred to kneel.",
   "boss.heroes_endgame.thragg.purge": "The Empire does not fight alone. Purge this one!",
@@ -348,6 +366,7 @@
   "boss.heroes_endgame.thragg.victory.0": "Viltrum endures. You do not.",
   "boss.heroes_endgame.thragg.victory.1": "Another weakling purged. The Empire grows stronger.",
   "boss.heroes_endgame.thragg.retreat": "There is nowhere in the universe you can hide from the Empire.",
+
   "boss.heroes_endgame.loki.arrival.0": "I am Loki, of Asgard, and I am burdened with glorious purpose.",
   "boss.heroes_endgame.loki.arrival.1": "The Mad Titan wants what you found. Hand it over, and I may let you kneel.",
   "boss.heroes_endgame.loki.army": "I have an army.",
@@ -358,6 +377,7 @@
   "boss.heroes_endgame.loki.victory.0": "Kneel before me. KNEEL!",
   "boss.heroes_endgame.loki.victory.1": "Is this not simpler? You were made to be ruled.",
   "boss.heroes_endgame.loki.retreat": "We'll meet again. I'm remarkably hard to get rid of.",
+
   "boss.heroes_endgame.ebony_maw.arrival.0": "Hear me and rejoice. You are about to be saved by Thanos.",
   "boss.heroes_endgame.ebony_maw.arrival.1": "You hold something that belongs to my master. Surrender it.",
   "boss.heroes_endgame.ebony_maw.disarm": "Such a primitive weapon. Allow me to relieve you of it.",
@@ -365,18 +385,21 @@
   "boss.heroes_endgame.ebony_maw.victory.0": "Rejoice. Even in death, you serve the Great Titan.",
   "boss.heroes_endgame.ebony_maw.victory.1": "Your sacrifice will be remembered. Briefly.",
   "boss.heroes_endgame.ebony_maw.retreat": "We will return for the stone.",
+
   "boss.heroes_endgame.cull_obsidian.arrival.0": "*Cull Obsidian roars and raises his hammer*",
   "boss.heroes_endgame.cull_obsidian.arrival.1": "*The ground shakes as Cull Obsidian advances*",
   "boss.heroes_endgame.cull_obsidian.defeat": "*Cull Obsidian collapses with a final roar*",
   "boss.heroes_endgame.cull_obsidian.victory.0": "*Cull Obsidian grunts in satisfaction*",
   "boss.heroes_endgame.cull_obsidian.victory.1": "*Cull Obsidian tears the stone from your grasp*",
   "boss.heroes_endgame.cull_obsidian.retreat": "*Cull Obsidian vanishes through a portal*",
+
   "boss.heroes_endgame.proxima_midnight.arrival.0": "He will not be stopped. Neither will I.",
   "boss.heroes_endgame.proxima_midnight.arrival.1": "Surrender the stone and your death will be quick.",
   "boss.heroes_endgame.proxima_midnight.defeat": "Father... forgive me...",
   "boss.heroes_endgame.proxima_midnight.victory.0": "You should have run.",
   "boss.heroes_endgame.proxima_midnight.victory.1": "The stone is ours. Thanos will be pleased.",
   "boss.heroes_endgame.proxima_midnight.retreat": "This is not over.",
+
   "boss.heroes_endgame.corvus_glaive.arrival.0": "The glaive hungers. Give us the stone.",
   "boss.heroes_endgame.corvus_glaive.arrival.1": "You cannot kill what the glaive sustains.",
   "boss.heroes_endgame.corvus_glaive.glaive_cracked": "The glaive... it's cracking!",
@@ -384,6 +407,7 @@
   "boss.heroes_endgame.corvus_glaive.victory.0": "Another soul for my glaive.",
   "boss.heroes_endgame.corvus_glaive.victory.1": "Thanos will have his stone.",
   "boss.heroes_endgame.corvus_glaive.retreat": "We fall back. For now.",
+
   "boss.heroes_endgame.thanos.arrival.0": "Fine. I'll do it myself.",
   "boss.heroes_endgame.thanos.arrival.1": "I am inevitable.",
   "boss.heroes_endgame.thanos.arrival.2": "Dread it. Run from it. Destiny arrives all the same.",
@@ -400,6 +424,7 @@
   "boss.heroes_endgame.thanos.victory.0": "The hardest choices require the strongest wills.",
   "boss.heroes_endgame.thanos.victory.1": "I know what it's like to lose. To feel so desperately that you're right, yet to fail nonetheless.",
   "boss.heroes_endgame.thanos.retreat": "I will find you. And when I do, the stones will be mine.",
+
   "boss.heroes_endgame.dormammu.arrival": "Who dares open the Eye in my realm? You have come to die.",
   "boss.heroes_endgame.dormammu.bargain": "Dormammu, I've come to bargain.",
   "boss.heroes_endgame.dormammu.loop_first": "What is this? An illusion?",
@@ -411,6 +436,7 @@
   "boss.heroes_endgame.dormammu.defeat": "This is not over, sorcerer.",
   "boss.heroes_endgame.dormammu.victory.0": "Your world is mine.",
   "boss.heroes_endgame.dormammu.victory.1": "Another soul for the Dark Dimension.",
+
   "boss.heroes_endgame.doombot.arrival.0": "THIS UNIT SPEAKS FOR DOOM. YOU WILL BE TESTED.",
   "boss.heroes_endgame.doombot.arrival.1": "DOOM HAS TAKEN AN INTEREST IN YOU. RECORDING.",
   "boss.heroes_endgame.doombot.emp": "YOUR TECHNOLOGY IS INFERIOR.",
@@ -420,6 +446,7 @@
   "boss.heroes_endgame.doombot.victory.0": "TEST CONCLUDED. SUBJECT INADEQUATE.",
   "boss.heroes_endgame.doombot.victory.1": "DOOM WILL BE DISAPPOINTED.",
   "boss.heroes_endgame.doombot.retreat": "RETURNING TO LATVERIA.",
+
   "boss.heroes_endgame.doom.arrival.0": "Doom has studied you and found you... interesting. That will not save you.",
   "boss.heroes_endgame.doom.arrival.1": "Kneel before Doom, and perhaps Doom will let you serve.",
   "boss.heroes_endgame.doom.studied": "Your reliance on %s is predictable. Doom has prepared.",
@@ -437,6 +464,7 @@
   "boss.heroes_endgame.doom.victory.0": "Doom expected nothing less.",
   "boss.heroes_endgame.doom.victory.1": "Another rival proven unworthy. As it always must be.",
   "boss.heroes_endgame.doom.retreat": "Doom has other matters to attend to. We will meet again.",
+
   "boss.heroes_endgame.doomsday.arrival": "*A bone-shaking roar splits the air. Something has clawed its way up from deep beneath the earth.*",
   "boss.heroes_endgame.doomsday.adapt": "*Doomsday's body hardens against %s (%s%% resistance)*",
   "boss.heroes_endgame.doomsday.immune": "*%s no longer has any effect on Doomsday*",
@@ -446,6 +474,7 @@
   "boss.heroes_endgame.doomsday.victory.0": "*Doomsday roars over its fallen prey*",
   "boss.heroes_endgame.doomsday.victory.1": "*Doomsday sinks back beneath the earth*",
   "boss.heroes_endgame.doomsday.retreat": "*Doomsday burrows back into the earth*",
+
   "boss.heroes_endgame.zoom.arrival.0": "I'm going to take your speed. And then I'm going to take everything.",
   "boss.heroes_endgame.zoom.arrival.1": "You're not the fastest. You never were.",
   "boss.heroes_endgame.zoom.remnants": "Meet my time remnants.",
@@ -459,6 +488,7 @@
   "boss.heroes_endgame.zoom.victory.0": "Your speed is mine.",
   "boss.heroes_endgame.zoom.victory.1": "There can only be one fastest man alive.",
   "boss.heroes_endgame.zoom.retreat": "I'll be watching from the dark.",
+
   "boss.heroes_endgame.sentinel.arrival": "MUTANT SIGNATURE DETECTED. COMMENCING NEUTRALIZATION.",
   "boss.heroes_endgame.sentinel.adapted": "THREAT PATTERN ANALYZED: %s. ADAPTING.",
   "boss.heroes_endgame.sentinel.inhibitor": "MUTANT INHIBITOR FIELD ENGAGED.",
@@ -467,12 +497,14 @@
   "boss.heroes_endgame.sentinel.victory.0": "THREAT NEUTRALIZED.",
   "boss.heroes_endgame.sentinel.victory.1": "MUTANT CONTAINMENT SUCCESSFUL.",
   "boss.heroes_endgame.sentinel.retreat": "SUBJECT LOST. RESUMING PATROL.",
+
   "boss.heroes_endgame.master_mold.arrival": "I AM MASTER MOLD. EVERY SENTINEL IS MY CHILD. EVERY MUTANT IS MY PREY.",
   "boss.heroes_endgame.master_mold.inhibitor": "GENETIC SUPPRESSION AT MAXIMUM.",
   "boss.heroes_endgame.master_mold.defeat": "PROGRAM... FAILURE... SENTINEL PRODUCTION... HALTED...",
   "boss.heroes_endgame.master_mold.victory.0": "THE MUTANT PROBLEM IS SOLVED.",
   "boss.heroes_endgame.master_mold.victory.1": "PRODUCTION WILL CONTINUE.",
   "boss.heroes_endgame.master_mold.retreat": "RECALCULATING.",
+
   "boss.heroes_endgame.ghost_rider.arrival.0": "Your soul is stained with innocent blood.",
   "boss.heroes_endgame.ghost_rider.arrival.1": "The Spirit of Vengeance has come for the guilty.",
   "boss.heroes_endgame.ghost_rider.penance": "Look into my eyes. Feel the pain you've caused.",
@@ -481,12 +513,14 @@
   "boss.heroes_endgame.ghost_rider.victory.0": "Your soul is judged.",
   "boss.heroes_endgame.ghost_rider.victory.1": "Vengeance is served.",
   "boss.heroes_endgame.ghost_rider.retreat": "I will return when the guilty walk again.",
+
   "boss.heroes_endgame.stonekeeper.line0": "Welcome, %s.",
   "boss.heroes_endgame.stonekeeper.line1": "I guide others to a treasure I cannot possess.",
   "boss.heroes_endgame.stonekeeper.line2": "What you seek lies before you - as does what you fear.",
   "boss.heroes_endgame.stonekeeper.line3": "The stone demands a sacrifice. To take it, you must lose that which you love.",
   "boss.heroes_endgame.stonekeeper.line4": "An everlasting exchange. A soul... for a soul.",
   "boss.heroes_endgame.stonekeeper.accepted": "It is done. %s was loved... and so the stone is yours.",
+
   "advancements.heroes_endgame.root.title": "Heroes Endgame",
   "advancements.heroes_endgame.root.description": "Your powers grow. So do your enemies.",
   "advancements.heroes_endgame.nemesis.viltrumite_trial.title": "Coming of Age",
@@ -531,6 +565,7 @@
   "advancements.heroes_endgame.nemesis.ghost_rider.description": "Survive the Spirit of Vengeance",
   "advancements.heroes_endgame.endgame.title": "Endgame",
   "advancements.heroes_endgame.endgame.description": "Defeat Thanos, Doctor Doom and three other major nemeses",
+
   "command.heroes_endgame.unknown_nemesis": "Unknown nemesis",
   "command.heroes_endgame.unknown_stone": "Unknown Infinity Stone or owner",
   "command.heroes_endgame.summon_failed": "Couldn't bring in %s (already active, or no room to spawn)",
@@ -544,6 +579,5 @@
   "command.heroes_endgame.infinity.unsnapped": "The snap has been undone",
   "command.heroes_endgame.infinity.reset": "The Infinity Saga has been reset",
   "command.heroes_endgame.debug.set": "Done",
-  "command.heroes_endgame.no_property": "That player has no Palladium property '%s' (is FSang18's Heroes installed?)",
-  "itemGroup.heroes_endgame.arsenal": "Heroes Endgame: Arsenal"
+  "command.heroes_endgame.no_property": "That player has no Palladium property '%s' (is FSang18's Heroes installed?)"
 }
