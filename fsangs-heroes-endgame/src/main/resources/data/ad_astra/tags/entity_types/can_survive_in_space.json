@@ -1,0 +1,89 @@
+{
+  "replace": false,
+  "values": [
+    {
+      "id": "heroes_endgame:viltrumite_enforcer",
+      "required": false
+    },
+    {
+      "id": "heroes_endgame:conquest",
+      "required": false
+    },
+    {
+      "id": "heroes_endgame:thragg",
+      "required": false
+    },
+    {
+      "id": "heroes_endgame:loki",
+      "required": false
+    },
+    {
+      "id": "heroes_endgame:illusion",
+      "required": false
+    },
+    {
+      "id": "heroes_endgame:chitauri",
+      "required": false
+    },
+    {
+      "id": "heroes_endgame:ebony_maw",
+      "required": false
+    },
+    {
+      "id": "heroes_endgame:cull_obsidian",
+      "required": false
+    },
+    {
+      "id": "heroes_endgame:proxima_midnight",
+      "required": false
+    },
+    {
+      "id": "heroes_endgame:corvus_glaive",
+      "required": false
+    },
+    {
+      "id": "heroes_endgame:thanos",
+      "required": false
+    },
+    {
+      "id": "heroes_endgame:stonekeeper",
+      "required": false
+    },
+    {
+      "id": "heroes_endgame:dormammu",
+      "required": false
+    },
+    {
+      "id": "heroes_endgame:mindless_one",
+      "required": false
+    },
+    {
+      "id": "heroes_endgame:doombot",
+      "required": false
+    },
+    {
+      "id": "heroes_endgame:doctor_doom",
+      "required": false
+    },
+    {
+      "id": "heroes_endgame:doomsday",
+      "required": false
+    },
+    {
+      "id": "heroes_endgame:zoom",
+      "required": false
+    },
+    {
+      "id": "heroes_endgame:sentinel",
+      "required": false
+    },
+    {
+      "id": "heroes_endgame:master_mold",
+      "required": false
+    },
+    {
+      "id": "heroes_endgame:ghost_rider",
+      "required": false
+    }
+  ]
+}

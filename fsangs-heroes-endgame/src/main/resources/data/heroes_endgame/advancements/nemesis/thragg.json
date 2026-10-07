@@ -1,0 +1,26 @@
+{
+  "display": {
+    "icon": {
+      "item": "heroes_endgame:regent_crest"
+    },
+    "title": {
+      "translate": "advancements.heroes_endgame.nemesis.thragg.title"
+    },
+    "description": {
+      "translate": "advancements.heroes_endgame.nemesis.thragg.description"
+    },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "granted_by_code": {
+      "trigger": "minecraft:impossible"
+    }
+  },
+  "parent": "heroes_endgame:nemesis/conquest",
+  "rewards": {
+    "experience": 800
+  }
+}

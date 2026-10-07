@@ -1,0 +1,26 @@
+{
+  "display": {
+    "icon": {
+      "item": "minecraft:green_dye"
+    },
+    "title": {
+      "translate": "advancements.heroes_endgame.puny_god.title"
+    },
+    "description": {
+      "translate": "advancements.heroes_endgame.puny_god.description"
+    },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": true
+  },
+  "criteria": {
+    "granted_by_code": {
+      "trigger": "minecraft:impossible"
+    }
+  },
+  "parent": "heroes_endgame:nemesis/loki",
+  "rewards": {
+    "experience": 100
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "type": "heroes_endgame:infinity_loot",
+  "conditions": [
+    {
+      "condition": "forge:loot_table_id",
+      "loot_table_id": "ad_astra:chests/temple/mars/temple"
+    }
+  ],
+  "reward": "power_stone",
+  "chance": "power_mars",
+  "requires_mod": "ad_astra"
+}

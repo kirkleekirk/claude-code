@@ -1,0 +1,7 @@
+{
+  "criteria": {
+    "granted_by_code": {
+      "trigger": "minecraft:impossible"
+    }
+  }
+}

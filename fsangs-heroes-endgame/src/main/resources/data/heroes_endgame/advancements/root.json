@@ -1,0 +1,23 @@
+{
+  "display": {
+    "icon": {
+      "item": "heroes_endgame:watcher_log"
+    },
+    "title": {
+      "translate": "advancements.heroes_endgame.root.title"
+    },
+    "description": {
+      "translate": "advancements.heroes_endgame.root.description"
+    },
+    "frame": "task",
+    "show_toast": false,
+    "announce_to_chat": false,
+    "hidden": false,
+    "background": "minecraft:textures/block/crying_obsidian.png"
+  },
+  "criteria": {
+    "tick": {
+      "trigger": "minecraft:tick"
+    }
+  }
+}

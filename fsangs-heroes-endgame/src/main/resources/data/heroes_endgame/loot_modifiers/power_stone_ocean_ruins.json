@@ -1,0 +1,12 @@
+{
+  "type": "heroes_endgame:infinity_loot",
+  "conditions": [
+    {
+      "condition": "forge:loot_table_id",
+      "loot_table_id": "minecraft:chests/underwater_ruin_big"
+    }
+  ],
+  "reward": "power_stone",
+  "chance": "power_ocean",
+  "forbids_mod": "ad_astra"
+}

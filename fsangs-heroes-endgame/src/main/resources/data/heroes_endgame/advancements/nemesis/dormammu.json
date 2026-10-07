@@ -1,0 +1,26 @@
+{
+  "display": {
+    "icon": {
+      "item": "heroes_endgame:time_stone"
+    },
+    "title": {
+      "translate": "advancements.heroes_endgame.nemesis.dormammu.title"
+    },
+    "description": {
+      "translate": "advancements.heroes_endgame.nemesis.dormammu.description"
+    },
+    "frame": "goal",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "granted_by_code": {
+      "trigger": "minecraft:impossible"
+    }
+  },
+  "parent": "heroes_endgame:first_stone",
+  "rewards": {
+    "experience": 300
+  }
+}
