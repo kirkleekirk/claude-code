@@ -10,6 +10,7 @@ import { buildIcons } from './items/icons.js';
 import { Input } from './core/input.js';
 import { injectCSS } from './ui/style.js';
 import { Game } from './game/game.js';
+import { loadAvatarAssets } from './entities/avatar/assets.js';
 
 const params = new URLSearchParams(location.search);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -71,6 +72,7 @@ export class App {
     this.sky = new Sky(gl);
     this.terrain = makeTerrainMaterials(this.sky.uniforms, blockTextureArray(gl));
     buildIcons(gl);
+    await loadAvatarAssets();
     this.input = new Input(this.canvas);
     this.input.sens = this.settings.sensitivity;
     this.input.invertY = this.settings.invertY;

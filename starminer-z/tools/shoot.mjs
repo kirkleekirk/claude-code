@@ -21,7 +21,8 @@ for (const s of shots) {
     await page.waitForFunction(() => (window.__readiness || 0) >= 1 || window.__shotReady === true, null, { timeout: wait, polling: 500 });
   } catch { logs.push(`[timeout] ${name} readiness=${await page.evaluate(() => window.__readiness)}`); }
   await page.waitForTimeout(parseInt(process.env.SETTLE || '2500', 10));
-  await page.screenshot({ path: `${outDir}/${name}.png` });
+  try { await page.screenshot({ path: `${outDir}/${name}.png`, timeout: 120000 }); }
+  catch (e) { logs.push(`[screenshot failed] ${name}: ${e.message.split('\n')[0]}`); }
   console.log(`${name}: ${((Date.now() - t0) / 1000).toFixed(1)} s`);
 }
 if (logs.length) console.log(logs.slice(0, 40).join('\n'));

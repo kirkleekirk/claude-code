@@ -14,6 +14,10 @@ import { BlockItemMaterials, blockItemGeometry } from '../gfx/blockItem.js';
 import { makePropMaterial } from '../gfx/propMaterial.js';
 import { Drops } from './drops.js';
 import { HUD } from '../ui/hud.js';
+import { AvatarModel } from '../entities/avatar/model.js';
+import { PRESETS } from '../entities/avatar/looks.js';
+
+const testParams = new URLSearchParams(location.search);
 
 const _v = new THREE.Vector3(), _f = new THREE.Vector3();
 
@@ -155,6 +159,11 @@ export class Game {
     this.tracers.update(dt);
     for (const got of this.drops.update(dt, p, this.inventory)) this.audio?.pickup(got.id);
     this.enemies?.update(dt, playing && this.ready);
+    if (this.testAvatars) for (const m of this.testAvatars) {
+      m.update(dt);
+      const L = this.world.lightAt(m.root.position.x, m.root.position.y + 1.4, m.root.position.z);
+      m.setLight(L.sky / 15, L.block / 15);
+    }
 
     // the view model
     const held = this.inventory.held;
@@ -187,10 +196,28 @@ export class Game {
 
   onReady() {
     this.ready = true;
+    if (testParams.has('avatars') && !this.testAvatars) this.spawnTestAvatars();
     // make sure the player is standing on the ground, not inside it
     const p = this.player;
     for (let i = 0; i < 120 && p.collides(p.pos.x, p.pos.y, p.pos.z); i++) p.pos.y += 1;
     if (!this.lastDayShown) { this.lastDayShown = true; this.hud.showDay(this.app.sky.day); }
+  }
+
+  // A line-up of the player avatars in front of the camera (tools/shoot.mjs uses it).
+  spawnTestAvatars() {
+    const p = this.player;
+    const fwd = new THREE.Vector3(-Math.sin(p.yaw), 0, -Math.cos(p.yaw));
+    const right = new THREE.Vector3(Math.cos(p.yaw), 0, -Math.sin(p.yaw));
+    this.testAvatars = PRESETS.map((look, i) => {
+      const m = new AvatarModel(look, this.app.sky.uniforms, this.app.terrain.uniforms);
+      const at = p.pos.clone().addScaledVector(fwd, parseFloat(testParams.get('adist') || '2.2')).addScaledVector(right, (i - 1.5) * 0.75);
+      at.y = this.world.surfaceY(at.x, at.z) + 1 + parseFloat(testParams.get('ay') || '0');
+      m.root.position.copy(at);
+      m.root.rotation.y = p.yaw;
+      m.play(testParams.get('anim') || 'idle');
+      this.scene.add(m.root);
+      return m;
+    });
   }
 
   biomeName() {
