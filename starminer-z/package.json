@@ -1,0 +1,21 @@
+{
+  "name": "starminer-z",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A voxel survival game in the spirit of CastleMiner Z (Xbox 360), set on an alien moon under a giant planet.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "build:artifact": "node tools/build-artifact.mjs",
+    "build:avatar": "node tools/avatar/build-avatar.mjs",
+    "test": "node tools/test-world.mjs"
+  },
+  "dependencies": {
+    "three": "0.169.0"
+  },
+  "devDependencies": {
+    "vite": "5.4.10"
+  }
+}
