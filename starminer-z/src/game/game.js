@@ -16,6 +16,8 @@ import { Drops } from './drops.js';
 import { HUD } from '../ui/hud.js';
 import { AvatarModel } from '../entities/avatar/model.js';
 import { PRESETS } from '../entities/avatar/looks.js';
+import { zombieLook } from '../entities/avatar/zombie.js';
+import { skeletonLook } from '../entities/avatar/skeleton.js';
 
 const testParams = new URLSearchParams(location.search);
 
@@ -208,8 +210,13 @@ export class Game {
     const p = this.player;
     const fwd = new THREE.Vector3(-Math.sin(p.yaw), 0, -Math.cos(p.yaw));
     const right = new THREE.Vector3(Math.cos(p.yaw), 0, -Math.sin(p.yaw));
-    this.testAvatars = PRESETS.map((look, i) => {
+    const kind = testParams.get('avatars');
+    const z = kind === 'z' || kind === 's';
+    const zs = parseInt(testParams.get('zseed') || '0', 10);
+    const list = kind === 'z' ? [1, 2, 3, 4].map((s) => zombieLook(s + zs)) : kind === 's' ? [1, 1, 1, 1].map((s) => skeletonLook(s + zs)) : PRESETS;
+    this.testAvatars = list.map((look, i) => {
       const m = new AvatarModel(look, this.app.sky.uniforms, this.app.terrain.uniforms);
+      if (z) { m.layer.reach = 0.9; m.layer.lean = 0.15; m.layer.tilt = (i - 1.5) * 0.15; }
       const at = p.pos.clone().addScaledVector(fwd, parseFloat(testParams.get('adist') || '2.2')).addScaledVector(right, (i - 1.5) * 0.75);
       at.y = this.world.surfaceY(at.x, at.z) + 1 + parseFloat(testParams.get('ay') || '0');
       m.root.position.copy(at);

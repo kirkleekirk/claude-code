@@ -8,7 +8,10 @@
 //   hair: { style: 'short' | 'bob' | 'none', color },
 //   top: { tint }, bottoms: { tint }, shoes: { tint },     a top's tint is its colour; the others'
 //                                                            multiply the avatar's own textures
-//   face: { eyes, brows, mouth, iris, lip, brow, browThin },  frames of the face atlas and colours
+//   face: { eyes, brows, mouth, iris, lip, brow, browThin,    frames of the face atlas and colours
+//           white, teeth, socket, eyeScale, irisLo },
+//   rot, grime, tear: 0..1, dead skin, filthy clothes and holes in them (zombies); seed varies them
+//   aged: old bone (skeletons); bodyPart: the body's material code (see material.js)
 //   build: (geometry builder) => extra pieces               see zombie.js and skeleton.js
 // }
 
@@ -110,6 +113,33 @@ export class CharacterGeometryBuilder {
     this.n += P.count;
   }
 
+  // Add a three.js geometry (positions in bind space) skinned by weights(x, y, z) -> [[bone, w], ...]
+  // (up to four, summing to 1), with colours per vertex if it has them.
+  addSkinned(geo, weights, color, partCode = 0, partExtra = 0) {
+    const A = avatarAssets();
+    const g = geo.index ? geo.toNonIndexed() : geo;
+    const P = g.attributes.position, N = g.attributes.normal;
+    const C = g.attributes.color;
+    const o = this.n;
+    const c = new THREE.Color(color);
+    for (let i = 0; i < P.count; i++) {
+      const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
+      this.pos.push(x, y, z);
+      this.nor.push(N.getX(i), N.getY(i), N.getZ(i));
+      if (C) this.col.push(C.getX(i), C.getY(i), C.getZ(i)); else this.col.push(c.r, c.g, c.b);
+      this.uv.push(0, 0); this.uv1.push(-1, -1); this.uvB.push(-1, -1); this.uvC.push(-1, -1);
+      this.part.push(partCode, partExtra);
+      const w = weights(x, y, z);
+      for (let k = 0; k < 4; k++) {
+        const b = w[k];
+        this.si.push(b ? (typeof b[0] === 'number' ? b[0] : A.index.get(b[0])) : 0);
+        this.sw.push(b ? b[1] : 0);
+      }
+      this.index.push(o + i);
+    }
+    this.n += P.count;
+  }
+
   build() {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
@@ -149,7 +179,7 @@ export function buildAvatarGeometry(look) {
       if (look.gloves != null && r === 'hand') return lin(look.gloves);
       return bodyParts ? bodyParts(i, r) : skin;
     },
-    part: () => [0, 0],
+    part: () => [look.bodyPart ?? (look.rot ? 6 : 0), 0],
     transform: look.bodyTransform ? (v, i, n) => look.bodyTransform(v, R[`${sex}_body`][i], n) : null,
     keep: look.bodyKeep || null,
   });
@@ -213,17 +243,20 @@ const CHAIN = ['BASE', 'BACKA', 'BACKB', 'NECK', 'HEAD', 'LF_C', 'LF_S', 'LF_E',
 // ---- the character --------------------------------------------------------------------------
 
 export class AvatarModel {
-  // shared: { geo, material } to share a built mesh (a horde of zombies wearing the same look)
+  // shared: { geo, material? } to share a built mesh (a horde of zombies wearing the same look);
+  // without a material, the model gets its own over the shared geometry
   constructor(look, sky, terrain, shared = null) {
     const A = avatarAssets();
     this.look = look;
     this.root = new THREE.Group();
     const geo = shared ? shared.geo : buildAvatarGeometry(look);
     const sex = look.sex === 'f' ? 'f' : 'm';
-    this.material = shared ? shared.material : makeCharacterMaterial(sky, terrain, look.faceTex || A.faceTex, A.clothes, { side: THREE.DoubleSide, faceBase: look.faceBase ?? A.faceBase[sex] });
-    if (!shared && look.face) this.setFace(look.face.eyes ?? 0, look.face.brows ?? 0, look.face.mouth ?? 0);
-    if (!shared && look.face?.iris != null) this.material.uniforms.uIris.value.setHex(look.face.iris);
-    if (!shared) {
+    // a shared geometry with a material of its own (so each can flash, fade and be lit apart)
+    const own = !shared?.material;
+    this.material = own ? makeCharacterMaterial(sky, terrain, look.faceTex || A.faceTex, A.clothes, { side: THREE.DoubleSide, faceBase: look.faceBase ?? A.faceBase[sex] }) : shared.material;
+    if (own && look.face) this.setFace(look.face.eyes ?? 0, look.face.brows ?? 0, look.face.mouth ?? 0);
+    if (own && look.face?.iris != null) this.material.uniforms.uIris.value.setHex(look.face.iris);
+    if (own) {
       // lips: the girl's own pink, or a deeper shade of the skin
       const u = this.material.uniforms;
       if (look.face?.lip != null) u.uLip.value.setHex(look.face.lip);
@@ -231,6 +264,18 @@ export class AvatarModel {
       else u.uLip.value.setHex(look.skin ?? 0xd9a582).multiplyScalar(0.62);
       u.uBrow.value.setHex(look.face?.brow ?? look.hair?.color ?? 0x2a1e14);
       u.uBrowThin.value = look.face?.browThin ? 0.04 : 0;
+      if (look.face?.white != null) u.uWhite.value.setHex(look.face.white);
+      if (look.face?.teeth != null) u.uTeeth.value.setHex(look.face.teeth);
+      u.uSocket.value = look.face?.socket ?? 0;
+      u.uEyeScale.value = look.face?.eyeScale ?? 1;
+      u.uIrisLo.value = look.face?.irisLo ?? 0.3;
+      u.uTear.value = look.tear ?? 0;
+      u.uRot.value = look.rot ?? 0;
+      u.uAged.value = look.aged ?? 0;
+      if (look.face?.nose) u.uNose.value.set(...look.face.nose);
+      u.uGrime.value = look.grime ?? 0;
+      const sd = look.seed ?? 0;
+      u.uSeed.value.set((sd * 0.618) % 7, (sd * 0.414) % 5, (sd * 0.732) % 3);
     }
     if (look.glow) this.material.uniforms.uGlow.value.set(...look.glow);
     const bones = A.rest.map((r, i) => {
