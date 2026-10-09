@@ -109,7 +109,7 @@ export class Enemies {
 
   spawning(dt) {
     const g = this.game, p = g.player, sky = g.app.sky, w = g.world;
-    if (p.dead || g.grace) return;
+    if (p.dead) return;
     const dist = g.distance ?? 0;
     const day = sky.day;
     const night = sky.isNight;

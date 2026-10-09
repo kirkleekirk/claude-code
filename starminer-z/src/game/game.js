@@ -82,8 +82,8 @@ export class Game {
     this.deathShown = false;
 
     const sky = app.sky;
-    // the grace period: a new world's first day, under the clear alien sky, with nothing
-    // hunting you yet. Late in the afternoon the storm rolls in and the dead start to rise.
+    // the first day under the clear alien sky; late in the afternoon the storm rolls in for
+    // good. (The sky only: the dead come for you from the start, as in the original.)
     this.grace = !save && !attract;
     if (save) {
       this.grace = !!save.grace;

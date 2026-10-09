@@ -8,8 +8,8 @@ Microsoft.
 
 ## Playing
 
-Endurance: start by the bedrock tower and see how far you can get from it. The first day is a
-grace period under a clear alien sky; late that afternoon a storm rolls in for good, and the dead
+Endurance: start by the bedrock tower and see how far you can get from it. The first day is
+under a clear alien sky; late that afternoon a storm rolls in for good. The dead
 start climbing out of the ground. They swarm at night and sprint; by day they rise as you push
 into new ground. Underground, in the pitch dark, skeletons come for you (light keeps them away).
 The further out you go, and every fifth day, the harder it gets, and out past the Desert the dead
