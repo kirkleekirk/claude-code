@@ -72,7 +72,8 @@ export class Player {
     if (this.dead || amount <= 0) return;
     this.health = Math.max(0, this.health - amount);
     this.hurtTimer = 0.45;
-    this.regenTimer = 6;
+    // the original: health starts coming back three seconds after the last hit
+    this.regenTimer = 3;
     if (from) {
       const k = new THREE.Vector3(this.pos.x - from.x, 0, this.pos.z - from.z);
       if (k.lengthSq() > 1e-4) k.normalize().multiplyScalar(5.5);
@@ -92,10 +93,10 @@ export class Player {
       this.pitch = Math.max(-1.55, Math.min(1.55, this.pitch));
     }
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
-    // health comes back slowly once you've been left alone for a while
+    // health comes back once you've been left alone (the original: three quarters of it a second)
     this.regenTimer -= dt;
     if (this.regenTimer <= 0 && this.health < this.maxHealth) {
-      this.health = Math.min(this.maxHealth, this.health + dt * 2.5);
+      this.health = Math.min(this.maxHealth, this.health + dt * 0.75 * this.maxHealth);
     }
 
     const w = this.world;
@@ -148,15 +149,17 @@ export class Player {
     this.vel.y -= (this.inLava ? 9 : 27) * dt;
     if (this.vel.y < -52) this.vel.y = -52;
 
-    // move, in small steps so nothing tunnels
+    // move, in small steps so nothing tunnels; the dead you push into hold you back (crowd, set
+    // by the enemies: the original's AttentuateVelocity)
     const steps = Math.max(1, Math.ceil((Math.abs(this.vel.x) + Math.abs(this.vel.y) + Math.abs(this.vel.z)) * dt / 0.35));
-    const h = dt / steps;
+    const crowd = this.crowd ?? 1;
+    const h = dt / steps, hy = this.vel.y > 0 ? h * crowd : h;
     this.wasOnGround = this.onGround;
     let landedSpeed = 0;
     for (let i = 0; i < steps; i++) {
       // horizontal, with an auto-climb up one-block steps
       for (const axis of ['x', 'z']) {
-        const d = this.vel[axis] * h;
+        const d = this.vel[axis] * h * crowd;
         if (!d) continue;
         const nx = axis === 'x' ? this.pos.x + d : this.pos.x;
         const nz = axis === 'z' ? this.pos.z + d : this.pos.z;
@@ -183,7 +186,7 @@ export class Player {
         this.vel[axis] = 0;
       }
       // vertical
-      const dy = this.vel.y * h;
+      const dy = this.vel.y * hy;
       if (dy) {
         if (!this.collides(this.pos.x, this.pos.y + dy, this.pos.z)) {
           this.pos.y += dy;

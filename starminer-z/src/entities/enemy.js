@@ -1,484 +1,99 @@
-// A zombie or a skeleton: a body on the avatar rig, driven by a small brain. It moves the way
-// the player does (the same kind of box against the same blocks, hopping up single blocks),
-// hunts the player when they're near, strikes when it reaches them, staggers when it's hit and
-// falls when it dies. It can't climb walls or dig: a tower or a wall keeps it out, as in
-// CastleMiner Z.
+// One of the dead, run the way CastleMiner Z runs them (AI.BaseZombie and its states, read from
+// the original's code):
+//
+//   emerge   the dead climb out of the ground (skeletons drop out of the cave roof instead, and
+//            archers stand up); they can't be hurt until they're out
+//   chase    straight at you, at a walk until they've chased you long enough (45 s, or a few
+//            seconds of you running) and then flat out; they hop at walls (fast ones clear
+//            several blocks), and get frustrated when something stops them
+//   attack   three or four swings, a fit of rage, more swings, while you're in reach
+//   dig      a frustrated zombie, or one with you above or below it, digs toward you through
+//            whatever it's strong enough to break; it gives up on what it can't
+//   give up  too far behind, dug into a wall it can't break, or you're dead: it goes off to eat
+//            (the skeletons rage), and is gone
+//   hit      every hit staggers them; die: they fall, and lie there a few seconds
+//
+// The archers walk up to within 35 m and shoot, five to nine arrows, then give up.
+//
+// The body is the original's model (./cmz/bodies.js) when the ripped files are there, else one
+// built on the avatar rig standing in for it; either way the clips' timing is the original's.
 
 import * as THREE from 'three';
+import { SOLID, B } from '../world/blocks.js';
 import { AvatarModel } from './avatar/model.js';
-import { SOLID, B, BLOCKS } from '../world/blocks.js';
+import { CmzBody } from './cmz/bodies.js';
+import { TYPES, attacksFor, damageMultiplier, HARDNESS, randomInt } from './cmz/types.js';
 
-// What the dead can dig through, by how far out they are (after CastleMiner Z: out past the
-// Desert they get through stone, the Mountains copper, the Snowfields iron, the Edge gold;
-// diamond stops them all, and nothing gets through bloodstone or bedrock).
-const DIG_TIER = (id) => {
-  switch (id) {
-    case B.DIRT: case B.GRASS: case B.SAND: case B.SNOW: case B.SNOW_GRASS: case B.LEAVES: case B.WOOD:
-    case B.LOG: case B.GLASS: case B.ICE: case B.CRATE: case B.LANTERN: return 0;
-    case B.ROCK: case B.COAL_ORE: case B.COPPER_ORE: case B.IRON_ORE: case B.GOLD_ORE: case B.DIAMOND_ORE: return 1;
-    case B.COPPER_WALL: return 2;
-    case B.IRON_WALL: return 3;
-    case B.GOLD_WALL: return 4;
-    default: return 99;
-  }
+const GRAVITY = 20; // the original's BasicPhysics.Gravity
+const HALF = 0.35, TALL = 1.65; // the original's box for the dead
+const EPS = 0.001;
+const _v = new THREE.Vector3();
+
+// The original's clip lengths (seconds), so the stand-in bodies keep its timing.
+const LENGTHS = {
+  arise_1: 2.3, arise_2: 3.5667, arise_3: 8.3, arise_4: 8.3, walk: 1.6333, walk2: 1.3, run: 1.3, run_fast: 0.6333,
+  attack1: 1.6333, attack2: 2.3, attack3: 1.9333, attack4: 1.9667, attack5: 2.4333, enraged: 3.6333,
+  hit_reaction1: 1.6333, hit_reaction3: 1.6333, death1: 1.9667, death2: 2.3, death3: 2.6333, eat_start: 1.3,
 };
-export function digTierAt(dist) {
-  return dist < 950 ? 0 : dist < 1600 ? 1 : dist < 2300 ? 2 : dist < 3000 ? 3 : 4;
+const SKELETON_LENGTHS = {
+  walk: 1.3, walk2: 1.9667, run: 0.6333, attack1: 1.9333, attack2: 1.9667, attack3: 2.4333, axes_atack1: 1.3, axes_atack2: 1.3,
+  enraged: 3.6333, gethit1: 0.9667, gethit2: 2.6333, gethit3: 0.8, death1: 1.8, death2: 1.8, death3: 1.8, death4: 1.9667,
+  death5: 2.3, death6: 2.9667, death7: 2.6333, standup: 2.1333, standup2: 3.4667, walk_archer1: 1.3, idle_archer1: 3.3, atack_archer1: 1.6333,
+};
+
+// Without the original's bodies: the avatar rig, playing the nearest of its own clips.
+function standIn(name, zombie) {
+  if (/^arise|^standup/.test(name)) return 'climb';
+  if (/^run/.test(name)) return 'run';
+  if (/walk/.test(name)) return 'walk';
+  if (/atta?ck/.test(name)) return zombie ? 'swingClub' : 'punch';
+  if (/^death/.test(name)) return 'faint';
+  return 'idle';
 }
 
-const EPS = 0.001;
-const GRAVITY = 27;
-const _d = new THREE.Vector3(), _e = new THREE.Vector3();
-
-export const KINDS = {
-  zombie: { hp: 40, damage: 10, speed: 2.2, reach: 1.3, rate: 1.5, blood: 0x5a0805, height: 1.74, aggro: 46, strike: 'swingClub', strikeAt: 0.42, strikeLen: 0.95 },
-  skeleton: { hp: 55, damage: 14, speed: 3.1, reach: 1.3, rate: 1.15, blood: 0xcfc6ac, height: 1.7, aggro: 30, strike: 'punch', strikeAt: 0.3, strikeLen: 0.7 },
-};
-
-const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
-
-export class Enemy {
-  // scale: { hp, damage, speed } multipliers for how far out and how many days in
-  constructor(game, kind, look, shared, x, y, z, scale = {}) {
-    const K = KINDS[kind];
-    this.game = game;
-    this.world = game.world;
-    this.kind = kind;
-    this.K = K;
+class AvatarBody {
+  constructor(game, T, look, shared) {
+    this.zombie = T.kind === 'zombie';
     this.model = new AvatarModel(look, game.app.sky.uniforms, game.app.terrain.uniforms, shared);
-    this.root = this.model.root;
-    this.pos = new THREE.Vector3(x, y, z);
-    this.vel = new THREE.Vector3();
-    this.knock = new THREE.Vector3();
-    this.yaw = Math.random() * Math.PI * 2;
-    this.radius = 0.3;
-    this.height = K.height;
-    this.maxHp = this.hp = Math.round(K.hp * (scale.hp ?? 1));
-    this.damage = Math.round(K.damage * (scale.damage ?? 1));
-    this.speed = K.speed * (scale.speed ?? 1) * (0.88 + Math.random() * 0.24);
-    this.bloodColor = K.blood;
-    this.onGround = false;
-    this.dead = false;
-    this.deadT = 0;
-    this.gone = false;
-    this.attackT = 0.6 + Math.random();
-    this.strikeT = 0;
-    this.struck = false;
-    this.flash = 0;
-    this.stagger = 0;
-    this.wander = Math.random() * Math.PI * 2;
-    this.wanderT = 0;
-    this.detour = 0;
-    this.detourT = 0;
-    this.side = Math.random() < 0.5 ? 1 : -1;
-    this.stuckT = 0;
-    this.t = Math.random() * 10;
-    this.hunch = 0.08 + Math.random() * 0.22;
-    this.tilt = (Math.random() - 0.5) * 0.6;
-    this.armLazy = Math.random();
-    this.headMark = this.model.attach('HEAD__Skeleton', [0, 1.32, 0]);
-    this.groanT = 1 + Math.random() * 6;
-    this.animAcc = 0;
-    this.hunting = false;
-    this.dig = null; // { x, y, z, t, need }
-    this.blockedT = 0;
-    this.digTier = scale.digTier ?? 0;
-    this.sprint = false;
-    // the dead come up out of the ground
-    this.rise = kind === 'zombie' && scale.rise !== false ? 1.5 : 0;
-    this.root.position.copy(this.pos);
-    this.root.rotation.y = this.yaw;
-    if (this.rise) this.root.position.y -= 1.9;
+    this.root = new THREE.Group();
+    this.root.add(this.model.root);
+    this.lengths = this.zombie ? LENGTHS : SKELETON_LENGTHS;
+    this.name = '';
+    this.t = 0;
   }
 
-  // Does the body's box at (x, y, z) overlap anything solid?
-  collides(x, y, z) {
-    const r = this.radius, w = this.world;
-    const x0 = Math.floor(x - r), x1 = Math.floor(x + r - EPS);
-    const y0 = Math.floor(y), y1 = Math.floor(y + this.height - EPS);
-    const z0 = Math.floor(z - r), z1 = Math.floor(z + r - EPS);
-    for (let by = y0; by <= y1; by++) for (let bz = z0; bz <= z1; bz++) for (let bx = x0; bx <= x1; bx++) {
-      if (SOLID[w.getBlock(bx, by, bz)]) return true;
-    }
-    return false;
-  }
+  has(name) { return name in this.lengths; }
 
-  // Is there a block in the cell (x, y, z)?
-  occupies(x, y, z) {
-    if (this.dead) return false;
-    const r = this.radius;
-    return x + 1 > this.pos.x - r && x < this.pos.x + r && z + 1 > this.pos.z - r && z < this.pos.z + r && y + 1 > this.pos.y && y < this.pos.y + this.height;
-  }
+  duration(name) { return this.lengths[name] ?? 1.5; }
 
-  // What's ahead on a heading: 0 clear, 1 a step it can hop, 2 a wall (or a drop it won't take)
-  probe(heading, wantDown = false) {
-    const w = this.world;
-    const ax = this.pos.x + Math.sin(heading) * (this.radius + 0.42), az = this.pos.z + Math.cos(heading) * (this.radius + 0.42);
-    const y = Math.floor(this.pos.y + 0.05);
-    const s0 = SOLID[w.getBlock(ax, y, az)], s1 = SOLID[w.getBlock(ax, y + 1, az)], s2 = SOLID[w.getBlock(ax, y + 2, az)];
-    if (s1 || (s0 && s2)) return 2;
-    if (s0) return SOLID[w.getBlock(this.pos.x, y + 2, this.pos.z)] ? 2 : 1;
-    // a long drop, or lava
-    let floor = 0;
-    for (let k = 1; k <= 4; k++) {
-      const id = w.getBlock(ax, y - k, az);
-      if (id === B.LAVA) return 2;
-      if (SOLID[id]) { floor = k; break; }
-    }
-    if (!floor && !wantDown) return 2;
-    return 0;
-  }
-
-  hurt(dmg, dir, head, game) {
-    if (this.dead) return;
-    this.hp -= dmg;
-    this.flash = 1;
-    this.stagger = Math.min(0.55, 0.12 + dmg / 70);
-    const k = 1.5 + Math.min(4, dmg * 0.06);
-    this.knock.x += dir.x * k;
-    this.knock.z += dir.z * k;
-    this.hunting = true;
-    if (this.hp <= 0) this.die(dir, game, head);
-    else game.audio?.enemyHurt?.(this.kind, this.pos);
-  }
-
-  die(dir, game) {
-    this.dead = true;
-    this.deadT = 0;
-    this.strikeT = 0;
-    if (game) game.stats.kills++;
-    // over backward, away from whatever killed it
-    if (dir) this.yaw = Math.atan2(-dir.x, -dir.z);
-    this.root.rotation.y = this.yaw;
+  play(name, { loop = false, fade = 0.25, speed = 1 } = {}) {
+    this.name = name;
+    this.t = 0;
+    this.speed = speed;
+    const clip = standIn(name, this.zombie);
+    this.model.play(clip, { once: !loop && clip !== 'idle', fade: Math.max(0.05, fade), speed: clip === 'faint' ? 1.2 : speed, restart: true });
     const L = this.model.layer;
-    L.reach = 0; L.reachL = null; L.reachR = null; L.lean = 0; L.tilt = 0; L.yaw = 0; L.pitch = 0;
-    this.model.play('faint', { once: true, fade: 0.1, speed: 1.2 + Math.random() * 0.2 });
-    game?.audio?.enemyDie?.(this.kind, this.pos);
+    L.reach = this.zombie && /walk|run/.test(name) ? 0.9 : 0;
+    L.lean = this.zombie ? 0.15 : 0.04;
   }
 
-  // dt: seconds; ctx: { player, near (distance for detail) }
-  update(dt, ctx) {
-    this.t += dt;
-    this.flash = Math.max(0, this.flash - dt * 4.5);
-    const u = this.model.material.uniforms;
-    u.uFlash.value = this.flash * 0.6;
-    if (this.dead) { this.updateDead(dt); this.light(); return; }
-    const w = this.world;
-    if (!w.isLoaded(this.pos.x, this.pos.z)) return;
-    const p = ctx.player;
-    if (this.rise > 0) { this.updateRise(dt, p); this.light(); return; }
-    _d.set(p.pos.x - this.pos.x, 0, p.pos.z - this.pos.z);
-    const dist = _d.length();
-    const dy = p.pos.y - this.pos.y;
-    this.dist = dist;
-    if (p.dead) this.hunting = false;
-    else if (dist < this.K.aggro) this.hunting = true;
-    else if (dist > this.K.aggro * 1.4) this.hunting = false;
+  setSpeed(s) { this.speed = s; this.model.current?.setEffectiveTimeScale(s); }
 
-    // where it wants to go
-    let goal;
-    if (this.hunting) goal = Math.atan2(_d.x, _d.z);
-    else {
-      this.wanderT -= dt;
-      if (this.wanderT <= 0) { this.wanderT = 2.5 + Math.random() * 5; this.wander += (Math.random() - 0.5) * 2.4; }
-      goal = this.wander;
-    }
-    let speed = this.hunting ? this.speed * (this.sprint ? 1.55 : 1) : this.speed * 0.32;
-    if (!this.hunting && Math.sin(this.t * 0.6 + this.armLazy * 9) > 0.5) speed = 0; // standing about
-    const close = this.hunting && dist < this.K.reach * 0.75 && Math.abs(dy) < 1.5;
-    if (close) speed = 0;
-    // round walls: try headings to one side, then the other, and keep to one for a while
-    let heading = goal;
-    if (speed > 0) {
-      if (this.detourT > 0) {
-        this.detourT -= dt;
-        heading = this.detour;
-        if (this.probe(goal, dy < -1) !== 2 && this.detourT < 0.4) this.detourT = 0;
-      }
-      const ahead = this.probe(heading, this.hunting && dy < -1);
-      // walled off from the player: dig through, if it's something they can break out here
-      if (this.kind === 'zombie' && this.hunting && Math.abs(dy) < 6 && (dist < 9 || (this.noWay && dist < 18)) && this.probe(goal, true) === 2 && this.onGround) {
-        this.blockedT += dt;
-        if (this.blockedT > 0.9 && !this.dig) this.startDig(goal);
-      } else this.blockedT = Math.max(0, this.blockedT - dt * 2);
-      if (this.dig) { speed = 0; heading = goal; }
-      else if (ahead === 2) {
-        let found = false;
-        for (let k = 1; k <= 5 && !found; k++) {
-          for (const s of [this.side, -this.side]) {
-            const h = goal + s * k * 0.55;
-            if (this.probe(h, this.hunting && dy < -1) !== 2) { this.detour = h; this.detourT = 0.7 + Math.random() * 0.8; this.side = s; heading = h; found = true; break; }
-          }
-        }
-        this.noWay = !found;
-        if (!found) { speed = 0; if (!this.hunting) this.wander += Math.PI * (0.5 + Math.random()); }
-      } else if (ahead === 1 && this.onGround) {
-        this.vel.y = 8.1; // hop up the step
-        this.onGround = false;
-      }
-    }
-    if (this.stagger > 0) { this.stagger -= dt; speed *= 0.15; }
-    if (this.strikeT > 0) speed *= 0.25;
+  stop() {}
 
-    // steer and move
-    const tx = Math.sin(heading) * speed, tz = Math.cos(heading) * speed;
-    const acc = this.onGround ? 10 : 2.5;
-    this.vel.x += (tx - this.vel.x) * Math.min(1, acc * dt);
-    this.vel.z += (tz - this.vel.z) * Math.min(1, acc * dt);
-    this.vel.y -= GRAVITY * dt;
-    if (this.vel.y < -50) this.vel.y = -50;
-    const kx = this.knock.x, kz = this.knock.z;
-    this.knock.multiplyScalar(Math.max(0, 1 - dt * 7));
-    this.move(dt, kx, kz);
-    // stuck in a wall (a block placed on it, or bad ground): climb out
-    if (this.collides(this.pos.x, this.pos.y, this.pos.z)) {
-      this.stuckT += dt;
-      if (this.stuckT > 0.3) { this.pos.y += 1; this.stuckT = 0; }
-    } else this.stuckT = 0;
-    if (this.pos.y < -20) { this.gone = true; return; }
-
-    // face where it's going, or the player when it's at them
-    const face = close || this.strikeT > 0 ? goal : speed > 0.2 ? Math.atan2(this.vel.x, this.vel.z) : this.yaw;
-    const turn = wrap(face - this.yaw);
-    this.yaw += Math.sign(turn) * Math.min(Math.abs(turn), dt * (this.kind === 'skeleton' ? 7 : 4.5));
-    this.root.position.copy(this.pos);
-    this.root.rotation.y = this.yaw;
-
-    if (this.dig) this.updateDig(dt, goal);
-    // strike
-    this.attackT -= dt;
-    if (this.strikeT > 0) {
-      this.strikeT -= dt;
-      if (!this.struck && this.strikeT <= this.K.strikeLen - this.K.strikeAt) {
-        this.struck = true;
-        if (dist < this.K.reach + 0.35 && Math.abs(dy) < 1.7 && !p.dead) p.hurt(this.damage, this.pos, this.kind);
-      }
-    } else if (this.hunting && dist < this.K.reach && Math.abs(dy) < 1.6 && this.attackT <= 0 && this.canSee(p)) {
-      this.attackT = this.K.rate * (0.85 + Math.random() * 0.3);
-      this.strikeT = this.K.strikeLen;
-      this.struck = false;
-      this.model.play(this.K.strike, { once: true, fade: 0.12, speed: 1.25, restart: true });
-      this.game.audio?.enemyAttack?.(this.kind, this.pos);
-    }
-
-    // a groan now and then
-    this.groanT -= dt;
-    if (this.groanT <= 0) {
-      this.groanT = (this.hunting ? 3 : 6) + Math.random() * 6;
-      if (dist < 30) this.game.audio?.enemyIdle?.(this.kind, this.pos, dist);
-    }
-
-    // the body (far away, every other frame)
-    this.animAcc += dt;
-    if (dist > 34 && this.animAcc < 0.05) { this.light(); return; }
-    this.animate(this.animAcc, Math.hypot(this.vel.x, this.vel.z), dist, dy, goal);
-    this.animAcc = 0;
-    this.light();
+  update(dt) {
+    this.t += dt * (this.speed || 1);
+    // climbing out of the ground
+    const rise = /^arise/.test(this.name) ? Math.max(0, 1 - this.t / this.duration(this.name)) : 0;
+    this.model.root.position.y = -1.9 * rise * rise;
+    this.model.update(dt);
   }
 
-  // Climbing up out of the ground, dirt flying.
-  updateRise(dt, p) {
-    const m = this.model;
-    this.rise -= dt;
-    const f = Math.max(0, this.rise / 1.5);
-    this.root.position.copy(this.pos);
-    this.root.position.y -= 1.9 * f * f;
-    _d.set(p.pos.x - this.pos.x, 0, p.pos.z - this.pos.z);
-    this.yaw = Math.atan2(_d.x, _d.z);
-    this.root.rotation.y = this.yaw;
-    const L = m.layer;
-    L.reach = 0.6 * (1 - f); L.reachL = null; L.reachR = null; L.lean = 0.3 * f; L.lift = 0.4 * f;
-    m.play('climb', { fade: 0.1, speed: 1.3 });
-    m.update(dt);
-    this.dirtT = (this.dirtT || 0) - dt;
-    if (this.dirtT <= 0 && this.game.sprites) {
-      this.dirtT = 0.12;
-      const id = this.world.getBlock(this.pos.x, this.pos.y - 0.5, this.pos.z);
-      const col = BLOCKS[id]?.color ?? 0x6a4a2a;
-      this.game.sprites.emit('dust', this.pos.x, this.pos.y + 0.1, this.pos.z, { color: col, size: 0.12, life: 0.7, spread: 1.6, gravity: 7, alpha: 0.9 });
-    }
-    if (this.rise <= 0) { this.rise = 0; m.play('idle', { fade: 0.2 }); }
-  }
+  setLight(sky, block) { this.model.setLight(sky, block); }
 
-  startDig(heading) {
-    const w = this.world;
-    const ax = Math.floor(this.pos.x + Math.sin(heading) * (this.radius + 0.5)), az = Math.floor(this.pos.z + Math.cos(heading) * (this.radius + 0.5));
-    const y = Math.floor(this.pos.y + 0.05);
-    for (const yy of [y + 1, y]) {
-      const id = w.getBlock(ax, yy, az);
-      if (!SOLID[id]) continue;
-      const tier = DIG_TIER(id);
-      // the hardest they can manage, they manage only sometimes
-      if (tier > this.digTier || (tier === 4 && Math.random() < 0.6)) { this.blockedT = -2; return; }
-      const hard = BLOCKS[id]?.hardness ?? 2;
-      this.dig = { x: ax, y: yy, z: az, t: 0, need: (1.2 + hard * 1.6) / (1 + this.digTier * 0.3), id, swing: 0 };
-      return;
-    }
-    this.blockedT = 0;
-  }
+  set flash(v) { this.model.material.uniforms.uFlash.value = v; }
 
-  updateDig(dt, goal) {
-    const d = this.dig, w = this.world;
-    if (w.getBlock(d.x, d.y, d.z) !== d.id) { this.dig = null; this.blockedT = 0; return; }
-    d.t += dt;
-    d.swing -= dt;
-    this.yaw = goal;
-    this.root.rotation.y = goal;
-    if (d.swing <= 0) {
-      d.swing = 0.85;
-      this.model.play(this.K.strike, { once: true, fade: 0.1, speed: 1.4, restart: true });
-      this.strikeT = 0.6;
-      this.struck = true;
-      this.game.audio?.enemyDig?.(this.pos, d.id);
-      this.game.debris?.burst?.(d.x + 0.5, d.y + 0.5, d.z + 0.5, BLOCKS[d.id]?.color ?? 0x777777, 4, 0.5);
-    }
-    if (d.t >= d.need) {
-      w.setBlock(d.x, d.y, d.z, B.AIR);
-      this.game.debris?.burst?.(d.x + 0.5, d.y + 0.5, d.z + 0.5, BLOCKS[d.id]?.color ?? 0x777777, 12, 0.6);
-      this.game.audio?.breakBlock?.(BLOCKS[d.id]?.sound || 'stone');
-      this.dig = null;
-      this.blockedT = 0.5;
-    }
-  }
-
-  canSee(p) {
-    const h = this.headMark.getWorldPosition(_e);
-    const eye = p.eye;
-    const dx = eye.x - h.x, dy = eye.y - h.y, dz = eye.z - h.z;
-    const L = Math.hypot(dx, dy, dz);
-    if (L < 0.01) return true;
-    const hit = this.world.raycast(h.x, h.y, h.z, dx / L, dy / L, dz / L, L, (id) => SOLID[id] === 1);
-    return !hit;
-  }
-
-  move(dt, kx, kz) {
-    const vx = this.vel.x + kx, vz = this.vel.z + kz;
-    const steps = Math.max(1, Math.ceil((Math.abs(vx) + Math.abs(this.vel.y) + Math.abs(vz)) * dt / 0.3));
-    const h = dt / steps;
-    let grounded = false;
-    for (let i = 0; i < steps; i++) {
-      for (const axis of ['x', 'z']) {
-        const d = (axis === 'x' ? vx : vz) * h;
-        if (!d) continue;
-        const nx = axis === 'x' ? this.pos.x + d : this.pos.x;
-        const nz = axis === 'z' ? this.pos.z + d : this.pos.z;
-        if (!this.collides(nx, this.pos.y, nz)) { this.pos.x = nx; this.pos.z = nz; continue; }
-        const p0 = this.pos[axis], r = this.radius;
-        this.pos[axis] = d > 0 ? Math.floor(p0 + r + d) - r - EPS : Math.floor(p0 - r + d) + 1 + r + EPS;
-        if (this.collides(this.pos.x, this.pos.y, this.pos.z)) this.pos[axis] = p0;
-        this.vel[axis] = 0;
-      }
-      const dy = this.vel.y * h;
-      if (!this.collides(this.pos.x, this.pos.y + dy, this.pos.z)) this.pos.y += dy;
-      else {
-        if (dy < 0) {
-          this.pos.y = Math.floor(this.pos.y + dy) + 1 + EPS;
-          if (this.collides(this.pos.x, this.pos.y, this.pos.z)) this.pos.y = Math.ceil(this.pos.y);
-          grounded = true;
-        } else this.pos.y = Math.floor(this.pos.y + this.height + dy) - this.height - EPS;
-        this.vel.y = 0;
-      }
-    }
-    this.onGround = grounded || (this.vel.y <= 0 && this.collides(this.pos.x, this.pos.y - 0.05, this.pos.z));
-  }
-
-  // The pose: the pack's walk under a shamble (arms out, hunched, head lolling) for the dead,
-  // a stiff, quick march for the skeletons.
-  animate(dt, speed, dist, dy, goal) {
-    const m = this.model, L = m.layer, t = this.t;
-    L.reach = 0; L.reachL = null; L.reachR = null; L.lift = 0; L.spread = 0; L.sway = 0; L.swayRate = 1;
-    L.lean = 0; L.tilt = 0; L.yaw = 0; L.pitch = 0; L.handL = null; L.handR = null;
-    const zombie = this.kind === 'zombie';
-    if (this.strikeT > 0) {
-      L.lean = this.hunch * 0.5 + 0.1;
-    } else {
-      if (speed < 0.12) m.play('idle', { fade: 0.35 });
-      else if (zombie && speed > 3.0) m.play('run', { fade: 0.3, speed: Math.min(1.35, Math.max(0.7, speed / 3.4)) });
-      else m.play('walk', { fade: 0.3, speed: Math.min(2.6, Math.max(0.4, speed / (zombie ? 1.05 : 0.95))) });
-      if (zombie) {
-        const reach = this.hunting ? 0.92 : 0.3 + this.armLazy * 0.4;
-        L.reach = reach;
-        L.reachR = reach * (0.8 + this.armLazy * 0.2);
-        L.sway = 1;
-        L.swayRate = 0.8 + speed * 0.2;
-        L.lean = this.hunch + Math.min(speed, 3) * 0.05;
-        L.tilt = this.tilt + Math.sin(t * 1.3) * 0.06;
-      } else {
-        L.reach = this.hunting ? 0.45 : 0;
-        L.lean = 0.04;
-        L.tilt = Math.sin(t * 7.3) * 0.04;
-      }
-    }
-    if (this.stagger > 0) { L.lean -= this.stagger * 0.7; L.reach *= 0.3; if (L.reachR != null) L.reachR *= 0.3; L.spread = this.stagger * 0.4; }
-    // the head turns to the player when it's near
-    let hy = zombie ? Math.sin(t * 0.8) * 0.15 : 0, hp = -L.lean * 0.6;
-    if (this.hunting && dist < 14) {
-      hy = Math.max(-1, Math.min(1, wrap(goal - this.yaw)));
-      hp = Math.max(-0.5, Math.min(0.5, -Math.atan2(dy + 0.2, Math.max(0.5, dist)))) - L.lean * 0.4;
-    }
-    L.yaw = hy;
-    L.pitch = hp;
-    m.update(dt);
-  }
-
-  updateDead(dt) {
-    this.deadT += dt;
-    const m = this.model;
-    // keep falling with gravity if it died in the air
-    this.vel.x *= Math.max(0, 1 - dt * 6); this.vel.z *= Math.max(0, 1 - dt * 6);
-    this.vel.y -= GRAVITY * dt;
-    this.move(dt, this.knock.x, this.knock.z);
-    this.knock.multiplyScalar(Math.max(0, 1 - dt * 8));
-    this.root.position.copy(this.pos);
-    if (this.deadT < 2.4) m.update(dt);
-    // then sink away
-    const f = Math.max(0, (this.deadT - 2.6) / 1.3);
-    if (f > 0) {
-      this.root.position.y -= f * 0.45;
-      m.material.uniforms.uOpacity.value = 1 - f;
-    }
-    if (f >= 1) this.gone = true;
-  }
-
-  light() {
-    const h = this.root.position;
-    const L = this.world.lightAt(h.x, h.y + 1.45, h.z);
-    this.model.setLight(L.sky / 15, L.block / 15);
-  }
-
-  // Where a ray first meets this body: { dist, head } or null
-  intersect(o, d, maxDist) {
-    if (this.dead) return null;
-    // the head: a sphere round the skull
-    const h = this.headMark.getWorldPosition(_e);
-    let best = null;
-    const hr = this.kind === 'skeleton' ? 0.2 : 0.22;
-    const ox = o.x - h.x, oy = o.y - h.y, oz = o.z - h.z;
-    const b = ox * d.x + oy * d.y + oz * d.z;
-    const c = ox * ox + oy * oy + oz * oz - hr * hr;
-    const disc = b * b - c;
-    if (disc >= 0) {
-      const tt = -b - Math.sqrt(disc);
-      if (tt > 0 && tt < maxDist) best = { dist: tt, head: true };
-    }
-    // the body: an upright cylinder from the feet to the shoulders
-    const r = 0.27, y0 = this.pos.y, y1 = h.y - hr * 0.8;
-    const px = o.x - this.pos.x, pz = o.z - this.pos.z;
-    const A = d.x * d.x + d.z * d.z;
-    if (A > 1e-8) {
-      const B2 = px * d.x + pz * d.z, C = px * px + pz * pz - r * r;
-      const D = B2 * B2 - A * C;
-      if (D >= 0) {
-        const s = Math.sqrt(D);
-        for (const tt of [(-B2 - s) / A, (-B2 + s) / A]) {
-          if (tt <= 0 || tt >= maxDist) continue;
-          const y = o.y + d.y * tt;
-          if (y >= y0 && y <= y1) { if (!best || tt < best.dist) best = { dist: tt, head: false }; break; }
-        }
-      }
-    }
-    return best;
-  }
+  set opacity(v) { this.model.material.uniforms.uOpacity.value = v; }
 
   dispose() {
     this.model.dispose();
@@ -486,3 +101,594 @@ export class Enemy {
     this.root.removeFromParent();
   }
 }
+
+export class Enemy {
+  // type: an index into TYPES; pkg: its rolled speeds (initPackage); stand: for the stand-in
+  // bodies, { look, shared }
+  constructor(game, type, x, y, z, pkg, stand = null) {
+    const T = TYPES[type];
+    this.game = game;
+    this.world = game.world;
+    this.T = T;
+    this.type = type;
+    this.kind = T.kind;
+    this.pos = new THREE.Vector3(x, y, z);
+    this.vel = new THREE.Vector3();
+    this.health = T.health;
+    this.pkg = pkg;
+    this.speed = pkg.slow;
+    this.fast = false;
+    this.tilFast = pkg.normalActivation;
+    this.tilRunFast = pkg.runActivation;
+    this.frustration = 15;
+    this.onGround = false;
+    this.touchingWall = false;
+    this.hittable = false;
+    this.blocking = false;
+    this.swingCount = 0;
+    this.hitCount = 0;
+    this.missCount = 0;
+    this.animIndex = -1;
+    this.stateTimer = 0;
+    this.yaw = 0;
+    this.dead = false;
+    this.gone = false;
+    this.dist = 0;
+    this.growl = null;
+    const bodies = game.app.cmzBodies;
+    this.body = bodies && !stand ? new CmzBody(bodies, T.model, T.skin, game.app.sky.uniforms, game.app.terrain.uniforms) : new AvatarBody(game, T, stand.look, stand.shared);
+    this.root = this.body.root;
+    this.clip = { name: '', t: 0, dur: 1, speed: 1, loop: false };
+    this.state = null;
+    this.root.position.copy(this.pos);
+    const S = T.kind === 'zombie' ? ZOMBIE : T.kind === 'archer' ? ARCHER : SKELETON;
+    this.S = S;
+    this.change(S.emerge);
+  }
+
+  // ---- the animation clock (the original's AnimationPlayer: clip time, run at a speed) ---------
+
+  playClip(name, loop, fade = 0.25) {
+    const c = this.clip;
+    c.name = name; c.t = 0; c.loop = loop; c.speed = 1;
+    c.dur = this.body.duration(name) || 1;
+    this.body.play(name, { loop, fade, speed: 1 });
+  }
+
+  setClipSpeed(s) { this.clip.speed = s; this.body.setSpeed(s); }
+
+  get nearEnd() { return this.clip.dur - this.clip.t < 0.25; }
+
+  get finished() { return !this.clip.loop && this.clip.t >= this.clip.dur; }
+
+  change(state) {
+    this.state = state;
+    state.enter(this);
+  }
+
+  // ---- where the player is -----------------------------------------------------------------
+
+  get target() { return this.game.player; }
+
+  // Seconds until the two meet, from how they're moving (the original's TimeToIntercept).
+  timeToIntercept() {
+    const t = this.target;
+    const dx = this.pos.x - t.pos.x, dz = this.pos.z - t.pos.z;
+    const d2 = dx * dx + dz * dz;
+    if (d2 < 1) return 0;
+    const rx = t.vel.x - this.vel.x, rz = t.vel.z - this.vel.z;
+    if (dx * rx + dz * rz < 0) return Infinity;
+    const r2 = rx * rx + rz * rz;
+    if (r2 < 0.001) return Infinity;
+    const r = Math.sqrt(r2), d = Math.sqrt(d2);
+    const c = (rx / r) * (dx / d) + (rz / r) * (dz / d);
+    if (c < 0.01) return Infinity;
+    return d / c / r;
+  }
+
+  faceTarget() {
+    const t = this.target;
+    const dx = t.pos.x - this.pos.x, dz = t.pos.z - this.pos.z;
+    if (dx * dx + dz * dz > 0.2 * 0.2) this.yaw = Math.atan2(dx, dz);
+  }
+
+  zeroVelocity() { this.vel.x = 0; this.vel.z = 0; }
+
+  reduceVelocity() { this.vel.x *= 0.99; this.vel.z *= 0.99; }
+
+  speedUp() {
+    if (!this.T.hasRunFast) return;
+    this.fast = true;
+    this.speed = this.pkg.fast;
+    if (this.state === CHASE) startMoveAnimation(this);
+  }
+
+  // ---- being hit ---------------------------------------------------------------------------
+
+  // A hit at height y from a weapon { dmg, type } (the original's EnemyDamage and its type).
+  // Returns true if it killed.
+  takeDamage(y, weapon) {
+    if (this.health <= 0) return false;
+    const head = y - this.pos.y > 1.5;
+    this.health -= weapon.dmg * damageMultiplier(this.T, weapon.type, head);
+    if (this.health <= 0) {
+      this.change(this.S.die);
+      return true;
+    }
+    if (this.state !== this.S.hit) this.change(this.S.hit);
+    return false;
+  }
+
+  giveUp() {
+    if (this.dead || this.state === this.S.giveUp) return;
+    this.change(this.S.giveUp);
+  }
+
+  remove() { this.gone = true; }
+
+  // ---- the frame ------------------------------------------------------------------------------
+
+  update(dt) {
+    const w = this.world;
+    // the original lets go of anything whose ground isn't loaded
+    if (!w.isLoaded(this.pos.x, this.pos.z)) { this.gone = true; return; }
+    const p = this.target;
+    this.dist = Math.hypot(p.pos.x - this.pos.x, p.pos.z - this.pos.z);
+    if (p.dead && !this.dead) this.giveUp();
+    this.state.update(this, dt);
+    if (this.gone) return;
+    // the clip runs on
+    const c = this.clip;
+    c.t += dt * c.speed;
+    if (c.t > c.dur) c.t = c.loop ? c.t % c.dur : c.dur;
+    this.physics(dt);
+    if (this.growl) this.game.audio?.move?.(this.growl, this.pos);
+    this.root.position.copy(this.pos);
+    this.root.rotation.y = this.yaw;
+    // far off, the body only every few frames
+    this.animAcc = (this.animAcc || 0) + dt;
+    if (this.dist < 40 || this.animAcc > 0.1) { this.body.update(this.animAcc); this.animAcc = 0; }
+    const L = w.lightAt(this.pos.x, this.pos.y + 1.2, this.pos.z);
+    this.body.setLight(L.sky / 15, L.block / 15);
+  }
+
+  // Does the box at (x, y, z) overlap anything solid? (Not the blocks it was made inside of:
+  // skeletons drop out of the cave roof.)
+  collides(x, y, z) {
+    const w = this.world, G = this.embedded;
+    const x0 = Math.floor(x - HALF), x1 = Math.floor(x + HALF - EPS);
+    const y0 = Math.floor(y), y1 = Math.floor(y + TALL - EPS);
+    const z0 = Math.floor(z - HALF), z1 = Math.floor(z + HALF - EPS);
+    for (let by = y0; by <= y1; by++) for (let bz = z0; bz <= z1; bz++) for (let bx = x0; bx <= x1; bx++) {
+      if (SOLID[w.getBlock(bx, by, bz)] && !(G && G.has(`${bx},${by},${bz}`))) return true;
+    }
+    return false;
+  }
+
+  // the solid cells the box is in
+  cellsIn(P) {
+    const out = new Set();
+    for (let by = Math.floor(P.y); by <= Math.floor(P.y + TALL - EPS); by++) for (let bz = Math.floor(P.z - HALF); bz <= Math.floor(P.z + HALF - EPS); bz++) {
+      for (let bx = Math.floor(P.x - HALF); bx <= Math.floor(P.x + HALF - EPS); bx++) if (SOLID[this.world.getBlock(bx, by, bz)]) out.add(`${bx},${by},${bz}`);
+    }
+    return out;
+  }
+
+  // Gravity, and the box slid along whatever it runs into (the original's ResolveCollsion, its
+  // probe skipping the blocks the box starts embedded in). Caught inside a block some other way,
+  // it climbs out.
+  physics(dt) {
+    const v = this.vel, P = this.pos;
+    if (this.embedded === undefined) { const c = this.cellsIn(P); this.embedded = c.size ? c : null; }
+    else if (this.embedded) {
+      const c = this.cellsIn(P);
+      if (![...c].some((k) => this.embedded.has(k))) this.embedded = null;
+    }
+    v.y -= GRAVITY * dt;
+    if (v.y < -60) v.y = -60;
+    this.onGround = false;
+    this.touchingWall = false;
+    if (this.collides(P.x, P.y, P.z)) {
+      P.y += Math.min(1, dt * 6);
+      v.y = Math.max(0, v.y);
+      this.touchingWall = true;
+    } else {
+      const steps = Math.max(1, Math.ceil((Math.abs(v.x) + Math.abs(v.y) + Math.abs(v.z)) * dt / 0.3));
+      const h = dt / steps;
+      for (let i = 0; i < steps; i++) {
+        for (const axis of ['x', 'z']) {
+          const d = v[axis] * h;
+          if (!d) continue;
+          const nx = axis === 'x' ? P.x + d : P.x, nz = axis === 'z' ? P.z + d : P.z;
+          if (!this.collides(nx, P.y, nz)) { P.x = nx; P.z = nz; continue; }
+          const p0 = P[axis];
+          P[axis] = d > 0 ? Math.floor(p0 + HALF + d) - HALF - EPS : Math.floor(p0 - HALF + d) + 1 + HALF + EPS;
+          if (this.collides(P.x, P.y, P.z)) P[axis] = p0;
+          v[axis] = 0;
+          this.touchingWall = true;
+        }
+        const dy = v.y * h;
+        if (!dy) continue;
+        if (!this.collides(P.x, P.y + dy, P.z)) { P.y += dy; continue; }
+        if (dy < 0) {
+          P.y = Math.floor(P.y + dy) + 1 + EPS;
+          if (this.collides(P.x, P.y, P.z)) P.y = Math.ceil(P.y);
+          this.onGround = true;
+        } else {
+          P.y = Math.floor(P.y + TALL + dy) - TALL - EPS;
+          this.touchingWall = true;
+        }
+        v.y = 0;
+      }
+    }
+    if (P.y < -20) { this.gone = true; return; }
+    // stuck (barely moving) runs the frustration down; moving freely resets it
+    if (v.x * v.x + v.z * v.z < 0.25) this.frustration -= dt;
+    else this.frustration = 2.5;
+  }
+
+  // The original's Explosive.EnemyBreakBlocks: in the box, each block no harder than `hardest`
+  // that `damage` beats breaks, half the time. 2: something broke; 3: nothing solid there; 0:
+  // something it could break, not yet; 1: only what it can't.
+  breakBlocks(x0, y0, z0, x1, y1, z1, damage, hardest) {
+    const w = this.world, g = this.game;
+    let canDig = false, broke = false, solid = false;
+    for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
+      const id = w.getBlock(x, y, z);
+      if (id === B.AIR) continue;
+      if (SOLID[id]) solid = true;
+      const hard = HARDNESS[id];
+      if (hard > hardest) continue;
+      canDig = true;
+      if (damage <= hard || Math.random() >= 0.5) continue;
+      broke = true;
+      g.removeBlock ? g.removeBlock(x, y, z) : w.setBlock(x, y, z, B.AIR);
+    }
+    return broke ? 2 : !solid ? 3 : canDig ? 0 : 1;
+  }
+
+  // ---- for the rest of the game ----------------------------------------------------------------
+
+  // Would a block at (x, y, z) overlap this body? (Nothing can be built inside one.)
+  occupies(x, y, z) {
+    if (!this.blocking) return false;
+    const P = this.pos;
+    return x + 1 > P.x - HALF && x < P.x + HALF && z + 1 > P.z - HALF && z < P.z + HALF && y + 1 > P.y && y < P.y + TALL;
+  }
+
+  // Where a ray meets the box: the distance and the point's height, or null.
+  intersect(o, d, maxDist) {
+    if (!this.hittable) return null;
+    const P = this.pos;
+    let t0 = 0, t1 = maxDist;
+    for (const [oa, da, lo, hi] of [[o.x, d.x, P.x - HALF, P.x + HALF], [o.y, d.y, P.y, P.y + TALL], [o.z, d.z, P.z - HALF, P.z + HALF]]) {
+      if (Math.abs(da) < 1e-9) { if (oa < lo || oa > hi) return null; continue; }
+      let a = (lo - oa) / da, b = (hi - oa) / da;
+      if (a > b) { const s = a; a = b; b = s; }
+      t0 = Math.max(t0, a); t1 = Math.min(t1, b);
+      if (t0 > t1) return null;
+    }
+    return { dist: t0, y: o.y + d.y * t0 };
+  }
+
+  dispose() {
+    if (this.growl) this.game.audio?.stop?.(this.growl);
+    this.body.dispose();
+    this.root.removeFromParent();
+  }
+}
+
+// ---- the states (the original's AI.*: Enter once, then Update every frame) ---------------------
+
+const growlFor = (e) => {
+  if (!e.growl?.playing) e.growl = e.game.audio?.growl?.(e.kind === 'zombie' ? 'zombie' : 'skeleton', e.pos) ?? null;
+};
+
+function startMoveAnimation(e) {
+  const s = e.speed;
+  if (s < 2.7) { e.playClip('walk', true); e.setClipSpeed(Math.min(s / 1, 1)); }
+  else if (s < 3.7) { e.playClip('walk2', true); e.setClipSpeed(Math.min(s / 1, 1)); }
+  else if (s >= 5 && e.T.hasRunFast) { e.playClip('run_fast', true); e.setClipSpeed(Math.min(s / 4, 1)); }
+  else { e.playClip('run', true); e.setClipSpeed(Math.min(s / 3, 1)); }
+}
+
+// the zombies climb out of the ground, facing anywhere; the archers stand up
+const EMERGE = {
+  name: 'emerge',
+  enter(e) {
+    e.blocking = true;
+    e.hittable = false;
+    if (e.kind === 'archer') {
+      e.swingCount = 5 + randomInt(0, 5);
+      e.playClip(randomInt(0, 2) ? 'standup2' : 'standup', false, 0);
+    } else e.playClip(`arise_${randomInt(0, 4) + 1}`, false, 0);
+    e.setClipSpeed(e.pkg.emergeSpeed);
+    e.yaw = Math.random() * Math.PI * 2;
+    if (e.T.foundIn === 0) {
+      e.game.audio?.play?.('CreatureUnearth', e.pos);
+      e.growl = e.game.audio?.play?.('ZombieCry', e.pos) ?? null;
+    }
+  },
+  update(e) { if (e.nearEnd) e.change(e.S.chase); },
+};
+
+const CHASE = {
+  name: 'chase',
+  enter(e) {
+    e.blocking = true;
+    e.hittable = true;
+    startMoveAnimation(e);
+    e.frustration = 2.5;
+  },
+  update(e, dt) {
+    growlFor(e);
+    const t = e.target, v = e.vel;
+    let dx = t.pos.x - e.pos.x;
+    const dy = t.pos.y - e.pos.y;
+    let dz = t.pos.z - e.pos.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 5 && e.timeToIntercept() < 1 / e.speed) {
+      if (Math.abs(dy) > 4 && e.onGround && t.onGround) e.change(e.S.dig);
+      else e.change(e.S.attack);
+      return;
+    }
+    if (e.frustration <= 0) { e.change(e.S.dig); e.zeroVelocity(); return; }
+    if (e.T.hasRunFast && !e.fast) {
+      e.tilFast -= dt;
+      if (e.tilFast <= 0 || e.game.enemies.zombieFest) e.speedUp();
+      // a few seconds of the player running and they break into a run too
+      if (t.vel.x * t.vel.x + t.vel.z * t.vel.z > 3.5) {
+        e.tilRunFast -= dt;
+        if (e.tilRunFast < 0) e.speedUp();
+      }
+    }
+    if (dist * dist < 0.001) { dx = 0; dz = 0; } else { dx /= dist; dz /= dist; }
+    let s = e.speed;
+    if (!e.onGround) s *= e.fast ? 1 : 0.5;
+    else if (e.touchingWall) v.y += e.fast ? e.T.fastJump : 10;
+    v.x = dx * s;
+    v.z = dz * s;
+    if (v.x * v.x + v.z * v.z > 0.2) e.yaw = Math.atan2(v.x, v.z);
+    if (dist >= 5) {
+      // fallen too far behind: they try digging, and give up from there
+      if (e.fast) { if (e.timeToIntercept() > 8) e.change(e.S.dig); }
+      else if (dist > 25) e.change(e.S.dig);
+    }
+  },
+};
+
+// swings at the player while they're in reach; a fit of rage now and then
+function attackState(rageClip = 'enraged') {
+  return {
+    name: 'attack',
+    enter(e) {
+      if (e.onGround) e.zeroVelocity();
+      const A = attacksFor(e.T);
+      e.animIndex = randomInt(0, A.clips.length);
+      e.playClip(A.clips[e.animIndex], false);
+      e.swingCount = 2 + randomInt(0, 3);
+      e.hitCount = 0;
+      e.missCount = randomInt(3, 5);
+      e.setClipSpeed(e.T.attackSpeed);
+    },
+    update(e) {
+      if (e.onGround) e.zeroVelocity(); else e.reduceVelocity();
+      const t = e.target, A = attacksFor(e.T);
+      if (e.nearEnd) {
+        if (!e.hitCount) e.missCount--;
+        const dx = t.pos.x - e.pos.x, dy = t.pos.y - e.pos.y, dz = t.pos.z - e.pos.z;
+        if (e.missCount <= 0) {
+          if (Math.abs(dy) > 1.5 && t.onGround && e.onGround) { e.change(e.S.dig); return; }
+          e.missCount = randomInt(1, 3);
+          e.hitCount = 1;
+          e.animIndex = -1;
+          e.playClip(rageClip, false);
+          return;
+        }
+        const d = Math.hypot(dx, dz);
+        if (d >= 1) { e.change(e.S.chase); return; }
+        if (d > 0.1) e.yaw = Math.atan2(dx, dz);
+        e.animIndex = randomInt(0, A.clips.length);
+        e.playClip(A.clips[e.animIndex], false);
+        e.hitCount = 0;
+        e.swingCount = 2 + randomInt(0, 3);
+        return;
+      }
+      if (e.animIndex === -1) return;
+      const times = A.times[e.animIndex];
+      // (the original divides the blow's moment by the clip's speed, though the clock is clip time)
+      if (e.clip.t < times[e.hitCount] / e.clip.speed) return;
+      const dx = t.pos.x - e.pos.x, dy = t.pos.y - e.pos.y, dz = t.pos.z - e.pos.z;
+      if (Math.abs(dy) < 1.2 && !t.dead) {
+        const d2 = dx * dx + dz * dz;
+        let hit = d2 < 0.05;
+        const r = A.range[e.animIndex];
+        if (!hit && d2 < r * r) {
+          const d = Math.sqrt(d2);
+          hit = (dx / d) * Math.sin(e.yaw) + (dz / d) * Math.cos(e.yaw) > 0.7;
+        }
+        // (a blow doesn't knock you back in the original)
+        if (hit) t.hurt(A.damage[e.animIndex] * t.maxHealth, null, e.kind);
+      }
+      e.hitCount++;
+      if (e.hitCount === times.length) { e.animIndex = -1; e.hitCount = 0; }
+    },
+  };
+}
+
+const ATTACK = attackState();
+
+// digging toward the player, through what it's strong enough to break
+const DIG = {
+  name: 'dig',
+  enter(e) {
+    const t = e.target;
+    if (_v.subVectors(t.pos, e.pos).lengthSq() > 256) { e.change(e.S.giveUp); return; }
+    if (e.onGround) e.zeroVelocity();
+    const A = attacksFor(e.T);
+    e.animIndex = randomInt(0, A.clips.length);
+    e.playClip(A.clips[e.animIndex], false);
+    e.hitCount = 0;
+    e.swingCount = 0;
+    e.missCount = 0;
+    e.setClipSpeed(e.T.attackSpeed);
+  },
+  update(e) {
+    if (e.onGround) e.zeroVelocity(); else e.reduceVelocity();
+    const t = e.target, A = attacksFor(e.T);
+    if (e.nearEnd) {
+      if (e.missCount === 4) { e.change(e.S.giveUp); return; }
+      if (!e.missCount || (e.missCount & 2)) { e.change(e.S.chase); return; }
+      const dx = t.pos.x - e.pos.x, dy = t.pos.y - e.pos.y, dz = t.pos.z - e.pos.z;
+      const d = Math.hypot(dx, dz);
+      if (d < 1 && Math.abs(dy) < 1.5) { e.change(e.S.attack); return; }
+      if (d > 16 || Math.abs(dy) > 8) { e.change(e.S.giveUp); return; }
+      e.yaw = Math.atan2(dx, dz);
+      e.animIndex = randomInt(0, A.clips.length);
+      e.playClip(A.clips[e.animIndex], false);
+      e.hitCount = 0;
+      e.missCount = 0;
+      return;
+    }
+    if (e.animIndex === -1) return;
+    const times = A.times[e.animIndex];
+    if (e.clip.t < times[e.hitCount] / e.clip.speed) return;
+    // the blocks: its own column and the next one toward the player, three high (a block
+    // higher or lower if the player is above or below)
+    const P = e.pos;
+    const bx = Math.floor(P.x), bz = Math.floor(P.z);
+    let by = Math.floor(P.y);
+    if (t.pos.y >= P.y + 1) by++; else if (t.pos.y <= P.y - 1) by--;
+    let x0 = bx, x1 = bx, z0 = bz, z1 = bz;
+    if (t.pos.x > P.x) x1++; else x0--;
+    if (t.pos.z >= P.z) z1++; else z0--;
+    e.swingCount++;
+    const damage = Math.floor(Math.fround(Math.fround(e.swingCount) * Math.fround(e.T.dig)));
+    const r = e.breakBlocks(x0, by, z0, x1, by + 2, z1, damage, e.T.hardest);
+    if (r === 0) e.missCount |= 1;
+    else if (r === 1) e.missCount |= 4;
+    else if (r === 2) e.missCount |= 2;
+    if (r !== 3) e.game.audio?.enemyDig?.(e.pos);
+    e.hitCount++;
+    if (e.hitCount === times.length) { e.animIndex = -1; e.hitCount = 0; }
+  },
+};
+
+const GIVE_UP = {
+  name: 'giveUp',
+  enter(e) {
+    e.zeroVelocity();
+    e.playClip(e.kind === 'zombie' ? 'eat_start' : 'enraged', false);
+  },
+  update(e) { if (e.finished) e.remove(); },
+};
+
+const HIT = {
+  name: 'hit',
+  enter(e) {
+    e.zeroVelocity();
+    e.playClip(e.kind === 'zombie' ? (randomInt(0, 2) ? 'hit_reaction3' : 'hit_reaction1') : `gethit${randomInt(0, 3) + 1}`, false);
+    e.setClipSpeed(e.T.hitSpeed);
+  },
+  update(e) { if (e.nearEnd) e.change(e.S.chase); },
+};
+
+// they fall, and lie there five seconds after the fall is done (then fade away)
+const DIE = {
+  name: 'die',
+  enter(e) {
+    e.zeroVelocity();
+    e.blocking = false;
+    e.hittable = false;
+    e.dead = true;
+    e.playClip(`death${randomInt(0, e.kind === 'zombie' ? 3 : 7) + 1}`, false);
+    e.frustration = 5;
+    e.setClipSpeed(e.T.dieSpeed);
+    if (e.growl) { e.game.audio?.stop?.(e.growl); e.growl = null; }
+  },
+  update(e, dt) {
+    if (!e.finished) return;
+    e.frustration -= dt;
+    e.body.opacity = Math.min(1, Math.max(0, e.frustration / 0.6));
+    if (e.frustration < 0) e.remove();
+  },
+};
+
+// ---- the archers ------------------------------------------------------------------------------
+
+const ARCHER_CHASE = {
+  name: 'archerChase',
+  enter(e) {
+    e.blocking = true;
+    e.hittable = true;
+    e.playClip('walk_archer1', true);
+    e.setClipSpeed(e.speed / 1);
+    e.frustration = 2.5;
+    e.stateTimer = 0;
+  },
+  update(e, dt) {
+    growlFor(e);
+    e.stateTimer -= dt;
+    const t = e.target, v = e.vel;
+    let dx = t.pos.x - e.pos.x, dz = t.pos.z - e.pos.z;
+    const dist = Math.hypot(dx, dz);
+    // in range, and it can see you: it stops to shoot
+    if (dist < 35 && e.stateTimer <= 0) {
+      e.stateTimer = 0.5;
+      const ox = e.pos.x, oy = e.pos.y + 1.5, oz = e.pos.z;
+      const lx = t.pos.x - ox, ly = t.pos.y + 1.5 - oy, lz = t.pos.z - oz;
+      const L = Math.hypot(lx, ly, lz);
+      if (L < 0.01 || !e.world.raycast(ox, oy, oz, lx / L, ly / L, lz / L, L, (id) => SOLID[id] === 1)) {
+        e.faceTarget();
+        e.change(ARCHER_ATTACK);
+        return;
+      }
+    }
+    if (e.frustration < 0) { e.change(e.S.giveUp); e.zeroVelocity(); return; }
+    if (dist * dist < 0.001) { dx = 0; dz = 0; } else { dx /= dist; dz /= dist; }
+    let s = e.speed;
+    if (!e.onGround) s *= 0.5;
+    else if (e.touchingWall) v.y += 10;
+    v.x = dx * s;
+    v.z = dz * s;
+    if (v.x * v.x + v.z * v.z > 0.2) e.yaw = Math.atan2(v.x, v.z);
+  },
+};
+
+const ARCHER_ATTACK = {
+  name: 'archerAttack',
+  enter(e) {
+    e.zeroVelocity();
+    e.hitCount = 0;
+    e.playClip('atack_archer1', false);
+    e.swingCount--;
+  },
+  update(e) {
+    if (e.nearEnd) { e.change(e.swingCount <= 0 ? e.S.giveUp : ARCHER_IDLE); return; }
+    e.faceTarget();
+    if (e.clip.t > 1.1 && !e.hitCount) {
+      e.hitCount = 1;
+      const t = e.target;
+      e.game.enemies.shootArrow(new THREE.Vector3(e.pos.x, e.pos.y + 1.5, e.pos.z), new THREE.Vector3(t.pos.x, t.pos.y + 0.5, t.pos.z));
+    }
+  },
+};
+
+const ARCHER_IDLE = {
+  name: 'archerIdle',
+  enter(e) {
+    e.zeroVelocity();
+    e.playClip('idle_archer1', true);
+    e.stateTimer = 1 + Math.random() * 2;
+  },
+  update(e, dt) {
+    e.stateTimer -= dt;
+    if (e.stateTimer <= 0) e.change(e.S.chase);
+  },
+};
+
+// each kind's states (the original's EnemyType.Get*State): skeletons come straight on, and
+// can't dig, so a frustrated one gives up
+const ZOMBIE = { emerge: EMERGE, chase: CHASE, attack: ATTACK, dig: DIG, giveUp: GIVE_UP, hit: HIT, die: DIE };
+const SKELETON = { emerge: CHASE, chase: CHASE, attack: ATTACK, dig: GIVE_UP, giveUp: GIVE_UP, hit: HIT, die: DIE };
+const ARCHER = { emerge: EMERGE, chase: ARCHER_CHASE, attack: ARCHER_ATTACK, dig: GIVE_UP, giveUp: GIVE_UP, hit: HIT, die: DIE };

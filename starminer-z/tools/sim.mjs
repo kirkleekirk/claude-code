@@ -17,7 +17,7 @@ while ((Date.now() - t0) / 1000 < parseFloat(secs)) {
     return {
       t: g.time.toFixed(1), hp: Math.round(p.health), dead: p.dead, fps: g.app.fps,
       player: [p.pos.x, p.pos.y, p.pos.z].map((v) => v.toFixed(1)).join(','),
-      enemies: g.enemies.list.map((e) => `${e.kind[0]}${e.dead ? 'x' : ''} d=${(e.dist ?? 0).toFixed(1)} y=${(e.pos.y - p.pos.y).toFixed(1)} hp=${e.hp} ${e.hunting ? 'H' : ''}${e.strikeT > 0 ? 'S' : ''}`).join(' | '),
+      enemies: g.enemies.list.map((e) => `${e.kind[0]}${e.type} ${e.state.name}${e.fast ? '!' : ''} ${e.clip.name} d=${(e.dist ?? 0).toFixed(1)} y=${(e.pos.y - p.pos.y).toFixed(1)} hp=${e.health.toFixed(2)}`).join(' | '),
     };
   });
   console.log(JSON.stringify(s));

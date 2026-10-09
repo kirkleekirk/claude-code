@@ -33,7 +33,7 @@ export const EMBER = {
 
 // observer latitude: puts the sun's daily arc above Ember
 const LATITUDE = THREE.MathUtils.degToRad(27);
-export const DAY_LENGTH = 20 * 60; // seconds of play per full day
+export const DAY_LENGTH = 16 * 60; // seconds of play per full day (the original's 16 minutes)
 
 const VS = /* glsl */ `
 uniform mat4 uCamRot;
@@ -337,8 +337,9 @@ export class Sky {
     this.gloom = 0;
     this.gloomTarget = 0;
     this.bolt = 0;
-    this.boltT = 12;
-    this.onThunder = null; // (delay seconds, loudness)
+    this.storm = null;
+    this.outdoors = true;
+    this.onThunder = null;
     // the endless night far out: 0 none, 1 the sun never shows
     this.endless = 0;
     this.dark = 0;
@@ -440,6 +441,32 @@ export class Sky {
 
   get isNight() { return this.sunDir.y < -0.07 || this.dark > 0.6; }
 
+  // The original's lightning (InGameHUD.OnUpdate): its clock runs only out in the open (outdoors,
+  // set by the game). Every 10 to 40 seconds come up to three flashes, a tenth to a third of a
+  // second apart, then the thunder, up to two seconds after the last.
+  lightning(dt) {
+    const L = this.storm || (this.storm = { wait: 10 + Math.random() * 30, flashes: Math.floor(Math.random() * 4), thunder: Math.random() * 2 });
+    if (L.wait > 0) {
+      if (this.outdoors !== false) L.wait -= dt;
+      return;
+    }
+    if (L.flashes > 0) {
+      if (this.outdoors === false) return;
+      L.flashes--;
+      L.wait = Math.random() / 4 + 0.1;
+      this.bolt = 1;
+      const a = Math.random() * Math.PI * 2, e = 0.08 + Math.random() * 0.45;
+      this.uniforms.uBoltDir.value.set(Math.sin(a) * Math.cos(e), Math.sin(e), Math.cos(a) * Math.cos(e));
+      return;
+    }
+    L.thunder -= dt;
+    if (L.thunder > 0) return;
+    if (this.onThunder) this.onThunder();
+    L.thunder = Math.random() * 2;
+    L.wait = 10 + Math.floor(Math.random() * 30);
+    L.flashes = Math.floor(Math.random() * 4);
+  }
+
   // Snap the weather (a loaded game, the menus) or let it roll in.
   setGloom(g, now = true) { this.gloomTarget = g; if (now) this.gloom = g; }
 
@@ -452,21 +479,9 @@ export class Sky {
     if (Math.abs(gd) > 1e-4) this.gloom += Math.sign(gd) * Math.min(Math.abs(gd), dt / 90);
     const G = this.gloom;
     u.uGloom.value = G;
-    // lightning, now and then, once the storm is in
-    this.bolt = Math.max(0, this.bolt - dt * 5.5);
-    if (G > 0.85 && dt > 0) {
-      this.boltT -= dt;
-      if (this.boltT <= 0) {
-        this.boltT = 9 + Math.random() * 32;
-        this.bolt = 1;
-        this.boltFlicker = 0.08 + Math.random() * 0.12;
-        const a = Math.random() * Math.PI * 2, e = 0.08 + Math.random() * 0.45;
-        u.uBoltDir.value.set(Math.sin(a) * Math.cos(e), Math.sin(e), Math.cos(a) * Math.cos(e));
-        if (this.onThunder) this.onThunder(0.6 + Math.random() * 2.6, 0.4 + Math.random() * 0.6);
-      }
-      // a second stroke a moment after the first
-      if (this.boltFlicker > 0) { this.boltFlicker -= dt; if (this.boltFlicker <= 0) this.bolt = Math.max(this.bolt, 0.7); }
-    }
+    // lightning, once the storm is in
+    this.bolt = Math.max(0, this.bolt - dt * 12);
+    if (G > 0.85 && dt > 0) this.lightning(dt);
     u.uBolt.value = this.bolt * this.bolt;
     const H = (t - 0.5) * Math.PI * 2; // hour angle, 0 at noon
     const dec = THREE.MathUtils.degToRad(4 * Math.sin((this.day / 12) * Math.PI * 2));

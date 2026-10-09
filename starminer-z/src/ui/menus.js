@@ -101,7 +101,7 @@ export class Menus {
           id, title: 'Endurance',
           sub: 'Get as far from the start tower as you can. The dead come out at night, and more of them the further you go.',
           items: [
-            m ? { label: 'Continue Game', small: `Day ${m.day} · ${m.maxDistance ?? 0} m`, on: () => app.continueGame() } : null,
+            m ? { label: 'Continue Game', small: `Day ${m.days ?? m.day} · ${m.maxDistance ?? 0} m`, on: () => app.continueGame() } : null,
             { label: 'New World', on: () => (m ? this.open('confirmNew') : app.newWorld()) },
             { label: 'Back', on: () => this.back() },
           ].filter(Boolean),

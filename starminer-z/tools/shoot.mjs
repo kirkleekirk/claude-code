@@ -16,7 +16,8 @@ for (const s of shots) {
   const page = await browser.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') logs.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
-  await page.goto(`${base}/?${q}`, { waitUntil: 'load', timeout: 120000 });
+  // a query, or a path of its own (one starting with /)
+  await page.goto(q.startsWith('/') ? `${base}${q}` : `${base}/?${q}`, { waitUntil: 'load', timeout: 120000 });
   const wait = parseInt(process.env.WAIT || '90000', 10);
   try {
     await page.waitForFunction(() => (window.__readiness || 0) >= 1 || window.__shotReady === true, null, { timeout: wait, polling: 500 });

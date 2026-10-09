@@ -2,6 +2,19 @@
 // with the recipes that make them. Modelled on the original game's early item set.
 
 import { B } from '../world/blocks.js';
+import { DMG } from '../entities/cmz/types.js';
+
+// What a hit with each does to the dead: the original's EnemyDamage (the weakest zombie has 1.0
+// of health, the toughest 27) and its kind of damage. Tools by tier, stone to diamond; guns by
+// material, iron, gold, diamond.
+const TOOL_DAMAGE = { pick: [0.1, 0.2, 0.4, 0.8, 1.6], spade: [0.1, 0.2, 0.4, 0.8, 1.6], axe: [0.15, 0.3, 0.5, 1.0, 2.0] };
+const GUN_DAMAGE = { pistol: [0.3, 1.0, 4.0], smg: [0.3, 1.0, 4.0], assault: [0.5, 2.5, 6.0], shotgun: [0.3, 1.0, 4.0], rifle: [0.5, 2.5, 6.0] };
+
+// { dmg, type } for a hit with an item (or bare hands)
+export function weaponDamage(it) {
+  if (!it) return { dmg: 0.025, type: DMG.BLUNT };
+  return { dmg: it.enemyDamage ?? 0.1, type: it.damageType ?? DMG.BLUNT };
+}
 
 export const TIERS = {
   stone: { name: 'Stone', tier: 1, speed: 2.2, color: 0x8b877f, durability: 140 },
@@ -16,8 +29,8 @@ const GUNS = {
   pistol: { name: 'Pistol', dmg: 12, rpm: 320, auto: false, mag: 8, spread: 1.4, reload: 1.3, pellets: 1, recoil: 0.05, range: 60, desc: 'Reliable semi-auto sidearm. Uses Bullets' },
   smg: { name: 'SMG', dmg: 8, rpm: 840, auto: true, mag: 32, spread: 3.2, reload: 1.7, pellets: 1, recoil: 0.025, range: 45, desc: 'Fast firing, short range. Uses Bullets' },
   assault: { name: 'Assault Rifle', dmg: 14, rpm: 600, auto: true, mag: 30, spread: 1.9, reload: 2.1, pellets: 1, recoil: 0.035, range: 80, desc: 'High power full auto. Uses Bullets' },
-  shotgun: { name: 'Shotgun', dmg: 9, rpm: 75, auto: false, mag: 6, spread: 7.5, reload: 2.4, pellets: 9, recoil: 0.12, range: 30, desc: 'Devastating up close. Uses Bullets' },
-  rifle: { name: 'Rifle', dmg: 70, rpm: 48, auto: false, mag: 5, spread: 0.25, reload: 2.6, pellets: 1, recoil: 0.14, range: 160, zoom: 2.6, desc: 'Bolt action. One shot, one kill. Uses Bullets' },
+  shotgun: { name: 'Shotgun', dmg: 9, rpm: 75, auto: false, mag: 6, spread: 7.5, reload: 2.4, pellets: 5, recoil: 0.12, range: 30, desc: 'Short range burst fire. Uses Bullets' },
+  rifle: { name: 'Rifle', dmg: 70, rpm: 48, auto: false, mag: 5, spread: 0.25, reload: 2.6, pellets: 1, recoil: 0.14, range: 160, zoom: 2.6, desc: 'High power, very accurate. Uses Bullets' },
 };
 const GUN_MATS = { iron: { prefix: '', mult: 1, ing: 'iron' }, gold: { prefix: 'Gold ', mult: 1.7, ing: 'gold' }, diamond: { prefix: 'Diamond ', mult: 2.6, ing: 'diamond' } };
 const GUN_COST = { pistol: [2, 1], smg: [3, 1], assault: [4, 2], shotgun: [3, 2], rifle: [3, 3] };
@@ -57,23 +70,27 @@ add('diamond', { kind: 'material', name: 'Diamond', desc: 'The hardest material 
 
 // ---- tools ----
 for (const [k, t] of Object.entries(TIERS)) {
-  add(`pick_${k}`, { kind: 'tool', tool: 'pick', mat: k, tier: t.tier, speed: t.speed, color: t.color, name: `${t.name} PickAxe`, stack: 1, durability: t.durability, melee: 8 + t.tier * 2, desc: `Digs rock and ore${t.tier >= 2 ? `, up to ${['', '', 'Iron', 'Gold', 'Diamond', 'BloodStone'][t.tier]} Ore` : ''}` });
-  add(`spade_${k}`, { kind: 'tool', tool: 'spade', mat: k, tier: t.tier, speed: t.speed, color: t.color, name: `${t.name} Spade`, stack: 1, durability: t.durability, melee: 6 + t.tier * 2, desc: 'Digs dirt, sand and snow fast' });
-  add(`axe_${k}`, { kind: 'tool', tool: 'axe', mat: k, tier: t.tier, speed: t.speed, color: t.color, name: `${t.name} Axe`, stack: 1, durability: t.durability, melee: 10 + t.tier * 3, desc: 'Chops wood fast' });
+  const hit = (tool) => ({ enemyDamage: TOOL_DAMAGE[tool][t.tier - 1], damageType: tool === 'spade' ? DMG.BLUNT : DMG.BLADE });
+  add(`pick_${k}`, { kind: 'tool', tool: 'pick', mat: k, tier: t.tier, speed: t.speed, color: t.color, name: `${t.name} PickAxe`, stack: 1, durability: t.durability, ...hit('pick'), desc: `Digs rock and ore${t.tier >= 2 ? `, up to ${['', '', 'Iron', 'Gold', 'Diamond', 'BloodStone'][t.tier]} Ore` : ''}` });
+  add(`spade_${k}`, { kind: 'tool', tool: 'spade', mat: k, tier: t.tier, speed: t.speed, color: t.color, name: `${t.name} Spade`, stack: 1, durability: t.durability, ...hit('spade'), desc: 'Digs dirt, sand and snow fast' });
+  add(`axe_${k}`, { kind: 'tool', tool: 'axe', mat: k, tier: t.tier, speed: t.speed, color: t.color, name: `${t.name} Axe`, stack: 1, durability: t.durability, ...hit('axe'), desc: 'Chops wood fast' });
 }
 add('compass', { kind: 'tool', tool: 'compass', name: 'Compass', stack: 1, desc: 'Points the way back to the start tower' });
 
 // ---- knives ----
-add('knife', { kind: 'melee', mat: 'iron', name: 'Knife', stack: 1, damage: 26, rate: 0.42, durability: 600, desc: 'Fast melee weapon' });
-add('knife_gold', { kind: 'melee', mat: 'gold', name: 'Gold Knife', stack: 1, damage: 44, rate: 0.4, durability: 1100, desc: 'Sharper and stronger' });
-add('knife_diamond', { kind: 'melee', mat: 'diamond', name: 'Diamond Knife', stack: 1, damage: 70, rate: 0.38, durability: 2400, desc: 'The deadliest blade' });
+add('knife', { kind: 'melee', mat: 'iron', name: 'Knife', stack: 1, enemyDamage: 0.5, damageType: DMG.BLADE, rate: 0.42, durability: 600, desc: 'Fast melee weapon' });
+add('knife_gold', { kind: 'melee', mat: 'gold', name: 'Gold Knife', stack: 1, enemyDamage: 1.0, damageType: DMG.BLADE, rate: 0.4, durability: 1100, desc: 'Sharper and stronger' });
+add('knife_diamond', { kind: 'melee', mat: 'diamond', name: 'Diamond Knife', stack: 1, enemyDamage: 2.0, damageType: DMG.BLADE, rate: 0.38, durability: 2400, desc: 'The deadliest blade' });
 
 // ---- guns ----
 for (const [gk, g] of Object.entries(GUNS)) {
-  for (const [mk, m] of Object.entries(GUN_MATS)) {
+  Object.entries(GUN_MATS).forEach(([mk, m], mi) => {
     const id = mk === 'iron' ? gk : `${gk}_${mk}`;
-    add(id, { kind: 'gun', gun: gk, mat: mk, name: `${m.prefix}${g.name}`, stack: 1, ...g, dmg: Math.round(g.dmg * m.mult), ammo: 'bullets', desc: g.desc, durability: 0 });
-  }
+    add(id, {
+      kind: 'gun', gun: gk, mat: mk, name: `${m.prefix}${g.name}`, stack: 1, ...g, dmg: Math.round(g.dmg * m.mult), ammo: 'bullets', desc: g.desc, durability: 0,
+      enemyDamage: GUN_DAMAGE[gk][mi], damageType: gk === 'shotgun' ? DMG.SHOTGUN : DMG.BULLET,
+    });
+  });
 }
 
 // ---- ammo ----

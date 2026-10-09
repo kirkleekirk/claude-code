@@ -8,12 +8,25 @@ Microsoft.
 
 ## Playing
 
-Endurance: start by the bedrock tower and see how far you can get from it. The first day is
-under a clear alien sky; late that afternoon a storm rolls in for good. The dead
-start climbing out of the ground. They swarm at night and sprint; by day they rise as you push
-into new ground. Underground, in the pitch dark, skeletons come for you (light keeps them away).
-The further out you go, and every fifth day, the harder it gets, and out past the Desert the dead
-dig through stone, then copper, iron and gold walls.
+Endurance: start by the bedrock tower and see how far you can get from it. A day lasts 16
+minutes, starting mid-morning. The first day is under a clear alien sky; early that afternoon a
+storm rolls in for good.
+
+The dead follow CastleMiner Z's own rules, read from the original's code:
+
+- At night they climb out of the ground around you, more often the deeper the night and the
+  further out you are. Near the start that means only late in the evening. Each day survived
+  counts as another 120 m out. At dusk some are skeleton archers. A lantern stops them coming up
+  near it.
+- Every 40 m or so of new ground you reach in daylight, two to four of them come for you.
+- They walk until they've chased you for 45 s (or for a few seconds of you running), then they
+  run, faster than you can. Just after midnight they all run.
+- A zombie that's stuck, or has you above or below it, digs toward you. Only the toughest get
+  through rock, and nothing gets through a wall.
+- In the dark underground, skeletons drop out of the cave roof near you, unless it's lit there.
+  They come in waves, a minute on and a minute off.
+- Which of the dead you meet, and how tough it is, goes by distance, from the original's table
+  of 18 zombies, 8 archers and 24 skeletons.
 
 The zones run in rings out from the tower, as in the original:
 
@@ -45,7 +58,22 @@ npm run build:avatar -- <path to XNAGameStudio/Samples>   # rebuilds src/assets/
 
 Test helpers: `tools/shoot.mjs` (screenshots in headless Chromium), `tools/flow.mjs` (walks the
 menus with key presses), `tools/sim.mjs` (runs the game and reports what the enemies do),
-`tools/eval.mjs` (runs a module in the page).
+`tools/eval.mjs` (runs a module in the page). In the game, `?play&horde=4&skel=2&archer=1`
+puts some of the dead in front of you, and `?nocmz` leaves out the original's bodies.
+
+### The original's sounds and bodies
+
+All the sound in the game is CastleMiner Z's own: every cue (effects, ambience and music) plays
+by the original's rules. So are the zombie and skeleton models, with their animations and skins.
+None of these files are in this repository. They come out of your own copy of the game (its
+`Content` folder) and go in `local-assets/`, which git ignores:
+
+```
+python3 tools/cmz/rip_audio.py  <Content> local-assets/audio    # needs ffmpeg
+python3 tools/cmz/rip_models.py <Content> local-assets/models
+```
+
+Without them the game is silent and the dead are built on the avatar rig.
 
 ## Credits
 
@@ -54,5 +82,7 @@ menus with key presses), `tools/sim.mjs` (runs the game and reports what the ene
   Microsoft Permissive License (Ms-PL); see `LICENSE-avatar.txt`.
 - three.js (MIT). Fonts: Archivo Black, Open Sans and Saira Semi Condensed (SIL Open Font
   License), from Google Fonts.
-- Everything else (the world, sky, sounds, zombies and skeletons, interface) is this project's
-  own work.
+- CastleMiner Z's sounds, music, models and animations (when you rip them from your own copy;
+  see above) belong to DigitalDNA Games and aren't distributed here.
+- Everything else (the world, sky, the stand-in zombies and skeletons, interface) is this
+  project's own work.

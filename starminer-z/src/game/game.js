@@ -3,11 +3,12 @@
 
 import * as THREE from 'three';
 import { World } from '../world/world.js';
-import { B, BLOCKS, SOLID, isTorch } from '../world/blocks.js';
+import { B, BLOCKS, SOLID, HEIGHT, isTorch } from '../world/blocks.js';
 import { BIOMES } from '../world/gen.js';
 import { Player } from '../entities/player.js';
 import { Inventory } from '../items/inventory.js';
-import { ITEMS, dropFor, digTime } from '../items/items.js';
+import { ITEMS, dropFor, digTime, weaponDamage } from '../items/items.js';
+import { getZombie, TYPES } from '../entities/cmz/types.js';
 import { ViewModel } from '../gfx/viewModel.js';
 import { BlockHighlight, Debris, Sprites, Tracers } from '../gfx/effects.js';
 import { BlockItemMaterials, blockItemGeometry } from '../gfx/blockItem.js';
@@ -23,7 +24,9 @@ import { skeletonLook } from '../entities/avatar/skeleton.js';
 
 const testParams = new URLSearchParams(location.search);
 
-// when the grace period ends: late on the first afternoon
+// a new game starts in the middle of the morning, as the original's does
+const START_TIME = 0.4;
+// when the grace period ends: early on the first afternoon
 const GRACE_ENDS = 0.62;
 
 const _v = new THREE.Vector3(), _f = new THREE.Vector3();
@@ -95,14 +98,13 @@ export class Game {
       this.player.spawn(p.x, p.y, p.z);
       this.player.yaw = p.yaw; this.player.pitch = p.pitch;
       this.player.health = p.health ?? 100;
-      this.lastDay = save.day;
     } else if (attract) {
       // late afternoon under the storm: a low sun through the clouds
       sky.setTime(0.69, 1);
       const sp = this.world.gen.spawnPoint();
       this.player.spawn(sp.x, sp.y, sp.z);
     } else {
-      sky.setTime(0.27, 1);
+      sky.setTime(START_TIME, 1);
       const sp = this.world.gen.spawnPoint();
       this.player.spawn(sp.x, sp.y, sp.z);
       // facing the giant planet
@@ -112,11 +114,13 @@ export class Game {
     }
     sky.setGloom(this.grace ? 0 : 1, true);
     if (testParams.has('gloom')) sky.setGloom(parseFloat(testParams.get('gloom')), true);
+    this.lastDay = this.dayNumber;
+    this.depth = 0;
     this.spawnAt = this.world.gen.spawnPoint();
     // distance is counted from the tower, as in the original (you start about 30 out)
     this.towerAt = { x: 0.5, z: 0.5 };
-    this.player.onStep = (block, sprint) => this.audio?.step(BLOCKS[block]?.sound || 'stone', sprint);
-    this.player.onLand = (speed, block) => { if (speed > 6) this.audio?.land(BLOCKS[block]?.sound || 'stone', speed); };
+    this.player.onStep = (block, sprint) => this.audio?.step(block, sprint);
+    this.player.onLand = (speed, block) => { if (speed > 6) this.audio?.land(block, speed); };
     this.player.onHurt = (n, kind) => { this.hud.hurt(); this.audio?.hurt(kind); if (this.app.vibrate) this.app.vibrate(40); };
     this.inventory.onChange = () => {};
     this.viewModel.setItem(this.inventory.held?.id ?? null);
@@ -260,16 +264,22 @@ export class Game {
       sky.endless = gen.endlessNight(p.pos.x, p.pos.z);
       sky.lavaGlow = gen.w[6];
     }
+    if (this.nightT === 0.25) {
+      // how much ground is overhead: the dripping of the caves, and no lightning down there
+      this.depth = this.depthUnderGround(p.pos);
+      sky.outdoors = this.depth <= 2 && p.pos.y > 32;
+    }
     if (this.grace && (sky.day > 1 || sky.time > GRACE_ENDS)) {
       this.grace = false;
       sky.setGloom(1, false);
       this.hud.message('The sky is turning...');
       this.audio?.storm?.();
     }
-    if (sky.day !== this.lastDay) {
-      this.lastDay = sky.day;
-      this.stats.days = Math.max(this.stats.days, sky.day);
-      this.hud.showDay(sky.day);
+    const day = this.dayNumber;
+    if (day !== this.lastDay) {
+      this.lastDay = day;
+      this.stats.days = Math.max(this.stats.days, day);
+      this.hud.showDay(day);
       this.audio?.dawn();
     }
 
@@ -286,6 +296,8 @@ export class Game {
         this.handleItems(dt, input);
       }
     }
+    if (p.inLava && !this.wasInLava) this.audio?.douse();
+    this.wasInLava = p.inLava;
     if (p.dead && !this.deathShown) this.onDeath();
     if (p.dead && this.deathShown && (input.consume('jump') || input.consume('accept') || input.consume('primary'))) this.respawn();
 
@@ -367,22 +379,38 @@ export class Game {
   onReady() {
     this.ready = true;
     if (testParams.has('avatars') && !this.testAvatars) this.spawnTestAvatars();
-    // a crowd to test against: horde=N zombies, skel=N skeletons, round the player at hdist
-    for (const [param, kind] of [['horde', 'zombie'], ['skel', 'skeleton']]) {
-      const n = parseInt(testParams.get(param) || '0', 10);
-      const r = parseFloat(testParams.get('hdist') || '9');
-      for (let i = 0; i < n; i++) {
-        const off = (i - (n - 1) / 2) * 1.4, yaw = this.player.yaw;
-        const x = this.player.pos.x - Math.sin(yaw) * r + off * Math.cos(yaw);
-        const z = this.player.pos.z - Math.cos(yaw) * r - off * Math.sin(yaw);
-        const y = this.world.surfaceY(x, z) + 1.001;
-        this.enemies.spawn(kind, x, y, z, { look: 1 + (i % 8), dayWalker: true });
-      }
-    }
+    // a crowd to test against, round the player at hdist: horde=N zombies (the type for the
+    // distance), skel=N cave skeletons, archer=N archers, or etype=a,b,c (types by number)
+    const r = parseFloat(testParams.get('hdist') || '9');
+    const types = [];
+    for (let i = 0; i < parseInt(testParams.get('horde') || '0', 10); i++) types.push(getZombie(this.enemies.playerDistance()));
+    for (let i = 0; i < parseInt(testParams.get('skel') || '0', 10); i++) types.push(26 + (i * 5) % 24);
+    for (let i = 0; i < parseInt(testParams.get('archer') || '0', 10); i++) types.push(18 + i % 8);
+    if (testParams.get('etype')) types.push(...testParams.get('etype').split(',').map(Number).filter((t) => TYPES[t]));
+    types.forEach((type, i) => {
+      const n = types.length, off = (i - (n - 1) / 2) * 1.4, yaw = this.player.yaw;
+      const x = Math.floor(this.player.pos.x - Math.sin(yaw) * r + off * Math.cos(yaw)) + 0.5;
+      const z = Math.floor(this.player.pos.z - Math.cos(yaw) * r - off * Math.sin(yaw)) + 0.5;
+      const y = this.world.surfaceY(x, z) + 1.1;
+      this.enemies.spawn(type, x, y, z, 0.5);
+    });
     // make sure the player is standing on the ground, not inside it
     const p = this.player;
     for (let i = 0; i < 120 && p.collides(p.pos.x, p.pos.y, p.pos.z); i++) p.pos.y += 1;
-    if (!this.lastDayShown) { this.lastDayShown = true; this.hud.showDay(this.app.sky.day); }
+    if (!this.lastDayShown) { this.lastDayShown = true; this.hud.showDay(this.dayNumber); }
+  }
+
+  // The original's clock: its Day counts up from 0.4, so each new day begins 0.4 of the way
+  // through one (mid-morning), when "Day N" shows and the stinger plays.
+  get cmzDay() { const s = this.app.sky; return s.day - 1 + s.time; }
+  get dayNumber() { return Math.max(1, Math.floor(this.cmzDay + 0.6 + 1e-9)); }
+
+  // Solid blocks over the player's feet (the original's BlockTerrain.DepthUnderGround).
+  depthUnderGround(pos) {
+    const x = Math.floor(pos.x), z = Math.floor(pos.z);
+    let n = 0;
+    for (let y = Math.max(0, Math.floor(pos.y)); y < HEIGHT; y++) if (SOLID[this.world.getBlock(x, y, z)]) n++;
+    return n;
   }
 
   // A line-up of the player avatars in front of the camera (tools/shoot.mjs uses it).
@@ -445,11 +473,10 @@ export class Game {
     const target = this.enemies?.raycast(eye, fwd, it?.kind === 'melee' ? 2.6 : 2.3, hit ? hit.dist : 99);
     const primary = input.isHeld('primary');
     if (primary && target && this.cooldown <= 0) {
-      const dmg = it ? (it.kind === 'melee' ? it.damage : it.melee || 4) : 4;
       const rate = it && it.kind === 'melee' ? it.rate : 0.45;
       vm.startSwing(it ? (it.kind === 'melee' ? 'stab' : 'tool') : 'punch', rate * 0.9);
       this.cooldown = rate;
-      target.enemy.hurt(dmg, fwd, false, this);
+      if (target.enemy.takeDamage(target.y, weaponDamage(it))) this.onKill(target.enemy);
       this.hud.hitMarker();
       this.audio?.melee(true);
       if (it && it.durability) inv.wearHeld(1);
@@ -499,7 +526,7 @@ export class Game {
     const L = this.world.lightAt(hit.x, hit.y + 1, hit.z);
     const light = Math.max(0.25, Math.max(L.sky / 15, L.block / 15));
     this.debris.burst(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, def.color, 14, light);
-    this.audio?.breakBlock(def.sound);
+    this.audio?.breakBlock(hit.id);
     const drop = dropFor(hit.id);
     if (drop) this.drops.spawn(drop, 1, hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
     // torches resting on this block fall
@@ -591,14 +618,15 @@ export class Game {
     const range = it.range;
     const block = this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, range, (id) => SOLID[id] || id === B.LEAVES || id === B.GLASS);
     const maxD = block ? block.dist : range;
-    const target = this.enemies?.raycast(eye, dir, maxD, maxD);
+    const target = this.enemies?.raycast(eye, dir, maxD, maxD, true);
     let end;
     if (target) {
       end = eye.clone().addScaledVector(dir, target.dist);
-      const dmg = it.dmg * (target.head ? 2 : 1) * (target.dist > range * 0.6 ? 0.7 : 1);
-      target.enemy.hurt(dmg, dir, target.head, this);
+      if (target.enemy.takeDamage(target.y, weaponDamage(it))) this.onKill(target.enemy);
       this.hud.hitMarker();
-      for (let i = 0; i < 6; i++) this.sprites.emit('blood', end.x, end.y, end.z, { color: target.enemy.bloodColor || 0x6a0a06, size: 0.1, life: 0.5, spread: 2.2, gravity: 9, alpha: 0.95 });
+      this.audio?.bulletHit(end);
+      const blood = target.enemy.kind === 'zombie' ? 0x5a0805 : 0xcfc6ac;
+      for (let i = 0; i < 6; i++) this.sprites.emit('blood', end.x, end.y, end.z, { color: blood, size: 0.1, life: 0.5, spread: 2.2, gravity: 9, alpha: 0.95 });
     } else {
       end = eye.clone().addScaledVector(dir, maxD);
       if (block) {
@@ -606,12 +634,40 @@ export class Game {
         const px = end.x - dir.x * 0.02, py = end.y - dir.y * 0.02, pz = end.z - dir.z * 0.02;
         for (let i = 0; i < 5; i++) this.sprites.emit('dust', px, py, pz, { color: def.color, size: 0.07, life: 0.6, spread: 2, gravity: 8, alpha: 0.9 });
         this.sprites.emit('spark', px, py, pz, { color: 0xffc070, size: 0.05, life: 0.12, spread: 3 });
-        this.audio?.impact(def.sound, end);
+        this.audio?.impact(block.id, end);
         // glass shatters
         if (block.id === B.GLASS) this.breakBlock(block);
       }
     }
     this.tracers.add(muzzle, end);
+  }
+
+  // One of the dead killed by the player: now and then it leaves something (the original's
+  // BaseZombie.CreatePickup: further out, better things; in Hell, better still).
+  onKill(e) {
+    this.stats.kills++;
+    const p = e.pos;
+    const r = THREE.MathUtils.lerp(Math.min(1, Math.hypot(p.x, p.y - 64, p.z) / 5000), 1, Math.random());
+    if (r < 0.5) return;
+    const hell = p.y < 64 - 40;
+    const table = hell ? [[0.7, 'copper_ore'], [0.8, 'copper'], [0.85, 'iron'], [0.9, 'gold_ore'], [1.01, 'diamond']]
+      : [[0.7, 'wood'], [0.8, 'coal'], [0.85, 'copper_ore'], [0.9, 'copper'], [1.01, 'iron_ore']];
+    const id = table.find(([k]) => r < k)[1];
+    this.drops.spawn(id, 1, p.x, p.y + 1, p.z);
+  }
+
+  // A block the dead dig out: no drop, but what hangs on it falls.
+  removeBlock(x, y, z) {
+    const id = this.world.getBlock(x, y, z);
+    if (id === B.AIR || !this.world.setBlock(x, y, z, B.AIR)) return;
+    const L = this.world.lightAt(x, y + 1, z);
+    this.debris.burst(x + 0.5, y + 0.5, z + 0.5, BLOCKS[id].color, 10, Math.max(0.25, Math.max(L.sky / 15, L.block / 15)));
+    for (const [dx, dy, dz, t] of [[0, 1, 0, B.TORCH], [1, 0, 0, B.TORCH_NX], [-1, 0, 0, B.TORCH_PX], [0, 0, 1, B.TORCH_NZ], [0, 0, -1, B.TORCH_PZ]]) {
+      if (this.world.getBlock(x + dx, y + dy, z + dz) === t) {
+        this.world.setBlock(x + dx, y + dy, z + dz, B.AIR);
+        this.drops.spawn('torch', 1, x + dx + 0.5, y + dy + 0.5, z + dz + 0.5);
+      }
+    }
   }
 
   // ---- death -------------------------------------------------------------------------------
@@ -620,7 +676,7 @@ export class Game {
     this.deathShown = true;
     this.stats.deaths++;
     this.audio?.death();
-    this.app.showDeath(this.maxDistance, this.app.sky.day);
+    this.app.showDeath(this.maxDistance, this.dayNumber);
   }
 
   respawn() {
@@ -643,6 +699,7 @@ export class Game {
       mode: this.mode,
       time: this.app.sky.time,
       day: this.app.sky.day,
+      days: this.dayNumber,
       player: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, pitch: p.pitch, health: p.health },
       inventory: this.inventory.serialize(),
       maxDistance: this.maxDistance,

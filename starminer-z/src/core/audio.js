@@ -1,488 +1,458 @@
-// Every sound in the game, made on the spot with Web Audio: no recordings. Footsteps for each
-// kind of ground, digging and building, the guns, the dead groaning and the bones rattling,
-// wind that rises with the storm, thunder, and a slow, uneasy score under it all.
+// The game's sound: CastleMiner Z's own recordings, played by the original's rules.
 //
-// The context can only start after the player does something (a key, a click, a tap), so
-// nothing plays until unlock(). Every method is safe to call before then: it does nothing.
+// The cues come from the copy ripped out of the game (tools/cmz/rip_audio.py writes them to
+// local-assets/audio, which is never committed). A cue is one or more sounds, one picked at
+// random each time (never the same twice running), and a sound is a set of tracks with its
+// volume, looping and category. When each cue plays follows the original's code: footsteps
+// as you walk, the dig sound when a block comes out, the dead growling the whole time they
+// chase you, thunder after the lightning, birds by day and crickets by night (dripping
+// underground, the lost souls in Hell), the theme in the menus, and a song the first time you
+// get 200, 900, 1600, 2300, 3000 and 3400 m out.
+//
+// Nothing is synthesized: without the ripped files the game is silent. The context can only
+// start once the player has done something (a key, a click, a tap); unlock() starts it, and
+// every method is safe to call before then.
 
-const NOTE = (n) => 440 * Math.pow(2, (n - 69) / 12);
-// the score keeps to a dark minor mode (A aeolian, with the flat second for unease)
-const SCALE = [0, 1, 3, 5, 7, 8, 10];
+import { B } from '../world/blocks.js';
+
+const BASE = 'local-assets/audio/';
+const dB = (v) => Math.pow(10, (v || 0) / 20);
+
+// the original's sound categories: effects, music, and the four kinds of ambience
+const CAT_MUSIC = 2;
+const AMBIENT = { 3: 'day', 4: 'night', 5: 'cave', 6: 'hell' };
+const AMBIENCE = ['Birds', 'Crickets', 'Drips', 'lostSouls'];
+
+// the songs, each played once, the first time you get this far out (in 3D, from the start)
+const SONGS = [['Song6', 3400], ['Song5', 3000], ['Song4', 2300], ['Song3', 1600], ['Song2', 900], ['Song1', 200]];
+// the original's y = 0 is our y = 64
+const GROUND = 64;
+// Hell's moaning starts 37 blocks under the original's y = 0 and is full 10 below that
+const HELL_TOP = GROUND - 37;
+
+// each gun's shot and reload
+const GUNS = {
+  pistol: ['GunShot4', 'Reload'], smg: ['GunShot2', 'Reload'], lmg: ['GunShot2', 'Reload'],
+  assault: ['GunShot3', 'AssaultReload'], rifle: ['GunShot1', 'AssaultReload'], shotgun: ['Shotgun', 'ShotGunReload'],
+};
+
+// the sound a block makes coming out (the original's Player.GetDigSound)
+const DIG = { [B.SAND]: 'Sand', [B.SNOW]: 'Sand', [B.SNOW_GRASS]: 'Sand', [B.LEAVES]: 'leaves' };
+
+// 3D sounds farther off than this aren't started at all
+const HEAR = 64;
+// at most this many of one cue at once (the farthest makes way for a nearer one)
+const MAX_LIVE = 10;
+// the theme fades out over three seconds when a game starts
+const FADE = 3;
+
+function decode(ctx, data) {
+  return new Promise((resolve) => {
+    try {
+      const p = ctx.decodeAudioData(data, resolve, () => resolve(null));
+      if (p && p.catch) p.catch(() => resolve(null));
+    } catch { resolve(null); }
+  });
+}
+
+function setPos(node, v) {
+  if (node.positionX) { node.positionX.value = v.x; node.positionY.value = v.y; node.positionZ.value = v.z; }
+  else node.setPosition(v.x, v.y, v.z);
+}
 
 export class Audio {
   constructor(app) {
     this.app = app;
-    this.ctx = null;
     this.vol = { sound: app.settings.sound ?? 0.9, music: app.settings.music ?? 0.6 };
-    this.listener = { x: 0, y: 0, z: 0, yaw: 0 };
-    this.musicT = 2;
-    this.chordT = 0;
-    this.groans = 0;
+    this.ctx = null;
+    this.cues = null;
+    this.banks = null;
+    this.buffers = new Map();
+    this.loads = new Map();
+    this.live = new Map();
+    this.lastPick = new Map();
+    this.ambient = null;
+    this.music = null; // the music cue playing
+    this.wanted = null; // the song still loading to play
+    this.fading = 0; // seconds into the theme's fade-out
+    this.musicGain = -1;
+    this.menu = true;
+    this.songs = SONGS.map(([name, at]) => ({ name, at, done: false }));
+    this.lastDist = 0;
+    this.L = { x: 0, y: 0, z: 0 };
+    const AC = window.AudioContext || window.webkitAudioContext;
+    try { if (AC) this.ctx = new AC(); } catch { this.ctx = null; }
+    if (!this.ctx) return;
+    this.buses();
+    this.loaded = this.load();
   }
 
-  unlock() {
-    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return;
-    try { this.ctx = new AC(); } catch { this.ctx = null; return; }
+  buses() {
     const c = this.ctx;
+    // the original mixes quietly (most effects at -12 dB): bring it all up, and catch the peaks
     this.master = c.createGain();
-    const comp = c.createDynamicsCompressor();
-    comp.threshold.value = -14; comp.knee.value = 10; comp.ratio.value = 4;
-    this.master.connect(comp).connect(c.destination);
-    this.sfx = c.createGain(); this.sfx.connect(this.master);
-    this.music = c.createGain(); this.music.connect(this.master);
-    this.amb = c.createGain(); this.amb.connect(this.master);
-    // a big, dark room for everything to ring in
-    this.verb = c.createConvolver();
-    this.verb.buffer = this.impulse(3.2, 2.6);
-    this.verbIn = c.createGain(); this.verbIn.gain.value = 0.5;
-    this.verbIn.connect(this.verb).connect(this.master);
-    this.white = this.noise(2, 'white');
-    this.brown = this.noise(4, 'brown');
+    this.master.gain.value = 2;
+    const lim = c.createDynamicsCompressor();
+    lim.threshold.value = -4; lim.knee.value = 4; lim.ratio.value = 12; lim.attack.value = 0.002; lim.release.value = 0.2;
+    this.master.connect(lim).connect(c.destination);
+    this.sfx = c.createGain();
+    this.sfx.connect(this.master);
+    this.mus = c.createGain();
+    this.mus.connect(this.master);
+    this.amb = {};
+    for (const k of Object.values(AMBIENT)) {
+      const g = c.createGain();
+      g.gain.value = 0;
+      g.connect(this.sfx);
+      this.amb[k] = g;
+    }
     this.setVolumes(this.vol.sound, this.vol.music);
-    this.startAmbience();
+  }
+
+  // The cue list, every effect and the ambience (they're small), and the menu theme first; the
+  // songs only when they're wanted.
+  async load() {
+    let idx = null;
+    try { const r = await fetch(BASE + 'index.json'); if (r.ok) idx = await r.json(); } catch { idx = null; }
+    if (!idx || !idx.cues) return false;
+    this.cues = idx.cues;
+    this.banks = idx.banks;
+    const urls = [...this.urls('Theme')];
+    for (const [name, cue] of Object.entries(this.cues)) {
+      if (!cue.sounds || cue.sounds.some((s) => s.category === CAT_MUSIC)) continue;
+      urls.push(...this.urls(name));
+    }
+    await Promise.all(urls.map((u) => this.fetch(u)));
+    return true;
+  }
+
+  // the files a cue's tracks are in
+  urls(name) {
+    const out = [];
+    for (const s of this.cues?.[name]?.sounds || []) for (const e of s.events) for (const w of e.waves) { const u = this.url(w); if (u) out.push(u); }
+    return out;
+  }
+
+  url(w) {
+    const t = this.banks?.[w.bank]?.[w.track];
+    return t && t.file && !t.error ? BASE + t.file : null;
+  }
+
+  entry(url) {
+    for (const L of Object.values(this.banks || {})) for (const t of L) if (t.file && BASE + t.file === url) return t;
+    return null;
+  }
+
+  fetch(url) {
+    if (!url || !this.ctx) return Promise.resolve(null);
+    let p = this.loads.get(url);
+    if (!p) {
+      p = fetch(url).then((r) => (r.ok ? r.arrayBuffer() : null)).then((d) => (d ? decode(this.ctx, d) : null)).catch(() => null)
+        .then((b) => { if (b) { b = this.trim(b, this.entry(url)); this.buffers.set(url, b); } return b; });
+      this.loads.set(url, p);
+    }
+    return p;
+  }
+
+  // An MP3 decodes with the encoder's silence before the sound and padding after it, unless
+  // the browser trims it from the file's header. Trim it here if it didn't, so loops are seamless.
+  trim(buf, t) {
+    const g = t && t.gapless;
+    if (!g || !t.samples) return buf;
+    const r = buf.sampleRate / t.rate;
+    const want = Math.round(t.samples * r), slack = buf.sampleRate * 0.004;
+    if (Math.abs(buf.length - want) <= slack) return buf;
+    let lead = -1;
+    // undecoded header frame or not, the sound starts after the encoder's delay
+    for (const [total, skip] of [[g.total, g.lead], [g.total + g.spf, g.lead + g.spf]]) {
+      if (total && Math.abs(buf.length - total * r) <= slack) { lead = Math.round(skip * r); break; }
+    }
+    if (lead < 0 || lead + want > buf.length) return buf;
+    const out = this.ctx.createBuffer(buf.numberOfChannels, want, buf.sampleRate);
+    for (let ch = 0; ch < buf.numberOfChannels; ch++) out.getChannelData(ch).set(buf.getChannelData(ch).subarray(lead, lead + want));
+    return out;
+  }
+
+  get running() { return !!this.ctx && this.ctx.state === 'running' && !!this.cues; }
+
+  unlock() {
+    if (this.ctx && this.ctx.state !== 'running') this.ctx.resume?.().catch?.(() => {});
   }
 
   setVolumes(sound, music) {
     this.vol.sound = sound; this.vol.music = music;
     if (!this.ctx) return;
-    const t = this.ctx.currentTime;
-    this.sfx.gain.setTargetAtTime(sound, t, 0.05);
-    this.amb.gain.setTargetAtTime(sound * 0.8, t, 0.05);
-    this.music.gain.setTargetAtTime(music * 0.5, t, 0.05);
+    this.sfx.gain.setTargetAtTime(sound, this.ctx.currentTime, 0.05);
+    if (!this.fading) this.setMusicGain(music);
   }
 
-  // ---- building blocks ---------------------------------------------------------------------------
-
-  noise(seconds, kind) {
-    const c = this.ctx, n = Math.floor(c.sampleRate * seconds);
-    const b = c.createBuffer(1, n, c.sampleRate), d = b.getChannelData(0);
-    let last = 0;
-    for (let i = 0; i < n; i++) {
-      const w = Math.random() * 2 - 1;
-      if (kind === 'brown') { last = (last + 0.02 * w) / 1.02; d[i] = last * 3.5; } else d[i] = w;
-    }
-    return b;
+  setMusicGain(v) {
+    if (Math.abs(v - this.musicGain) < 1e-4) return;
+    this.musicGain = v;
+    this.mus.gain.setTargetAtTime(v, this.ctx.currentTime, 0.03);
   }
 
-  impulse(seconds, decay) {
-    const c = this.ctx, n = Math.floor(c.sampleRate * seconds);
-    const b = c.createBuffer(2, n, c.sampleRate);
-    for (let ch = 0; ch < 2; ch++) {
-      const d = b.getChannelData(ch);
-      for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, decay);
-    }
-    return b;
-  }
+  // ---- playing cues -------------------------------------------------------------------------
 
-  // Where a sound comes from: a stereo pan and a gain for its distance (null pos: in your head).
-  where(pos, range = 40) {
-    if (!pos) return { pan: 0, gain: 1 };
-    const L = this.listener;
-    const dx = pos.x - L.x, dy = (pos.y ?? L.y) - L.y, dz = pos.z - L.z;
-    const d = Math.hypot(dx, dy, dz);
-    if (d > range) return null;
-    const rx = Math.cos(L.yaw), rz = -Math.sin(L.yaw);
-    const pan = d > 0.01 ? Math.max(-1, Math.min(1, (dx * rx + dz * rz) / d)) : 0;
-    return { pan: pan * 0.85, gain: 1 / Math.pow(1 + d / 7, 1.4) };
-  }
-
-  // An output for one sound: through a panner to the effects bus, with some sent to the room.
-  out(pos, range, wet = 0.15, gain = 1) {
+  // Plays a cue at a place in the world (pos) or in your head. Returns the instance, which a
+  // moving sound follows with move(), or null if it didn't start.
+  play(name, pos = null, gain = 1) {
+    if (!this.running) return null;
+    const cue = this.cues[name];
+    if (!cue || !cue.sounds || !cue.sounds.length) return null;
     const c = this.ctx;
-    const p = this.where(pos, range);
-    if (!p) return null;
-    const g = c.createGain();
-    g.gain.value = gain * p.gain;
-    let node = g;
-    if (c.createStereoPanner) { const s = c.createStereoPanner(); s.pan.value = p.pan; g.connect(s); node = s; }
-    node.connect(this.sfx);
-    if (wet > 0) { const w = c.createGain(); w.gain.value = wet * (pos ? 1 + (1 - p.gain) : 1); node.connect(w).connect(this.verbIn); }
-    return g;
+    let dist = 0;
+    if (pos) {
+      dist = Math.hypot(pos.x - this.L.x, pos.y - this.L.y, pos.z - this.L.z);
+      if (dist > HEAR) return null;
+    }
+    let live = this.live.get(name);
+    if (!live) { live = new Set(); this.live.set(name, live); }
+    const limit = cue.limit && cue.limit < 255 ? cue.limit : MAX_LIVE;
+    if (live.size >= limit) {
+      let far = null;
+      for (const i of live) if (!far || i.dist > far.dist) far = i;
+      if (!pos || !far || far.dist <= dist) return null;
+      this.stop(far);
+    }
+    const s = cue.sounds[this.pick(name, cue)];
+    // an event with several tracks plays one of them
+    const parts = [];
+    for (const e of s.events) {
+      const us = e.waves.map((w) => this.url(w)).filter(Boolean);
+      if (!us.length) continue;
+      const u = us.length > 1 ? us[Math.floor(Math.random() * us.length)] : us[0];
+      const buf = this.buffers.get(u);
+      if (buf) parts.push([e, buf]); else this.fetch(u);
+    }
+    if (!parts.length) return null;
+    const out = c.createGain();
+    out.gain.value = dB(s.vol) * gain;
+    const inst = { name, srcs: [], out, panner: null, dist, playing: true, loop: false };
+    let node = out;
+    if (pos) {
+      const pn = c.createPanner();
+      pn.panningModel = 'equalpower';
+      pn.distanceModel = 'inverse';
+      pn.refDistance = 3;
+      pn.rolloffFactor = 1.1;
+      pn.maxDistance = 10000;
+      setPos(pn, pos);
+      out.connect(pn);
+      node = inst.panner = pn;
+    }
+    node.connect(s.category === CAT_MUSIC ? this.mus : this.amb[AMBIENT[s.category]] || this.sfx);
+    const t0 = c.currentTime + 0.005;
+    for (const [e, buf] of parts) {
+      const src = c.createBufferSource();
+      src.buffer = buf;
+      src.loop = !!e.loop;
+      let to = out;
+      if (e.vol) { to = c.createGain(); to.gain.value = dB(e.vol); to.connect(out); }
+      src.connect(to);
+      src.onended = () => this.ended(inst, src);
+      src.start(t0 + (e.t || 0));
+      inst.srcs.push(src);
+      if (src.loop) inst.loop = true;
+    }
+    live.add(inst);
+    return inst;
   }
 
-  burst(dest, { t = 0, dur = 0.1, f = 1200, q = 1, type = 'bandpass', gain = 1, attack = 0.002, buf = this.white, rate = 1 } = {}) {
-    const c = this.ctx, t0 = c.currentTime + t;
-    const s = c.createBufferSource();
-    s.buffer = buf;
-    s.playbackRate.value = rate;
-    const fl = c.createBiquadFilter();
-    fl.type = type; fl.frequency.value = f; fl.Q.value = q;
-    const g = c.createGain();
-    g.gain.setValueAtTime(0, t0);
-    g.gain.linearRampToValueAtTime(gain, t0 + attack);
-    g.gain.exponentialRampToValueAtTime(0.0008, t0 + dur);
-    s.connect(fl).connect(g).connect(dest);
-    // long sounds loop the noise; short ones start somewhere random in it
-    if (dur > buf.duration - 0.1) s.loop = true;
-    s.start(t0, Math.max(0, Math.random() * (buf.duration - dur - 0.05)));
-    s.stop(t0 + dur + 0.05);
-    return fl;
+  // one of the cue's sounds by their weights, and not the one it played last
+  pick(name, cue) {
+    const n = cue.sounds.length;
+    if (n === 1) return 0;
+    const w = cue.weights && cue.weights.length === n ? cue.weights : null;
+    const last = this.lastPick.get(name);
+    let total = 0;
+    for (let i = 0; i < n; i++) if (i !== last) total += (w && w[i]) || 1;
+    let r = Math.random() * total, k = 0;
+    for (; k < n; k++) {
+      if (k === last) continue;
+      r -= (w && w[k]) || 1;
+      if (r <= 0) break;
+    }
+    if (k >= n) k = ((last ?? -1) + 1) % n;
+    this.lastPick.set(name, k);
+    return k;
   }
 
-  tone(dest, { t = 0, dur = 0.2, f = 440, f2 = null, type = 'sine', gain = 0.3, attack = 0.005 } = {}) {
-    const c = this.ctx, t0 = c.currentTime + t;
-    const o = c.createOscillator();
-    o.type = type;
-    o.frequency.setValueAtTime(f, t0);
-    if (f2) o.frequency.exponentialRampToValueAtTime(f2, t0 + dur);
-    const g = c.createGain();
-    g.gain.setValueAtTime(0, t0);
-    g.gain.linearRampToValueAtTime(gain, t0 + attack);
-    g.gain.exponentialRampToValueAtTime(0.0008, t0 + dur);
-    o.connect(g).connect(dest);
-    o.start(t0);
-    o.stop(t0 + dur + 0.05);
-    return o;
+  ended(inst, src) {
+    const i = inst.srcs.indexOf(src);
+    if (i >= 0) inst.srcs.splice(i, 1);
+    if (inst.srcs.length) return;
+    inst.playing = false;
+    this.live.get(inst.name)?.delete(inst);
+    try { (inst.panner || inst.out).disconnect(); } catch { /* gone */ }
   }
 
-  // ---- the world ---------------------------------------------------------------------------------
-
-  static GROUND = {
-    grass: { f: 900, q: 0.8, dur: 0.09, gain: 0.35 }, dirt: { f: 700, q: 0.9, dur: 0.08, gain: 0.35 },
-    sand: { f: 2400, q: 0.5, dur: 0.11, gain: 0.22, type: 'highpass' }, stone: { f: 1800, q: 1.6, dur: 0.06, gain: 0.32 },
-    snow: { f: 1500, q: 0.6, dur: 0.14, gain: 0.3 }, wood: { f: 420, q: 3, dur: 0.07, gain: 0.4 },
-    metal: { f: 2600, q: 6, dur: 0.12, gain: 0.25 }, glass: { f: 3200, q: 4, dur: 0.08, gain: 0.25 }, leaves: { f: 3000, q: 0.5, dur: 0.12, gain: 0.2 },
-  };
-
-  step(mat, sprint) {
-    if (!this.ctx) return;
-    const G = Audio.GROUND[mat] || Audio.GROUND.stone;
-    const o = this.out(null, 0, 0.04, sprint ? 0.55 : 0.4);
-    this.burst(o, { ...G, f: G.f * (0.85 + Math.random() * 0.3) });
-    if (mat === 'snow') this.burst(o, { t: 0.03, f: 900, q: 0.7, dur: 0.1, gain: 0.2 });
+  stop(inst, fade = 0.04) {
+    if (!inst || !inst.playing) return;
+    inst.playing = false;
+    this.live.get(inst.name)?.delete(inst);
+    const t = this.ctx.currentTime;
+    try {
+      inst.out.gain.cancelScheduledValues(t);
+      inst.out.gain.setValueAtTime(inst.out.gain.value, t);
+      inst.out.gain.linearRampToValueAtTime(0, t + fade);
+      for (const s of inst.srcs) s.stop(t + fade + 0.01);
+    } catch { /* already stopped */ }
   }
 
-  land(mat, speed) {
-    if (!this.ctx) return;
-    const o = this.out(null, 0, 0.08, Math.min(1, speed / 14));
-    this.burst(o, { ...(Audio.GROUND[mat] || Audio.GROUND.stone), dur: 0.16 });
-    this.tone(o, { f: 120, f2: 50, dur: 0.15, gain: 0.5 });
-  }
-
-  dig(mat, cannot) {
-    if (!this.ctx) return;
-    const G = Audio.GROUND[mat] || Audio.GROUND.stone;
-    const o = this.out(null, 0, 0.1, 0.55);
-    this.burst(o, { ...G, dur: G.dur * 1.4, gain: G.gain * 1.3 });
-    if (cannot || mat === 'stone' || mat === 'metal') this.tone(o, { f: cannot ? 1700 : 1100 + Math.random() * 300, dur: 0.07, type: 'triangle', gain: 0.12 });
-  }
-
-  breakBlock(mat) {
-    if (!this.ctx) return;
-    const G = Audio.GROUND[mat] || Audio.GROUND.stone;
-    const o = this.out(null, 0, 0.18, 0.7);
-    this.burst(o, { ...G, dur: 0.3, gain: G.gain * 1.4, q: G.q * 0.6 });
-    this.burst(o, { t: 0.04, f: G.f * 0.5, q: 0.7, dur: 0.22, gain: 0.25 });
-    this.tone(o, { f: 160, f2: 60, dur: 0.18, gain: 0.35 });
-  }
-
-  place(mat) {
-    if (!this.ctx) return;
-    const o = this.out(null, 0, 0.08, 0.6);
-    this.burst(o, { ...(Audio.GROUND[mat] || Audio.GROUND.stone), dur: 0.1 });
-    this.tone(o, { f: 180, f2: 90, dur: 0.1, gain: 0.35 });
-  }
-
-  pickup() {
-    if (!this.ctx) return;
-    const o = this.out(null, 0, 0.1, 0.35);
-    this.tone(o, { f: 880, f2: 1320, dur: 0.12, type: 'triangle', gain: 0.25 });
-  }
-
-  equip() {
-    if (!this.ctx) return;
-    const o = this.out(null, 0, 0.05, 0.3);
-    this.burst(o, { f: 2200, q: 2, dur: 0.06, gain: 0.25 });
-  }
-
-  melee(hit) {
-    if (!this.ctx) return;
-    const o = this.out(null, 0, 0.1, 0.6);
-    this.burst(o, { f: 600, q: 0.6, dur: 0.12, gain: 0.3, type: 'lowpass' });
-    if (hit) this.tone(o, { f: 140, f2: 60, dur: 0.12, gain: 0.5 });
-  }
-
-  toolBreak() {
-    if (!this.ctx) return;
-    const o = this.out(null, 0, 0.2, 0.6);
-    for (let i = 0; i < 3; i++) this.tone(o, { t: i * 0.04, f: 2400 - i * 500, dur: 0.15, type: 'triangle', gain: 0.18 });
-  }
-
-  // ---- guns -----------------------------------------------------------------------------------
-
-  gunshot(gun) {
-    if (!this.ctx) return;
-    const P = {
-      pistol: { f: 1400, body: 110, dur: 0.22, gain: 0.85 }, smg: { f: 1800, body: 140, dur: 0.14, gain: 0.7 },
-      assault: { f: 1200, body: 95, dur: 0.24, gain: 0.95 }, shotgun: { f: 700, body: 70, dur: 0.42, gain: 1.1 },
-      rifle: { f: 2200, body: 80, dur: 0.5, gain: 1.15 },
-    }[gun] || { f: 1400, body: 110, dur: 0.22, gain: 0.85 };
-    const o = this.out(null, 0, 0.45, P.gain);
-    this.burst(o, { f: P.f, q: 0.7, dur: P.dur, gain: 0.9, attack: 0.001 });
-    this.burst(o, { f: 5000, q: 0.5, dur: 0.05, gain: 0.5, type: 'highpass', attack: 0.0005 });
-    this.tone(o, { f: P.body * 2, f2: P.body * 0.5, dur: P.dur * 0.8, gain: 0.9, attack: 0.001 });
-    // the report coming back off the hills
-    this.burst(o, { t: 0.18 + Math.random() * 0.1, f: 500, q: 0.6, dur: P.dur * 2.2, gain: 0.12, type: 'lowpass', buf: this.brown });
-  }
-
-  reload() {
-    if (!this.ctx) return;
-    const o = this.out(null, 0, 0.05, 0.5);
-    this.burst(o, { f: 3000, q: 5, dur: 0.05, gain: 0.4 });
-    this.burst(o, { t: 0.25, f: 2200, q: 4, dur: 0.06, gain: 0.35 });
-  }
-
-  reloadDone() {
-    if (!this.ctx) return;
-    const o = this.out(null, 0, 0.05, 0.55);
-    this.burst(o, { f: 2600, q: 6, dur: 0.05, gain: 0.45 });
-    this.burst(o, { t: 0.08, f: 1600, q: 5, dur: 0.07, gain: 0.4 });
-  }
-
-  dryFire() {
-    if (!this.ctx) return;
-    this.burst(this.out(null, 0, 0.02, 0.4), { f: 3400, q: 8, dur: 0.04, gain: 0.4 });
-  }
-
-  impact(mat, pos) {
-    if (!this.ctx) return;
-    const o = this.out(pos, 50, 0.2, 0.5);
-    if (!o) return;
-    this.burst(o, { ...(Audio.GROUND[mat] || Audio.GROUND.stone), dur: 0.08 });
+  // a 3D sound follows whatever's making it
+  move(inst, pos) {
+    if (!inst || !inst.playing || !inst.panner) return;
+    setPos(inst.panner, pos);
+    inst.dist = Math.hypot(pos.x - this.L.x, pos.y - this.L.y, pos.z - this.L.z);
   }
 
   // ---- the player ---------------------------------------------------------------------------
 
-  hurt() {
-    if (!this.ctx) return;
-    const o = this.out(null, 0, 0.1, 0.7);
-    this.tone(o, { f: 180, f2: 70, dur: 0.22, type: 'sawtooth', gain: 0.18 });
-    this.burst(o, { f: 400, q: 0.8, dur: 0.15, gain: 0.4, type: 'lowpass' });
-  }
+  step() { this.play('FootStep'); }
+  land() { this.play('FootStep'); }
+  // the original is quiet while you swing at a block; it sounds when the block comes out
+  dig() {}
+  breakBlock(id) { this.play(DIG[id] || 'punch'); }
+  place() { this.play('Place'); }
+  pickup() { this.play('pickupitem'); }
+  drop() { this.play('dropitem'); }
+  equip() { this.play('Click'); }
+  melee(hit) { if (hit) this.play('punch'); }
+  toolBreak() {}
+  gunshot(gun) { this.play((GUNS[gun] || GUNS.assault)[0]); }
+  reload(gun) { this.play((GUNS[gun] || GUNS.pistol)[1]); }
+  reloadDone() {}
+  dryFire() {}
+  impact(_id, pos) { this.play('BulletHitDirt', pos); }
+  bulletHit(pos) { this.play('BulletHitHuman', pos); }
+  hurt() { this.play('Hit'); }
+  death() { this.play('Fall'); }
+  douse() { this.play('Douse'); }
 
-  death() {
-    if (!this.ctx) return;
-    const o = this.out(null, 0, 0.5, 0.8);
-    this.tone(o, { f: 220, f2: 55, dur: 1.6, type: 'sawtooth', gain: 0.12, attack: 0.05 });
-    this.tone(o, { f: 110, f2: 40, dur: 2.4, gain: 0.4, attack: 0.05 });
-  }
+  // ---- the dead -----------------------------------------------------------------------------
 
-  // ---- the dead --------------------------------------------------------------------------------
+  // climbing out of the ground
+  emerge(pos) { this.play('CreatureUnearth', pos); this.play('ZombieCry', pos); }
+  // the growl (the rattle, for the skeletons) that never stops while they chase you
+  growl(kind, pos) { return this.play(kind === 'skeleton' ? 'Skeleton' : 'ZombieGrowl', pos); }
+  enemyDig(pos) { this.play('ZombieDig', pos); }
 
-  // A groan: a buzzing throat through two vowel formants, sagging in pitch.
-  groan(pos, { gain = 0.7, dur = 1.1 + Math.random() * 0.8, pitch = 85 + Math.random() * 45, harsh = 0 } = {}) {
-    const o = this.out(pos, 42, 0.35, gain);
-    if (!o) return;
-    const c = this.ctx, t0 = c.currentTime;
-    const src = c.createOscillator();
-    src.type = 'sawtooth';
-    src.frequency.setValueAtTime(pitch * 1.15, t0);
-    src.frequency.linearRampToValueAtTime(pitch, t0 + dur * 0.3);
-    src.frequency.exponentialRampToValueAtTime(pitch * 0.72, t0 + dur);
-    const vib = c.createOscillator(); vib.frequency.value = 5 + Math.random() * 4;
-    const vg = c.createGain(); vg.gain.value = pitch * 0.04;
-    vib.connect(vg).connect(src.frequency);
-    const env = c.createGain();
-    env.gain.setValueAtTime(0, t0);
-    env.gain.linearRampToValueAtTime(0.5, t0 + 0.15);
-    env.gain.setValueAtTime(0.5, t0 + dur * 0.6);
-    env.gain.exponentialRampToValueAtTime(0.0008, t0 + dur);
-    for (const [f, q, g] of [[520 + Math.random() * 200, 6, 1], [1150 + Math.random() * 300, 8, 0.5]]) {
-      const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = q;
-      const gg = c.createGain(); gg.gain.value = g;
-      src.connect(bp).connect(gg).connect(env);
-    }
-    // breath and rasp
-    const n = c.createBufferSource(); n.buffer = this.white;
-    const nf = c.createBiquadFilter(); nf.type = 'bandpass'; nf.frequency.value = 900; nf.Q.value = 1.2;
-    const ng = c.createGain(); ng.gain.value = 0.25 + harsh * 0.5;
-    n.connect(nf).connect(ng).connect(env);
-    env.connect(o);
-    src.start(t0); vib.start(t0); n.start(t0, Math.random());
-    src.stop(t0 + dur + 0.1); vib.stop(t0 + dur + 0.1); n.stop(t0 + dur + 0.1);
-  }
+  // ---- the sky, the front end -------------------------------------------------------------
 
-  rattle(pos, gain = 0.6) {
-    const o = this.out(pos, 32, 0.3, gain);
-    if (!o) return;
-    const n = 7 + Math.floor(Math.random() * 7);
-    for (let i = 0; i < n; i++) this.burst(o, { t: i * (0.035 + Math.random() * 0.03), f: 2400 + Math.random() * 1800, q: 7, dur: 0.035, gain: 0.5 * (1 - i / n * 0.5) });
-  }
+  thunder() { this.play('thunderLow'); }
+  storm() { this.play('thunderBig'); }
+  // a new day
+  dawn() { this.play('HorrorStinger'); }
+  ui(kind) { this.play(kind === 'deny' ? 'Error' : kind === 'open' ? 'Popup' : 'Click'); }
+  craft() { this.play('craft'); }
+  award() { this.play('Award'); }
 
-  enemyIdle(kind, pos) {
-    if (!this.ctx) return;
-    if (kind === 'skeleton') this.rattle(pos, 0.45);
-    else this.groan(pos, { gain: 0.6 });
-  }
+  // ---- every frame ----------------------------------------------------------------------------
 
-  enemyAttack(kind, pos) {
-    if (!this.ctx) return;
-    if (kind === 'skeleton') { this.rattle(pos, 0.7); return; }
-    this.groan(pos, { gain: 0.85, dur: 0.5, pitch: 120 + Math.random() * 40, harsh: 1 });
-  }
-
-  enemyHurt(kind, pos) {
-    if (!this.ctx) return;
-    const o = this.out(pos, 50, 0.15, 0.7);
-    if (!o) return;
-    this.burst(o, { f: 300, q: 0.7, dur: 0.12, gain: 0.6, type: 'lowpass' });
-    if (kind === 'skeleton') this.rattle(pos, 0.4);
-    else this.groan(pos, { gain: 0.5, dur: 0.35, pitch: 140 });
-  }
-
-  enemyDie(kind, pos) {
-    if (!this.ctx) return;
-    if (kind === 'skeleton') { this.rattle(pos, 0.9); this.rattle(pos, 0.6); }
-    else this.groan(pos, { gain: 0.8, dur: 1.4, pitch: 100 });
-    const o = this.out(pos, 40, 0.2, 0.6);
-    if (o) this.tone(o, { t: 0.5, f: 90, f2: 40, dur: 0.25, gain: 0.6 });
-  }
-
-  enemyDig(pos) {
-    if (!this.ctx) return;
-    const o = this.out(pos, 30, 0.2, 0.7);
-    if (!o) return;
-    this.burst(o, { f: 900, q: 0.8, dur: 0.12, gain: 0.6 });
-    this.tone(o, { f: 130, f2: 60, dur: 0.12, gain: 0.5 });
-  }
-
-  // ---- the sky ---------------------------------------------------------------------------------
-
-  thunder(delay = 1, loud = 0.7) {
-    if (!this.ctx) return;
-    const o = this.out(null, 0, 0.6, loud);
-    if (delay < 1.2) this.burst(o, { t: delay, f: 1800, q: 0.4, dur: 0.35, gain: 0.5, type: 'lowpass' });
-    this.burst(o, { t: delay + 0.05, f: 180, q: 0.5, dur: 3.5 + Math.random() * 2.5, gain: 1.2, type: 'lowpass', buf: this.brown, attack: 0.25 });
-    this.burst(o, { t: delay + 0.6, f: 90, q: 0.5, dur: 3, gain: 0.8, type: 'lowpass', buf: this.brown, attack: 0.5 });
-  }
-
-  storm() {
-    if (!this.ctx) return;
-    this.thunder(0.4, 0.9);
-    const o = this.out(null, 0, 0.6, 0.5);
-    this.tone(o, { f: 55, dur: 6, gain: 0.25, attack: 2.5 });
-    this.tone(o, { f: 58.3, dur: 6, gain: 0.2, attack: 2.5 });
-  }
-
-  dawn() {
-    if (!this.ctx) return;
-    const o = this.out(null, 0, 0.7, 0.4);
-    [57, 60, 64].forEach((n, i) => this.tone(o, { t: i * 0.3, f: NOTE(n), dur: 3, type: 'triangle', gain: 0.08, attack: 0.6 }));
-  }
-
-  // ---- the front end ----------------------------------------------------------------------------
-
-  ui(kind) {
-    if (!this.ctx) return;
-    const o = this.out(null, 0, 0.05, 0.35);
-    if (kind === 'move') this.tone(o, { f: 660, dur: 0.05, type: 'triangle', gain: 0.18 });
-    else if (kind === 'select' || kind === 'open') { this.tone(o, { f: 520, dur: 0.08, type: 'triangle', gain: 0.2 }); this.tone(o, { t: 0.06, f: 780, dur: 0.1, type: 'triangle', gain: 0.18 }); }
-    else if (kind === 'back') this.tone(o, { f: 440, f2: 330, dur: 0.1, type: 'triangle', gain: 0.18 });
-    else if (kind === 'deny') this.tone(o, { f: 160, dur: 0.15, type: 'square', gain: 0.08 });
-  }
-
-  craft() {
-    if (!this.ctx) return;
-    const o = this.out(null, 0, 0.15, 0.5);
-    this.burst(o, { f: 1600, q: 3, dur: 0.08, gain: 0.4 });
-    this.tone(o, { t: 0.05, f: 700, f2: 1050, dur: 0.18, type: 'triangle', gain: 0.2 });
-  }
-
-  award() {
-    if (!this.ctx) return;
-    const o = this.out(null, 0, 0.5, 0.45);
-    [69, 72, 76, 81].forEach((n, i) => this.tone(o, { t: i * 0.11, f: NOTE(n), dur: 0.9, type: 'triangle', gain: 0.14 }));
-  }
-
-  // ---- the air ----------------------------------------------------------------------------------
-
-  startAmbience() {
-    const c = this.ctx;
-    // wind: brown noise through a wandering band
-    const w = c.createBufferSource(); w.buffer = this.brown; w.loop = true;
-    this.windF = c.createBiquadFilter(); this.windF.type = 'bandpass'; this.windF.frequency.value = 400; this.windF.Q.value = 0.6;
-    this.windG = c.createGain(); this.windG.gain.value = 0;
-    w.connect(this.windF).connect(this.windG).connect(this.amb);
-    w.start();
-    // a low drone under the night
-    this.drone = [41, 41.7].map((m) => {
-      const o = c.createOscillator(); o.type = 'sine'; o.frequency.value = NOTE(m);
-      const g = c.createGain(); g.gain.value = 0;
-      o.connect(g).connect(this.amb);
-      o.start();
-      return g;
-    });
-  }
-
-  // Each frame: where the ears are, and how the air should sound.
+  // info: menu (the front end), time (of day), depth (blocks of ground overhead), y, pos (the
+  // player, for the songs)
   update(dt, cam, info = {}) {
     if (!this.ctx || !cam) return;
-    const L = this.listener;
+    const L = this.L, e = cam.matrixWorld.elements;
     L.x = cam.position.x; L.y = cam.position.y; L.z = cam.position.z;
-    L.yaw = cam.rotation.y;
-    const c = this.ctx, t = c.currentTime;
-    const gloom = info.gloom ?? 0, night = info.night ?? 0, under = info.underground ?? 0;
-    const height = Math.max(0, Math.min(1, ((info.y ?? 64) - 70) / 50));
-    this.windG.gain.setTargetAtTime((0.05 + gloom * 0.22 + height * 0.25) * (1 - under * 0.85), t, 0.5);
-    this.windF.frequency.setTargetAtTime(300 + 250 * Math.sin(t * 0.13) + 200 * Math.sin(t * 0.31) + gloom * 150, t, 0.4);
-    for (const g of this.drone) g.gain.setTargetAtTime(0.035 * Math.max(night * gloom, under * 0.6, info.menu ? 0.6 : 0), t, 1.5);
+    const l = this.ctx.listener;
+    if (l.positionX) {
+      l.positionX.value = L.x; l.positionY.value = L.y; l.positionZ.value = L.z;
+      l.forwardX.value = -e[8]; l.forwardY.value = -e[9]; l.forwardZ.value = -e[10];
+      l.upX.value = 0; l.upY.value = 1; l.upZ.value = 0;
+    } else {
+      l.setPosition(L.x, L.y, L.z);
+      l.setOrientation(-e[8], -e[9], -e[10], 0, 1, 0);
+    }
+    if (!this.running) return;
+    // the ambience loops all the time; the categories' volumes say which you hear
+    this.ambient = this.ambient || [];
+    for (let i = 0; i < AMBIENCE.length; i++) if (!this.ambient[i]?.playing) this.ambient[i] = this.play(AMBIENCE[i]);
+    this.ambience(info);
     this.score(dt, info);
   }
 
-  // The score: slow, uneasy chords and a few bare notes, darker once the storm is in.
+  // The original's SetAudio: birds by day and crickets by night, crossing at dawn and dusk;
+  // dripping water once there's ground overhead (all of it under 15 blocks); the lost souls in
+  // Hell. The front end has the birds.
+  ambience(info) {
+    let day = 1, night = 0, cave = 0, hell = 0;
+    if (!info.menu) {
+      const h = (info.time ?? 0.5) * 24, hour = Math.floor(h), f = h - hour;
+      if (hour <= 5 || hour >= 21) { day = 0; night = 1; }
+      else if (hour >= 9 && hour <= 17) { day = 1; night = 0; }
+      else if (hour === 6) { day = 0; night = 1 - f; }
+      else if (hour === 7 || hour === 19) { day = 0.5; night = 0.5; }
+      else if (hour === 8) { day = f; night = 0; }
+      else if (hour === 18) { day = 1 - f; night = 0; }
+      else { day = 0; night = f; }
+      cave = Math.min(1, (info.depth || 0) / 15);
+      const y = info.y ?? GROUND;
+      if (y <= HELL_TOP) hell = Math.min(1, (HELL_TOP - y) / 10);
+    }
+    const t = this.ctx.currentTime;
+    const set = (k, v) => this.amb[k].gain.setTargetAtTime(v, t, 0.25);
+    set('day', day * (1 - cave));
+    set('night', night * (1 - cave));
+    set('cave', cave * (1 - hell));
+    set('hell', hell);
+  }
+
+  // The music: the theme in the front end; into a game it fades away, and each song plays once,
+  // the first time you walk out past its distance, when nothing else is playing. (A jump of
+  // more than 10 m past one, a game loaded far out, skips it, as in the original.)
   score(dt, info) {
-    const c = this.ctx;
-    this.chordT -= dt;
-    this.musicT -= dt;
-    const dark = Math.max(info.gloom ?? 0, info.menu ? 1 : 0);
-    const root = dark > 0.5 ? 45 : 50;
-    if (this.chordT <= 0) {
-      this.chordT = 9 + Math.random() * 6;
-      const deg = [0, 5, 3, 6, 1][Math.floor(Math.random() * 5)];
-      const notes = [0, 2, 4].map((k) => root + SCALE[(deg + k) % 7] + 12 * Math.floor((deg + k) / 7));
-      for (const n of notes) this.pad(NOTE(n - 12), 11, 0.05);
-      if (dark > 0.5 && Math.random() < 0.35) this.pad(NOTE(root - 11), 11, 0.03); // the flat second, rubbing
+    if (info.menu) {
+      this.menu = true;
+      this.playMusic('Theme');
+    } else {
+      if (this.menu) {
+        this.menu = false;
+        this.fadeMusic();
+        for (const s of this.songs) s.done = false;
+        this.lastDist = 0;
+      }
+      const p = info.pos;
+      if (p) {
+        const d = Math.hypot(p.x, p.y - GROUND, p.z), last = this.lastDist;
+        this.lastDist = d;
+        for (const s of this.songs) {
+          if (s.done) continue;
+          if (this.music?.playing || this.wanted) break;
+          if (d <= s.at) continue;
+          s.done = true;
+          if (d - last <= 10) this.playMusic(s.name);
+        }
+      }
     }
-    if (this.musicT <= 0) {
-      this.musicT = 2.5 + Math.random() * 5;
-      const n = root + 12 + SCALE[Math.floor(Math.random() * 7)] + (Math.random() < 0.3 ? 12 : 0);
-      this.bell(NOTE(n), 0.07);
-    }
-    void c;
-  }
-
-  pad(f, dur, gain) {
-    const c = this.ctx, t0 = c.currentTime;
-    const g = c.createGain();
-    g.gain.setValueAtTime(0, t0);
-    g.gain.linearRampToValueAtTime(gain, t0 + dur * 0.35);
-    g.gain.linearRampToValueAtTime(0, t0 + dur);
-    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 700; lp.Q.value = 0.7;
-    g.connect(lp).connect(this.music);
-    const w = c.createGain(); w.gain.value = 0.6; lp.connect(w).connect(this.verbIn);
-    for (const d of [-6, 6]) {
-      const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = d;
-      const og = c.createGain(); og.gain.value = 0.5;
-      o.connect(og).connect(g);
-      o.start(t0); o.stop(t0 + dur + 0.1);
+    if (this.fading > 0) {
+      this.fading += dt;
+      this.setMusicGain(Math.max(0, this.vol.music - this.fading / FADE));
+      if (this.fading >= FADE) { this.stop(this.music); this.music = null; this.fading = 0; }
     }
   }
 
-  bell(f, gain) {
-    const c = this.ctx, t0 = c.currentTime;
-    const g = c.createGain();
-    g.gain.setValueAtTime(0, t0);
-    g.gain.linearRampToValueAtTime(gain, t0 + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.0005, t0 + 3.5);
-    g.connect(this.music);
-    const w = c.createGain(); w.gain.value = 1.2; g.connect(w).connect(this.verbIn);
-    for (const [m, a] of [[1, 1], [2.01, 0.25], [3.02, 0.08]]) {
-      const o = c.createOscillator(); o.type = 'sine'; o.frequency.value = f * m;
-      const og = c.createGain(); og.gain.value = a;
-      o.connect(og).connect(g);
-      o.start(t0); o.stop(t0 + 3.6);
-    }
+  // The original's PlayMusic: another song stops the one playing; the same one carries on.
+  playMusic(name) {
+    if (this.fading) { this.fading = 0; }
+    this.setMusicGain(this.vol.music);
+    const m = this.music;
+    if (m && m.playing && m.name !== name) { this.stop(m); this.music = null; }
+    if ((this.music && this.music.playing) || this.wanted === name) return;
+    const urls = this.urls(name);
+    if (!urls.length) return;
+    if (urls.every((u) => this.buffers.has(u))) { this.music = this.play(name); return; }
+    this.wanted = name;
+    Promise.all(urls.map((u) => this.fetch(u))).then(() => {
+      if (this.wanted !== name) return;
+      this.wanted = null;
+      if (this.menu === (name === 'Theme')) this.music = this.play(name);
+    });
+  }
+
+  fadeMusic() {
+    if (this.music && this.music.playing) this.fading = 1e-4;
+    this.wanted = null;
   }
 }

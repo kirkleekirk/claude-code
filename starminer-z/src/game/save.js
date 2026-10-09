@@ -43,7 +43,7 @@ export function saveMeta() {
 }
 
 export async function saveGame(data) {
-  const meta = { day: data.day, maxDistance: data.maxDistance, savedAt: data.savedAt, seed: data.seed };
+  const meta = { day: data.day, days: data.days, maxDistance: data.maxDistance, savedAt: data.savedAt, seed: data.seed };
   const ok = await tx('readwrite', (s) => s.put(data, KEY));
   if (ok === undefined) {
     // no IndexedDB: try to squeeze it into localStorage

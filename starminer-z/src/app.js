@@ -19,6 +19,7 @@ import { Game } from './game/game.js';
 import { Awards } from './game/awards.js';
 import { saveGame, loadGame, deleteSave, saveMeta } from './game/save.js';
 import { loadAvatarAssets } from './entities/avatar/assets.js';
+import { loadCmzBodies } from './entities/cmz/bodies.js';
 import { PRESETS } from './entities/avatar/looks.js';
 import { Audio } from './core/audio.js';
 
@@ -110,13 +111,15 @@ export class App {
     this.terrain = makeTerrainMaterials(this.sky.uniforms, blockTextureArray(gl));
     buildIcons(gl);
     this.menus.setLoading(0.4);
-    await loadAvatarAssets();
+    // the original's own bodies for the dead, if the ripped files are there
+    const [, cmz] = await Promise.all([loadAvatarAssets(), params.has('nocmz') ? false : loadCmzBodies()]);
+    this.cmzBodies = cmz || null;
     this.menus.setLoading(0.6);
     this.audio = new Audio(this);
     // sound can only start once the player has done something
     const unlock = () => this.audio.unlock();
     for (const ev of ['pointerdown', 'keydown', 'touchstart']) window.addEventListener(ev, unlock, { capture: true });
-    this.sky.onThunder = (delay, loud) => this.audio.thunder(delay, loud);
+    this.sky.onThunder = () => this.audio.thunder();
     document.addEventListener('pointerlockchange', () => this.onLockChange());
     document.addEventListener('visibilitychange', () => { if (document.hidden) this.autosave(); });
     window.addEventListener('pagehide', () => this.autosave());
@@ -267,7 +270,7 @@ export class App {
     const g = this.game;
     if (!g || g.attract || !g.ready || this.state === 'loading') return;
     const data = g.serialize();
-    this.meta = { day: data.day, maxDistance: data.maxDistance, savedAt: data.savedAt, seed: data.seed };
+    this.meta = { day: data.day, days: data.days, maxDistance: data.maxDistance, savedAt: data.savedAt, seed: data.seed };
     await saveGame(data);
   }
 
@@ -358,10 +361,10 @@ export class App {
       this.sky.update(this.frames < 3 ? 0 : dt);
       this.renderer.gloom = this.sky.gloom;
       this.touch?.setVisible(this.state === 'playing' && !g.crafting?.isOpen && !g.player.dead);
-      const l = g.light || { x: 1 };
+      const p = g.player;
       this.audio.update(dt, this.camera, {
-        gloom: this.sky.gloom, night: this.sky.uniforms.uNight.value, underground: g.attract ? 0 : 1 - l.x,
-        y: this.camera.position.y, menu: this.state === 'menu' || this.state === 'boot',
+        menu: g.attract || this.state === 'menu' || this.state === 'boot' || this.state === 'loading',
+        time: this.sky.time, depth: g.depth || 0, y: p.pos.y, pos: p.pos,
       });
       this.renderer.exposure = parseFloat(params.get('ex') || this.autoExposure(dt));
       g.sprites.setScale(this.renderer.size.H, this.camera.fov);
