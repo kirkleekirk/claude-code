@@ -14,11 +14,13 @@ import { Input } from './core/input.js';
 import { injectCSS } from './ui/style.js';
 import { Menus, MENU_CSS } from './ui/menus.js';
 import { CRAFT_CSS } from './ui/crafting.js';
+import { TouchControls, TOUCH_CSS } from './ui/touch.js';
 import { Game } from './game/game.js';
 import { Awards } from './game/awards.js';
 import { saveGame, loadGame, deleteSave, saveMeta } from './game/save.js';
 import { loadAvatarAssets } from './entities/avatar/assets.js';
 import { PRESETS } from './entities/avatar/looks.js';
+import { Audio } from './core/audio.js';
 
 const params = new URLSearchParams(location.search);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -67,6 +69,8 @@ export class App {
     root.appendChild(this.canvas);
     this.uiRoot = document.createElement('div');
     this.uiRoot.className = 'ui';
+    // keep the HUD clear of a phone's notch and home bar
+    this.uiRoot.style.inset = 'env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px)';
     root.appendChild(this.uiRoot);
     this.settings = loadSettings();
     this.profile = loadProfile();
@@ -85,8 +89,9 @@ export class App {
     try { localStorage.setItem('starminer.settings', JSON.stringify(this.settings)); } catch { /* storage blocked */ }
   }
 
-  async start() {
-    injectCSS(MENU_CSS + CRAFT_CSS);
+  // boot: { resume } carries on in the saved game after the page was updated mid-play
+  async start(boot = {}) {
+    injectCSS(MENU_CSS + CRAFT_CSS + TOUCH_CSS);
     this.renderer = new Renderer(this.canvas, this.settings.quality);
     const gl = this.renderer.gl;
     this.camera = new THREE.PerspectiveCamera(this.settings.fov, 1, 0.06, 1200);
@@ -94,6 +99,7 @@ export class App {
     this.input.sens = this.settings.sensitivity;
     this.input.invertY = this.settings.invertY;
     this.menus = new Menus(this);
+    this.touch = isTouch || params.has('touch') ? new TouchControls(this) : null;
     this.menus.show('loading');
     this.menus.setLoading(0.05);
     window.addEventListener('resize', () => this.onResize());
@@ -106,7 +112,11 @@ export class App {
     this.menus.setLoading(0.4);
     await loadAvatarAssets();
     this.menus.setLoading(0.6);
-    this.audio = null;
+    this.audio = new Audio(this);
+    // sound can only start once the player has done something
+    const unlock = () => this.audio.unlock();
+    for (const ev of ['pointerdown', 'keydown', 'touchstart']) window.addEventListener(ev, unlock, { capture: true });
+    this.sky.onThunder = (delay, loud) => this.audio.thunder(delay, loud);
     document.addEventListener('pointerlockchange', () => this.onLockChange());
     document.addEventListener('visibilitychange', () => { if (document.hidden) this.autosave(); });
     window.addEventListener('pagehide', () => this.autosave());
@@ -117,6 +127,9 @@ export class App {
     if (params.has('play') || params.has('test')) {
       // straight into a world (tests and screenshots)
       this.startGame({ seed: parseInt(params.get('seed') || '1337', 10) });
+    } else if (boot.resume && this.meta) {
+      const save = await loadGame();
+      if (save) this.startGame({ save }); else this.attract();
     } else {
       this.attract();
     }
@@ -344,6 +357,12 @@ export class App {
       }
       this.sky.update(this.frames < 3 ? 0 : dt);
       this.renderer.gloom = this.sky.gloom;
+      this.touch?.setVisible(this.state === 'playing' && !g.crafting?.isOpen && !g.player.dead);
+      const l = g.light || { x: 1 };
+      this.audio.update(dt, this.camera, {
+        gloom: this.sky.gloom, night: this.sky.uniforms.uNight.value, underground: g.attract ? 0 : 1 - l.x,
+        y: this.camera.position.y, menu: this.state === 'menu' || this.state === 'boot',
+      });
       this.renderer.exposure = parseFloat(params.get('ex') || this.autoExposure(dt));
       g.sprites.setScale(this.renderer.size.H, this.camera.fov);
       this.renderer.render(g.scene, this.camera, g.viewModel.scene, g.viewModel.camera);

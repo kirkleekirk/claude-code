@@ -68,6 +68,12 @@ export const CRAFT_CSS = /* css */ `
   .craft .left { left: 2%; }
   .craft .right { left: auto; right: 2%; }
 }
+/* phones held upright: the two panels stacked, a little smaller */
+@media (max-aspect-ratio: 1/1) {
+  .craft { font-size: min(var(--ui-size, 16px), 2.3vw); }
+  .craft .left { left: 2%; top: 4%; }
+  .craft .right { left: 2%; right: auto; top: calc(4% + 36.5em); }
+}
 `;
 
 // the categories, CastleMiner Z's four, and the kinds within each

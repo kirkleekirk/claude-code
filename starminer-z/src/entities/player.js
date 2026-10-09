@@ -109,8 +109,9 @@ export class Player {
 
     // movement intent in the yaw frame
     this.crouching = input.isHeld('crouch');
-    if (input.pressed('sprint') && input.lastDevice !== 'keyboard') this.sprintToggle = !this.sprintToggle;
-    const wantSprint = input.lastDevice === 'keyboard' ? input.isHeld('sprint') : this.sprintToggle;
+    // keyboard: hold to sprint; pad: click the stick to toggle; touch: push the stick to the edge
+    if (input.pressed('sprint') && input.lastDevice === 'pad') this.sprintToggle = !this.sprintToggle;
+    const wantSprint = input.lastDevice === 'pad' ? this.sprintToggle : input.isHeld('sprint');
     const mx = input.move.x, my = input.move.y;
     this.sprinting = wantSprint && my > 0.5 && !this.crouching;
     if (Math.hypot(mx, my) < 0.1) this.sprintToggle = false;
