@@ -4,9 +4,15 @@
 // stop while you craft.
 //
 // Mouse and touch: click a category, a kind, a thing; click it again (or Craft) to make it.
-// Click an item in the backpack or hotbar to pick it up, click another slot to put it there.
-// Pad and keyboard: up and down in a column, left and right between columns, A / Enter to
-// craft, the bumpers to change category, B / Esc / Y / E to close.
+// Items move by the original's inventory screen rules: click one in the backpack or hotbar to
+// pick it up and click a slot to put it down (or drag it there); it joins a stack of the same
+// thing, or swaps with what's there. Shift-click sends a stack across, backpack to hotbar or
+// back; right-click picks up half a stack, or puts down one. A number key puts the item under
+// the pointer on that hotbar slot.
+// Pad and keyboard: up and down in a column, left and right between columns (the backpack is
+// the fourth, the hotbar under it), A / Enter to craft or to pick up and put down, the right
+// stick to split a stack, the bumpers to change category, B to put back what's held or close,
+// Esc / Y / E to close.
 
 import { ITEMS, RECIPES } from '../items/items.js';
 import { iconFor } from '../items/icons.js';
@@ -56,8 +62,16 @@ export const CRAFT_CSS = /* css */ `
 .craft .need .tile.short .n { color: #ff7a6a; }
 .craft .grid { position: absolute; left: 0.85em; top: 0.9em; display: grid; grid-template-columns: repeat(4, 3.4em); gap: 0.12em; }
 .craft .grid .slot, .craft .carry { width: 3.4em; height: 3.4em; background: rgba(24, 60, 90, 0.55); border: 0.06em solid rgba(60, 100, 130, 0.65); }
-.craft .grid .slot.hl { border: 0.1em solid #fff; }
+.craft .grid .slot { cursor: pointer; }
+.craft .grid .slot:hover, .hud.crafting .slot:hover { border-color: #fff; }
+.craft .grid .slot.cur, .hud.crafting .slot.cur { outline: 0.16em solid #fff; outline-offset: 0.06em; box-shadow: 0 0 0.7em rgba(255, 255, 255, 0.6); z-index: 1; }
+.craft .grid .slot.cur.hold, .hud.crafting .slot.cur.hold { outline-color: #ff4a3a; }
 .craft .grid .slot .n, .craft .carry .n { font-size: 0.8em; color: #fff; }
+/* the hotbar stays the HUD's, lifted over the screen so things can go on it */
+.hud.crafting .bottom { z-index: 5; }
+.hud.crafting .hotbar .slot { cursor: pointer; }
+.craft .ihelp { position: absolute; left: 0; right: 0; bottom: -2em; display: flex; flex-wrap: wrap; gap: 0.2em 1em; font-family: var(--ui-font); font-size: 0.72em; font-weight: 700; color: #fff; }
+.craft .ihelp span { display: inline-flex; gap: 0.35em; align-items: center; }
 .craft .carry { position: fixed; pointer-events: none; z-index: 9; background: transparent; border: none; display: none; transform: translate(-50%, -50%); }
 .craft .carry img { position: absolute; inset: 0.15em; width: calc(100% - 0.3em); height: calc(100% - 0.3em); }
 .craft .carry .n { position: absolute; right: 0.15em; bottom: 0.05em; font-weight: 700; text-shadow: 0 0.06em 0.12em #000; }
@@ -126,8 +140,9 @@ export class Crafting {
     this.sub = 0;
     this.tile = 0;
     this.focus = 2;
+    this.cursor = HOTBAR; // the pad's place in the backpack (or on the hotbar)
     this.isOpen = false;
-    this.carry = null; // slot index being carried
+    this.drag = null;
     const el = document.createElement('div');
     el.className = 'craft ui';
     el.innerHTML = `
@@ -135,7 +150,7 @@ export class Crafting {
         <div class="cats"></div><div class="detail"></div><div class="subs"></div><div class="tiles"></div><div class="need"></div>
         <div class="help txt"></div>
       </div>
-      <div class="cp right"><div class="tab">Inventory</div><div class="grid"></div></div>
+      <div class="cp right"><div class="tab">Inventory</div><div class="grid"></div><div class="ihelp txt"></div></div>
       <div class="carry slot"><img alt=""><span class="n"></span></div>`;
     parent.appendChild(el);
     this.el = el;
@@ -143,28 +158,45 @@ export class Crafting {
     this.left = this.$('.left');
     this.carryEl = this.$('.carry');
     this.$('.x').addEventListener('pointerdown', (e) => { e.stopPropagation(); this.close(); });
-    // the backpack
+    // the backpack; the hotbar is the HUD's own, which takes things while this is up
     const grid = this.$('.grid');
     this.packEls = [];
     for (let i = 0; i < PACK; i++) {
       const s = document.createElement('div');
       s.className = 'slot';
+      s.dataset.slot = HOTBAR + i;
       s.innerHTML = '<img alt="" draggable="false"><span class="n"></span>';
-      s.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); this.slotClick(HOTBAR + i); });
-      s.addEventListener('pointerenter', () => { this.hover = HOTBAR + i; });
-      s.addEventListener('pointerleave', () => { if (this.hover === HOTBAR + i) this.hover = null; });
       grid.appendChild(s);
       this.packEls.push(s);
     }
-    el.addEventListener('pointermove', (e) => { this.mx = e.clientX; this.my = e.clientY; this.placeCarry(); });
-    // a click on the backdrop drops what's carried back where it came from
-    el.addEventListener('pointerdown', (e) => { if (e.target === el) this.carry = null; this.renderInv(); });
-    // the hotbar takes things too, while this is up
-    game.hud.slots.forEach((S, i) => S.el.addEventListener('pointerdown', (e) => {
+    game.hud.slots.forEach((S, i) => { S.el.dataset.slot = i; });
+    this.slotEls = [...game.hud.slots.map((S) => S.el), ...this.packEls];
+    const down = (e) => {
       if (!this.isOpen) return;
+      const t = e.target.closest?.('[data-slot]');
+      if (!t) return;
+      // ahead of the HUD's own handler, which would pick that slot to hold
       e.stopPropagation();
-      this.slotClick(i);
-    }, true));
+      e.preventDefault();
+      this.slotDown(+t.dataset.slot, e);
+    };
+    grid.addEventListener('pointerdown', down);
+    this.hotbarEl = game.hud.hotbar;
+    this.hotbarEl.addEventListener('pointerdown', down, true);
+    const noMenu = (e) => { if (this.isOpen) e.preventDefault(); };
+    el.addEventListener('contextmenu', noMenu);
+    this.hotbarEl.addEventListener('contextmenu', noMenu);
+    // let go of the backdrop: what's held goes back where it came from
+    el.addEventListener('pointerdown', (e) => {
+      if (e.target !== el || !game.inventory.hand) return;
+      this.putBack();
+      this.render();
+    });
+    this.onMove = (e) => { this.mx = e.clientX; this.my = e.clientY; if (this.isOpen) { this.pointer = true; this.placeCarry(); } };
+    this.onUp = (e) => this.slotUp(e);
+    window.addEventListener('pointermove', this.onMove);
+    window.addEventListener('pointerup', this.onUp);
+    window.addEventListener('pointercancel', this.onUp);
     this.render();
   }
 
@@ -173,8 +205,9 @@ export class Crafting {
 
   open() {
     this.isOpen = true;
-    this.carry = null;
+    this.drag = null;
     this.el.classList.add('on');
+    this.game.hud.el.classList.add('crafting');
     this.render();
   }
 
@@ -182,12 +215,21 @@ export class Crafting {
   close(quiet = false) {
     if (!this.isOpen) return;
     this.isOpen = false;
-    this.carry = null;
+    this.drag = null;
+    this.putBack();
     this.el.classList.remove('on');
+    this.game.hud.el.classList.remove('crafting');
+    for (const s of this.slotEls) s.classList.remove('cur', 'hold');
     this.game.closedCrafting(quiet);
   }
 
-  dispose() { this.el.remove(); }
+  dispose() {
+    window.removeEventListener('pointermove', this.onMove);
+    window.removeEventListener('pointerup', this.onUp);
+    window.removeEventListener('pointercancel', this.onUp);
+    this.game.hud.el.classList.remove('crafting');
+    this.el.remove();
+  }
 
   // ---- what's chosen -----------------------------------------------------------------------------
 
@@ -205,26 +247,85 @@ export class Crafting {
     this.render();
   }
 
-  // ---- the backpack ---------------------------------------------------------------------------------
+  // ---- the backpack and the hotbar ---------------------------------------------------------------
 
-  slotClick(i) {
+  // A press on slot i (CastleMiner Z's inventory screen, by mouse or touch).
+  slotDown(i, e) {
     const inv = this.game.inventory;
-    if (this.carry == null) {
-      if (inv.slots[i]) { this.carry = i; this.game.audio?.ui?.('move'); }
-    } else {
-      inv.moveTo(this.carry, i);
-      this.carry = null;
-      this.game.audio?.ui?.('move');
+    this.pointer = true;
+    this.mx = e.clientX; this.my = e.clientY;
+    let did;
+    if (e.button === 2) did = inv.hand ? inv.put(i, true) : inv.lift(i, true);
+    else if (e.shiftKey && !inv.hand) did = inv.quickMove(i);
+    else if (inv.hand) did = inv.put(i);
+    else if ((did = inv.lift(i))) this.drag = { from: i, x: e.clientX, y: e.clientY };
+    if (!did) return;
+    this.cursor = i;
+    this.game.audio?.ui?.('move');
+    this.render();
+  }
+
+  // Let go: a click leaves it in the hand, to put down with another; a drag puts it where it's
+  // let go, and anything it swapped with goes back where it came from.
+  slotUp(e) {
+    const d = this.drag, inv = this.game.inventory;
+    this.drag = null;
+    if (!d || !this.isOpen || !inv.hand) return;
+    if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < 10) return;
+    const i = this.slotAt(e.clientX, e.clientY);
+    if (i != null && i !== d.from) {
+      inv.put(i);
+      if (inv.hand) inv.put(d.from);
+      this.cursor = i;
     }
+    this.putBack();
+    this.game.audio?.ui?.('move');
+    this.render();
+  }
+
+  slotAt(x, y) {
+    if (x == null) return null;
+    const t = document.elementFromPoint(x, y)?.closest?.('[data-slot]');
+    return t ? +t.dataset.slot : null;
+  }
+
+  // what's held back in the inventory (and if somehow there's no room, on the ground)
+  putBack() {
+    const g = this.game, left = g.inventory.restore();
+    if (left) { const p = g.player.pos; g.drops.spawn(left.id, left.count, p.x, p.y + 1, p.z); }
+  }
+
+  // The pad's cursor: four across the backpack's eight rows, then the eight of the hotbar.
+  moveCursor(dx, dy) {
+    let i = this.cursor;
+    if (i >= HOTBAR) {
+      const k = i - HOTBAR;
+      let r = Math.floor(k / 4), c = k % 4;
+      if (dx < 0 && c === 0) { this.focus = 2; this.render(); return; }
+      c = Math.min(3, c + dx);
+      r += dy;
+      i = r > 7 ? Math.min(HOTBAR - 1, c * 2) : HOTBAR + Math.max(0, r) * 4 + c;
+    } else {
+      if (dx < 0 && i === 0) { this.focus = 2; this.render(); return; }
+      i = dy < 0 ? HOTBAR + 28 + (i >> 1) : Math.max(0, Math.min(HOTBAR - 1, i + dx));
+    }
+    if (i !== this.cursor) this.game.audio?.ui?.('move');
+    this.cursor = i;
     this.renderInv();
   }
 
   placeCarry() {
-    const c = this.carryEl;
-    if (this.carry == null || this.mx == null) { c.style.display = 'none'; return; }
+    const c = this.carryEl, h = this.game.inventory.hand;
+    if (!h) { c.style.display = 'none'; return; }
+    let x = this.mx, y = this.my;
+    if (!this.pointer || x == null) {
+      // held over the pad's cursor
+      const r = this.slotEls[this.cursor].getBoundingClientRect();
+      x = r.left + r.width * 0.62; y = r.top + r.height * 0.38;
+    }
     c.style.display = 'block';
-    c.style.left = `${this.mx}px`;
-    c.style.top = `${this.my}px`;
+    c.style.left = `${x}px`;
+    c.style.top = `${y}px`;
   }
 
   // ---- drawing ----------------------------------------------------------------------------------------
@@ -271,28 +372,36 @@ export class Crafting {
       const have = inv.count(id);
       return `<div class="tile${have >= n ? '' : ' short'}"><img alt="" draggable="false" src="${iconFor(id)}"><span class="n">${have}</span></div>`;
     }).join('')}`;
+    const touch = this.game.app.isTouch;
     this.$('.help').innerHTML = pad
       ? '<span><span class="btn a">A</span> Craft</span><span>LB / RB Category</span><span><span class="btn b">B</span> Close</span>'
-      : this.game.app.isTouch ? '' : '<span><span class="key">Enter</span> Craft</span><span><span class="key">Esc</span> Close</span>';
+      : touch ? '' : '<span><span class="key">Enter</span> Craft</span><span><span class="key">Esc</span> Close</span>';
+    this.$('.ihelp').innerHTML = pad
+      ? '<span><span class="btn a">A</span> Move</span><span>RS Split</span>'
+      : touch ? '<span>Tap or drag to move</span>'
+        : '<span><span class="key">Shift</span> + click: across</span><span>Right-click: split</span>';
     this.renderInv();
   }
 
   renderInv() {
     const inv = this.game.inventory;
     this.packEls.forEach((s, k) => {
-      const i = HOTBAR + k;
-      const sl = inv.slots[i];
+      const sl = inv.slots[HOTBAR + k];
       const img = s.querySelector('img'), n = s.querySelector('.n');
-      s.classList.toggle('hl', this.carry === i);
       if (!sl) { img.style.display = 'none'; img.removeAttribute('src'); n.textContent = ''; return; }
       img.style.display = '';
       img.src = iconFor(sl.id);
       n.textContent = ITEMS[sl.id].stack > 1 && sl.count > 1 ? sl.count : '';
     });
-    const c = this.carry != null ? inv.slots[this.carry] : null;
-    if (c) {
-      this.carryEl.querySelector('img').src = iconFor(c.id);
-      this.carryEl.querySelector('.n').textContent = c.count > 1 ? c.count : '';
+    // the pad's cursor, red while it holds something (as the original's)
+    this.slotEls.forEach((s, i) => {
+      s.classList.toggle('cur', this.focus === 3 && i === this.cursor);
+      s.classList.toggle('hold', !!inv.hand);
+    });
+    const h = inv.hand;
+    if (h) {
+      this.carryEl.querySelector('img').src = iconFor(h.s.id);
+      this.carryEl.querySelector('.n').textContent = h.s.count > 1 ? h.s.count : '';
     }
     this.placeCarry();
   }
@@ -301,10 +410,16 @@ export class Crafting {
 
   update(dt, input) {
     if (!this.isOpen) return;
-    if (input.consume('inventory') || input.consume('back_btn') || input.consume('pause')) { this.close(); return; }
+    const inv = this.game.inventory;
+    // B puts back what's held before it closes, as the original's did
+    const back = input.consume('back_btn');
+    if (back && inv.hand) { this.putBack(); this.game.audio?.ui?.('move'); this.render(); }
+    else if (back || input.consume('inventory') || input.consume('pause')) { this.close(); return; }
     if (input.consume('accept') || input.consume('jump')) {
-      if (this.focus === 2) this.craft(); else { this.focus++; this.render(); }
+      if (this.focus === 3) this.cursorUse(false);
+      else if (this.focus === 2) this.craft(); else { this.focus++; this.render(); }
     }
+    if (input.consume('crouch') && this.focus === 3) this.cursorUse(true);
     if (input.consume('next') || input.consume('reload')) this.setCat(this.cat + 1);
     if (input.consume('prev') || input.consume('drop')) this.setCat(this.cat - 1);
     let dy = 0, dx = 0;
@@ -322,16 +437,37 @@ export class Crafting {
       if (this.stickT <= 0) { this.stickT = key === this.stickKey ? 0.14 : 0.36; dx = ax; dy = ay; }
     }
     this.stickKey = key;
-    if (dx) { this.focus = Math.max(0, Math.min(2, this.focus + dx)); this.render(); }
-    if (dy) {
-      if (this.focus === 0) this.setCat(this.cat + dy);
-      else if (this.focus === 1) this.setSub(this.sub + dy);
-      else this.setTile(this.tile + dy);
+    if (dx || dy) this.pointer = false;
+    if (this.focus === 3) { if (dx || dy) this.moveCursor(dx, dy); }
+    else {
+      if (dx) { this.focus = Math.max(0, Math.min(3, this.focus + dx)); this.render(); }
+      if (dy) {
+        if (this.focus === 0) this.setCat(this.cat + dy);
+        else if (this.focus === 1) this.setSub(this.sub + dy);
+        else this.setTile(this.tile + dy);
+      }
     }
-    // number keys move the hovered backpack item onto that hotbar slot
-    if (this.hover != null) for (let i = 0; i < HOTBAR; i++) if (input.consume(`slot${i + 1}`)) { this.game.inventory.swap(this.hover, i); this.renderInv(); }
+    // a number key puts what's held, or what's under the pointer (or the cursor), on that slot
+    for (let k = 0; k < HOTBAR; k++) {
+      if (!input.consume(`slot${k + 1}`)) continue;
+      const at = this.pointer ? this.slotAt(this.mx, this.my) : this.focus === 3 ? this.cursor : null;
+      if (inv.hand) inv.put(k);
+      else if (at != null && at !== k && (inv.slots[at] || inv.slots[k])) inv.swap(at, k);
+      else continue;
+      this.game.audio?.ui?.('move');
+      this.render();
+    }
     // keep counts fresh (things get picked up while the screen is open)
     this.t = (this.t || 0) - dt;
     if (this.t <= 0) { this.t = 0.5; this.renderInv(); }
+  }
+
+  // A (or Enter) on the cursor: pick up or put down; the right stick: half, or one.
+  cursorUse(half) {
+    const inv = this.game.inventory, i = this.cursor;
+    this.pointer = false;
+    if (!(inv.hand ? inv.put(i, half) : inv.lift(i, half))) return;
+    this.game.audio?.ui?.('move');
+    this.render();
   }
 }

@@ -23,6 +23,14 @@ let assets = null;
 const EXTRA = [
   ['X_HELMET', 'HEAD__Skeleton', [0, 1.33, 0]],
 ];
+// the rig's own prop bones, which no part mesh follows (so the pack's meshes leave them out):
+// [name, parent, offset from it]; held things hang from PROP, as on the Xbox
+const PROPS = [
+  ['RT_PROP__Skeleton', 'RT_W__Skeleton', [-0.0629, -0.15725, 0]],
+  ['RT_SPECIAL__Skeleton', 'RT_W__Skeleton', [-0.09435, -0.09435, 0]],
+  ['LF_PROP__Skeleton', 'LF_W__Skeleton', [0.0629, -0.15725, 0]],
+  ['LF_SPECIAL__Skeleton', 'LF_W__Skeleton', [0.09435, -0.09435, 0]],
+];
 
 export function avatarAssets() {
   if (!assets) throw new Error('avatar assets used before loadAvatarAssets() resolved');
@@ -148,6 +156,15 @@ async function load() {
     names.push(name);
     rest.push({ p, q, s, parent: pi });
     boneInverses.push(bind.clone().invert());
+  }
+  for (const [name, parent, at] of PROPS) {
+    const pi = index.get(parent);
+    const p = new THREE.Vector3(...at);
+    const bind = boneInverses[pi].clone().invert().multiply(new THREE.Matrix4().makeTranslation(p.x, p.y, p.z));
+    index.set(name, names.length);
+    names.push(name);
+    rest.push({ p, q: new THREE.Quaternion(), s: new THREE.Vector3(1, 1, 1), parent: pi });
+    boneInverses.push(bind.invert());
   }
 
   // clips

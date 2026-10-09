@@ -204,11 +204,12 @@ export class ViewModel {
     const k = this.kind;
     const rest = new THREE.Vector3(), rot = new THREE.Euler();
     if (k === 'gun') {
-      rest.set(0.17, -0.19, -0.36);
+      rest.set(0.17, -0.17, -0.44);
       rot.set(0.02, 0.05, 0);
     } else if (k === 'tool') {
-      rest.set(0.36, -0.46, -0.62);
-      rot.set(-0.42, 0.18, 0.52);
+      // the hand on the handle in sight at the lower right, the head up and forward
+      rest.set(0.26, -0.2, -0.52);
+      rot.set(-0.3, 0.25, 0.36);
     } else if (k === 'torch') {
       rest.set(0.3, -0.4, -0.55);
       rot.set(-0.3, 0.2, 0.25);
@@ -294,7 +295,9 @@ export class ViewModel {
     if (this.itemMesh) {
       this.itemMesh.position.set(0, 0, 0);
       if (k === 'block') { this.itemMesh.position.set(0, 0.05, -0.05); }
-      if (k === 'tool') { this.itemMesh.position.set(0, -0.04, 0); this.itemMesh.rotation.set(0, Math.PI / 2, 0); }
+      // tools a little smaller in the hand, gripped a hand's width up the handle
+      this.itemMesh.scale.setScalar(k === 'tool' ? 0.78 : 1);
+      if (k === 'tool') { this.itemMesh.position.set(0, -0.1, 0); this.itemMesh.rotation.set(0, Math.PI / 2, 0); }
       else if (k === 'torch') { this.itemMesh.position.set(0, -0.06, 0); this.itemMesh.rotation.set(0, 0, 0); }
       else if (k === 'knife') this.itemMesh.rotation.set(0, 0, 0);
       else this.itemMesh.rotation.set(0, 0, 0);

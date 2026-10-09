@@ -181,6 +181,8 @@ export class Menus {
           <b>Reload</b><span>X</span><b>Crafting</b><span>Y</span><b>Items</b><span>Bumpers, d-pad</span><b>Sprint</b><span>Left stick click</span><b>Pause</b><span>Start</span></div>
           <h3>Touch</h3>
           <p>Left thumb moves, right thumb looks. Hold the dig button to dig or fire; tap place to build or aim. Tap the hotbar to switch items.</p>
+          <h3>Inventory</h3>
+          <p>On the crafting screen, click or tap something in the backpack or the hotbar to pick it up, then a slot to put it there, or drag it. Shift-click sends a stack across, backpack to hotbar or back; right-click picks up half a stack, or puts down one. With a controller, go right into the backpack (the hotbar is under it): A picks up and puts down, the right stick splits.</p>
         </div>`,
         items: [{ label: 'Back', on: () => this.back() }],
       };

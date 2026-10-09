@@ -30,8 +30,10 @@ void main() {
   vNormalW = normalize(mat3(modelMatrix) * objectNormal);
   vColor = color;
   vMat = aMat;
-#ifdef USE_FACE
+#if defined(USE_FACE) || defined(USE_MAP)
   vUv = uv;
+#endif
+#ifdef USE_FACE
   vFace = aFace;
 #endif
   gl_Position = projectionMatrix * viewMatrix * w;
@@ -50,6 +52,9 @@ uniform vec3 uViewPos;
 #ifdef USE_FACE
 uniform sampler2D uFaceMap;
 #endif
+#ifdef USE_MAP
+uniform sampler2D uMap;
+#endif
 varying vec3 vWorld;
 varying vec3 vNormalW;
 varying vec3 vColor;
@@ -60,6 +65,9 @@ void main() {
   vec3 n = normalize(vNormalW);
   if (!gl_FrontFacing) n = -n;
   vec3 albedo = vColor * uTint;
+#ifdef USE_MAP
+  albedo *= texture2D(uMap, vUv).rgb;
+#endif
 #ifdef USE_FACE
   if (vFace.x > 0.5) {
     vec4 f = texture2D(uFaceMap, vUv);
@@ -111,6 +119,8 @@ export function makePropMaterial(skyUniforms, terrainUniforms, opts = {}) {
   const defines = {};
   if (opts.noFog) defines.NOFOG = 1;
   if (opts.face) { defines.USE_FACE = 1; uniforms.uFaceMap = { value: opts.face }; }
+  // a texture the colour multiplies (models made with one)
+  if (opts.map) { defines.USE_MAP = 1; uniforms.uMap = { value: opts.map }; }
   const m = new THREE.ShaderMaterial({
     uniforms,
     vertexShader: VS,

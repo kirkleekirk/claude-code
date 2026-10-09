@@ -20,6 +20,8 @@ import { Awards } from './game/awards.js';
 import { saveGame, loadGame, deleteSave, saveMeta } from './game/save.js';
 import { loadAvatarAssets } from './entities/avatar/assets.js';
 import { loadCmzBodies } from './entities/cmz/bodies.js';
+import { loadCmzClips } from './entities/cmz/avatarAnim.js';
+import { loadCmzItems } from './entities/cmz/held.js';
 import { PRESETS } from './entities/avatar/looks.js';
 import { Audio } from './core/audio.js';
 
@@ -111,9 +113,12 @@ export class App {
     this.terrain = makeTerrainMaterials(this.sky.uniforms, blockTextureArray(gl));
     buildIcons(gl);
     this.menus.setLoading(0.4);
-    // the original's own bodies for the dead, if the ripped files are there
-    const [, cmz] = await Promise.all([loadAvatarAssets(), params.has('nocmz') ? false : loadCmzBodies()]);
+    // the original's own bodies for the dead, and its clips and items for the player, if the
+    // ripped files are there
+    const cmzOn = !params.has('nocmz');
+    const [, cmz, clips, items] = await Promise.all([loadAvatarAssets(), cmzOn && loadCmzBodies(), cmzOn && loadCmzClips(), cmzOn && loadCmzItems()]);
     this.cmzBodies = cmz || null;
+    this.cmzPlayer = clips && items ? { clips, items } : null;
     this.menus.setLoading(0.6);
     this.audio = new Audio(this);
     // sound can only start once the player has done something
@@ -225,6 +230,7 @@ export class App {
     if (params.has('pitch')) g.player.pitch = parseFloat(params.get('pitch'));
     if (params.has('slot')) g.inventory.select(parseInt(params.get('slot'), 10));
     if (params.has('fly')) g.player.noclip = true;
+    if (params.has('third')) this.thirdPerson = true;
     this.applySettings();
     this.saveTimer = 0;
   }

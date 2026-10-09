@@ -10,6 +10,9 @@ import { Inventory } from '../items/inventory.js';
 import { ITEMS, dropFor, digTime, weaponDamage } from '../items/items.js';
 import { getZombie, TYPES } from '../entities/cmz/types.js';
 import { ViewModel } from '../gfx/viewModel.js';
+import { CmzViewModel } from '../gfx/cmzViewModel.js';
+import { CmzPlayerAnimation } from '../entities/cmz/playerAnim.js';
+import { HeldItems } from '../entities/cmz/held.js';
 import { BlockHighlight, Debris, Sprites, Tracers } from '../gfx/effects.js';
 import { BlockItemMaterials, blockItemGeometry } from '../gfx/blockItem.js';
 import { makePropMaterial } from '../gfx/propMaterial.js';
@@ -17,7 +20,7 @@ import { Drops } from './drops.js';
 import { Enemies } from './enemies.js';
 import { HUD } from '../ui/hud.js';
 import { Crafting } from '../ui/crafting.js';
-import { AvatarModel } from '../entities/avatar/model.js';
+import { AvatarModel, bindPosition } from '../entities/avatar/model.js';
 import { PRESETS } from '../entities/avatar/looks.js';
 import { zombieLook } from '../entities/avatar/zombie.js';
 import { skeletonLook } from '../entities/avatar/skeleton.js';
@@ -49,7 +52,9 @@ export class Game {
     this.player = new Player(this.world);
     this.player.autoClimb = app.settings.autoClimb;
     this.inventory = new Inventory();
-    this.viewModel = new ViewModel(app.sky.uniforms, app.terrain.uniforms);
+    // first person: the original's own arms, clips and items when they've been ripped
+    const cmz = app.cmzPlayer;
+    this.viewModel = cmz ? new CmzViewModel(app.sky.uniforms, app.terrain.uniforms, cmz.clips, cmz.items) : new ViewModel(app.sky.uniforms, app.terrain.uniforms);
     this.highlight = new BlockHighlight(this.scene);
     this.debris = new Debris(this.scene, this.world);
     this.sprites = new Sprites(this.scene);
@@ -142,6 +147,7 @@ export class Game {
     this.hud.el.remove();
     this.enemies?.dispose?.();
     this.crafting?.dispose?.();
+    this.viewModel.dispose?.();
     for (const m of [this.playerModel, this.preview]) if (m) { m.dispose(); m.material.dispose(); m.root.removeFromParent(); }
   }
 
@@ -150,7 +156,10 @@ export class Game {
   setLook(look) {
     this.look = look;
     if (this.playerModel) { this.playerModel.dispose(); this.playerModel.material.dispose(); this.playerModel.root.removeFromParent(); this.playerModel = null; }
+    this.playerAnim = null;
+    this.playerItem = null;
     this.viewModel.setArmColors?.(look.skin, look.top?.tint);
+    this.viewModel.setLook?.(look);
   }
 
   // The avatar on show in the Choose Avatar screen, standing in front of the camera.
@@ -185,21 +194,47 @@ export class Game {
     const p = this.player;
     const show = this.app.thirdPerson && !p.dead && this.look;
     if (!show) { if (this.playerModel) this.playerModel.root.visible = false; return; }
+    const cmz = this.app.cmzPlayer;
     if (!this.playerModel) {
       this.playerModel = new AvatarModel(this.look, this.app.sky.uniforms, this.app.terrain.uniforms);
       this.scene.add(this.playerModel.root);
+      if (cmz) {
+        this.playerAnim = new CmzPlayerAnimation(cmz.clips, cmz.clips.bonesOf(this.playerModel.byName), bindPosition('BASE__Skeleton'), false);
+        this.playerHeld ??= new HeldItems(cmz.items, this.app.sky.uniforms, this.app.terrain.uniforms);
+        this.playerItem = null;
+      }
     }
     const m = this.playerModel;
     m.root.visible = true;
     m.root.position.copy(p.pos);
     m.root.rotation.y = p.yaw + Math.PI;
     const sp = Math.hypot(p.vel.x, p.vel.z);
+    const L = this.world.lightAt(p.pos.x, p.pos.y + 1.4, p.pos.z);
+    if (this.playerAnim) {
+      // the original's clips, with what's in hand on the right hand's prop bone
+      const id = this.inventory.held?.id ?? null;
+      if (!this.playerItem || this.playerItem.id !== id) {
+        this.playerItem?.obj.removeFromParent();
+        this.playerItem = { id, ...this.playerHeld.make(id) };
+        m.byName.RT_PROP__Skeleton.add(this.playerItem.obj);
+        this.playerAnim.setMode(this.playerItem.spec.mode);
+      }
+      const it = id ? ITEMS[id] : null, gun = it && it.kind === 'gun';
+      const back = p.vel.x * Math.sin(p.yaw) + p.vel.z * Math.cos(p.yaw) > 0.3;
+      this.playerAnim.update(dt, {
+        use: !!this.viewModel.useNow, shoulder: gun && this.ads, reload: gun && this.reloading > 0, reloadTime: it?.reload,
+        move: Math.min(1, sp / 4.4), back, pitch: p.pitch, dead: false,
+      });
+      m.setLight(L.sky / 15, L.block / 15);
+      this.playerHeld.setLight(m.material.uniforms.uObjLight.value);
+      m.update(dt);
+      return;
+    }
     if (!p.onGround && Math.abs(p.vel.y) > 2) m.play('jump', { fade: 0.15, once: true });
     else if (sp > 5.2) m.play('run', { fade: 0.2, speed: sp / 6 });
     else if (sp > 0.4) m.play('walk', { fade: 0.2, speed: Math.min(2.4, sp / 1.6) });
     else m.play('idle', { fade: 0.3 });
     m.layer.pitch = -p.pitch * 0.5;
-    const L = this.world.lightAt(p.pos.x, p.pos.y + 1.4, p.pos.z);
     m.setLight(L.sky / 15, L.block / 15);
     m.update(dt);
   }
@@ -354,6 +389,7 @@ export class Game {
     this.viewModel.update(dt, {
       camera: cam, yaw: p.yaw, pitch: p.pitch, bob: bob, bobPhase: p.bobPhase,
       ads: this.ads && !p.sprinting, sprinting: p.sprinting && !this.viewModel.swinging, light: this.light, toTower,
+      move: Math.min(1, Math.hypot(p.vel.x, p.vel.z) / 4.4),
     });
     this.viewModel.hidden = app.thirdPerson || p.dead;
 
@@ -562,7 +598,7 @@ export class Game {
 
   handleGun(dt, input, it, held, eye, fwd, hit) {
     const vm = this.viewModel, inv = this.inventory;
-    this.ads = input.isHeld('secondary');
+    this.ads = input.isHeld('secondary') || testParams.has('ads');
     this.spread = Math.max(0, this.spread - dt * 3.5);
     // reload
     const ammoLeft = inv.count(it.ammo);
@@ -673,6 +709,7 @@ export class Game {
   // ---- death -------------------------------------------------------------------------------
 
   onDeath() {
+    this.crafting?.close(true);
     this.deathShown = true;
     this.stats.deaths++;
     this.audio?.death();

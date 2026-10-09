@@ -1,5 +1,7 @@
 // The player's items: 8 hotbar slots and 32 in the backpack, as in the original.
 // A slot is null or { id, count, dur, mag } (dur: wear left on a tool; mag: rounds loaded in a gun).
+// On the inventory screen a stack can be lifted out of its slot into the hand, as the original's
+// screen holds one: { s, from }.
 
 import { ITEMS } from './items.js';
 
@@ -10,6 +12,7 @@ export class Inventory {
   constructor() {
     this.slots = new Array(HOTBAR + PACK).fill(null);
     this.selected = 0;
+    this.hand = null;
     this.onChange = null;
   }
 
@@ -117,29 +120,106 @@ export class Inventory {
     this.changed();
   }
 
-  // Move slot a onto slot b: stacks merge when they can, otherwise they swap.
-  moveTo(a, b) {
-    if (a === b) return;
-    const A = this.slots[a], Bs = this.slots[b];
-    if (A && Bs && A.id === Bs.id && ITEMS[A.id].stack > 1) {
-      const room = ITEMS[A.id].stack - Bs.count;
-      const n = Math.min(room, A.count);
-      Bs.count += n; A.count -= n;
-      if (A.count <= 0) this.slots[a] = null;
-      this.changed();
-      return;
-    }
-    this.swap(a, b);
-  }
-
   select(i) {
     this.selected = ((i % HOTBAR) + HOTBAR) % HOTBAR;
     this.changed();
   }
 
-  serialize() { return { slots: this.slots.map((s) => (s ? { ...s } : null)), selected: this.selected }; }
+  // ---- the hand ----------------------------------------------------------------------------------
+
+  // Pick up slot i, or half of it (the original's Split: the hand takes the smaller half).
+  lift(i, half = false) {
+    const s = this.slots[i];
+    if (!s || this.hand) return false;
+    if (half && s.count > 1) {
+      const n = Math.floor(s.count / 2);
+      s.count -= n;
+      this.hand = { s: { ...s, count: n }, from: i };
+    } else {
+      this.slots[i] = null;
+      this.hand = { s, from: i };
+    }
+    this.changed();
+    return true;
+  }
+
+  // Put the hand down on slot i (one: just one of it). It joins a stack of the same thing as far
+  // as that goes; on anything else it swaps, and the hand takes what was there.
+  put(i, one = false) {
+    const h = this.hand;
+    if (!h) return false;
+    const t = this.slots[i], max = ITEMS[h.s.id].stack;
+    if (t && t.id === h.s.id && max > 1) {
+      const n = Math.min(max - t.count, one ? 1 : h.s.count);
+      if (n <= 0) return false;
+      t.count += n; h.s.count -= n;
+      if (h.s.count <= 0) this.hand = null;
+    } else if (!t) {
+      if (one && h.s.count > 1) { this.slots[i] = { ...h.s, count: 1 }; h.s.count -= 1; }
+      else { this.slots[i] = h.s; this.hand = null; }
+    } else {
+      this.slots[i] = h.s;
+      h.s = t; h.from = i;
+    }
+    this.changed();
+    return true;
+  }
+
+  // Back where it came from if that's free, else wherever it goes (the original's
+  // AddInventoryItem). Returns what didn't fit, or null.
+  restore() {
+    const h = this.hand;
+    if (!h) return null;
+    this.hand = null;
+    if (!this.slots[h.from]) { this.slots[h.from] = h.s; this.changed(); return null; }
+    return this.stow(h.s);
+  }
+
+  // A stack onto stacks of the same thing, then into the first free slot, the hotbar's before
+  // the backpack's. Returns what didn't fit, or null.
+  stow(s, from = 0, to = this.slots.length) {
+    const max = ITEMS[s.id].stack;
+    if (max > 1) {
+      for (let k = from; k < to && s.count > 0; k++) {
+        const t = this.slots[k];
+        if (t && t !== s && t.id === s.id && t.count < max) { const n = Math.min(max - t.count, s.count); t.count += n; s.count -= n; }
+      }
+    }
+    let left = s.count > 0 ? s : null;
+    if (left) for (let k = from; k < to; k++) if (!this.slots[k]) { this.slots[k] = left; left = null; break; }
+    this.changed();
+    return left;
+  }
+
+  // Shift-click: slot i over to the other side, backpack to hotbar or back, as far as it goes
+  // (the original's AddItemToTray / AddItemToInventory).
+  quickMove(i) {
+    const s = this.slots[i];
+    if (!s) return false;
+    this.slots[i] = null;
+    const before = s.count;
+    const left = i < HOTBAR ? this.stow(s, HOTBAR) : this.stow(s, 0, HOTBAR);
+    if (left) this.slots[i] = left;
+    this.changed();
+    return !left || left.count < before;
+  }
+
+  serialize() {
+    const slots = this.slots.map((s) => (s ? { ...s } : null));
+    // something lifted on the inventory screen goes in the save where it came from
+    const h = this.hand;
+    if (h) {
+      const t = slots[h.from];
+      if (!t) slots[h.from] = { ...h.s };
+      else if (t.id === h.s.id && ITEMS[t.id].stack > 1) t.count += h.s.count;
+      else { const k = slots.indexOf(null); if (k >= 0) slots[k] = { ...h.s }; }
+    }
+    return { slots, selected: this.selected };
+  }
+
   load(d) {
     if (!d || !Array.isArray(d.slots)) return;
+    this.hand = null;
     this.slots = new Array(HOTBAR + PACK).fill(null);
     d.slots.forEach((s, i) => { if (s && ITEMS[s.id] && i < this.slots.length) this.slots[i] = { ...s }; });
     this.selected = d.selected || 0;

@@ -58,22 +58,32 @@ npm run build:avatar -- <path to XNAGameStudio/Samples>   # rebuilds src/assets/
 
 Test helpers: `tools/shoot.mjs` (screenshots in headless Chromium), `tools/flow.mjs` (walks the
 menus with key presses), `tools/sim.mjs` (runs the game and reports what the enemies do),
-`tools/eval.mjs` (runs a module in the page). In the game, `?play&horde=4&skel=2&archer=1`
-puts some of the dead in front of you, and `?nocmz` leaves out the original's bodies.
+`tools/eval.mjs` (runs a module in the page), `tools/cmz/hold.html?item=pistol` (the avatar
+holding something, posed by the original's clips, from four sides). In the game,
+`?play&horde=4&skel=2&archer=1` puts some of the dead in front of you, `&slot=2` picks a hotbar
+slot, `&third` starts in third person, `&ads` aims, and `?nocmz` leaves out everything ripped
+from the original.
 
-### The original's sounds and bodies
+### The original's sounds, bodies and hands
 
 All the sound in the game is CastleMiner Z's own: every cue (effects, ambience and music) plays
 by the original's rules. So are the zombie and skeleton models, with their animations and skins.
+So is how you hold things: in first person you see your avatar's own arms from its eyes, as the
+original drew them, posed by its clips (picking, aiming at the shoulder, firing, reloading) with
+its models of the pickaxe, guns, knife, compass and the rest in your hand; in third person the
+avatar walks, runs and leans with the same clips.
+
 None of these files are in this repository. They come out of your own copy of the game (its
 `Content` folder) and go in `local-assets/`, which git ignores:
 
 ```
 python3 tools/cmz/rip_audio.py  <Content> local-assets/audio    # needs ffmpeg
 python3 tools/cmz/rip_models.py <Content> local-assets/models
+python3 tools/cmz/rip_player.py <Content> local-assets          # avatar clips and held items
 ```
 
-Without them the game is silent and the dead are built on the avatar rig.
+Without them the game is silent, the dead are built on the avatar rig, and what you hold is drawn
+from parts.
 
 ## Credits
 
