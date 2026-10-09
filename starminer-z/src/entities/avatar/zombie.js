@@ -17,6 +17,8 @@ const SKINS = [0x6e7262, 0x76796a, 0x666b58, 0x7a7866, 0x6a705e, 0x80806e, 0x727
 const HAIRS = [0x3e3a26, 0x2a2620, 0x4a4030, 0x1e1c18, 0x55503e, 0x3a2e22];
 const SHIRTS = [0x5a5638, 0x4a3c2c, 0x4c5560, 0x7a7466, 0x3c4a34, 0x5c3a30, 0x464a3a];
 const TROUSERS = [0xffffff, 0xc8b090, 0x9a9080, 0xd0c8b8];
+const RED_SKINS = [0x9a5a4c, 0x8a4c40, 0xa26252];
+const RED_RAGS = [0x5a2620, 0x4a2a24, 0x6a3028];
 
 // Thin everything down. The same for the skin and the clothes over it, so they stay together;
 // blended by position, so the joins (shoulders, hips, neck) stay smooth.
@@ -169,20 +171,22 @@ function rags(rand) {
 
 const looks = new Map();
 
-// The look for a zombie (built once per seed; the horde shares a handful of them).
-export function zombieLook(seed = 1) {
-  if (looks.has(seed)) return looks.get(seed);
+// The look for a zombie (built once per seed; the horde shares a handful of them). Red ones,
+// the stronger dead that walk from the fifth day on, are raw and bloody all over.
+export function zombieLook(seed = 1, red = false) {
+  const key = `${seed}|${red ? 1 : 0}`;
+  if (looks.has(key)) return looks.get(key);
   const A = avatarAssets();
   const rand = mulberry32(seed * 7919 + 13);
   const pick = (a) => a[Math.floor(rand() * a.length)];
-  const hair = pick(HAIRS), shirt = pick(SHIRTS);
+  const hair = pick(HAIRS), shirt = red ? pick(RED_RAGS) : pick(SHIRTS);
   const hairLen = 0.24 + rand() * 0.14;
   const shoes = rand() < 0.4;
   const look = {
     name: 'zombie',
     sex: 'm',
     seed,
-    skin: pick(SKINS),
+    skin: red ? pick(RED_SKINS) : pick(SKINS),
     rot: 1,
     grime: 1,
     tear: 0.6 + rand() * 0.4,
@@ -214,7 +218,7 @@ export function zombieLook(seed = 1) {
       eyeScale: 1.45,
       irisLo: 0.05,
     },
-    glow: [2.4, 0.22, 0.06],
+    glow: [5.5, 0.5, 0.12],
     bodyTransform: (v) => starve(v),
     clothTransform: (v) => starve(v),
     headTransform: (v) => gaunt(v),
@@ -237,6 +241,7 @@ export function zombieLook(seed = 1) {
       b.addSkinned(rg, () => [['BASE__Skeleton', 1]], shirt, 0, 1);
     },
   };
-  looks.set(seed, look);
+  if (red) look.glow = [7, 0.6, 0.15];
+  looks.set(key, look);
   return look;
 }

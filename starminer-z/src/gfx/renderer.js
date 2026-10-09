@@ -5,10 +5,10 @@
 import * as THREE from 'three';
 
 export const QUALITY = {
-  low: { scale: 0.6, msaa: 0, bloom: false, shadows: 0, distance: 5, maxDpr: 1 },
-  medium: { scale: 0.8, msaa: 0, bloom: true, shadows: 0, distance: 7, maxDpr: 1.5 },
-  high: { scale: 1, msaa: 4, bloom: true, shadows: 2048, distance: 9, maxDpr: 2 },
-  ultra: { scale: 1, msaa: 4, bloom: true, shadows: 4096, distance: 12, maxDpr: 2 },
+  low: { scale: 0.6, msaa: 0, bloom: false, shadows: 0, distance: 8, maxDpr: 1 },
+  medium: { scale: 0.8, msaa: 0, bloom: true, shadows: 0, distance: 12, maxDpr: 1.5 },
+  high: { scale: 1, msaa: 4, bloom: true, shadows: 2048, distance: 16, maxDpr: 2 },
+  ultra: { scale: 1, msaa: 4, bloom: true, shadows: 4096, distance: 24, maxDpr: 2 },
 };
 
 const FS_TRI = (() => {
@@ -65,7 +65,7 @@ void main() {
 
 const COMPOSITE = /* glsl */ `
 uniform sampler2D tScene; uniform sampler2D tBloom; uniform float uBloom; uniform float uExposure;
-uniform float uTime; uniform vec2 uRes; uniform float uVignette; uniform vec3 uFlash; uniform float uSaturation;
+uniform float uTime; uniform vec2 uRes; uniform float uVignette; uniform vec3 uFlash; uniform float uSaturation; uniform float uGloom;
 varying vec2 vUv;
 // ACES filmic (Stephen Hill's fit)
 vec3 RRTAndODTFit(vec3 v) {
@@ -91,8 +91,19 @@ void main() {
   float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
   col = max(mix(vec3(l), col, uSaturation), 0.0);
   col = aces(col);
+  // the storm's grade: cold, drained shadows, a dirty warmth in the light, more contrast
+  if (uGloom > 0.0) {
+    float L = dot(col, vec3(0.2126, 0.7152, 0.0722));
+    vec3 split = mix(vec3(0.84, 0.94, 1.04), vec3(1.05, 1.0, 0.88), smoothstep(0.06, 0.55, L));
+    vec3 g = mix(vec3(L), col, 0.78) * split;
+    // the green goes olive, like the original's grass
+    float green = clamp((g.g - max(g.r, g.b)) * 5.0, 0.0, 1.0);
+    g = mix(g, vec3(g.g * 0.9, g.g * 0.86, g.b * 0.8), green * 0.55);
+    g = mix(g, g * g * (3.0 - 2.0 * g), 0.3);
+    col = mix(col, g, uGloom);
+  }
   vec2 q = vUv - 0.5;
-  col *= 1.0 - dot(q, q) * uVignette;
+  col *= 1.0 - dot(q, q) * (uVignette + 0.9 * uGloom);
   col = toSRGB(col);
   // dither away banding
   col += (ign(gl_FragCoord.xy + fract(uTime) * 64.0) - 0.5) / 255.0;
@@ -126,7 +137,7 @@ export class Renderer {
     this.mUp = mk(UP, { tSrc: { value: null }, tPrev: { value: null }, uTexel: { value: new THREE.Vector2() }, uRadius: { value: 1 } });
     this.mComp = mk(COMPOSITE, {
       tScene: { value: null }, tBloom: { value: null }, uBloom: { value: this.bloomStrength }, uExposure: { value: 1 },
-      uTime: { value: 0 }, uRes: { value: new THREE.Vector2() }, uVignette: { value: this.vignette }, uFlash: { value: this.flash }, uSaturation: { value: this.saturation },
+      uTime: { value: 0 }, uRes: { value: new THREE.Vector2() }, uVignette: { value: this.vignette }, uFlash: { value: this.flash }, uSaturation: { value: this.saturation }, uGloom: { value: 0 },
     });
     this.black = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
     this.black.needsUpdate = true;
@@ -214,6 +225,7 @@ export class Renderer {
     c.uTime.value = this.time;
     c.uVignette.value = this.vignette;
     c.uSaturation.value = this.saturation;
+    c.uGloom.value = this.gloom || 0;
     this.pass(this.mComp, null);
   }
 }

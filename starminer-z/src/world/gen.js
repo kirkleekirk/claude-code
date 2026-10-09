@@ -1,29 +1,40 @@
 // Terrain for one chunk column at a time, laid out the way CastleMiner Z lays out its world:
-// biomes come in rings by distance from the start tower, so walking away from it always takes
-// you through the same sequence, and the deeper rings are harder to cross.
+// zones in rings by distance from the start tower, always in the same order, each harder to
+// cross than the last. There's no water anywhere (the riverbeds are dry), and under all of it,
+// about forty blocks down, a bloodstone roof over the Underworld.
 //
-//   Classic         0 –  200   rolling grass hills and trees around the tower
-//   Elevated Forest 200 –  950   cliffs, odd caverns, floating islands
-//   Desert          950 – 1600   mostly flat sand
-//   Mountains      1600 – 2300   huge rock ridges with sandy valleys and snow caps
-//   Arctic         2300 – 3000   snow and ice, crevasses
-//   Decent         3000 – 3400   the land falls away, pale rock spotted with bloodstone
-//   Hell           3400 – 4400   a lava cavern under a black rock plateau
+//   Spawn               0 –   25   the bedrock tower, lantern-tipped
+//   The Hills          25 –  200   steep green hills and tall stone ones, trees, sandy hollows
+//   Floating Islands  200 –  950   islands in the sky, cliffs, overhangs, dry riverbeds
+//   The Desert        950 – 1600   mostly flat sand and dunes; no caves
+//   The Mountains    1600 – 2300   very steep peaks and passes, snow on the tops
+//   The Snowfields   2300 – 3000   flat snow, frozen lakes, dips and holes
+//   World's Edge     3000 – 3400   ore everywhere; the land sinks, with pits into the Underworld
+//   Hell on Earth    3400 – 5000   bloodstone and lava lakes under a black sky
 //
-// then the rings start over. Shared by the workers and the main thread (no DOM, no three.js).
+// Past Hell a new world begins: the zones again in reverse, back to the Hills at about 9100,
+// and round again. Shared by the workers and the main thread (no DOM, no three.js).
 
 import { Noise, hash2, hash3, mulberry32, clamp, lerp, smoothstep } from '../core/noise.js';
 import { B, CHUNK, HEIGHT, COLUMN_SIZE } from './blocks.js';
 
-export const BIOMES = ['Classic', 'Elevated Forest', 'Desert', 'Mountains', 'Arctic', 'Decent', 'Hell'];
-export const BIOME = { CLASSIC: 0, LAGOON: 1, DESERT: 2, MOUNTAIN: 3, ARCTIC: 4, DECENT: 5, HELL: 6 };
-const STARTS = [0, 200, 950, 1600, 2300, 3000, 3400, 4400];
-export const CYCLE = 4400;
-const BLEND = 45; // half-width of the blend between two rings
+export const BIOMES = ['The Hills', 'Floating Islands', 'The Desert', 'The Mountains', 'The Snowfields', "World's Edge", 'Hell on Earth'];
+export const BIOME = { HILLS: 0, ISLANDS: 1, DESERT: 2, MOUNTAIN: 3, SNOW: 4, EDGE: 5, HELL: 6 };
+// the stretches along the way out and back: [where it starts, zone, which way through it]
+const SEG = [
+  [0, 0, 1], [200, 1, 1], [950, 2, 1], [1600, 3, 1], [2300, 4, 1], [3000, 5, 1], [3400, 6, 1],
+  [5000, 5, -1], [5400, 4, -1], [6500, 3, -1], [7000, 2, -1], [7800, 1, -1], [8600, 0, -1],
+];
+export const CYCLE = 9100;
+const BLEND = 45; // half-width of the blend between two zones
 
-export const TOWER = { x0: -3, x1: 3, z0: -3, z1: 3, height: 30 };
-export const LAVA_LEVEL_HELL = 25;
+// the tower: bedrock, stepping in from 9 to 7 to 5 blocks across, lanterns at the top
+export const TOWER = { tiers: [[4, 12], [3, 24], [2, 34]], height: 34 };
+const SPAWN_Z = 30;
+export const LAVA_LEVEL_HELL = 27;
 export const LAVA_LEVEL_DEEP = 6;
+// the Underworld: a bloodstone roof about forty blocks under the ground, a cavern below it
+export const UNDER = { floor: 7, ceil: 20, roof: 25 };
 
 export class WorldGen {
   constructor(seed = 1337) {
@@ -51,81 +62,99 @@ export class WorldGen {
     return d + 38 * this.nB.n2(x / 310, z / 310) * smoothstep(150, 260, d);
   }
 
-  // Blend weights of the seven biomes at (x, z), written into this.w. Returns the index of the strongest.
+  // Which stretch of the way a distance falls in: { i, d } (d within the cycle).
+  segment(dr) {
+    const d = ((dr % CYCLE) + CYCLE) % CYCLE;
+    let i = SEG.length - 1;
+    while (i > 0 && SEG[i][0] > d) i--;
+    return { i, d };
+  }
+
+  // Blend weights of the seven zones at (x, z), written into this.w. Returns the index of the strongest.
   weights(x, z, out = this.w) {
-    const dr = this.ringDistance(x, z);
-    const dc = dr < CYCLE ? dr : ((dr - CYCLE) % CYCLE);
+    const { i, d } = this.segment(this.ringDistance(x, z));
     out.fill(0);
-    let best = 0, bw = -1;
-    for (let i = 0; i < 7; i++) {
-      const a = STARTS[i], b = STARTS[i + 1];
-      const wIn = i === 0 ? 1 : smoothstep(a - BLEND, a + BLEND, dc);
-      const wOut = 1 - smoothstep(b - BLEND, b + BLEND, dc);
-      const w = wIn * wOut;
-      out[i] += w;
-    }
-    // the cycle wraps: the end of Hell blends into the next Classic ring
-    if (dr >= CYCLE - BLEND) {
-      const t = smoothstep(CYCLE - BLEND, CYCLE + BLEND, dc < BLEND ? dc + CYCLE : dc);
-      if (dc < BLEND) { out[0] = t; out[6] = 1 - t; for (let i = 1; i < 6; i++) out[i] = 0; }
-    }
-    let sum = 0;
-    for (let i = 0; i < 7; i++) sum += out[i];
-    for (let i = 0; i < 7; i++) {
-      out[i] /= sum || 1;
-      if (out[i] > bw) { bw = out[i]; best = i; }
+    const a = SEG[i][0], b = i + 1 < SEG.length ? SEG[i + 1][0] : CYCLE;
+    const zone = SEG[i][1];
+    const prev = i > 0 ? SEG[i - 1][1] : SEG[SEG.length - 1][1];
+    const next = i + 1 < SEG.length ? SEG[i + 1][1] : SEG[0][1];
+    let w = 1;
+    if (d - a < BLEND && a > 0) { const t = smoothstep(a - BLEND, a + BLEND, d); w = t; out[prev] += 1 - t; }
+    if (b - d < BLEND) { const t = smoothstep(b - BLEND, b + BLEND, d); w = Math.min(w, 1 - t); out[next] += t; }
+    out[zone] += w;
+    let sum = 0, best = 0, bw = -1;
+    for (let k = 0; k < 7; k++) sum += out[k];
+    for (let k = 0; k < 7; k++) {
+      out[k] /= sum || 1;
+      if (out[k] > bw) { bw = out[k]; best = k; }
     }
     return best;
   }
 
-  // The strongest biome at (x, z).
+  // The strongest zone at (x, z).
   biomeAt(x, z) {
     return this.weights(x, z, new Float32Array(7));
   }
 
-  // The progress through the Decent ring (0 at its start, 1 at Hell's gate).
+  // How far down World's Edge has sunk at (x, z): 0 where it starts, 1 at Hell's gate.
   decentProgress(x, z) {
-    const dr = this.ringDistance(x, z);
-    const dc = dr < CYCLE ? dr : ((dr - CYCLE) % CYCLE);
-    return clamp((dc - 3000) / 400, 0, 1);
+    const { i, d } = this.segment(this.ringDistance(x, z));
+    const [a, zone, dir] = SEG[i];
+    if (zone === 6) return 1;
+    if (zone !== 5) return 0;
+    const t = clamp((d - a) / 400, 0, 1);
+    return dir > 0 ? t : 1 - t;
+  }
+
+  // How dark the sky is kept here: the endless night of the deep Edge and of Hell on Earth.
+  endlessNight(x, z) {
+    const w = this.w;
+    this.weights(x, z, w);
+    return clamp(w[6] + w[5] * smoothstep(0.45, 0.95, this.decentProgress(x, z)), 0, 1);
   }
 
   // Ground height of each biome on its own.
   biomeHeight(b, x, z) {
     const n = this.nH, d = this.nD;
     switch (b) {
-      case 0: { // Classic: rolling hills
-        const hills = n.fbm2(x / 120, z / 120, 4);
-        const bump = Math.max(0, n.n2(x / 190 + 7.3, z / 190 - 2.1));
-        return 64 + 7 * hills + 11 * bump * bump + 2.5 * d.n2(x / 26, z / 26);
+      case 0: { // The Hills: steep green hills, and taller stone ones
+        const hills = n.fbm2(x / 105, z / 105, 4);
+        const bump = Math.max(0, n.n2(x / 150 + 7.3, z / 150 - 2.1));
+        const knob = Math.max(0, n.n2(x / 58 - 3.3, z / 58 + 9.1));
+        return 64 + 9 * hills + 18 * bump * bump + 14 * knob * knob * knob + 2.5 * d.n2(x / 24, z / 24);
       }
-      case 1: { // Elevated Forest: taller, terraced hills with cliffs
-        const base = 70 + 13 * n.fbm2(x / 95 + 11, z / 95 - 4, 4);
+      case 1: { // Floating Islands: taller, terraced land with cliffs, and dry riverbeds through it
+        const base = 70 + 14 * n.fbm2(x / 95 + 11, z / 95 - 4, 4);
         const step = 5;
         const terr = Math.floor(base / step) * step;
         const frac = (base - terr) / step;
         const cliff = terr + step * smoothstep(0.55, 0.85, frac);
-        return lerp(base, cliff, 0.75) + 2 * d.n2(x / 22, z / 22);
+        const river = 1 - smoothstep(0.015, 0.075, Math.abs(this.nO.n2(x / 290, z / 290) + 0.15 * d.n2(x / 70, z / 70)));
+        return lerp(base, cliff, 0.75) + 2 * d.n2(x / 22, z / 22) - 11 * river;
       }
       case 2: { // Desert: flat sand with soft dunes
         const dune = 1 - Math.abs(d.n2(x / 46 + 0.3 * n.n2(x / 90, z / 90), z / 120));
         return 62.5 + 2.2 * n.fbm2(x / 80, z / 80, 3) + 2.4 * dune * dune;
       }
-      case 3: { // Mountains: ridges
-        const r = n.ridged2(x / 230 + 3.1, z / 230 - 8.7, 5);
-        return 63 + 56 * Math.pow(r, 1.7) + 5 * n.fbm2(x / 38, z / 38, 2) + 3 * d.n2(x / 15, z / 15);
+      case 3: { // The Mountains: very steep peaks, passes between them
+        const r = n.ridged2(x / 210 + 3.1, z / 210 - 8.7, 5);
+        const peak = 63 + 64 * Math.pow(r, 2.1) + 5 * n.fbm2(x / 38, z / 38, 2);
+        // cliffs: the slopes break into steps
+        const st = 6, t = Math.floor(peak / st) * st;
+        return lerp(peak, t + st * smoothstep(0.35, 0.7, (peak - t) / st), 0.55) + 2.5 * d.n2(x / 15, z / 15);
       }
-      case 4: { // Arctic: snowfields with crevasses
-        const base = 64 + 7 * n.fbm2(x / 105 - 5, z / 105 + 2, 4) + 3 * d.n2(x / 31, z / 31);
-        const crev = Math.pow(n.ridged2(x / 64, z / 64, 2), 4);
-        return base - 7 * crev;
+      case 4: { // The Snowfields: mostly flat, with dips where the frozen lakes lie
+        const base = 64 + 3.5 * n.fbm2(x / 120 - 5, z / 120 + 2, 4) + 1.5 * d.n2(x / 31, z / 31);
+        const dip = Math.max(0, n.n2(x / 85 + 4.4, z / 85 - 1.7));
+        return base - 9 * dip * dip;
       }
-      case 5: { // Decent: the land drops toward Hell
+      case 5: { // World's Edge: the land sinks away toward Hell
         const p = this.decentProgress(x, z);
-        return lerp(63, 33, smoothstep(0, 1, p)) + 2.2 * n.fbm2(x / 50, z / 50, 3) + 1.2 * d.n2(x / 9, z / 9);
+        return lerp(63, 31, smoothstep(0, 1, p)) + 2.6 * n.fbm2(x / 50, z / 50, 3) + 1.4 * d.n2(x / 9, z / 9);
       }
-      case 6: { // Hell: the black plateau over the cavern
-        return 84 + 3 * n.fbm2(x / 64, z / 64, 3) + 1.5 * d.n2(x / 17, z / 17);
+      case 6: { // Hell on Earth: low bloodstone ground, lava lying in the hollows, rock spires
+        const spire = Math.max(0, this.nHell.n2(x / 21, z / 21) - 0.45);
+        return 31 + 3.5 * n.fbm2(x / 64, z / 64, 3) + 1.5 * d.n2(x / 17, z / 17) - 4 * Math.max(0, this.nHell.n2(x / 70 + 3, z / 70)) + 60 * spire * spire;
       }
     }
     return 64;
@@ -240,7 +269,24 @@ export class WorldGen {
     for (let y = 1; y <= h; y++) if (out[col | (y << 8)] === 0) set(y, B.ROCK);
     const n = this.nS.n2(wx / 7, wz / 7);
     switch (b) {
-      case 0: case 1: { // grass over dirt
+      case 0: { // grass over dirt; the tall hills bare stone; sand lying in the hollows
+        const stone = Math.max(0, this.nH.n2(wx / 58 - 3.3, wz / 58 + 9.1));
+        if (stone > 0.62 + n * 0.06 && h > 70) break;
+        if (h < 61 + n) {
+          for (let y = h - 3; y <= h; y++) set(y, B.SAND);
+          break;
+        }
+        const dirt = 3 + Math.floor((n + 1) * 1.2);
+        for (let y = h - dirt; y < h; y++) set(y, B.DIRT);
+        set(h, B.GRASS);
+        break;
+      }
+      case 1: { // grass over dirt; the dry riverbeds sand and gravelly rock
+        const river = 1 - smoothstep(0.015, 0.075, Math.abs(this.nO.n2(wx / 290, wz / 290) + 0.15 * this.nD.n2(wx / 70, wz / 70)));
+        if (river > 0.35) {
+          for (let y = h - 2; y <= h; y++) set(y, n > 0.3 ? B.ROCK : B.SAND);
+          break;
+        }
         const dirt = 3 + Math.floor((n + 1) * 1.2);
         for (let y = h - dirt; y < h; y++) set(y, B.DIRT);
         set(h, B.GRASS);
@@ -251,39 +297,48 @@ export class WorldGen {
         for (let y = h - sand; y <= h; y++) set(y, B.SAND);
         break;
       }
-      case 3: { // rock with sandy valleys and snow caps
+      case 3: { // rock, sand in the passes, snow on the peaks
         if (h < 69 + n * 2) {
           for (let y = h - 3; y <= h; y++) set(y, B.SAND);
-        } else if (h > 106 + n * 4) {
+        } else if (h > 100 + n * 4) {
           set(h, B.SNOW);
-          if (h > 112) set(h - 1, B.SNOW);
-        } else if (n > 0.55 && h < 90) {
-          set(h, B.GRASS); set(h - 1, B.DIRT);
+          if (h > 106) set(h - 1, B.SNOW);
         }
         break;
       }
-      case 4: { // snow over frozen dirt; frozen lakes in the hollows
+      case 4: { // snow over frozen dirt; frozen lakes in the dips
         set(h, B.SNOW);
         set(h - 1, B.SNOW);
         set(h - 2, B.DIRT);
         set(h - 3, B.DIRT);
-        const lake = 61;
+        const lake = 60;
         if (h < lake) for (let y = h + 1; y <= lake; y++) set(y, B.ICE);
         break;
       }
-      case 5: { // the descent: pale sand and rock, spotted with bloodstone
-        const s = this.nS.n2(wx / 13, wz / 13);
-        if (s > 0.15) { set(h, B.SAND); set(h - 1, B.SAND); }
-        const blood = this.nS.n2(wx / 5 + 40, wz / 5 - 13);
-        if (blood > 0.62) { set(h, B.BLOODSTONE); if (blood > 0.75) set(h - 1, B.BLOODSTONE); }
+      case 5: { // World's Edge: bare rock in broad sheets of pale sand, bloodstone showing through deeper in
+        const s = this.nS.n2(wx / 46, wz / 46) + 0.25 * n;
+        if (s > 0.05) { set(h, B.SAND); set(h - 1, B.SAND); }
+        const blood = this.nS.n2(wx / 17 + 40, wz / 17 - 13) - 0.45 * (1 - this.decentProgress(wx, wz));
+        if (blood > 0.5) { set(h, B.BLOODSTONE); set(h - 1, B.BLOODSTONE); }
         break;
       }
-      case 6: { // Hell's roof: black rock streaked with bloodstone
-        const s = this.nS.n2(wx / 9 + 7, wz / 9);
-        if (s > 0.35) set(h, B.BLOODSTONE);
+      case 6: { // Hell on Earth: bloodstone, lava lying in the low ground
+        for (let y = h - 4; y <= h; y++) set(y, B.BLOODSTONE);
+        if (h < LAVA_LEVEL_HELL) for (let y = h + 1; y <= LAVA_LEVEL_HELL; y++) set(y, B.LAVA);
         break;
       }
     }
+  }
+
+  // The Underworld at (x, z): the cavern's floor and ceiling, and its bloodstone roof.
+  underworld(x, z) {
+    const n = this.nHell;
+    const floor = UNDER.floor + 2.5 * n.n2(x / 40, z / 40);
+    const pit = Math.max(0, n.n2(x / 34 + 11, z / 34 - 7));
+    const ceil = UNDER.ceil + 3 * n.fbm2(x / 52 + 5, z / 52, 3);
+    // pillars of bloodstone hold the roof up
+    const pillar = n.n2(x / 11 - 4, z / 11 + 2) > 0.6;
+    return { floor: Math.floor(floor - 4 * pit), ceil: Math.floor(ceil), roof: Math.floor(UNDER.roof + 2 * n.n2(x / 30, z / 30)), pillar };
   }
 
   carve(out, cx, cz, heights, wAll) {
@@ -313,60 +368,77 @@ export class WorldGen {
       const b = lerp(lerp(arr[i010], arr[i110], tx), lerp(arr[i011], arr[i111], tx), tz);
       return lerp(a, b, ty);
     };
+    // World's Edge has pits that drop into the Underworld; the Snowfields, holes
+    const pits = [];
+    for (let gx = Math.floor((x0 - 8) / 24); gx <= Math.floor((x0 + 24) / 24); gx++) {
+      for (let gz = Math.floor((z0 - 8) / 24); gz <= Math.floor((z0 + 24) / 24); gz++) {
+        const h0 = hash2(gx, gz, this.seed + 700);
+        const px = gx * 24 + 4 + Math.floor(hash2(gx, gz, this.seed + 701) * 16), pz = gz * 24 + 4 + Math.floor(hash2(gx, gz, this.seed + 702) * 16);
+        const b = this.biomeAt(px, pz);
+        if (b === 5 && h0 < 0.42) pits.push([px, pz, 2.5 + hash2(gx, gz, this.seed + 703) * 3.5, 0]);
+        else if (b === 4 && h0 < 0.18) pits.push([px, pz, 1.2 + hash2(gx, gz, this.seed + 704) * 1.4, 12 + Math.floor(h0 * 60)]);
+      }
+    }
 
     for (let z = 0; z < CHUNK; z++) for (let x = 0; x < CHUNK; x++) {
       const col = x | (z << 4);
       const h = heights[z * CHUNK + x];
       const wo = (z * CHUNK + x) * 7;
-      const lw = wAll[wo + 1], hw = wAll[wo + 6], aw = wAll[wo + 4];
+      const lw = wAll[wo + 1], dw = wAll[wo + 2], hw = wAll[wo + 6];
       const wx = x0 + x, wz = z0 + z;
       const nearTower = Math.abs(wx) < 12 && Math.abs(wz) < 12;
 
-      // Hell's cavern: hollow out between floor and ceiling, lava in the low parts
-      let hellFloor = -1, hellCeil = -1;
-      if (hw > 0.2) {
-        const s = smoothstep(0.2, 0.85, hw);
-        const c = this.hellCavern(wx, wz, hw);
-        // at the gate the cavern floor meets the descent's floor
-        const gateFloor = 33;
-        hellFloor = Math.floor(lerp(gateFloor, c.floor, s));
-        hellCeil = Math.floor(lerp(gateFloor + 9, c.ceil, Math.pow(s, 0.5)));
-        for (let y = hellFloor + 1; y < hellCeil; y++) {
-          const id = y <= LAVA_LEVEL_HELL ? B.LAVA : B.AIR;
-          out[col | (y << 8)] = id;
-        }
-        // bloodstone veins in the cavern walls and floor
-        for (let y = Math.max(3, hellFloor - 3); y <= hellFloor; y++) if (hash3(wx, y, wz, this.seed + 91) < 0.3) out[col | (y << 8)] = B.BLOODSTONE;
-        for (let y = hellCeil; y < hellCeil + 3 && y < HEIGHT; y++) if (hash3(wx, y, wz, this.seed + 92) < 0.18) out[col | (y << 8)] = B.BLOODSTONE;
+      // the Underworld, under everything: a bloodstone roof, a cavern, lava pits in its floor
+      const U = this.underworld(wx, wz);
+      const top = Math.min(U.roof + 3, h - 6);
+      for (let y = 3; y <= top; y++) {
+        const i = col | (y << 8);
+        if (out[i] === B.BEDROCK) continue;
+        if (y > U.ceil) { out[i] = hash3(wx, y, wz, this.seed + 92) < 0.82 ? B.BLOODSTONE : B.ROCK; continue; }
+        if (y <= U.floor || U.pillar) { out[i] = hash3(wx, y, wz, this.seed + 91) < 0.75 ? B.BLOODSTONE : B.ROCK; continue; }
+        out[i] = y <= LAVA_LEVEL_DEEP ? B.LAVA : B.AIR;
       }
 
-      for (let y = 3; y < h + 1 && y < HEIGHT - 1; y++) {
+      // pits and holes
+      for (const [px, pz, r, deep] of pits) {
+        const dx = wx - px, dz = wz - pz;
+        const rr = r + 0.8 * this.nD.n2(wx / 3, wz / 3);
+        if (dx * dx + dz * dz > rr * rr) continue;
+        const bottom = deep ? Math.max(U.roof + 4, h - deep) : U.ceil - 1;
+        for (let y = bottom; y <= h; y++) {
+          const i = col | (y << 8);
+          if (out[i] !== B.BEDROCK) out[i] = B.AIR;
+        }
+      }
+
+      for (let y = top + 1; y < h + 1 && y < HEIGHT - 1; y++) {
         const i = col | (y << 8);
         const id = out[i];
         if (id === B.AIR || id === B.BEDROCK || id === B.LAVA || id === B.ICE) continue;
         if (nearTower && y > h - 12) continue;
-        if (hellFloor >= 0 && y > hellFloor - 2 && y < hellCeil + 2) continue;
         const depth = h - y;
+        // no caves under the desert
+        if (dw > 0.5 && depth < 34) continue;
         // worm tunnels: where two noise sheets cross
         const a = sample(cave, x, y, z), b = sample(cave2, x, y, z);
         const width = 0.075 + 0.03 * smoothstep(40, 10, y);
         let carved = Math.abs(a) < width && Math.abs(b) < width * 1.25;
         // big caverns, mostly deep
-        if (!carved && y < 52 && y > 8) {
+        if (!carved && y < 52 && y > U.roof + 4) {
           const g = sample(big, x, y, z);
           carved = g > 0.62 + 0.18 * smoothstep(30, 52, y);
         }
         // keep a lid on most tunnels so the surface isn't riddled with holes
         if (carved && depth < 3 && hash2(wx >> 3, wz >> 3, this.seed + 3) < 0.7) carved = false;
-        // the Elevated Forest's odd caverns and overhangs
+        // the Floating Islands' odd caverns and overhangs
         if (!carved && lw > 0.3 && depth > 1 && depth < 16) {
           const o = sample(over, x, y, z);
           carved = o > 0.5 - 0.1 * lw;
         }
-        if (carved) out[i] = y <= LAVA_LEVEL_DEEP ? B.LAVA : B.AIR;
+        if (carved) out[i] = B.AIR;
       }
 
-      // floating islands of the Elevated Forest
+      // the floating islands
       if (lw > 0.05) {
         const isl = this.island(wx, wz, lw);
         if (isl) {
@@ -378,21 +450,28 @@ export class WorldGen {
           }
         }
       }
-      void aw;
+      void hw;
     }
   }
 
   ores(out, cx, cz) {
     // vein seeds on an 8-block grid; veins reach up to 3 blocks from their seed, so the
-    // cells of neighbouring chunks are visited too
+    // cells of neighbouring chunks are visited too. Further out, rare ores are commoner and
+    // veins bigger; World's Edge is full of everything, diamonds included.
     const x0 = cx * CHUNK, z0 = cz * CHUNK;
+    const w = new Float32Array(7);
+    this.weights(x0 + 8, z0 + 8, w);
+    const far = clamp(this.ringDistance(x0 + 8, z0 + 8) / 3000, 0, 1);
+    const edge = w[5];
+    const rich = 1 + far * 0.6 + edge * 2.2;
+    const deep = UNDER.roof + 3;
     const table = [
       // [block, chance per cell, min y, max y, size]
-      [B.COAL_ORE, 0.95, 6, 118, 7],
-      [B.COPPER_ORE, 0.6, 6, 84, 6],
-      [B.IRON_ORE, 0.5, 4, 64, 5],
-      [B.GOLD_ORE, 0.3, 4, 40, 4],
-      [B.DIAMOND_ORE, 0.18, 3, 22, 3],
+      [B.COAL_ORE, 0.95, deep, 118, 7],
+      [B.COPPER_ORE, 0.6, deep, 84, 6],
+      [B.IRON_ORE, 0.5, deep, 64, 5 + Math.round(far * 2 + edge * 3)],
+      [B.GOLD_ORE, 0.3 * (1 + far), deep, 46 + edge * 20, 4 + Math.round(far * 2 + edge * 3)],
+      [B.DIAMOND_ORE, 0.16 * (1 + far * 1.5 + edge * 2), deep, 36 + edge * 26, 3 + Math.round(edge * 3)],
     ];
     for (let gx = Math.floor((x0 - 4) / 8); gx <= Math.floor((x0 + 19) / 8); gx++) {
       for (let gz = Math.floor((z0 - 4) / 8); gz <= Math.floor((z0 + 19) / 8); gz++) {
@@ -402,7 +481,7 @@ export class WorldGen {
             const cy = gy * 8;
             if (cy + 8 < ymin || cy > ymax) continue;
             const h0 = hash3(gx, gy, gz, this.seed + 1000 + t * 31);
-            if (h0 > chance * 0.5) continue;
+            if (h0 > Math.min(0.95, chance * 0.5 * rich)) continue;
             const r = mulberry32(Math.floor(h0 * 1e9) ^ (t * 7919));
             let px = gx * 8 + Math.floor(r() * 8), py = cy + Math.floor(r() * 8), pz = gz * 8 + Math.floor(r() * 8);
             if (py < ymin || py > ymax) continue;
@@ -434,8 +513,9 @@ export class WorldGen {
         const tx = gx * G + Math.floor(hash2(gx, gz, this.seed + 501) * (G - 1));
         const tz = gz * G + Math.floor(hash2(gx, gz, this.seed + 502) * (G - 1));
         if (tx * tx + tz * tz < 20 * 20) continue; // the clearing round the tower
+        if (tx * tx + (tz - SPAWN_Z) * (tz - SPAWN_Z) < 6 * 6) continue; // and where you start
         this.weights(tx, tz, w);
-        let chance = w[0] * 0.5 + w[1] * 0.72 + w[3] * 0.07 + w[4] * 0.06;
+        let chance = w[0] * 0.5 + w[1] * 0.6;
         // thinner in places so forests have glades
         chance *= 0.55 + 0.45 * this.nS.n2(tx / 70, tz / 70) + 0.25;
         if (h0 > chance) continue;
@@ -460,10 +540,11 @@ export class WorldGen {
   surfaceKind(x, z, base) {
     const w = this.w;
     const b = this.weights(x, z, w);
-    if (b === 0 || b === 1) return true;
-    if (b === 4) return true;
-    if (b === 3) return base < 90 && base > 70 && this.nS.n2(x / 7, z / 7) > 0.55;
-    return false;
+    if (b !== 0 && b !== 1) return false;
+    // not on the bare stone hills, the sandy hollows or the riverbeds
+    if (b === 0 && (base < 62 || (Math.max(0, this.nH.n2(x / 58 - 3.3, z / 58 + 9.1)) > 0.62 && base > 70))) return false;
+    if (b === 1 && 1 - smoothstep(0.015, 0.075, Math.abs(this.nO.n2(x / 290, z / 290) + 0.15 * this.nD.n2(x / 70, z / 70))) > 0.35) return false;
+    return true;
   }
 
   tree(out, x0, z0, tx, ty, tz, r, arctic, pick) {
@@ -510,43 +591,35 @@ export class WorldGen {
     }
   }
 
-  // The start tower: a tall pillar of dark stone, lanterns up its faces and a lit crown.
+  // The start tower: bedrock, unbreakable, stepping in from 9 blocks across to 7 to 5 as it
+  // rises, and tipped with lanterns, so the way home shows from far off.
   tower(out, cx, cz) {
     const x0 = cx * CHUNK, z0 = cz * CHUNK;
     const base = this.towerBase();
-    const T = TOWER;
     const put = (x, y, z, id) => {
       const lx = x - x0, lz = z - z0;
       if (lx < 0 || lx >= CHUNK || lz < 0 || lz >= CHUNK || y < 1 || y >= HEIGHT) return;
       out[lx | (lz << 4) | (y << 8)] = id;
     };
-    const top = base + T.height;
-    for (let x = T.x0; x <= T.x1; x++) for (let z = T.z0; z <= T.z1; z++) {
-      // foundations down into the ground
-      for (let y = base - 6; y <= top; y++) put(x, y, z, B.TOWER_STONE);
-      // crenellations
-      const edge = x === T.x0 || x === T.x1 || z === T.z0 || z === T.z1;
-      if (edge && ((x + z) & 1) === 0) put(x, top + 1, z, B.TOWER_STONE);
+    let y0 = base - 6;
+    for (const [r, h] of TOWER.tiers) {
+      for (let y = y0; y <= base + h; y++) for (let x = -r; x <= r; x++) for (let z = -r; z <= r; z++) put(x, y, z, B.BEDROCK);
+      y0 = base + h + 1;
     }
-    // lanterns: a column up the middle of each face, every 5 blocks, and the crown
-    for (let y = base + 4; y < top - 1; y += 5) {
-      put(0, y, T.z0, B.LANTERN); put(0, y, T.z1, B.LANTERN);
-      put(T.x0, y, 0, B.LANTERN); put(T.x1, y, 0, B.LANTERN);
-    }
+    // the lantern tip: a lantern on each corner of the top and a stack in the middle
+    const top = base + TOWER.height;
+    const r = TOWER.tiers[TOWER.tiers.length - 1][0];
+    for (const [x, z] of [[-r, -r], [r, -r], [-r, r], [r, r]]) put(x, top + 1, z, B.LANTERN);
     put(0, top + 1, 0, B.LANTERN);
     put(0, top + 2, 0, B.LANTERN);
-    for (const [x, z] of [[T.x0, T.z0], [T.x1, T.z0], [T.x0, T.z1], [T.x1, T.z1]]) put(x, top + 2, z, B.LANTERN);
-    // a ring of lanterns at the foot, so the way home glows at night
-    for (const [x, z] of [[-6, -6], [6, -6], [-6, 6], [6, 6]]) {
-      const g = Math.floor(this.heightAt(x, z));
-      put(x, g + 1, z, B.TOWER_STONE);
-      put(x, g + 2, z, B.LANTERN);
-    }
+    put(0, top + 3, 0, B.LANTERN);
+    // and one on each ledge where the tower steps in
+    for (const [tr, th] of TOWER.tiers.slice(0, -1)) for (const [x, z] of [[-tr, -tr], [tr, -tr], [-tr, tr], [tr, tr]]) put(x, base + th + 1, z, B.LANTERN);
   }
 
-  // Where a new player stands: just south of the tower, on the ground.
+  // Where a new player stands: south of the tower, about thirty meters out, on the ground.
   spawnPoint() {
-    const x = 0, z = 9;
+    const x = 0, z = SPAWN_Z;
     const y = Math.floor(this.heightAt(x, z)) + 1;
     return { x: x + 0.5, y, z: z + 0.5 };
   }

@@ -36,7 +36,8 @@ const at = (x, y, z) => {
   const c = cols.get(key(Math.floor(x / 16), Math.floor(z / 16)));
   return c[(x & 15) | ((z & 15) << 4) | (y << 8)];
 };
-check(at(0, gen.towerBase() + 10, 0) === B.TOWER_STONE, 'tower at the origin');
+check(at(0, gen.towerBase() + 10, 0) === B.BEDROCK && at(4, gen.towerBase() + 5, 4) === B.BEDROCK && at(4, gen.towerBase() + 20, 4) === B.AIR, 'bedrock tower at the origin, stepping in');
+check(Math.abs(Math.hypot(sp.x, sp.z) - 30) < 2, `spawn about 30 m from the tower (${Math.hypot(sp.x, sp.z).toFixed(1)})`);
 check(at(Math.floor(sp.x), sp.y, Math.floor(sp.z)) === B.AIR && at(Math.floor(sp.x), sp.y + 1, Math.floor(sp.z)) === B.AIR, `spawn point is clear (y=${sp.y})`);
 check(OPAQUE[at(Math.floor(sp.x), sp.y - 1, Math.floor(sp.z))] === 1, 'spawn point stands on ground');
 void c0;
@@ -79,12 +80,17 @@ check(ms / n < 80, 'meshing under 80 ms per column');
 // ---- the rings ----
 {
   const order = [];
-  for (let d = 0; d < 4600; d += 25) {
+  for (let d = 0; d < 9600; d += 25) {
     const best = gen.biomeAt(d * 0.7071, d * 0.7071);
     if (order[order.length - 1] !== BIOMES[best]) order.push(BIOMES[best]);
   }
-  console.log('rings walking out:', order.join(' > '));
-  check(order.slice(0, 7).join() === BIOMES.join(), 'biome rings in CastleMiner Z order');
+  console.log('zones walking out:', order.join(' > '));
+  check(order.slice(0, 7).join() === BIOMES.join(), 'zones in CastleMiner Z order');
+  check(order.slice(6, 13).join() === BIOMES.slice().reverse().join(), 'then back again in reverse');
+  // the Underworld under the tower: a bloodstone roof about forty blocks down, a cavern below
+  const u = gen.underworld(20, 20);
+  check(u.roof > 20 && u.roof < 30 && u.ceil > u.floor, `Underworld roof at ${u.roof}, cavern ${u.floor}-${u.ceil}`);
+  check(gen.endlessNight(3600, 0) === 1 && gen.endlessNight(500, 0) === 0, 'endless night in Hell on Earth');
 }
 
 // top-down map: colour by surface block, shaded by height

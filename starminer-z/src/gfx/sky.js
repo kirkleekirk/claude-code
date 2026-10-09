@@ -55,6 +55,7 @@ uniform vec3 uPlanetDir;
 uniform float uNight;
 uniform vec3 uFogTint;
 uniform float uFogUnder;
+uniform float uGloom;
 vec2 skyViewUV(vec3 d) {
   float az = atan(d.x, d.z);
   float el = asin(clamp(d.y, -1.0, 1.0));
@@ -66,6 +67,8 @@ vec3 skyLookup(vec3 d) { return texture2D(uSkyView, skyViewUV(d)).rgb; }
 vec3 fogColorFor(vec3 d) {
   vec3 h = normalize(vec3(d.x, max(d.y, 0.0) * 0.6 + 0.03, d.z));
   vec3 c = skyLookup(h);
+  // under the storm the distance fades to the dark of the cloud deck, not a bright haze
+  c *= 1.0 - 0.5 * uGloom;
   return mix(c, uFogTint, uFogUnder);
 }
 `;
@@ -96,6 +99,8 @@ uniform float uDay;
 uniform float uStarBoost;
 uniform float uCelestial2;
 uniform vec3 uSunColor;
+uniform float uBolt;
+uniform vec3 uBoltDir;
 varying vec3 vDir;
 
 float hash13(vec3 p) {
@@ -224,15 +229,16 @@ vec4 clouds(vec3 d, vec3 skyCol) {
   float mu = d.y;
   float t = -r0 * mu + sqrt(r0 * r0 * (mu * mu - 1.0) + Rc * Rc);
   vec3 p = d * t;
-  vec2 uv = p.xz / 30.0 + uWind * uTime;
+  // storm clouds are bigger and run faster
+  vec2 uv = p.xz / mix(30.0, 44.0, uGloom) + uWind * uTime * (1.0 + 1.6 * uGloom);
   // cirrus streaks stretched along the wind, and patchy puffs
   vec4 n1 = texture2D(uCloudNoise, uv * 0.35);
   vec4 n2 = texture2D(uCloudNoise, uv * 1.1 + n1.rg * 0.15);
   vec4 n3 = texture2D(uCloudNoise, vec2(uv.x * 0.25, uv.y * 1.6) + n1.ba * 0.3);
   float puff = n1.r * 0.62 + n2.g * 0.28 + n2.b * 0.1;
   float wisps = smoothstep(0.52, 0.85, n3.a) * smoothstep(0.35, 0.65, n1.g);
-  float cover = uCloudCover;
-  float dens = smoothstep(1.0 - cover, 1.0 - cover + 0.32, puff) * 0.9 + wisps * 0.55;
+  float cover = mix(uCloudCover, 0.86, uGloom);
+  float dens = smoothstep(1.0 - cover, 1.0 - cover + mix(0.32, 0.42, uGloom), puff) * 0.9 + wisps * 0.55 * (1.0 - uGloom * 0.6);
   if (dens <= 0.001) return vec4(0.0);
   // light: denser toward the sun means more shadow
   vec2 toSun = normalize(uSunDir.xz + 1e-4) * 0.06;
@@ -249,11 +255,21 @@ vec4 clouds(vec3 d, vec3 skyCol) {
   // at night the clouds are dark shapes against the nebula, rimmed with Ember's light
   amb *= 1.0 - uNight * 0.55;
   vec3 col = (sunL + planetL) * mix(vec3(1.0), vec3(0.85, 0.9, 1.0), dens) + amb;
+  if (uGloom > 0.0) {
+    // storm cloud: dark, heavy bellies; the thin edges toward the sun lit gold
+    // bellies a step lighter than the black sky behind them, so their shapes read
+    vec3 belly = (amb * 0.62 + sunL * 0.16 + uSunColor * 0.0045) * vec3(0.8, 0.84, 0.92) * (1.0 - 0.4 * smoothstep(0.35, 1.0, dens));
+    vec3 edge = uSunColor * (silver * 0.14 + 0.014) * (1.0 - smoothstep(0.2, 0.8, dens)) * vec3(1.0, 0.84, 0.62);
+    col = mix(col, belly + edge, uGloom);
+    // lightning inside the clouds
+    float bolt = uBolt * (0.25 + 0.75 * pow(max(dot(d, uBoltDir), 0.0), 5.0));
+    col += vec3(0.7, 0.76, 1.0) * bolt * (0.4 + dens) * 2.2;
+  }
   // far clouds melt into the haze near the horizon
   float far = 1.0 - exp(-t / 260.0);
   col = mix(col, skyCol, far * 0.75);
-  float a = (1.0 - exp(-dens * 2.6)) * smoothstep(0.0, 0.07, d.y);
-  return vec4(col, a * (1.0 - far * 0.5));
+  float a = (1.0 - exp(-dens * mix(2.6, 4.2, uGloom))) * smoothstep(0.0, 0.07, d.y);
+  return vec4(col, a * (1.0 - far * 0.5 * (1.0 - uGloom * 0.7)));
 }
 
 void main() {
@@ -266,7 +282,7 @@ void main() {
   vec3 c = uCelestial * d;
   vec3 neb = textureCube(uNebula, c).rgb;
   neb *= neb;
-  vec3 space = neb * (0.05 + 0.13 * uNight) + starsAt(c) * 0.05;
+  vec3 space = (neb * (0.05 + 0.13 * uNight) + starsAt(c) * 0.05) * (1.0 - 0.9 * uGloom);
 
   // the far moon, behind the giant planet
   vec4 m1 = moon(d, uMoonDir[1], uMoonR[1], vec3(0.75, 0.85, 1.0), 4.0);
@@ -286,11 +302,16 @@ void main() {
   float limbD = sqrt(max(0.0, 1.0 - (sd / sunR) * (sd / sunR)));
   space += uSunDisc * disc * (0.6 + 0.4 * limbD) * (1.0 - pl.a);
 
+  // after the grace, Ember is only a vague huge shape behind the storm
+  space *= 1.0 - 0.82 * uGloom;
   // by day the planet's disc reads as a darker, deeper blue where it blocks the far sky,
   // and its lit face shows through the haze a little more clearly than physics would allow
-  vec3 col = sky * (1.0 - pl.a * (0.16 + 0.22 * clamp(dot(pl.rgb, vec3(0.3)) * 0.5, 0.0, 1.0)) * uDay) + space * T;
+  vec3 col = sky * (1.0 - pl.a * (0.16 + 0.22 * clamp(dot(pl.rgb, vec3(0.3)) * 0.5, 0.0, 1.0)) * uDay * (1.0 - uGloom)) + space * T;
+  col += vec3(0.6, 0.66, 0.9) * uBolt * 0.004 * uSunE.r;
 
-  vec4 cl = clouds(d, sky);
+  // under the storm the sky darkens toward the horizon to meet the fog
+  col *= 1.0 - 0.5 * uGloom * (1.0 - smoothstep(0.0, 0.25, d.y));
+  vec4 cl = clouds(d, sky * (1.0 - 0.5 * uGloom));
   col = mix(col, cl.rgb, cl.a);
   // below the horizon: the haze the distant land fades into
   if (d.y < 0.0) col = mix(col, fogColorFor(d), smoothstep(0.0, -0.05, d.y));
@@ -312,6 +333,15 @@ export class Sky {
     this.ambientUp = new THREE.Vector3();
     this.ambientDown = new THREE.Vector3();
     this._frame = 0;
+    // the weather: 0 the clear alien sky of the grace period, 1 the storm after it
+    this.gloom = 0;
+    this.gloomTarget = 0;
+    this.bolt = 0;
+    this.boltT = 12;
+    this.onThunder = null; // (delay seconds, loudness)
+    // the endless night far out: 0 none, 1 the sun never shows
+    this.endless = 0;
+    this.dark = 0;
 
     const e = EMBER;
     const az = THREE.MathUtils.degToRad(e.azimuth), el = THREE.MathUtils.degToRad(e.elevation);
@@ -363,6 +393,9 @@ export class Sky {
       uFogUnder: { value: 0 },
       // lighting for the terrain and characters
       uSunColor: { value: this.sunColor },
+      uGloom: { value: 0 },
+      uBolt: { value: 0 },
+      uBoltDir: { value: new THREE.Vector3(0, 0.3, 1).normalize() },
       uPlanetLight: { value: this.planetLight },
       uAmbientUp: { value: this.ambientUp },
       uAmbientDown: { value: this.ambientDown },
@@ -405,12 +438,36 @@ export class Sky {
     while (this.time >= 1) { this.time -= 1; this.day++; }
   }
 
-  get isNight() { return this.sunDir.y < -0.07; }
+  get isNight() { return this.sunDir.y < -0.07 || this.dark > 0.6; }
+
+  // Snap the weather (a loaded game, the menus) or let it roll in.
+  setGloom(g, now = true) { this.gloomTarget = g; if (now) this.gloom = g; }
 
   update(dt, cameraHeight = 0) {
     const u = this.uniforms;
     const t = this.time;
     u.uTime.value += dt;
+    // the storm rolls in over a minute and a half
+    const gd = this.gloomTarget - this.gloom;
+    if (Math.abs(gd) > 1e-4) this.gloom += Math.sign(gd) * Math.min(Math.abs(gd), dt / 90);
+    const G = this.gloom;
+    u.uGloom.value = G;
+    // lightning, now and then, once the storm is in
+    this.bolt = Math.max(0, this.bolt - dt * 5.5);
+    if (G > 0.85 && dt > 0) {
+      this.boltT -= dt;
+      if (this.boltT <= 0) {
+        this.boltT = 9 + Math.random() * 32;
+        this.bolt = 1;
+        this.boltFlicker = 0.08 + Math.random() * 0.12;
+        const a = Math.random() * Math.PI * 2, e = 0.08 + Math.random() * 0.45;
+        u.uBoltDir.value.set(Math.sin(a) * Math.cos(e), Math.sin(e), Math.cos(a) * Math.cos(e));
+        if (this.onThunder) this.onThunder(0.6 + Math.random() * 2.6, 0.4 + Math.random() * 0.6);
+      }
+      // a second stroke a moment after the first
+      if (this.boltFlicker > 0) { this.boltFlicker -= dt; if (this.boltFlicker <= 0) this.bolt = Math.max(this.bolt, 0.7); }
+    }
+    u.uBolt.value = this.bolt * this.bolt;
     const H = (t - 0.5) * Math.PI * 2; // hour angle, 0 at noon
     const dec = THREE.MathUtils.degToRad(4 * Math.sin((this.day / 12) * Math.PI * 2));
     const phi = LATITUDE;
@@ -434,10 +491,15 @@ export class Sky {
     u.uPlanetSpin.value = dayF * EMBER.spin * Math.PI * 2 * 0.1;
     u.uCloudSpin.value = dayF * EMBER.cloudSpin * Math.PI * 2 * 0.1;
 
+    // the endless night closes in and lifts slowly
+    this.dark += (this.endless - this.dark) * Math.min(1, dt * 0.4);
+    if (dt === 0) this.dark = this.endless;
+    const D = this.dark;
     // sunlight reaching the ground, and the disc's own brightness
-    const sunE = 20;
+    const sunE = 20 * (1 - 0.97 * D);
     const Ts = sunTransmittance(this.sunDir.y);
-    this.sunColor.set(Ts[0], Ts[1], Ts[2]).multiplyScalar(sunE);
+    // under the storm the sun still breaks through, lower and weaker
+    this.sunColor.set(Ts[0], Ts[1], Ts[2]).multiplyScalar(sunE * (1 - 0.45 * G));
     u.uSunE.value.set(sunE, sunE, sunE);
     u.uSunDisc.value.set(Ts[0], Ts[1], Ts[2]).multiplyScalar(sunE * 0.0 + 3000);
 
@@ -447,13 +509,13 @@ export class Sky {
     const Tp = sunTransmittance(this.planetDir.y);
     const pal = new THREE.Color(EMBER.palette.base);
     const pe = sunE * EMBER.shine * lit;
-    this.planetLight.set(pal.r * Tp[0], pal.g * Tp[1], pal.b * Tp[2]).multiplyScalar(pe * 4.0);
+    this.planetLight.set(pal.r * Tp[0], pal.g * Tp[1], pal.b * Tp[2]).multiplyScalar(pe * 4.0 * (1 - 0.92 * G));
 
     // night factor: 0 in daylight, 1 once the sun is well down
     const sy = this.sunDir.y;
-    const night = THREE.MathUtils.smoothstep(-sy, -0.02, 0.22);
+    const night = Math.max(D, THREE.MathUtils.smoothstep(-sy, -0.02, 0.22));
     u.uNight.value = night;
-    u.uDay.value = THREE.MathUtils.smoothstep(sy, -0.1, 0.25);
+    u.uDay.value = THREE.MathUtils.smoothstep(sy, -0.1, 0.25) * (1 - D);
     u.uStarBoost.value = u.uDay.value;
     // eyes adapted to the dark would see Ember blinding; keep it bright but readable
     u.uCelestial2.value = THREE.MathUtils.lerp(1, 0.09, night);
@@ -463,14 +525,33 @@ export class Sky {
 
     // the sky table: every frame while the sun is moving fast across the horizon, else every few
     this._frame++;
-    if (this._frame % (Math.abs(sy) < 0.15 ? 1 : 4) === 0 || dt === 0) {
-      this.atmo.renderView(this.sunDir, u.uSunE.value, this.planetDir, new THREE.Vector3(pal.r, pal.g, pal.b).multiplyScalar(sunE * EMBER.shine * lit * 1.4), airglow);
+    if (this._frame % (Math.abs(sy) < 0.15 || Math.abs(gd) > 1e-4 ? 1 : 4) === 0 || dt === 0) {
+      this.atmo.renderView(this.sunDir, u.uSunE.value, this.planetDir, new THREE.Vector3(pal.r, pal.g, pal.b).multiplyScalar(sunE * EMBER.shine * lit * 1.4 * (1 - 0.9 * G)), airglow, G);
     }
 
     // ambient light from the sky for surfaces facing up and down
     const zen = skyRadianceApprox(this.sunDir, this.sunColor, night, this.planetLight);
-    this.ambientUp.copy(zen.up);
-    this.ambientDown.copy(zen.down);
+    this.ambientUp.copy(zen.up).multiplyScalar(1 - 0.85 * D);
+    this.ambientDown.copy(zen.down).multiplyScalar(1 - 0.85 * D);
+    // Hell's lava lights the smoke from below
+    const lv = this.lavaGlow || 0;
+    if (lv > 0) {
+      this.ambientDown.x += 0.3 * lv; this.ambientDown.y += 0.07 * lv; this.ambientDown.z += 0.025 * lv;
+      this.ambientUp.x += 0.09 * lv; this.ambientUp.y += 0.022 * lv; this.ambientUp.z += 0.01 * lv;
+    }
+    if (G > 0) {
+      // a dark grey sky gives a dim, cold, colourless light; the night is black
+      for (const v of [this.ambientUp, this.ambientDown]) {
+        const l = v.x * 0.2126 + v.y * 0.7152 + v.z * 0.0722;
+        const k = 1 - G * (0.5 - 0.15 * night);
+        v.set(THREE.MathUtils.lerp(v.x, l * 0.82, G * 0.7) * k, THREE.MathUtils.lerp(v.y, l * 0.88, G * 0.7) * k, THREE.MathUtils.lerp(v.z, l * 1.0, G * 0.7) * k);
+      }
+      // the cloud deck gives back a little of what light there is: dark, but you can see
+      this.ambientUp.x += 0.035 * G * night; this.ambientUp.y += 0.04 * G * night; this.ambientUp.z += 0.055 * G * night;
+      // lightning lights everything for a moment
+      const b = this.bolt * this.bolt * G;
+      this.ambientUp.x += b * 0.9; this.ambientUp.y += b * 0.95; this.ambientUp.z += b * 1.2;
+    }
     void cameraHeight;
   }
 }

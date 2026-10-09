@@ -13,7 +13,9 @@ import { BlockHighlight, Debris, Sprites, Tracers } from '../gfx/effects.js';
 import { BlockItemMaterials, blockItemGeometry } from '../gfx/blockItem.js';
 import { makePropMaterial } from '../gfx/propMaterial.js';
 import { Drops } from './drops.js';
+import { Enemies } from './enemies.js';
 import { HUD } from '../ui/hud.js';
+import { Crafting } from '../ui/crafting.js';
 import { AvatarModel } from '../entities/avatar/model.js';
 import { PRESETS } from '../entities/avatar/looks.js';
 import { zombieLook } from '../entities/avatar/zombie.js';
@@ -21,12 +23,20 @@ import { skeletonLook } from '../entities/avatar/skeleton.js';
 
 const testParams = new URLSearchParams(location.search);
 
+// when the grace period ends: late on the first afternoon
+const GRACE_ENDS = 0.62;
+
 const _v = new THREE.Vector3(), _f = new THREE.Vector3();
 
+// input with nothing pressed (the player stands still while a screen has the controls)
+const IDLE = { move: { x: 0, y: 0 }, look: { x: 0, y: 0 }, wheel: 0, lastDevice: 'keyboard', isHeld: () => false, pressed: () => false, consume: () => false };
+
 export class Game {
-  constructor(app, { seed = 1337, save = null, mode = 'endurance' } = {}) {
+  // attract: the world behind the menus (no player, no HUD, no enemies; a camera drifting by)
+  constructor(app, { seed = 1337, save = null, mode = 'endurance', attract = false } = {}) {
     this.app = app;
     this.mode = mode;
+    this.attract = attract;
     this.seed = save ? save.seed : seed;
     const R = app.renderer;
     this.scene = new THREE.Scene();
@@ -45,8 +55,17 @@ export class Game {
     this.blockMats = new BlockItemMaterials(app.sky.uniforms, app.terrain.uniforms);
     this.drops = new Drops(this.scene, this.world, this.propMat, (b) => this.blockMats.get(b), blockItemGeometry);
     this.hud = new HUD(app.uiRoot, this);
-    this.enemies = null;
+    this.enemies = new Enemies(this);
     this.audio = app.audio;
+    this.look = null;
+    this.playerModel = null;
+    this.preview = null;
+    this.lockFree = false;
+    if (attract) {
+      this.hud.el.style.display = 'none';
+      this.viewModel.hidden = true;
+    }
+    if (testParams.has('play')) window.__game = this;
 
     // progress
     this.stats = { kills: 0, crafted: 0, dug: 0, placed: 0, shots: 0, deaths: 0, maxDistance: 0, days: 1 };
@@ -63,7 +82,11 @@ export class Game {
     this.deathShown = false;
 
     const sky = app.sky;
+    // the grace period: a new world's first day, under the clear alien sky, with nothing
+    // hunting you yet. Late in the afternoon the storm rolls in and the dead start to rise.
+    this.grace = !save && !attract;
     if (save) {
+      this.grace = !!save.grace;
       sky.setTime(save.time, save.day);
       this.inventory.load(save.inventory);
       this.maxDistance = save.maxDistance || 0;
@@ -73,6 +96,11 @@ export class Game {
       this.player.yaw = p.yaw; this.player.pitch = p.pitch;
       this.player.health = p.health ?? 100;
       this.lastDay = save.day;
+    } else if (attract) {
+      // late afternoon under the storm: a low sun through the clouds
+      sky.setTime(0.69, 1);
+      const sp = this.world.gen.spawnPoint();
+      this.player.spawn(sp.x, sp.y, sp.z);
     } else {
       sky.setTime(0.27, 1);
       const sp = this.world.gen.spawnPoint();
@@ -82,7 +110,11 @@ export class Game {
       this.player.pitch = 0.12;
       this.starterKit();
     }
+    sky.setGloom(this.grace ? 0 : 1, true);
+    if (testParams.has('gloom')) sky.setGloom(parseFloat(testParams.get('gloom')), true);
     this.spawnAt = this.world.gen.spawnPoint();
+    // distance is counted from the tower, as in the original (you start about 30 out)
+    this.towerAt = { x: 0.5, z: 0.5 };
     this.player.onStep = (block, sprint) => this.audio?.step(BLOCKS[block]?.sound || 'stone', sprint);
     this.player.onLand = (speed, block) => { if (speed > 6) this.audio?.land(BLOCKS[block]?.sound || 'stone', speed); };
     this.player.onHurt = (n, kind) => { this.hud.hurt(); this.audio?.hurt(kind); if (this.app.vibrate) this.app.vibrate(40); };
@@ -105,17 +137,135 @@ export class Game {
     this.world.dispose();
     this.hud.el.remove();
     this.enemies?.dispose?.();
+    this.crafting?.dispose?.();
+    for (const m of [this.playerModel, this.preview]) if (m) { m.dispose(); m.material.dispose(); m.root.removeFromParent(); }
+  }
+
+  // ---- the player's avatar ---------------------------------------------------------------------
+
+  setLook(look) {
+    this.look = look;
+    if (this.playerModel) { this.playerModel.dispose(); this.playerModel.material.dispose(); this.playerModel.root.removeFromParent(); this.playerModel = null; }
+    this.viewModel.setArmColors?.(look.skin, look.top?.tint);
+  }
+
+  // The avatar on show in the Choose Avatar screen, standing in front of the camera.
+  showPreview(look) {
+    if (this.preview && (!look || this.preview.look !== look)) {
+      this.preview.dispose(); this.preview.material.dispose(); this.preview.root.removeFromParent(); this.preview = null;
+    }
+    if (!look || this.preview) return;
+    this.preview = new AvatarModel(look, this.app.sky.uniforms, this.app.terrain.uniforms);
+    this.preview.play('idle');
+    this.preview.spin = 0;
+    this.scene.add(this.preview.root);
+  }
+
+  updatePreview(dt) {
+    const m = this.preview;
+    if (!m) return;
+    const cam = this.camera;
+    const f = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+    f.y = 0; f.normalize();
+    const right = new THREE.Vector3(-f.z, 0, f.x);
+    m.root.position.copy(cam.position).addScaledVector(f, 2.7).addScaledVector(right, 0.85);
+    m.root.position.y -= 1.12;
+    m.spin += dt * 0.5;
+    m.root.rotation.y = Math.atan2(-f.x, -f.z) + Math.sin(m.spin) * 0.5;
+    m.setLight(1, 0);
+    m.update(dt);
+  }
+
+  // Third person: the avatar walks where the player does.
+  updatePlayerModel(dt) {
+    const p = this.player;
+    const show = this.app.thirdPerson && !p.dead && this.look;
+    if (!show) { if (this.playerModel) this.playerModel.root.visible = false; return; }
+    if (!this.playerModel) {
+      this.playerModel = new AvatarModel(this.look, this.app.sky.uniforms, this.app.terrain.uniforms);
+      this.scene.add(this.playerModel.root);
+    }
+    const m = this.playerModel;
+    m.root.visible = true;
+    m.root.position.copy(p.pos);
+    m.root.rotation.y = p.yaw + Math.PI;
+    const sp = Math.hypot(p.vel.x, p.vel.z);
+    if (!p.onGround && Math.abs(p.vel.y) > 2) m.play('jump', { fade: 0.15, once: true });
+    else if (sp > 5.2) m.play('run', { fade: 0.2, speed: sp / 6 });
+    else if (sp > 0.4) m.play('walk', { fade: 0.2, speed: Math.min(2.4, sp / 1.6) });
+    else m.play('idle', { fade: 0.3 });
+    m.layer.pitch = -p.pitch * 0.5;
+    const L = this.world.lightAt(p.pos.x, p.pos.y + 1.4, p.pos.z);
+    m.setLight(L.sky / 15, L.block / 15);
+    m.update(dt);
+  }
+
+  // ---- crafting -------------------------------------------------------------------------------------
+
+  openCrafting() {
+    if (!this.crafting) this.crafting = new Crafting(this.app.uiRoot, this);
+    this.crafting.open();
+    this.lockFree = true;
+    this.app.input.exitLock();
+    this.audio?.ui?.('open');
+  }
+
+  closedCrafting(quiet = false) {
+    this.lockFree = false;
+    if (quiet) return;
+    this.app.input.requestLock();
+    this.audio?.ui?.('back');
+  }
+
+  // ---- the attract mode ---------------------------------------------------------------------------
+
+  updateAttract(dt) {
+    const app = this.app, sky = app.sky, cam = this.camera;
+    sky.advance(dt * 0.4);
+    const base = this.world.gen.towerBase();
+    this.orbit = (this.orbit ?? 0) + dt * 0.045;
+    const sway = Math.sin(this.orbit);
+    // south of the tower, looking north past it to Ember; the menus sit on the left
+    const cx = 15 + sway * 5, cz = -36 + Math.cos(this.orbit * 0.7) * 3;
+    cam.position.set(cx, base + 9 + Math.sin(this.orbit * 1.3) * 1.2, cz);
+    cam.rotation.set(0.16 + Math.sin(this.orbit * 0.8) * 0.03, Math.PI - 0.1 + sway * 0.06, 0, 'YXZ');
+    if (cam.fov !== app.settings.fov) { cam.fov = app.settings.fov; cam.updateProjectionMatrix(); }
+    cam.updateMatrixWorld();
+    this.world.update(cx, cz);
+    this.world.flushUrgent();
+    if (!this.ready && this.world.readiness(cx, cz, 2) >= 1 && this.world.readiness(0, 0, 2) >= 1) this.ready = true;
+    this.light = new THREE.Vector2(1, 0);
+    this.blockMats.setLight(this.light);
+    this.propMat.uniforms.uObjLight.value.copy(this.light);
+    this.sprites.update(dt);
+    this.viewModel.hidden = true;
+    this.viewModel.update(dt, { camera: cam, yaw: 0, pitch: 0, bob: 0, bobPhase: 0, ads: false, sprinting: false, light: this.light, toTower: 0 });
+    this.updatePreview(dt);
   }
 
   // ---- the frame --------------------------------------------------------------------------
 
   update(dt, input) {
+    if (this.attract) { this.updateAttract(dt); return; }
     const app = this.app, sky = app.sky, p = this.player;
     this.time += dt;
     const playing = !this.paused && !app.menuOpen;
 
-    // the clock
+    // the clock, and the endless night of the deep Edge and Hell on Earth
     if (playing && this.ready) sky.advance(dt);
+    this.nightT = (this.nightT || 0) - dt;
+    if (this.nightT <= 0) {
+      this.nightT = 0.25;
+      const gen = this.world.gen;
+      sky.endless = gen.endlessNight(p.pos.x, p.pos.z);
+      sky.lavaGlow = gen.w[6];
+    }
+    if (this.grace && (sky.day > 1 || sky.time > GRACE_ENDS)) {
+      this.grace = false;
+      sky.setGloom(1, false);
+      this.hud.message('The sky is turning...');
+      this.audio?.storm?.();
+    }
     if (sky.day !== this.lastDay) {
       this.lastDay = sky.day;
       this.stats.days = Math.max(this.stats.days, sky.day);
@@ -123,10 +273,18 @@ export class Game {
       this.audio?.dawn();
     }
 
-    // the player
+    // the player (standing still while the crafting screen is up; the world goes on)
+    const crafting = this.crafting?.isOpen;
     if (playing && this.ready && !p.dead) {
-      p.update(dt, input, true);
-      this.handleItems(dt, input);
+      if (crafting) {
+        p.update(dt, IDLE, false);
+        this.crafting.update(dt, input);
+      } else {
+        if (input.consume('inventory')) this.openCrafting();
+        if (input.consume('view')) app.thirdPerson = !app.thirdPerson;
+        p.update(dt, input, true);
+        this.handleItems(dt, input);
+      }
     }
     if (p.dead && !this.deathShown) this.onDeath();
     if (p.dead && this.deathShown && (input.consume('jump') || input.consume('accept') || input.consume('primary'))) this.respawn();
@@ -139,6 +297,14 @@ export class Game {
     cam.position.copy(eye);
     const shake = p.hurtTimer > 0 ? p.hurtTimer * 0.03 : 0;
     cam.rotation.set(p.pitch + (Math.random() - 0.5) * shake, p.yaw + (Math.random() - 0.5) * shake, Math.cos(p.bobPhase) * 0.004 * bob, 'YXZ');
+    if (app.thirdPerson && !p.dead) {
+      // behind the shoulder, pulled in short of any wall
+      const back = p.forward(_v).negate();
+      const hit = this.world.raycast(eye.x, eye.y, eye.z, back.x, back.y, back.z, 3.6, (id) => SOLID[id] === 1);
+      const d = Math.max(0.3, (hit ? hit.dist : 3.6) - 0.25);
+      cam.position.addScaledVector(back, d);
+      cam.position.y += 0.25;
+    }
     const fov = app.settings.fov * (p.sprinting ? 1.06 : 1) / (this.viewModel.ads > 0.5 && this.viewModel.info.scope ? ITEMS[this.inventory.held?.id]?.zoom || 1 : 1 + this.viewModel.ads * 0.12);
     cam.fov += (fov - cam.fov) * Math.min(1, dt * 10);
     cam.updateProjectionMatrix();
@@ -161,6 +327,8 @@ export class Game {
     this.tracers.update(dt);
     for (const got of this.drops.update(dt, p, this.inventory)) this.audio?.pickup(got.id);
     this.enemies?.update(dt, playing && this.ready);
+    this.updatePlayerModel(dt);
+    this.updatePreview(dt);
     if (this.testAvatars) for (const m of this.testAvatars) {
       m.update(dt);
       const L = this.world.lightAt(m.root.position.x, m.root.position.y + 1.4, m.root.position.z);
@@ -170,7 +338,7 @@ export class Game {
     // the view model
     const held = this.inventory.held;
     this.viewModel.setItem(held ? held.id : null);
-    const toTower = Math.atan2(this.spawnAt.x - p.pos.x, this.spawnAt.z - p.pos.z) - p.yaw + Math.PI;
+    const toTower = Math.atan2(this.towerAt.x - p.pos.x, this.towerAt.z - p.pos.z) - p.yaw + Math.PI;
     this.viewModel.update(dt, {
       camera: cam, yaw: p.yaw, pitch: p.pitch, bob: bob, bobPhase: p.bobPhase,
       ads: this.ads && !p.sprinting, sprinting: p.sprinting && !this.viewModel.swinging, light: this.light, toTower,
@@ -178,7 +346,7 @@ export class Game {
     this.viewModel.hidden = app.thirdPerson || p.dead;
 
     // distance from the tower
-    const dist = Math.floor(Math.hypot(p.pos.x - this.spawnAt.x, p.pos.z - this.spawnAt.z));
+    const dist = Math.floor(Math.hypot(p.pos.x - this.towerAt.x, p.pos.z - this.towerAt.z));
     this.distance = dist;
     if (dist > this.maxDistance && !p.dead) { this.maxDistance = dist; this.stats.maxDistance = dist; }
     app.awards?.check(this);
@@ -199,6 +367,18 @@ export class Game {
   onReady() {
     this.ready = true;
     if (testParams.has('avatars') && !this.testAvatars) this.spawnTestAvatars();
+    // a crowd to test against: horde=N zombies, skel=N skeletons, round the player at hdist
+    for (const [param, kind] of [['horde', 'zombie'], ['skel', 'skeleton']]) {
+      const n = parseInt(testParams.get(param) || '0', 10);
+      const r = parseFloat(testParams.get('hdist') || '9');
+      for (let i = 0; i < n; i++) {
+        const off = (i - (n - 1) / 2) * 1.4, yaw = this.player.yaw;
+        const x = this.player.pos.x - Math.sin(yaw) * r + off * Math.cos(yaw);
+        const z = this.player.pos.z - Math.cos(yaw) * r - off * Math.sin(yaw);
+        const y = this.world.surfaceY(x, z) + 1.001;
+        this.enemies.spawn(kind, x, y, z, { look: 1 + (i % 8), dayWalker: true });
+      }
+    }
     // make sure the player is standing on the ground, not inside it
     const p = this.player;
     for (let i = 0; i < 120 && p.collides(p.pos.x, p.pos.y, p.pos.z); i++) p.pos.y += 1;
@@ -466,6 +646,7 @@ export class Game {
       player: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, pitch: p.pitch, health: p.health },
       inventory: this.inventory.serialize(),
       maxDistance: this.maxDistance,
+      grace: this.grace,
       stats: this.stats,
       edits: this.world.serializeEdits(),
       savedAt: Date.now(),

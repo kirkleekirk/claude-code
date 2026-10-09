@@ -290,7 +290,7 @@ function rifle(mat) {
 // ---- small things ----------------------------------------------------------------------------
 
 function lump(color, metal, seed, size = 0.05, rough = 0.3) {
-  const g = new THREE.IcosahedronGeometry(size, 1).toNonIndexed();
+  const g = new THREE.IcosahedronGeometry(size, 1);
   const p = g.attributes.position;
   let h = seed * 9301 + 49297;
   const rnd = () => ((h = (h * 9301 + 49297) % 233280) / 233280);
@@ -313,7 +313,7 @@ function ingot(color, metal) {
 }
 
 function gem() {
-  const g = new THREE.OctahedronGeometry(0.045, 0).toNonIndexed();
+  const g = new THREE.OctahedronGeometry(0.045, 0);
   g.scale(1, 1.25, 1);
   g.computeVertexNormals();
   return { geo: merge([paint(g, 0xa8f0f8, 0.95, 0.15)]), info: {} };

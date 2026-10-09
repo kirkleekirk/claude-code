@@ -103,6 +103,7 @@ uniform vec3 uPlanetDir;
 uniform vec3 uPlanetE;
 uniform float uViewH;
 uniform vec3 uAirglow;
+uniform float uGloom;
 varying vec2 vUv;
 
 vec3 trans(float r, float mu) { return texture2D(uTrans, transUV(r, mu)).rgb; }
@@ -156,6 +157,15 @@ void main() {
     tPrev = t;
   }
   vec3 col = sumS * uSunE + sumP * uPlanetE + airglow * uAirglow;
+  // the dead's weather, once the grace is over: a dark, grey sky, almost black overhead and a
+  // dull grey low down, with the sun's glow burning through near it
+  if (uGloom > 0.0) {
+    float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
+    float k = mix(0.26, 0.1, smoothstep(0.0, 0.6, dir.y));
+    vec3 grey = vec3(lum) * vec3(0.8, 0.86, 1.0) * k;
+    vec3 glow = col * pow(max(cosS, 0.0), 6.0) * 0.55;
+    col = mix(col, grey + glow, uGloom);
+  }
   if (ground) col *= 0.5;
   gl_FragColor = vec4(col, 1.0);
 }
@@ -192,6 +202,7 @@ export class Atmosphere {
       uPlanetE: { value: new THREE.Vector3(0, 0, 0) },
       uViewH: { value: ATMO.viewH },
       uAirglow: { value: new THREE.Vector3(0, 0, 0) },
+      uGloom: { value: 0 },
     };
     this.viewMat = new THREE.ShaderMaterial({ uniforms: this.viewUniforms, vertexShader: VS, fragmentShader: VIEW_FS, depthTest: false, depthWrite: false });
     this.quad = new THREE.Mesh(tri, this.transMat);
@@ -210,8 +221,9 @@ export class Atmosphere {
     r.setRenderTarget(prev);
   }
 
-  renderView(sunDir, sunE, planetDir, planetE, airglow) {
+  renderView(sunDir, sunE, planetDir, planetE, airglow, gloom = 0) {
     const u = this.viewUniforms;
+    u.uGloom.value = gloom;
     u.uSunDir.value.copy(sunDir);
     u.uSunE.value.copy(sunE);
     u.uPlanetDir.value.copy(planetDir);
