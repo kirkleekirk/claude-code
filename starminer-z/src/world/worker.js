@@ -11,6 +11,7 @@ self.onmessage = (e) => {
   try {
     if (m.type === 'init') {
       gen = new WorldGen(m.seed);
+      self.postMessage({ type: 'ready' });
       return;
     }
     if (m.type === 'gen') {

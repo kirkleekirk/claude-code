@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "build:artifact": "node tools/build-artifact.mjs",
     "build:avatar": "node tools/avatar/build-avatar.mjs",
-    "test": "node tools/test-world.mjs"
+    "test": "node tools/test-world.mjs",
+    "build:download": "node tools/build-download.mjs"
   },
   "dependencies": {
     "three": "0.169.0"

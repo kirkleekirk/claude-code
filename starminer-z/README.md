@@ -53,8 +53,13 @@ npm run dev             # http://localhost:5173 (add ?play to skip the menus)
 npm test                # world generation, meshing and lighting checks
 npm run build           # dist/
 npm run build:artifact  # one self-contained page: dist-artifact/starminer-z.html
+npm run build:download  # one file to open straight from disk: dist-download/starminer-z.html
 npm run build:avatar -- <path to XNAGameStudio/Samples>   # rebuilds src/assets/avatarData.js
 ```
+
+A page opened from disk can't fetch the files beside it, so the download build packs
+whatever is in `local-assets/` into the file itself; that copy is yours alone and isn't for
+passing round.
 
 Test helpers: `tools/shoot.mjs` (screenshots in headless Chromium), `tools/flow.mjs` (walks the
 menus with key presses), `tools/sim.mjs` (runs the game and reports what the enemies do),

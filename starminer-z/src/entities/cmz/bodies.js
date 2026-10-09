@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { loadGltfJson } from './gltf.js';
+import { fileFetch, fileUrl } from '../../core/files.js';
 import { GLSL_SKY_COMMON } from '../../gfx/sky.js';
 import { GLSL_LIGHTING } from '../../gfx/terrainMaterial.js';
 
@@ -87,7 +88,7 @@ export function loadCmzBodies() {
 
 async function load() {
   try {
-    const r = await fetch(BASE + 'index.json');
+    const r = await fileFetch(BASE + 'index.json');
     if (!r.ok) return false;
     const idx = await r.json();
     const models = {};
@@ -103,7 +104,7 @@ async function load() {
     }));
     for (const m of Object.values(models)) if (!m.clips.size && m.info.clipsFrom) m.clips = models[m.info.clipsFrom].clips;
     const tl = new THREE.TextureLoader();
-    const skins = await Promise.all(idx.textures.map((t) => tl.loadAsync(BASE + t.file).then((tex) => {
+    const skins = await Promise.all(idx.textures.map((t) => tl.loadAsync(fileUrl(BASE + t.file)).then((tex) => {
       tex.flipY = false;
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.anisotropy = 4;

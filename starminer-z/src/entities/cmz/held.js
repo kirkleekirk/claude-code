@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import { loadGltfJson } from './gltf.js';
+import { fileFetch } from '../../core/files.js';
 import { ITEMS } from '../../items/items.js';
 import { itemModel } from '../../items/models.js';
 import { makePropMaterial, paint } from '../../gfx/propMaterial.js';
@@ -57,7 +58,7 @@ export function loadCmzItems() {
 
 async function load() {
   try {
-    const r = await fetch(BASE + 'index.json');
+    const r = await fileFetch(BASE + 'index.json');
     if (!r.ok) return false;
     const idx = await r.json();
     const models = {};

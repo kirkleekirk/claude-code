@@ -7,6 +7,7 @@
 
 import * as THREE from 'three';
 import { avatarAssets } from '../avatar/assets.js';
+import { fileFetch } from '../../core/files.js';
 
 const BASE = 'local-assets/avatar/';
 
@@ -233,7 +234,7 @@ const b64 = (s) => {
 
 async function load() {
   try {
-    const r = await fetch(BASE + 'clips.json');
+    const r = await fileFetch(BASE + 'clips.json');
     if (!r.ok) return false;
     const d = await r.json();
     const rot = new Int16Array(b64(d.rot)), pos = new Float32Array(b64(d.pos));

@@ -14,6 +14,7 @@
 // every method is safe to call before then.
 
 import { B } from '../world/blocks.js';
+import { fileFetch } from './files.js';
 
 const BASE = 'local-assets/audio/';
 const dB = (v) => Math.pow(10, (v || 0) / 20);
@@ -113,7 +114,7 @@ export class Audio {
   // songs only when they're wanted.
   async load() {
     let idx = null;
-    try { const r = await fetch(BASE + 'index.json'); if (r.ok) idx = await r.json(); } catch { idx = null; }
+    try { const r = await fileFetch(BASE + 'index.json'); if (r.ok) idx = await r.json(); } catch { idx = null; }
     if (!idx || !idx.cues) return false;
     this.cues = idx.cues;
     this.banks = idx.banks;
@@ -147,7 +148,7 @@ export class Audio {
     if (!url || !this.ctx) return Promise.resolve(null);
     let p = this.loads.get(url);
     if (!p) {
-      p = fetch(url).then((r) => (r.ok ? r.arrayBuffer() : null)).then((d) => (d ? decode(this.ctx, d) : null)).catch(() => null)
+      p = fileFetch(url).then((r) => (r.ok ? r.arrayBuffer() : null)).then((d) => (d ? decode(this.ctx, d) : null)).catch(() => null)
         .then((b) => { if (b) { b = this.trim(b, this.entry(url)); this.buffers.set(url, b); } return b; });
       this.loads.set(url, p);
     }

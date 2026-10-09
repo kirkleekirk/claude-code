@@ -35,11 +35,13 @@ export class World {
     this.stats = { meshMs: 0, meshes: 0 };
     this.onColumnMeshed = null;
     const n = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 1));
+    this.workersAlive = false;
+    this.workersSince = performance.now();
     try {
       for (let i = 0; i < n; i++) {
         const w = new WorldWorker();
         w.onmessage = (e) => this.onMessage(e.data);
-        w.onerror = (e) => console.error('world worker error', e.message);
+        w.onerror = (e) => { console.error('world worker error', e.message); this.workerFailed(w); };
         w.postMessage({ type: 'init', seed });
         w.busy = 0;
         this.workers.push(w);
@@ -47,7 +49,31 @@ export class World {
     } catch (err) {
       // no workers (a locked-down frame): do the work here, a little each frame
       console.warn('world workers unavailable, generating on the main thread', err);
+      for (const w of this.workers) w.terminate();
       this.workers.length = 0;
+      this.localMesher = new Mesher();
+    }
+  }
+
+  // A worker that couldn't start (some browsers refuse one to a page opened from disk): its
+  // work goes back in the queue, and with none left the world is made here, a little each frame.
+  workerFailed(w) {
+    if (!this.workers.includes(w)) return;
+    w.terminate();
+    this.workers = this.workers.filter((x) => x !== w);
+    for (const [id, job] of this.jobs) {
+      if (job.w !== w) continue;
+      this.jobs.delete(id);
+      if (job.c.state === 'gen') {
+        this.genInFlight--;
+        if (this.columns.get(job.c.key) === job.c) this.columns.delete(job.c.key);
+      } else {
+        this.meshInFlight--;
+        job.c.meshing = false;
+      }
+    }
+    if (!this.workers.length && !this.localMesher) {
+      console.warn('world workers unavailable, generating on the main thread');
       this.localMesher = new Mesher();
     }
   }
@@ -64,6 +90,10 @@ export class World {
 
   update(px, pz, budgetMs = 4) {
     this.lastX = px; this.lastZ = pz;
+    // workers that never answer at all are as good as failed
+    if (this.workers.length && !this.workersAlive && performance.now() - this.workersSince > 8000) {
+      for (const w of [...this.workers]) this.workerFailed(w);
+    }
     const cx = Math.floor(px / CHUNK), cz = Math.floor(pz / CHUNK);
     this.center.cx = cx; this.center.cz = cz;
     const R = this.radius;
@@ -171,6 +201,8 @@ export class World {
   }
 
   onMessage(m) {
+    this.workersAlive = true;
+    if (m.type === 'ready') return;
     const job = this.jobs.get(m.id);
     if (!job) return;
     this.jobs.delete(m.id);

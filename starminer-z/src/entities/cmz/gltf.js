@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { fileFetch } from '../../core/files.js';
 
 function bytes(uri) {
   const s = atob(uri.slice(uri.indexOf(',') + 1));
@@ -41,7 +42,7 @@ async function texture(uri) {
 }
 
 export async function loadGltfJson(url) {
-  const r = await fetch(url);
+  const r = await fileFetch(url);
   if (!r.ok) throw new Error(`${url}: ${r.status}`);
   const doc = await r.json();
   const buf = doc.buffers[0];
