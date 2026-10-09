@@ -272,7 +272,9 @@ export class Game {
     cam.updateMatrixWorld();
     this.world.update(cx, cz);
     this.world.flushUrgent();
-    if (!this.ready && this.world.readiness(cx, cz, 2) >= 1 && this.world.readiness(0, 0, 2) >= 1) this.ready = true;
+    // the tower too, as far round it as the view reaches from here (at the shortest view
+    // distance the far side of a wider patch is never drawn, so it would never be ready)
+    if (!this.ready && this.world.readiness(cx, cz, 2) >= 1 && this.world.readiness(0, 0, Math.min(2, this.world.radius - 3)) >= 1) this.ready = true;
     this.light = new THREE.Vector2(1, 0);
     this.blockMats.setLight(this.light);
     this.propMat.uniforms.uObjLight.value.copy(this.light);
