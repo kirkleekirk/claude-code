@@ -202,6 +202,24 @@ def export(name, x, out, with_clips=True):
             'height': [round(min(heights), 3), round(max(heights), 3)], 'bindError': round(err, 5),
             'clipVsBindTranslation': round(max(offs), 4) if offs else None, 'bytes': os.path.getsize(os.path.join(out, f'{name}.glb'))}
 
+def embed(out, index):
+    # Each .glb as a .gltf.json: the same glTF, its binary inline as base64. Web hosts that
+    # won't serve .glb serve .json, and GLTFLoader reads either.
+    import base64
+    for m in index['models'].values():
+        if not m['file'].endswith('.glb'): continue
+        src = os.path.join(out, m['file'])
+        d = open(src, 'rb').read()
+        jl = struct.unpack_from('<I', d, 12)[0]
+        doc = json.loads(d[20:20 + jl])
+        p = 20 + jl
+        bl = struct.unpack_from('<I', d, p)[0]
+        doc['buffers'][0]['uri'] = 'data:application/octet-stream;base64,' + base64.b64encode(d[p + 8:p + 8 + bl]).decode()
+        m['file'] = m['file'][:-4] + '.gltf.json'
+        json.dump(doc, open(os.path.join(out, m['file']), 'w'), separators=(',', ':'))
+        m['bytes'] = os.path.getsize(os.path.join(out, m['file']))
+        os.remove(src)
+
 def main(content, out):
     os.makedirs(out, exist_ok=True)
     index = {'models': {}, 'textures': []}
@@ -224,7 +242,14 @@ def main(content, out):
         cut = sum(1 for i in range(3, len(rgba), 4) if rgba[i] < 128)
         index['textures'].append({'file': fn, 'w': t['w'], 'h': t['h'], 'transparentPixels': cut})
     print('textures', [(t['file'], t['transparentPixels']) for t in index['textures']])
+    embed(out, index)
     json.dump(index, open(os.path.join(out, 'index.json'), 'w'), indent=1)
 
 if __name__ == '__main__':
-    main(sys.argv[1], sys.argv[2])
+    if sys.argv[1] == 'embed':
+        # turn an earlier rip's .glb files into .gltf.json
+        idx = json.load(open(os.path.join(sys.argv[2], 'index.json')))
+        embed(sys.argv[2], idx)
+        json.dump(idx, open(os.path.join(sys.argv[2], 'index.json'), 'w'), indent=1)
+    else:
+        main(sys.argv[1], sys.argv[2])
