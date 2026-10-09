@@ -5,8 +5,8 @@
 // the dead are built on the avatar rig instead (see ../enemy.js).
 
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { loadGltfJson } from './gltf.js';
 import { GLSL_SKY_COMMON } from '../../gfx/sky.js';
 import { GLSL_LIGHTING } from '../../gfx/terrainMaterial.js';
 
@@ -90,10 +90,9 @@ async function load() {
     const r = await fetch(BASE + 'index.json');
     if (!r.ok) return false;
     const idx = await r.json();
-    const gl = new GLTFLoader();
     const models = {};
     await Promise.all(Object.entries(idx.models).map(async ([name, info]) => {
-      const g = await gl.loadAsync(BASE + info.file);
+      const g = await loadGltfJson(BASE + info.file);
       g.scene.traverse((o) => {
         if (!o.isSkinnedMesh) return;
         // the clips swing the bodies well outside their bind pose (climbing out of the ground,

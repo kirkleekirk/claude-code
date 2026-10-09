@@ -193,6 +193,8 @@ export class Menus {
           <p>A fan remake in the spirit of CastleMiner Z (DigitalDNA Games, 2011), on an alien moon under the giant planet Ember. Not affiliated with or endorsed by DigitalDNA Games or Microsoft.</p>
           <h3>Avatars</h3>
           <p>Character rig, avatar meshes, clothing, faces and animations from the Avatar Animation Pack for XNA Game Studio 4.0 by Microsoft Corporation, used under the Microsoft Permissive License (Ms-PL).</p>
+          <h3>From your copy of CastleMiner Z</h3>
+          <p>${this.ripped()}</p>
           <h3>Built with</h3>
           <p>three.js (MIT). Fonts: Archivo Black and Open Sans (SIL Open Font License).</p>
         </div>`,
@@ -201,6 +203,16 @@ export class Menus {
       case 'loading': return { id, loading: arg || 'Please Wait...', small: false };
       default: return null;
     }
+  }
+
+  // which of the original's own files this copy found (they come from the player's own game)
+  ripped() {
+    const app = this.app, have = [];
+    if (app.audio?.cues) have.push('its sound and music');
+    if (app.cmzBodies) have.push('its zombies and skeletons');
+    if (app.cmzPlayer) have.push('its avatar animations and the models of what you hold');
+    if (!have.length) return 'None found, so the game is silent, the dead are built on the avatar rig and what you hold is drawn from parts.';
+    return `In use: ${have.join('; ')}.`;
   }
 
   choice(label, values, get, set, fmt = String) {

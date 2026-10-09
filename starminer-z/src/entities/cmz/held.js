@@ -4,7 +4,7 @@
 // InventoryItemClass.CreateEntity sets one there, with the clips that go with it.
 
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { loadGltfJson } from './gltf.js';
 import { ITEMS } from '../../items/items.js';
 import { itemModel } from '../../items/models.js';
 import { makePropMaterial, paint } from '../../gfx/propMaterial.js';
@@ -60,10 +60,9 @@ async function load() {
     const r = await fetch(BASE + 'index.json');
     if (!r.ok) return false;
     const idx = await r.json();
-    const gl = new GLTFLoader();
     const models = {};
     await Promise.all(Object.entries(idx).map(async ([name, info]) => {
-      const g = await gl.loadAsync(BASE + info.file);
+      const g = await loadGltfJson(BASE + info.file);
       models[name] = { scene: g.scene, info };
     }));
     return { models };
