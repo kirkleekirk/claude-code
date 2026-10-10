@@ -222,7 +222,7 @@ export class Ghost {
     this.root.position.copy(P);
     this.root.rotation.y = this.yaw;
     // the growl that never stops while they chase someone
-    if (!this.dead && /walk|run/.test(this.clipName) && !this.growl?.playing) this.growl = g.audio?.growl?.(this.kind === 'zombie' ? 'zombie' : 'skeleton', P) ?? null;
+    if (!this.dead && /walk|run|MoveLoop/.test(this.clipName) && !this.growl?.playing) this.growl = g.audio?.growl?.(this.kind, P) ?? null;
     if (this.growl) g.audio?.move?.(this.growl, P);
     if (!this.root.visible) return;
     this.animAcc += dt;

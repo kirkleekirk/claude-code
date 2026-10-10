@@ -154,3 +154,44 @@ export const smoothstep = (a, b, x) => {
   const t = clamp((x - a) / (b - a), 0, 1);
   return t * t * (3 - 2 * t);
 };
+
+// Ken Perlin's improved gradient noise in 2D, roughly in [-1, 1]. Its values bunch near zero
+// far more than simplex noise's do (above 0.5 over about 2% of the plane, where simplex is over
+// it about 16% of the time), which is what the original's PerlinNoise gives its crash sites.
+export class Perlin {
+  constructor(seed = 1) {
+    const rand = mulberry32(seed);
+    const b = new Uint8Array(256);
+    for (let i = 0; i < 256; i++) b[i] = i;
+    for (let i = 255; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      const t = b[i]; b[i] = b[j]; b[j] = t;
+    }
+    this.p = new Uint8Array(512);
+    for (let i = 0; i < 512; i++) this.p[i] = b[i & 255];
+  }
+
+  n2(x, y) {
+    const p = this.p;
+    const fx = Math.floor(x), fy = Math.floor(y);
+    const X = fx & 255, Y = fy & 255;
+    x -= fx; y -= fy;
+    const u = x * x * x * (x * (x * 6 - 15) + 10), v = y * y * y * (y * (y * 6 - 15) + 10);
+    const A = p[X] + Y, B = p[X + 1] + Y;
+    const g = (h, gx, gy) => {
+      switch (h & 15) {
+        case 0: case 12: return gx + gy;
+        case 1: case 14: return -gx + gy;
+        case 2: return gx - gy;
+        case 3: return -gx - gy;
+        case 4: case 8: return gx;
+        case 5: case 9: return -gx;
+        case 6: case 10: case 13: return gy;
+        default: return -gy;
+      }
+    };
+    const a = g(p[p[A]], x, y) + u * (g(p[p[B]], x - 1, y) - g(p[p[A]], x, y));
+    const c = g(p[p[A + 1]], x, y - 1) + u * (g(p[p[B + 1]], x - 1, y - 1) - g(p[p[A + 1]], x, y - 1));
+    return a + v * (c - a);
+  }
+}

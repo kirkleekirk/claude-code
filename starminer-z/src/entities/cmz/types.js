@@ -1,11 +1,12 @@
 // CastleMiner Z's table of the dead (AI.EnemyType.Init), and its rules for which of them come
-// for you where (FindEnemy, GetZombie, GetAbovegroundEnemy, GetBelowgroundEnemy) and how each
-// one is rolled when it's made (CreateInitPackage). Health is the original's own (a starter
+// for you where (FindEnemy, GetZombie; the rest, which keep the Felguard's timer, are in
+// ../../game/enemies.js) and how each one is rolled when it's made (CreateInitPackage). Health is the original's own (a starter
 // pistol round takes 0.3 of it), and so is everything else here.
 //
 // 0-17: zombies, slow and weak to fast and tough, further out. 18-25: skeleton archers, up on
 // the surface at dusk. 26-49: skeletons in the caves, plain ones, swordsmen, then the axemen.
-// (50 and 51, the Hell demon and the space aliens, aren't in this game.)
+// 50: the Felguard, the demon of Hell, met first deep and far out underground. 51: the aliens,
+// round the crash sites.
 
 import { B } from '../../world/blocks.js';
 
@@ -13,7 +14,7 @@ import { B } from '../../world/blocks.js';
 export const DMG = { BLUNT: 1, PIERCING: 2, BLADE: 4, BULLET: 8, SHOTGUN: 16 };
 
 // models (local-assets/models) and skins (their index in its list)
-const MODELS = ['zombie', 'skeleton', 'skeleton_archer', 'skeleton_axes', 'skeleton_sword'];
+const MODELS = ['zombie', 'skeleton', 'skeleton_archer', 'skeleton_axes', 'skeleton_sword', 'felguard', 'alien'];
 
 function zombie(i, skin, hardest, dig) {
   const f = i / 16;
@@ -48,7 +49,13 @@ export const TYPES = [];
   S.forEach(([model, skin, cls], k) => { TYPES[26 + k] = skeleton(26 + k, model, skin, 1, cls); });
   for (let k = 0; k < 8; k++) TYPES[18 + k].health = 1 + 2.5 * k;
   for (let k = 0; k < 24; k++) TYPES[26 + k].health = 1 + 0.9 * k;
+  // the Felguard (FelguardEnemyType: the Demon model, its skin, found in Hell) and the aliens
+  // (AlienEnemyType: their model, the warrior skin, found at the crash sites): EnemyType's
+  // defaults otherwise, 140 and 70 health
+  TYPES[50] = { ...skeleton(50, 5, 12, 2, -1), kind: 'felguard', skeletonClass: undefined, health: 140 };
+  TYPES[51] = { ...skeleton(51, 6, 13, 3, -1), kind: 'alien', skeletonClass: undefined, health: 70 };
 }
+export const FELGUARD = 50, ALIEN = 51;
 
 // what a hit does to each kind: zombies shrug off blunt blows and some of a blade; skeletons
 // let a lot of a piercing hit through, and the shotgun's spread breaks them up; a shot to the
@@ -59,6 +66,12 @@ export function damageMultiplier(T, type, head) {
     if (type & DMG.BLUNT) m *= 0.5;
     else if (type & DMG.BLADE) m *= 0.75;
     if (head) m *= 2.5;
+  } else if (T.kind === 'alien') {
+    // (the aliens shrug off more of a piercing hit, and less of the shotgun breaks them up)
+    if (type & DMG.PIERCING) m *= 0.25;
+    else if (type & DMG.SHOTGUN) m *= 1.25;
+    else if (type & DMG.BLADE) m *= 0.75;
+    if (head) m *= 2;
   } else {
     if (type & DMG.PIERCING) m *= 0.5;
     else if (type & DMG.SHOTGUN) m *= 1.5;
@@ -91,17 +104,6 @@ export function findEnemy(spread, dist, first, last) {
 }
 
 export const getZombie = (dist) => findEnemy(188.888885, dist, 0, 17);
-
-// on the surface: archers in the half light (likelier the further from midnight), else the dead
-export function getAbovegroundEnemy(midnight, dist) {
-  if (Math.random() < Math.pow(1 - midnight, 4)) return findEnemy(425, dist, 18, 25);
-  return getZombie(dist);
-}
-
-// underground: deeper counts as further out
-export function getBelowgroundEnemy(depth, dist) {
-  return findEnemy(141.666672, dist + (depth * 2 * 141.666672) / 50, 26, 49);
-}
 
 // One of a type, rolled: how slow it walks, how fast it runs once it gets going, how soon it
 // does, and how fast it climbs out of the ground (quicker in the dead of night).
@@ -142,7 +144,12 @@ export const ATTACKS = {
   },
 };
 
+// the Felguard's two (FelguardTryAttack) and the aliens' (AlienAttack)
+ATTACKS.felguard = { clips: ['Attack1', 'atack_3'], times: [[0.7], [1.5667]], damage: [0.4, 0.6], range: [1.6, 2.1] };
+ATTACKS.alien = { clips: ['Attack1', 'Attack2'], times: [[0.7], [0.7]], damage: [0.6, 0.8], range: [1.6, 2.1] };
+
 export function attacksFor(T) {
+  if (T.kind === 'felguard' || T.kind === 'alien') return ATTACKS[T.kind];
   return T.kind === 'zombie' ? ATTACKS.zombie : T.skeletonClass === 1 ? ATTACKS.axes : ATTACKS.skeleton;
 }
 

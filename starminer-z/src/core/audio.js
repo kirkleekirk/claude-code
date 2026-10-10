@@ -41,6 +41,9 @@ const gunCues = (it) => [it?.shot || (GUNS[it?.gun] || GUNS.assault)[0], it?.rel
 // the sound a block makes coming out (the original's Player.GetDigSound)
 const DIG = { [B.SAND]: 'Sand', [B.SNOW]: 'Sand', [B.SNOW_GRASS]: 'Sand', [B.LEAVES]: 'leaves' };
 
+// what each of the dead growls while it chases you (ZombieChase.Update, by where it's found)
+const GROWLS = { zombie: 'ZombieGrowl', skeleton: 'Skeleton', archer: 'Skeleton', felguard: 'Felguard', alien: 'Alien' };
+
 // 3D sounds farther off than this aren't started at all
 const HEAR = 64;
 // at most this many of one cue at once (the farthest makes way for a nearer one)
@@ -344,8 +347,9 @@ export class Audio {
 
   // climbing out of the ground
   emerge(pos) { this.play('CreatureUnearth', pos); this.play('ZombieCry', pos); }
-  // the growl (the rattle, for the skeletons) that never stops while they chase you
-  growl(kind, pos) { return this.play(kind === 'skeleton' ? 'Skeleton' : 'ZombieGrowl', pos); }
+  // the growl (the rattle, for the skeletons; the Felguard's and the aliens' own) that never
+  // stops while they chase you
+  growl(kind, pos) { return this.play(GROWLS[kind] || 'Skeleton', pos); }
   enemyDig(pos) { this.play('ZombieDig', pos); }
 
   // ---- the sky, the front end -------------------------------------------------------------

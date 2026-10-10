@@ -657,6 +657,7 @@ export class Game {
           this.dig.key = '';
         } else if (t !== Infinity) {
           this.sprites.emit('dust', hit.x + 0.5 + hit.nx * 0.52, hit.y + 0.5 + hit.ny * 0.52, hit.z + 0.5 + hit.nz * 0.52, { color: BLOCKS[hit.id].color, size: 0.08, life: 0.5, spread: 1.6, gravity: 6, alpha: 0.9 });
+          this.enemies?.noise('swing', hit.id, it);
         }
         wear();
       }
@@ -716,6 +717,8 @@ export class Game {
     this.audio?.breakBlock(hit.id);
     const drop = dropFor(hit.id, tool);
     if (drop) this.drops.spawn(drop, 1, hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
+    // (digging out the crash sites' rock is noise the aliens hear)
+    this.enemies?.noise('dug', hit.id, tool);
     // the other half of a door
     if (isDoor(hit.id)) {
       const oy = DOOR(hit.id).upper ? hit.y - 1 : hit.y + 1;
@@ -831,6 +834,7 @@ export class Game {
       dirs.push(dir.addScaledVector(right, rand(-it.inaccuracy, it.inaccuracy)).addScaledVector(up, rand(-it.inaccuracy, it.inaccuracy)).normalize());
     }
     this.fire(it, eye, muzzle, dirs, true);
+    this.enemies?.noise('shot');
     this.applyRecoil(it.recoil);
     this.spread = Math.min(1.5, this.spread + it.recoil * D2R * 4);
     // online: the others hear it, and see it go

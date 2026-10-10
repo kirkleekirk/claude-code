@@ -12,10 +12,13 @@
 //   World's Edge     3000 – 3400   ore everywhere; the land sinks, with pits into the Underworld
 //   Hell on Earth    3400 – 5000   bloodstone and lava lakes under a black sky
 //
+// Between 300 and 3600 out, the original's crash sites: here and there a crater, an asteroid of
+// space rock in it, Space Goo glowing in the rock, and the ground hollowed out under it.
+//
 // Past Hell a new world begins: the zones again in reverse, back to the Hills at about 9100,
 // and round again. Shared by the workers and the main thread (no DOM, no three.js).
 
-import { Noise, hash2, hash3, mulberry32, clamp, lerp, smoothstep } from '../core/noise.js';
+import { Noise, Perlin, hash2, hash3, mulberry32, clamp, lerp, smoothstep } from '../core/noise.js';
 import { B, CHUNK, HEIGHT, COLUMN_SIZE } from './blocks.js';
 
 export const BIOMES = ['The Hills', 'Floating Islands', 'The Desert', 'The Mountains', 'The Snowfields', "World's Edge", 'Hell on Earth'];
@@ -50,6 +53,7 @@ export class WorldGen {
     this.nO = new Noise(s + 8);
     this.nS = new Noise(s + 9);
     this.nHell = new Noise(s + 10);
+    this.nCrash = new Perlin(s + 11);
     this.w = new Float32Array(7);
     this.spawnY = null;
   }
@@ -104,6 +108,31 @@ export class WorldGen {
     if (zone !== 5) return 0;
     const t = clamp((d - a) / 400, 0, 1);
     return dir > 0 ? t : 1 - t;
+  }
+
+  // How far out a place counts as, the way out: on the way back, where it would be on the way
+  // out through the same zone (the original's world mirrors itself the same way).
+  outward(x, z) {
+    const { i, d } = this.segment(this.ringDistance(x, z));
+    const [a, zone, dir] = SEG[i];
+    if (dir > 0) return d;
+    const b = i + 1 < SEG.length ? SEG[i + 1][0] : CYCLE;
+    const k = SEG.findIndex((g) => g[1] === zone && g[2] > 0);
+    const s0 = SEG[k][0], s1 = SEG[k + 1][0];
+    return s1 - ((d - a) / (b - a)) * (s1 - s0);
+  }
+
+  // A crash site's column, by the original's CrashSiteDepositer: null, or how deep its crater
+  // goes under the ground plane (66), how far its asteroid reaches either side of that, and how
+  // much of the rock is Space Goo (further out, more).
+  crater(x, z) {
+    const d = this.outward(x, z);
+    if (d <= 300 || d >= 3600) return null;
+    const v = this.nCrash.n2(0.004688 * x, 0.004688 * z);
+    if (v <= 0.5) return null;
+    const depth = Math.trunc((v - 0.5) * 7 * 20);
+    const rock = v > 0.55 ? Math.min(depth, Math.trunc((v - 0.55) * 10 * 20)) : 0;
+    return { depth, rock, goo: Math.trunc(clamp(d / 3600, 0, 1) * 10) };
   }
 
   // How dark the sky is kept here: the endless night of the deep Edge and of Hell on Earth.
@@ -243,16 +272,20 @@ export class WorldGen {
       this.fillGround(out, x, z, wx, wz, hi, pick, w, rand);
     }
 
-    // 2. caves, overhangs, Hell's cavern, islands (3D noise sampled on a coarse grid)
+    // 2. the crash sites (before the caves, as the original builds them: its caves go through
+    // the asteroids too)
+    this.crashSites(out, cx, cz);
+
+    // 3. caves, overhangs, Hell's cavern, islands (3D noise sampled on a coarse grid)
     this.carve(out, cx, cz, heights, wAll);
 
-    // 3. ores
+    // 4. ores
     this.ores(out, cx, cz);
 
-    // 4. trees
+    // 5. trees
     this.trees(out, cx, cz);
 
-    // 5. the start tower
+    // 6. the start tower
     if (Math.abs(x0 + 8) < 40 && Math.abs(z0 + 8) < 40) this.tower(out, cx, cz);
 
     return out;
@@ -438,8 +471,8 @@ export class WorldGen {
         if (carved) out[i] = B.AIR;
       }
 
-      // the floating islands
-      if (lw > 0.05) {
+      // the floating islands (none over a crater: what came down took them)
+      if (lw > 0.05 && !this.crater(wx, wz)) {
         const isl = this.island(wx, wz, lw);
         if (isl) {
           for (let y = Math.max(isl.bottom, h + 6); y <= isl.top && y < HEIGHT - 1; y++) {
@@ -451,6 +484,35 @@ export class WorldGen {
         }
       }
       void hw;
+    }
+  }
+
+  // Each crater column, from y = 20 up (the original's local heights are ours): under the
+  // asteroid, ten blocks clear of it, everything goes but bloodstone (and what sits on it); the
+  // asteroid is space rock; above it, nothing, to the sky. With no asteroid (a crater's rim), a
+  // ten-block crust is left over the hollow. Deep in the rock, here and there, Space Goo.
+  crashSites(out, cx, cz) {
+    const x0 = cx * CHUNK, z0 = cz * CHUNK;
+    for (let z = 0; z < CHUNK; z++) for (let x = 0; x < CHUNK; x++) {
+      const wx = x0 + x, wz = z0 + z;
+      const c = this.crater(wx, wz);
+      if (!c) continue;
+      const col = x | (z << 4);
+      const top = 66 - c.depth + c.rock, bottom = 66 - c.depth - c.rock - 10;
+      for (let y = 20; y < 126; y++) {
+        const i = col | (y << 8);
+        if (y < bottom) {
+          if (out[i] !== B.BLOODSTONE && out[col | ((y - 1) << 8)] !== B.BLOODSTONE) out[i] = B.AIR;
+        } else if (c.rock > 0 && y < top) out[i] = B.SPACE_ROCK;
+        else if (y >= top) out[i] = B.AIR;
+        if (out[i] === B.SPACE_ROCK && y < top - 3) {
+          // (the original's IntNoise, at half and full resolution, offset by 777)
+          const ox = wx + 777, oy = y - 64 + 777, oz = wz + 777;
+          const coarse = Math.floor(hash3(Math.trunc(ox / 2), Math.trunc(oy / 2), Math.trunc(oz / 2), this.seed + 1200) * 256);
+          const fine = Math.floor(hash3(ox, oy, oz, this.seed + 1201) * 256);
+          if (coarse + Math.trunc((fine - 128) / 8) > 265 - c.goo) out[i] = B.SLIME;
+        }
+      }
     }
   }
 
@@ -514,6 +576,7 @@ export class WorldGen {
         const tz = gz * G + Math.floor(hash2(gx, gz, this.seed + 502) * (G - 1));
         if (tx * tx + tz * tz < 20 * 20) continue; // the clearing round the tower
         if (tx * tx + (tz - SPAWN_Z) * (tz - SPAWN_Z) < 6 * 6) continue; // and where you start
+        if (this.crater(tx, tz)) continue; // nor in a crater
         this.weights(tx, tz, w);
         let chance = w[0] * 0.5 + w[1] * 0.6;
         // thinner in places so forests have glades

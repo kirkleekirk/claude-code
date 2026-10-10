@@ -13,7 +13,8 @@
 //            (the skeletons rage), and is gone
 //   hit      every hit staggers them; die: they fall, and lie there a few seconds
 //
-// The archers walk up to within 35 m and shoot, five to nine arrows, then give up.
+// The archers walk up to within 35 m and shoot, five to nine arrows, then give up. The Felguard
+// and the aliens come at you as the skeletons do, each with clips of its own.
 //
 // The body is the original's model (./cmz/bodies.js) when the ripped files are there, else one
 // built on the avatar rig standing in for it; either way the clips' timing is the original's.
@@ -41,17 +42,34 @@ const SKELETON_LENGTHS = {
   death5: 2.3, death6: 2.9667, death7: 2.6333, standup: 2.1333, standup2: 3.4667, walk_archer1: 1.3, idle_archer1: 3.3, atack_archer1: 1.6333,
 };
 
+// the Felguard's and the aliens' (their own models' clips)
+const FELGUARD_LENGTHS = { Idle: 3.3, Attack1: 1.6333, atack_3: 2.9667, walk: 1.3, run: 1.1333, death1: 1.3, death2: 5.9667 };
+const ALIEN_LENGTHS = { Jump: 1.3, MoveLoop: 2.6333, Attack1: 1.9667, Attack2: 1.9667, Damage1: 0.6333, Damage2: 0.6333, Death: 2.6333 };
+const LENGTHS_OF = { zombie: LENGTHS, felguard: FELGUARD_LENGTHS, alien: ALIEN_LENGTHS };
+
 // every clip the dead play, numbered the same on every machine (online, a body's clip goes by
 // its number)
-export const CLIP_NAMES = [...new Set([...Object.keys(LENGTHS), ...Object.keys(SKELETON_LENGTHS)])];
+export const CLIP_NAMES = [...new Set([...Object.keys(LENGTHS), ...Object.keys(SKELETON_LENGTHS), ...Object.keys(FELGUARD_LENGTHS), ...Object.keys(ALIEN_LENGTHS)])];
+
+// the clips each kind plays for its states (the original's GetClipName and GetAnimName for
+// each), and its fit of rage
+const r2 = () => randomInt(0, 2);
+const KIND_CLIPS = {
+  zombie: { emerge: () => `arise_${randomInt(0, 4) + 1}`, hit: () => (r2() ? 'hit_reaction3' : 'hit_reaction1'), die: () => `death${randomInt(0, 3) + 1}`, giveUp: 'eat_start', rage: 'enraged' },
+  skeleton: { emerge: () => 'standup', hit: () => `gethit${randomInt(0, 3) + 1}`, die: () => `death${randomInt(0, 7) + 1}`, giveUp: 'enraged', rage: 'enraged' },
+  archer: { emerge: () => (r2() ? 'standup2' : 'standup'), hit: () => `gethit${randomInt(0, 3) + 1}`, die: () => `death${randomInt(0, 7) + 1}`, giveUp: 'enraged', rage: 'enraged' },
+  felguard: { emerge: () => 'Idle', hit: () => 'Idle', die: () => (r2() ? 'death2' : 'death1'), giveUp: 'Idle', rage: 'Attack1' },
+  alien: { emerge: () => 'Jump', hit: () => `Damage${r2() + 1}`, die: () => 'Death', giveUp: 'Jump', rage: 'Attack1' },
+};
 
 // Without the original's bodies: the avatar rig, playing the nearest of its own clips.
 function standIn(name, zombie) {
   if (/^arise|^standup/.test(name)) return 'climb';
-  if (/^run/.test(name)) return 'run';
+  if (/^run|^MoveLoop/.test(name)) return 'run';
   if (/walk/.test(name)) return 'walk';
-  if (/atta?ck/.test(name)) return zombie ? 'swingClub' : 'punch';
-  if (/^death/.test(name)) return 'faint';
+  if (/atta?ck/i.test(name)) return zombie ? 'swingClub' : 'punch';
+  if (/^death/i.test(name)) return 'faint';
+  if (name === 'Jump') return 'jump';
   return 'idle';
 }
 
@@ -61,7 +79,9 @@ class AvatarBody {
     this.model = new AvatarModel(look, game.app.sky.uniforms, game.app.terrain.uniforms, shared);
     this.root = new THREE.Group();
     this.root.add(this.model.root);
-    this.lengths = this.zombie ? LENGTHS : SKELETON_LENGTHS;
+    // (the Felguard stands a head taller than the rest)
+    if (T.kind === 'felguard') this.model.root.scale.setScalar(1.3);
+    this.lengths = LENGTHS_OF[T.kind] || SKELETON_LENGTHS;
     this.name = '';
     this.t = 0;
   }
@@ -152,7 +172,7 @@ export class Enemy {
     this.clip = { name: '', t: 0, dur: 1, speed: 1, loop: false };
     this.state = null;
     this.root.position.copy(this.pos);
-    const S = T.kind === 'zombie' ? ZOMBIE : T.kind === 'archer' ? ARCHER : SKELETON;
+    const S = T.kind === 'zombie' ? ZOMBIE : T.kind === 'archer' ? ARCHER : T.kind === 'skeleton' ? SKELETON : OTHER;
     this.S = S;
     this.change(S.emerge);
   }
@@ -405,11 +425,17 @@ export class Enemy {
 // ---- the states (the original's AI.*: Enter once, then Update every frame) ---------------------
 
 const growlFor = (e) => {
-  if (!e.growl?.playing) e.growl = e.game.audio?.growl?.(e.kind === 'zombie' ? 'zombie' : 'skeleton', e.pos) ?? null;
+  if (!e.growl?.playing) e.growl = e.game.audio?.growl?.(e.kind, e.pos) ?? null;
 };
 
 function startMoveAnimation(e) {
   const s = e.speed;
+  // the aliens scuttle (AlienChase); the Felguard walks, or runs (FelguardChase)
+  if (e.kind === 'alien') { e.playClip('MoveLoop', true); e.setClipSpeed(Math.min(s / 1, 1)); return; }
+  if (e.kind === 'felguard') {
+    if (s < 2.7) { e.playClip('walk', true); e.setClipSpeed(Math.min(s / 1, 1)); } else { e.playClip('run', true); e.setClipSpeed(Math.min(s / 3, 1)); }
+    return;
+  }
   if (s < 2.7) { e.playClip('walk', true); e.setClipSpeed(Math.min(s / 1, 1)); }
   else if (s < 3.7) { e.playClip('walk2', true); e.setClipSpeed(Math.min(s / 1, 1)); }
   else if (s >= 5 && e.T.hasRunFast) { e.playClip('run_fast', true); e.setClipSpeed(Math.min(s / 4, 1)); }
@@ -422,10 +448,8 @@ const EMERGE = {
   enter(e) {
     e.blocking = true;
     e.hittable = false;
-    if (e.kind === 'archer') {
-      e.swingCount = 5 + randomInt(0, 5);
-      e.playClip(randomInt(0, 2) ? 'standup2' : 'standup', false, 0);
-    } else e.playClip(`arise_${randomInt(0, 4) + 1}`, false, 0);
+    if (e.kind === 'archer') e.swingCount = 5 + randomInt(0, 5);
+    e.playClip(KIND_CLIPS[e.kind].emerge(), false, 0);
     e.setClipSpeed(e.pkg.emergeSpeed);
     e.yaw = Math.random() * Math.PI * 2;
     if (e.T.foundIn === 0) {
@@ -474,15 +498,16 @@ const CHASE = {
     v.z = dz * s;
     if (v.x * v.x + v.z * v.z > 0.2) e.yaw = Math.atan2(v.x, v.z);
     if (dist >= 5) {
-      // fallen too far behind: they try digging, and give up from there
+      // fallen too far behind: they try digging, and give up from there (the aliens keep on
+      // out to 40 m)
       if (e.fast) { if (e.timeToIntercept() > 8) e.change(e.S.dig); }
-      else if (dist > 25) e.change(e.S.dig);
+      else if (dist > (e.kind === 'alien' ? 40 : 25)) e.change(e.S.dig);
     }
   },
 };
 
 // swings at the player while they're in reach; a fit of rage now and then
-function attackState(rageClip = 'enraged') {
+function attackState() {
   return {
     name: 'attack',
     enter(e) {
@@ -506,7 +531,7 @@ function attackState(rageClip = 'enraged') {
           e.missCount = randomInt(1, 3);
           e.hitCount = 1;
           e.animIndex = -1;
-          e.playClip(rageClip, false);
+          e.playClip(KIND_CLIPS[e.kind].rage, false);
           return;
         }
         const d = Math.hypot(dx, dz);
@@ -602,7 +627,7 @@ const GIVE_UP = {
   name: 'giveUp',
   enter(e) {
     e.zeroVelocity();
-    e.playClip(e.kind === 'zombie' ? 'eat_start' : 'enraged', false);
+    e.playClip(KIND_CLIPS[e.kind].giveUp, false);
   },
   update(e) { if (e.finished) e.remove(); },
 };
@@ -611,7 +636,7 @@ const HIT = {
   name: 'hit',
   enter(e) {
     e.zeroVelocity();
-    e.playClip(e.kind === 'zombie' ? (randomInt(0, 2) ? 'hit_reaction3' : 'hit_reaction1') : `gethit${randomInt(0, 3) + 1}`, false);
+    e.playClip(KIND_CLIPS[e.kind].hit(), false);
     e.setClipSpeed(e.T.hitSpeed);
   },
   update(e) { if (e.nearEnd) e.change(e.S.chase); },
@@ -625,7 +650,7 @@ const DIE = {
     e.blocking = false;
     e.hittable = false;
     e.dead = true;
-    e.playClip(`death${randomInt(0, e.kind === 'zombie' ? 3 : 7) + 1}`, false);
+    e.playClip(KIND_CLIPS[e.kind].die(), false);
     e.frustration = 5;
     e.setClipSpeed(e.T.dieSpeed);
     if (e.growl) { e.game.audio?.stop?.(e.growl); e.growl = null; }
@@ -716,3 +741,5 @@ const ARCHER_IDLE = {
 const ZOMBIE = { emerge: EMERGE, chase: CHASE, attack: ATTACK, dig: DIG, giveUp: GIVE_UP, hit: HIT, die: DIE };
 const SKELETON = { emerge: CHASE, chase: CHASE, attack: ATTACK, dig: GIVE_UP, giveUp: GIVE_UP, hit: HIT, die: DIE };
 const ARCHER = { emerge: EMERGE, chase: ARCHER_CHASE, attack: ARCHER_ATTACK, dig: GIVE_UP, giveUp: GIVE_UP, hit: HIT, die: DIE };
+// the Felguard and the aliens come out of their own emerge clip, and can't dig either
+const OTHER = { emerge: EMERGE, chase: CHASE, attack: ATTACK, dig: GIVE_UP, giveUp: GIVE_UP, hit: HIT, die: DIE };

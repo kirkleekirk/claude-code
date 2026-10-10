@@ -41,7 +41,14 @@ The zones run in rings out from the tower, as in the original:
 | 3400 - 5000 | Hell on Earth (endless night) |
 
 Then the zones come round again in reverse. Under everything, about forty blocks down, a
-bloodstone roof over the Underworld.
+bloodstone roof over the Underworld. Between 300 and 3600 m out, the later version's crash sites:
+craters, each with an asteroid of space rock in it (Space Goo glowing in the rock, more of it
+further out), the ground hollowed out under their rims.
+
+The later version's dead come too: the aliens round the crash sites (one every 10 to 20 seconds
+near the rock, every 3 to 7 once noise rouses them: digging the rock, shooting inside the
+asteroid), and the Felguard, a demon met first deep and far out underground, five minutes or more
+apart, and once met, anywhere.
 
 Items and crafting are the later CastleMiner Z's, with its own numbers: the bloodstone tier, light
 machine guns, laser guns and swords, rocket launchers, grenades, TNT and C4, crates, doors, the
