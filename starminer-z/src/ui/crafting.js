@@ -17,7 +17,12 @@
 // thing, or on a component goes to its recipe; B (or Y, E, Esc) goes back to the inventory.
 // Shift-click makes as many as you can.
 //
-// The world doesn't stop while either is up.
+// A crate (the original's CrateScreen): its 32 slots in the top half, the backpack and hotbar
+// below, the selector going down through all three and round again. Things move as on the
+// inventory; Y (shift-click) sends a stack across, crate to backpack or back. Online, the slot
+// someone else is on in the same crate can't be touched.
+//
+// The world doesn't stop while any of them is up.
 
 import { Vector3 } from 'three';
 import { ITEMS, RECIPES } from '../items/items.js';
@@ -34,6 +39,8 @@ const TEXT = { x: 169, y: 20 };
 const TO_CRAFT = { x: 169, y: 101 }, DROP = { x: 169, y: 239 }, SPLIT = { x: 494, y: 239 };
 const LIST = { x: 39, y: 184, step: 77 }, INGS = { x: 131, y: 184, step: 77 }, PRESS = { x: 131, y: 151 };
 const TILE = 76, SELECTOR = 68;
+// a crate's slots, and the grid drawn under them (InventoryGrid)
+const BOX = { x: 169, y: 24 }, BOX_GRID = { x: 165, y: 20 };
 
 export const CRAFT_CSS = /* css */ `
 .craft { position: absolute; inset: 0; display: none; pointer-events: auto; z-index: 4; font-family: 'Saira Semi Condensed', 'Saira Condensed', 'Arial Narrow', var(--ui-font); }
@@ -68,7 +75,11 @@ html:not(.cmz-ui) .craft .sel.hold { box-shadow: inset 0 0 0 ${P(4)} #ff2a1a, 0 
 .craft .link { cursor: pointer; pointer-events: auto; }
 .craft .link:hover { color: #ffe9a0; }
 .craft .page { display: none; }
-.craft.inv .page.inv, .craft.cr .page.cr { display: block; }
+.craft.inv .page.inv, .craft.cr .page.cr, .craft.box .page.box { display: block; }
+.craft.box .name { display: none; }
+.craft .bgrid { position: absolute; width: ${P(491)}; height: ${P(254)}; pointer-events: none; }
+html:not(.cmz-ui) .craft .bgrid { display: none; }
+.craft .cell.locked::after { content: ''; position: absolute; inset: ${P(3)}; background: rgba(120, 0, 0, 0.45); pointer-events: none; }
 .craft .help { position: absolute; left: 0; right: 0; top: calc(100% + ${P(8)}); display: flex; justify-content: center; flex-wrap: wrap; gap: ${P(4)} ${P(22)}; font-family: var(--ui-font); font-size: ${P(14)}; font-weight: 700; color: #fff; text-shadow: 0 ${P(1)} ${P(2)} #000; }
 .craft .help span { display: inline-flex; gap: ${P(6)}; align-items: center; }
 .craft .close { position: absolute; right: ${P(10)}; top: ${P(8)}; width: ${P(30)}; height: ${P(30)}; display: grid; place-items: center; color: #e8ece8; font-size: ${P(20)}; font-weight: 700; cursor: pointer; font-family: var(--ui-font); text-shadow: 0 0 ${P(3)} #000; }
@@ -118,6 +129,11 @@ export class Crafting {
           <div class="t link drop" style="left:${P(DROP.x)};top:${P(DROP.y)}"><div class="big"><span class="btn x">X</span> Drop Item</div></div>
           <div class="t split" style="left:${P(SPLIT.x)};top:${P(SPLIT.y)}"><div class="big">Split Items <span class="btn rs">RS</span></div></div>
         </div>
+        <div class="page box">
+          <div class="frame" style="left:${P(BOX.x - 8)};top:${P(BOX.y - 8)};width:${P(CELL * 8 + 8)};height:${P(CELL * 4 + 8)}"></div>
+          <div class="bgrid ${SP('InventoryGrid')}" style="left:${P(BOX_GRID.x)};top:${P(BOX_GRID.y)}"></div>
+          <div class="cgrid grid"></div>
+        </div>
         <div class="page cr">
           <div class="t" style="left:${P(PRESS.x)};top:${P(PRESS.y - 28)}"><div class="big">Press <span class="btn a">A</span> To Create Item</div><div class="big">Components: </div></div>
           <div class="list"></div>
@@ -146,24 +162,36 @@ export class Crafting {
       grid.appendChild(c);
       this.cells[i] = c;
     }
+    // a crate's cells (data-box)
+    const cgrid = this.$('.cgrid');
+    this.boxCells = [];
+    for (let i = 0; i < 32; i++) {
+      const c = document.createElement('div');
+      c.className = 'cell';
+      c.style.left = P(BOX.x + (i % 8) * CELL); c.style.top = P(BOX.y + Math.floor(i / 8) * CELL);
+      c.dataset.box = i;
+      cgrid.appendChild(c);
+      this.boxCells[i] = c;
+    }
     this.$('.close').addEventListener('pointerdown', (e) => { e.stopPropagation(); this.close(); });
     this.$('.tocraft').addEventListener('pointerdown', (e) => { e.stopPropagation(); this.showCrafting(); });
     this.$('.drop').addEventListener('pointerdown', (e) => { e.stopPropagation(); this.dropHeld(false); });
-    grid.addEventListener('pointerdown', (e) => {
-      const t = e.target.closest('[data-slot]');
-      if (!t || !this.isOpen) return;
-      e.stopPropagation();
-      e.preventDefault();
-      this.slotDown(+t.dataset.slot, e);
-    });
-    grid.addEventListener('pointerover', (e) => {
-      const t = e.target.closest('[data-slot]');
-      if (!t || !this.isOpen || this.page !== 'inv') return;
-      this.pointer = true;
-      const i = +t.dataset.slot;
-      this.at = i < HOTBAR ? { x: i, y: 4 } : { x: (i - HOTBAR) % 8, y: Math.floor((i - HOTBAR) / 8) };
-      this.render();
-    });
+    for (const g of [grid, cgrid]) {
+      g.addEventListener('pointerdown', (e) => {
+        const t = e.target.closest('[data-slot],[data-box]');
+        if (!t || !this.isOpen) return;
+        e.stopPropagation();
+        e.preventDefault();
+        this.slotDown(this.cellOf(t), e);
+      });
+      g.addEventListener('pointerover', (e) => {
+        const t = e.target.closest('[data-slot],[data-box]');
+        if (!t || !this.isOpen || this.page === 'cr') return;
+        this.pointer = true;
+        this.selectCell(this.cellOf(t));
+        this.render();
+      });
+    }
     this.$('.list').addEventListener('pointerdown', (e) => {
       const t = e.target.closest('[data-r]');
       if (!t) return;
@@ -183,7 +211,7 @@ export class Crafting {
     });
     // a click (or right-click) outside the panel lets go of what's held: onto the ground
     el.addEventListener('pointerdown', (e) => {
-      if (e.target !== el || !game.inventory.hand || this.page !== 'inv') return;
+      if (e.target !== el || !game.inventory.hand || this.page === 'cr') return;
       this.dropHeld(e.button === 2);
     });
     el.addEventListener('wheel', (e) => {
@@ -208,24 +236,80 @@ export class Crafting {
 
   get slot() { return this.at.y >= 4 ? this.at.x : HOTBAR + this.at.y * 8 + this.at.x; }
 
+  // A cell, as { box, i }: box the slots it's in (the player's, or the crate's), i its index;
+  // and the one the selector's on (in a crate, the selector's rows go down through the crate's
+  // four, the backpack's four and the hotbar, as the original's _selectorInCrateGrid has it)
+  cellOf(el) {
+    if (el.dataset.box != null) return { box: this.crate?.slots, i: +el.dataset.box, crate: true };
+    return { box: this.game.inventory.slots, i: +el.dataset.slot, crate: false };
+  }
+
+  get cell() {
+    if (this.page === 'box' && this.inBox) return { box: this.crate.slots, i: this.at.y * 8 + this.at.x, crate: true };
+    return { box: this.game.inventory.slots, i: this.slot, crate: false };
+  }
+
+  selectCell(c) {
+    if (c.crate) { this.inBox = true; this.at = { x: c.i % 8, y: Math.floor(c.i / 8) }; }
+    else { this.inBox = false; const i = c.i; this.at = i < HOTBAR ? { x: i, y: 4 } : { x: (i - HOTBAR) % 8, y: Math.floor((i - HOTBAR) / 8) }; }
+    this.sendFocus();
+  }
+
+  // online: which of the crate's slots this player is on (the others can't touch it meanwhile)
+  sendFocus() {
+    if (this.page !== 'box' || !this.crate) return;
+    const f = this.inBox ? `${this.crate.k}:${this.at.y * 8 + this.at.x}` : '';
+    if (f === this.focusSent) return;
+    this.focusSent = f;
+    this.game.online?.crateFocus(this.inBox ? this.crate : null, this.at.y * 8 + this.at.x);
+  }
+
+  // is this cell someone else's just now?
+  locked(c) { return !!c.crate && !!this.crate && !!this.game.crates?.locked(this.crate, c.i); }
+
   sound(kind) { this.game.audio?.ui?.(kind); }
 
   open() {
     this.isOpen = true;
     this.drag = null;
     this.page = 'inv';
+    this.crate = null;
+    this.inBox = false;
     this.at = { x: this.game.inventory.selected, y: 4 };
     this.el.classList.add('on');
     this.game.hud.el.classList.add('crafting');
     this.render();
   }
 
+  // A crate's screen (the original's CrateScreen.OnPushed: the selector on the hotbar's chosen
+  // slot).
+  openCrate(crate) {
+    this.open();
+    this.page = 'box';
+    this.crate = crate;
+    this.focusSent = '';
+    this.render();
+  }
+
+  // a crate changed (on another machine, or it's gone)
+  crateChanged(c) {
+    if (!this.isOpen || this.page !== 'box') return;
+    if (c && c === this.crate && c.gone) { this.close(); return; }
+    this.render();
+  }
+
   // quiet: closed by something else (the pause menu), which looks after the mouse itself
   close(quiet = false) {
     if (!this.isOpen) return;
-    this.isOpen = false;
     this.drag = null;
     this.putBack();
+    if (this.page === 'box' && this.crate) {
+      this.game.crates?.commit(this.crate);
+      if (this.focusSent) this.game.online?.crateFocus(null, 0);
+    }
+    this.isOpen = false;
+    this.crate = null;
+    this.page = 'inv';
     this.el.classList.remove('on');
     this.game.hud.el.classList.remove('crafting');
     this.game.closedCrafting(quiet);
@@ -314,21 +398,23 @@ export class Crafting {
 
   // ---- the backpack and the hotbar ---------------------------------------------------------------
 
-  // A press on slot i, by mouse or touch (the original's BlockPickerScreen rules).
-  slotDown(i, e) {
-    if (this.page !== 'inv') return;
+  // A press on a cell, by mouse or touch (the original's BlockPickerScreen rules; a crate's
+  // CrateScreen's, which are the same).
+  slotDown(c, e) {
+    if (this.page === 'cr' || !c.box) return;
     const inv = this.game.inventory;
     this.pointer = true;
     this.mx = e.clientX; this.my = e.clientY;
+    if (this.locked(c)) { this.sound('deny'); return; }
+    const box = this.page === 'box';
     let did;
-    if (e.button === 2) did = inv.hand ? inv.put(i, true) : inv.lift(i, true);
-    else if (e.shiftKey && !inv.hand) did = inv.quickMove(i);
-    else if (inv.hand) did = inv.put(i);
-    else if ((did = inv.lift(i))) this.drag = { from: i, x: e.clientX, y: e.clientY };
+    if (e.button === 2) did = inv.hand ? inv.put(c.i, true, c.box) : inv.lift(c.i, true, c.box);
+    else if (e.shiftKey && !inv.hand) did = box ? inv.moveAcross(c.i, c.box, c.crate ? inv.slots : this.crate.slots) : inv.quickMove(c.i);
+    else if (inv.hand) did = inv.put(c.i, false, c.box);
+    else if ((did = inv.lift(c.i, false, c.box))) this.drag = { from: c, x: e.clientX, y: e.clientY };
     if (!did) return;
-    this.at = i < HOTBAR ? { x: i, y: 4 } : { x: (i - HOTBAR) % 8, y: Math.floor((i - HOTBAR) / 8) };
-    this.sound('move');
-    this.render();
+    this.selectCell(c);
+    this.moved();
   }
 
   // Let go: a click leaves it in the hand, to put down with another; a drag puts it where it's
@@ -339,16 +425,23 @@ export class Crafting {
     if (!d || !this.isOpen || !inv.hand) return;
     if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < 10) return;
     const hit = document.elementFromPoint(e.clientX, e.clientY);
-    const t = hit?.closest?.('[data-slot]');
-    if (t && +t.dataset.slot !== d.from) {
-      inv.put(+t.dataset.slot);
-      if (inv.hand) inv.put(d.from);
+    const t = hit?.closest?.('[data-slot],[data-box]');
+    const to = t ? this.cellOf(t) : null;
+    if (to && to.box && !(to.box === d.from.box && to.i === d.from.i) && !this.locked(to)) {
+      inv.put(to.i, false, to.box);
+      if (inv.hand && !this.locked(d.from)) inv.put(d.from.i, false, d.from.box);
     } else if (!this.panel.contains(hit)) {
       this.dropHeld(false);
       return;
     }
     this.putBack();
+    this.moved();
+  }
+
+  // something moved: the sound, a crate's changes out to the others, and the screen
+  moved() {
     this.sound('move');
+    if (this.page === 'box' && this.crate) this.game.crates?.commit(this.crate);
     this.render();
   }
 
@@ -362,12 +455,13 @@ export class Crafting {
   dropHeld(one) {
     const g = this.game, inv = g.inventory, p = g.player.pos;
     let s = null;
+    const c = this.cell;
     if (inv.hand) {
       const h = inv.hand;
       if (one && h.s.count > 1) { s = { ...h.s, count: 1 }; h.s.count--; } else { s = h.s; inv.hand = null; }
-    } else if (inv.slots[this.slot]) {
-      s = inv.slots[this.slot];
-      inv.slots[this.slot] = null;
+    } else if (c.box && c.box[c.i] && !this.locked(c)) {
+      s = c.box[c.i];
+      c.box[c.i] = null;
     }
     if (!s) return;
     inv.changed();
@@ -375,40 +469,58 @@ export class Crafting {
     const f = g.player.forward(new Vector3());
     g.drops.spawn(s.id, s.count, p.x + f.x * 0.6, p.y + 1.2, p.z + f.z * 0.6, f.clone().multiplyScalar(4).setY(2), s, true);
     g.audio?.drop?.();
+    if (this.page === 'box' && this.crate) this.game.crates?.commit(this.crate);
     this.render();
   }
 
   // the pad's A on the selector: pick up, or put down (joining, or swapping with what's there)
   padUse() {
-    const inv = this.game.inventory, i = this.slot;
+    const inv = this.game.inventory, c = this.cell;
     this.pointer = false;
-    if (!(inv.hand ? inv.put(i) : inv.lift(i))) return;
-    this.sound('move');
-    this.render();
+    if (this.locked(c)) { this.sound('deny'); return; }
+    if (!(inv.hand ? inv.put(c.i, false, c.box) : inv.lift(c.i, false, c.box))) return;
+    this.moved();
+  }
+
+  // Y in a crate: what's held, or what's chosen, across to the other side
+  padAcross() {
+    const inv = this.game.inventory, c = this.cell;
+    this.pointer = false;
+    if (this.locked(c)) { this.sound('deny'); return; }
+    const other = c.crate ? inv.slots : this.crate.slots;
+    let did = false;
+    if (inv.hand) {
+      const h = inv.hand;
+      inv.hand = null;
+      const left = inv.stow(h.s, 0, other.length, other);
+      if (left) inv.hand = { ...h, s: left };
+      did = !left || left.count < h.s.count;
+    } else did = inv.moveAcross(c.i, c.box, other);
+    if (did) this.moved();
   }
 
   // the right stick: pick up half (the smaller half) of the stack, or with something in hand,
   // put one down on an empty slot, or take up half of a stack of the same thing
   padSplit() {
-    const inv = this.game.inventory, i = this.slot, h = inv.hand, t = inv.slots[i];
+    const inv = this.game.inventory, c = this.cell, h = inv.hand, t = c.box[c.i];
     this.pointer = false;
+    if (this.locked(c)) { this.sound('deny'); return; }
     let did = false;
-    if (!h) did = inv.lift(i, true);
-    else if (!t) did = inv.put(i, true);
+    if (!h) did = inv.lift(c.i, true, c.box);
+    else if (!t) did = inv.put(c.i, true, c.box);
     else if (t.id === h.s.id && ITEMS[t.id].stack > 1) {
       const n = t.count > 1 ? Math.floor(t.count / 2) : 1;
       const room = ITEMS[t.id].stack - h.s.count;
       const k = Math.min(n, room);
-      if (k > 0) { h.s.count += k; t.count -= k; if (t.count <= 0) inv.slots[i] = null; inv.changed(); did = true; }
-    } else did = inv.put(i);
+      if (k > 0) { h.s.count += k; t.count -= k; if (t.count <= 0) c.box[c.i] = null; inv.changed(); did = true; }
+    } else did = inv.put(c.i, false, c.box);
     if (!did) return;
-    this.sound('move');
-    this.render();
+    this.moved();
   }
 
   placeCarry() {
     const c = this.carryEl, h = this.game.inventory.hand;
-    if (!h || !this.pointer || this.mx == null || this.page !== 'inv') { c.style.display = 'none'; return; }
+    if (!h || !this.pointer || this.mx == null || this.page === 'cr') { c.style.display = 'none'; return; }
     c.style.display = 'block';
     c.style.left = `${this.mx}px`;
     c.style.top = `${this.my}px`;
@@ -418,9 +530,19 @@ export class Crafting {
 
   render() {
     if (!this.isOpen) return;
-    const inv = this.game.inventory, cr = this.page === 'cr';
-    this.el.classList.toggle('inv', !cr);
+    const inv = this.game.inventory, cr = this.page === 'cr', box = this.page === 'box';
+    this.el.classList.toggle('inv', this.page === 'inv');
     this.el.classList.toggle('cr', cr);
+    this.el.classList.toggle('box', box);
+    // a crate's slots (someone else's slot dimmed)
+    if (box && this.crate) {
+      for (let i = 0; i < this.boxCells.length; i++) {
+        const s = this.crate.slots[i], cell = this.boxCells[i];
+        const key = s ? `${s.id}|${s.count}|${s.dur ?? ''}` : '';
+        if (cell.dataset.key !== key) { cell.dataset.key = key; cell.innerHTML = iconHtml(s); }
+        cell.classList.toggle('locked', this.locked({ crate: true, i }));
+      }
+    }
     // the backpack and the hotbar (in the hand's place, nothing)
     const h = inv.hand;
     for (let i = 0; i < this.cells.length; i++) {
@@ -449,7 +571,7 @@ export class Crafting {
       sel.style.display = this.recipe ? '' : 'none';
       this.renderRecipes();
     } else {
-      const { x, y } = this.cellAt(this.slot);
+      const { x, y } = box && this.inBox ? { x: BOX.x + this.at.x * CELL, y: BOX.y + this.at.y * CELL } : this.cellAt(this.slot);
       sel.style.left = P(x - 4); sel.style.top = P(y - 4);
       sel.style.display = '';
       sel.classList.toggle('hold', !!h);
@@ -459,8 +581,9 @@ export class Crafting {
     this.placeCarry();
     // the help along the bottom
     const pad = this.game.app.input.lastDevice === 'pad', touch = this.game.app.isTouch;
-    this.$('.help').innerHTML = pad ? '' : touch
+    this.$('.help').innerHTML = pad ? (box ? '<span><span class="btn y">Y</span> Move across</span>' : '') : touch
       ? (cr ? '<span>Tap the chosen thing to make it</span><span>Tap a component for its recipe</span>' : '<span>Tap or drag to move things</span>')
+      : box ? '<span><span class="key">Shift</span>+click: across</span><span><span class="key">Q</span> Drop</span><span>Right-click: split</span><span><span class="key">E</span> / <span class="key">Esc</span> Close</span>'
       : cr ? '<span><span class="key">Enter</span> Make it</span><span><span class="key">Shift</span>+click: as many as you can</span><span><span class="key">E</span> / <span class="key">Esc</span> Back</span>'
         : '<span><span class="key">E</span> Crafting</span><span><span class="key">Q</span> Drop</span><span><span class="key">Shift</span>+click: across</span><span>Right-click: split</span><span><span class="key">Esc</span> Close</span>';
   }
@@ -486,7 +609,8 @@ export class Crafting {
 
   update(dt, input) {
     if (!this.isOpen) return;
-    const inv = this.game.inventory, cr = this.page === 'cr';
+    const inv = this.game.inventory, cr = this.page === 'cr', box = this.page === 'box';
+    if (box && (!this.crate || this.crate.gone)) { this.close(); return; }
     if (input.consume('pause')) {
       // Start: the pause menu (what's held goes back first); Esc, back a page or out
       if (input.lastDevice === 'pad') { this.close(true); this.game.app.pause?.(); return; }
@@ -495,10 +619,14 @@ export class Crafting {
     }
     if (input.consume('back_btn')) {
       if (cr) this.showInventory();
-      else if (inv.hand) { this.putBack(); this.sound('move'); this.render(); } else this.close();
+      else if (inv.hand) { this.putBack(); this.moved(); } else this.close();
       return;
     }
-    if (input.consume('inventory')) { if (cr) this.showInventory(); else this.showCrafting(); return; }
+    if (input.consume('inventory')) {
+      // in a crate, Y sends across (E, on a keyboard, shuts it)
+      if (box) { if (input.lastDevice === 'pad') this.padAcross(); else this.close(); } else if (cr) this.showInventory(); else this.showCrafting();
+      return;
+    }
     // the stick and the d-pad, with a repeat
     let dx = 0, dy = 0;
     if (input.consume('fwd') || input.consume('up')) dy = -1;
@@ -527,8 +655,14 @@ export class Crafting {
       if (input.consume('accept') || input.consume('jump')) { if (this.ing > 0) this.toComponentRecipe(); else this.craft(); }
     } else {
       if (dx || dy) {
-        const x = (this.at.x + dx + 8) % 8, y = (this.at.y + dy + 5) % 5;
-        this.at = { x, y };
+        const x = (this.at.x + dx + 8) % 8;
+        if (box) {
+          // down through the crate's rows, the backpack's and the hotbar, and round again
+          const row = ((this.inBox ? this.at.y : 4 + this.at.y) + dy + 9) % 9;
+          this.inBox = row < 4;
+          this.at = { x, y: this.inBox ? row : row - 4 };
+          this.sendFocus();
+        } else this.at = { x, y: (this.at.y + dy + 5) % 5 };
         this.sound('move');
         this.render();
       }
@@ -536,7 +670,7 @@ export class Crafting {
       if (input.consume('crouch')) this.padSplit();
       if (input.consume('reload') || input.consume('drop')) this.dropHeld(false);
       // a number key puts what's held, or what's under the pointer (or the selector), on that slot
-      for (let k = 0; k < HOTBAR; k++) {
+      for (let k = 0; k < HOTBAR && !box; k++) {
         if (!input.consume(`slot${k + 1}`)) continue;
         const under = this.pointer ? document.elementFromPoint(this.mx, this.my)?.closest?.('[data-slot]') : null;
         const at = under ? +under.dataset.slot : this.slot;

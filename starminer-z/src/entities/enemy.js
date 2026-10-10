@@ -230,6 +230,19 @@ export class Enemy {
     return false;
   }
 
+  // An explosion's share (the original's TakeExplosiveDamage): all of it, whatever the type.
+  // Returns true if it killed.
+  takeExplosiveDamage(dmg) {
+    if (this.health <= 0) return false;
+    this.health -= dmg;
+    if (this.health <= 0) {
+      this.change(this.S.die);
+      return true;
+    }
+    if (this.state !== this.S.hit) this.change(this.S.hit);
+    return false;
+  }
+
   giveUp() {
     if (this.dead || this.state === this.S.giveUp) return;
     this.change(this.S.giveUp);

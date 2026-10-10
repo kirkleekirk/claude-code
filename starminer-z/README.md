@@ -50,6 +50,16 @@ out as its are: you learn a recipe once you carry what it makes, one of the thin
 a gun it makes the bullets for. Tools and guns wear out as they're used. When you die, your
 backpack falls where you fell; the hotbar stays with you.
 
+The new things work as the original's code has them. Bullets fly at their gun's speed and fall
+as they go; laser bolts fly at 200 m/s, glance off bedrock, bloodstone and diamond walls, and
+knock out the block they stop in. TNT and C4 go off four seconds after they're lit (B, the right
+mouse button, or a swing of anything but a spade), or at once when shot, taking out what's soft
+enough round them, setting off any more in reach, and hurting you less through walls. Grenades
+cook while the trigger's held and bounce as each block lets them; rockets pop out of the tube and
+fly. Doors open and shut both halves; crates hold 32 stacks with the world, and spill them when
+they're broken. The locator and teleporter mark a block and point the way to it (with a marker
+standing there), and the clock turns with the day.
+
 Controls: keyboard and mouse, an Xbox controller, or touch (see Help & Controls in the game).
 
 ### Playing online
@@ -65,6 +75,9 @@ Up to eight players can play together in one world, as in CastleMiner Z:
 - Each player's machine runs the dead that come for that player (as the original does), and the
   others see them and can shoot them. A kill counts for whoever made it.
 - What each friend carries is kept with the host's world, for when they come back.
+- Shots, grenades and rockets fly on every machine; explosions hurt every player and every
+  machine's dead (the kill is whoever set it off). Crates are the same for everyone, and the
+  slot a friend is on in one is theirs until they move off it.
 - Online, the game goes on behind the pause menu, and Teleport To Player there takes you to a
   friend.
 
@@ -127,7 +140,7 @@ None of these files are in this repository. They come out of your own copy of th
 ```
 python3 tools/cmz/rip_audio.py  <Content> local-assets/audio    # needs ffmpeg
 python3 tools/cmz/rip_models.py <Content> local-assets/models
-python3 tools/cmz/rip_player.py <Content> local-assets          # avatar clips and held items
+python3 tools/cmz/rip_player.py <Content> local-assets          # avatar clips, held items, the locator's marker
 python3 tools/cmz/rip_ui.py     <Content> local-assets          # the inventory and crafting panel
 ```
 

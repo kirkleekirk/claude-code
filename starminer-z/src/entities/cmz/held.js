@@ -42,9 +42,12 @@ const HAND = place(new THREE.Quaternion(), [0, 0, 0]);
 export function heldSpec(id) {
   const it = id ? ITEMS[id] : null;
   if (!it) return { mode: 'fist' };
-  if (it.kind === 'tool' && it.tool === 'compass') return { model: 'compass', at: COMPASS, mode: 'generic', compass: true };
-  // the clock, the locator and the teleporter sit in the hand as the compass does
-  if (it.kind === 'tool' && (it.tool === 'clock' || it.tool === 'locator' || it.tool === 'teleporter')) return { model: it.tool, at: COMPASS, mode: 'generic' };
+  // the compass, the clock, the locator and the teleporter sit in the hand alike, each turning as
+  // the original's entity for it turns it: the compass to the start, a locator to where it's set,
+  // the clock round once a day
+  if (it.kind === 'tool' && it.tool === 'compass') return { model: 'compass', at: COMPASS, mode: 'generic', turn: 'compass' };
+  if (it.kind === 'tool' && it.tool === 'clock') return { model: 'clock', at: COMPASS, mode: 'generic', turn: 'clock' };
+  if (it.kind === 'tool' && (it.tool === 'locator' || it.tool === 'teleporter')) return { model: it.tool, at: COMPASS, mode: 'generic', turn: 'compass' };
   // a laser sword is held as it is, its beam the colour of what it's made of
   if (it.kind === 'tool' && it.laser) return { model: 'saber', at: HAND, mode: 'tool', beam: it.beam };
   if (it.kind === 'tool') return { model: { pick: 'pickaxe', spade: 'spade', axe: 'axe' }[it.tool], at: TOOL, mode: 'tool', tint: MAT[it.mat] };
@@ -114,7 +117,7 @@ export class HeldItems {
   }
 
   // { obj, spec, muzzle, turn }: obj goes on the prop bone; muzzle is a gun's barrel tip;
-  // turn is the part that turns to point the way (the compass)
+  // turn is the part that turns (to point the way, or to tell the time)
   make(id) {
     const spec = heldSpec(id);
     const obj = new THREE.Group();
@@ -141,7 +144,7 @@ export class HeldItems {
         o.frustumCulled = false;
       });
       if (spec.rocket && out.muzzle && this.L.models.rocket) this.loadRocket(m, out.muzzle);
-      if (spec.compass) {
+      if (spec.turn) {
         const turn = new THREE.Group();
         turn.add(m);
         obj.add(turn);
@@ -172,6 +175,7 @@ export class HeldItems {
     // XNA's CreateWorld: its forward (-z) along the barrel, kept upright
     const z = left.clone().negate(), x = new THREE.Vector3(0, 1, 0).cross(z).normalize(), y = z.clone().cross(x);
     const r = this.L.models.rocket.scene.clone(true);
+    r.name = 'LoadedRocket';
     r.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
     r.position.copy(at);
     r.scale.setScalar(0.65);

@@ -31,11 +31,13 @@ ITEMS = {
     'pistol': 'Colt', 'assault': 'AK', 'rifle': 'BoltRifle', 'shotgun': 'PumpShotgun', 'smg': 'M11',
     'ore': 'Ore', 'bars': 'Bars', 'gems': 'Gems', 'ammo': 'Ammo',
     # the later updates': the light machine gun, the laser guns, the rocket launcher and its
-    # rocket, the laser sword, the grenade, gunpowder, the locator, teleporter and clock, the door
+    # rocket, the laser sword, the grenade, gunpowder, the locator, teleporter and clock, the door,
+    # and the marker that stands where a locator points
     'lmg': 'Weapons/M294/Model', 'laser_assault': 'SpaceWeapons/AK', 'laser_rifle': 'SpaceWeapons/BoltRifle',
     'laser_pistol': 'SpaceWeapons/Colt', 'laser_smg': 'SpaceWeapons/M11', 'laser_shotgun': 'SpaceWeapons/PumpShotgun',
     'rpg': 'Weapons/Rpg', 'rocket': 'Weapons/RPGGrenade', 'saber': 'Saber', 'grenade': 'Grenade', 'gunpowder': 'GunPowder',
     'locator': 'Locator', 'teleporter': 'Teleporter', 'clock': 'Clock', 'door': 'WoodDoor', 'torch': 'Torch',
+    'marker': 'Marker',
 }
 
 def b64(fmt, vals):
@@ -111,8 +113,16 @@ class Doc:
         self.accessors.append(a)
         return len(self.accessors) - 1
 
+# a file in the content, whatever the case of its name (the Xbox's is any)
+def find(content, rel):
+    path = content
+    for part in (rel + '.xnb').split('/'):
+        names = {n.lower(): n for n in os.listdir(path)}
+        path = os.path.join(path, names.get(part.lower(), part))
+    return path
+
 def item(name, rel, content, out):
-    p = xnb.parse(xnb.read_xnb(os.path.join(content, rel + '.xnb')))
+    p = xnb.parse(xnb.read_xnb(find(content, rel)))
     if 'errors' in p: raise ValueError(f'{rel}: {p["errors"]}')
     model, shared = p['object'], p['shared']
     g = Doc()

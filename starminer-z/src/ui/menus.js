@@ -203,6 +203,20 @@ export class Menus {
           ],
         };
       }
+      case 'name': {
+        // the original's on-screen keyboard over the game (a locator's name)
+        const q = app.nameAsk || { value: '', max: 10 };
+        const done = () => { const v = (q.value || '').trim(); app.resume(); if (v) q.done?.(v); };
+        return {
+          id, title: q.title || 'Name', small: true, dim: true, typing: true, sub: q.sub || '',
+          items: [
+            { label: 'Name', kind: 'text', max: q.max || 10, cycle: NAME_CHARS, filter: nameChar, get: () => q.value, set: (v) => { q.value = v; }, enter: done },
+            { label: 'Done', on: done },
+            { label: 'Cancel', on: () => app.resume() },
+          ],
+          back: () => app.resume(),
+        };
+      }
       case 'confirmEnd': return {
         id, title: 'End The Game?', small: true, dim: true,
         sub: 'Your friends will go back to their menus. Your world is saved, with what they have, for next time.',
@@ -264,23 +278,27 @@ export class Menus {
           <p>You start at the tower. Every meter you get from it counts: your best is the Max. Dig for coal, copper, iron and gold, craft tools, guns and walls, and keep moving. At night the dead come for you; underground, in the dark, so do skeletons. The further out you go, the harder it gets.</p>
           <h3>Keyboard & Mouse</h3>
           <div class="grid"><b>Move</b><span>W A S D</span><b>Look</b><span>Mouse</span><b>Jump</b><span>Space</span><b>Sprint</b><span>Shift</span><b>Crouch</b><span>C or Ctrl</span>
-          <b>Dig / Shoot</b><span>Left click</span><b>Place / Aim</b><span>Right click</span><b>Reload</b><span>R</span><b>Items</b><span>1-8 or the wheel</span>
+          <b>Use (dig, shoot, place)</b><span>Left click</span><b>Aim / Open, light</b><span>Right click</span><b>Reload</b><span>R</span><b>Items</b><span>1-8 or the wheel</span>
           <b>Inventory</b><span>E or Tab</span><b>Drop</b><span>Q</span><b>Camera</b><span>V</span><b>Pause</b><span>Esc</span></div>
           <h3>Xbox Controller</h3>
-          <div class="grid"><b>Move / Look</b><span>Left / right stick</span><b>Jump</b><span>A</span><b>Dig / Shoot</b><span>Right trigger</span><b>Place / Aim</b><span>Left trigger</span>
-          <b>Reload</b><span>X</span><b>Inventory</b><span>Y</span><b>Items</b><span>Bumpers, d-pad left and right</span><b>Sprint</b><span>Left stick click</span>
-          <b>Camera</b><span>D-pad up, or Back</span><b>Pause</b><span>Start or B</span></div>
+          <div class="grid"><b>Move / Look</b><span>Left / right stick</span><b>Jump</b><span>A</span><b>Use (dig, shoot, place)</b><span>Right trigger</span><b>Aim / Place</b><span>Left trigger</span>
+          <b>Open, light</b><span>B, looking at a door, a crate or TNT</span><b>Reload</b><span>X</span><b>Inventory</b><span>Y</span><b>Items</b><span>Bumpers, d-pad left and right</span>
+          <b>Sprint</b><span>Left stick click</span><b>Camera</b><span>D-pad up, or Back</span><b>Pause</b><span>Start (or B)</span></div>
           <h3>Touch</h3>
-          <p>Left thumb moves, right thumb looks. Hold the dig button to dig or fire; tap place to build or aim. Tap the hotbar to switch items.</p>
+          <p>Left thumb moves, right thumb looks. Hold the use button to dig, fire or build; tap place to build, aim, or open a door or a crate. Tap the hotbar to switch items.</p>
+          <h3>Things To Use</h3>
+          <p>A block in hand goes down with either trigger (either mouse button), and doesn't dig: take out a pick or a spade for that. TNT and C4 go off four seconds after they're lit, with B (right click) or a swing of anything but a spade (a spade digs them up); a bullet sets them off at once. Grenades cook while you hold the trigger and are thrown when you let go: cook too long and they go off sooner. A rocket launcher fires its one rocket. Laser guns knock out the block their bolt stops in, and bounce off bedrock, bloodstone and diamond walls.</p>
+          <p>Doors go in a gap with room for both halves; B (right click) opens and shuts them. A crate holds 32 stacks and keeps them with the world; B (right click) opens it, and breaking it spills what's in it. The locator marks the block you aim it at and points the way there; reload names it. The teleporter marks one too, and its left trigger takes you there, once. The clock tells the time.</p>
           <h3>Inventory and Crafting</h3>
           <p>On the inventory screen, click or tap something in the backpack or the hotbar to pick it up, then a slot to put it there, or drag it. Shift-click sends a stack across, backpack to hotbar or back; right-click picks up half a stack, or puts down one. Q, or letting go of it outside the panel, drops it. With a controller, the d-pad or the stick moves the selector: A picks up and puts down, the right stick splits, X drops.</p>
           <p>Y (or E) goes to crafting. The recipes you know are down the left, the ones you can make first: you learn one once you carry what it makes, one of the things it takes, or a gun it makes the bullets for. Up and down choose a recipe, left and right its components; A makes it, or on a component goes to that component's recipe. Shift-click makes as many as you can. Y, E or B goes back.</p>
+          <p>In a crate, its slots are at the top: things move between it and your backpack as they do on the inventory screen, and Y (shift-click) sends a stack across. Online, the slot a friend is on is theirs until they move off it.</p>
           <p>When you die, what's in your backpack falls where you fell. The hotbar stays with you.</p>
           <h3>Playing Online</h3>
           <p>To host, choose Play Game, then Host Online Game (or Invite Friends from the pause menu of a game you're in). You get a five-letter code: your friends choose Join Online Game and type it. Up to eight can play. Everyone plays in the host's world, saved on the host's machine, and what each friend carries is kept with it for when they come back. Each player's dead come for that player, and anyone can shoot them. Online, the game goes on while the pause menu is up, and Teleport To Player there takes you to a friend.</p>
           <p>Keep the game in front: a browser stops running a page whose tab is hidden. Online play needs an internet connection, and doesn't work inside the Claude artifact viewer.</p>
           <h3>On an Xbox</h3>
-          <p>In Microsoft Edge, hold the Menu button and choose Use game controls, so the controller plays the game instead of moving a pointer. B pauses and the d-pad's up changes the camera, because Edge keeps the View button for itself (if the controller stops answering, press the Xbox button twice). If it runs slowly, turn off Edge's "Apps can add a border" setting (Settings, System) and lower View Distance in Options.</p>
+          <p>In Microsoft Edge, hold the Menu button and choose Use game controls, so the controller plays the game instead of moving a pointer. B pauses (unless you're looking at a door, a crate or TNT) and the d-pad's up changes the camera, because Edge keeps the View button for itself (if the controller stops answering, press the Xbox button twice). If it runs slowly, turn off Edge's "Apps can add a border" setting (Settings, System) and lower View Distance in Options.</p>
         </div>`,
         items: [{ label: 'Back', on: () => this.back() }],
       };

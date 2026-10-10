@@ -116,6 +116,12 @@ try {
     return g.enemies.spawn(26, x, g.world.surfaceY(x, z) + 1.1, z, 0.5).nid;
   });
   await wait(A, (n) => [...window.__game.enemies.ghosts.values()].some((gh) => gh.owner === 1 && gh.nid === n && gh.heard), bz, 20000).then(() => ok(true, "B's skeleton shows on A"), () => ok(false, "B's skeleton shows on A"));
+  // (it stands still, out of reach, for later: it would kill B meanwhile)
+  await B.evaluate((n) => {
+    const g = window.__app.game, e = g.enemies.list.find((x) => x.nid === n), p = g.player;
+    if (e) { e.pos.set(p.pos.x + 9, e.pos.y, p.pos.z); e.update = () => {}; }
+    if (p.dead) g.respawn();
+  }, bz);
 
   // the clock is the host's
   await A.evaluate(() => window.__app.sky.setTime(0.8, 3));
@@ -128,6 +134,66 @@ try {
   const u0 = await A.evaluate(() => [...window.__game.online.players.values()][0].uses);
   await B.evaluate(() => { const g = window.__app.game; g.viewModel.startSwing('tool', 0.34); g.uses++; });
   await wait(A, (u) => [...window.__game.online.players.values()][0].uses !== u, u0, 10000).then(() => ok(true, "B's swing reaches A"), () => ok(false, "B's swing reaches A"));
+
+  // B fires: the bullet flies on A's machine too
+  const bState = await B.evaluate(() => {
+    // (headless, the mouse is never held, so the game pauses itself: back to it, and stay)
+    const app = window.__app;
+    app.onLockChange = () => {};
+    const was = app.state;
+    if (app.state === 'paused') app.resume();
+    const g = app.game, inv = g.inventory;
+    inv.slots[6] = inv.make('pistol', 1); inv.select(6);
+    g.player.pitch = 0.3;
+    return was;
+  });
+  // (once it's in hand: taking it out holds the trigger back a moment of game time, and the
+  // game runs slow in here)
+  await wait(B, () => window.__app.game.cooldown <= 0 && window.__app.game.lastSelected === 6, null, 30000).catch(() => {});
+  await A.evaluate(() => { const o = window.__game.online, f = o.remoteShot.bind(o); window.__shots = 0; o.remoteShot = (...a) => { window.__shots++; return f(...a); }; });
+  await B.evaluate(() => { const I = window.__app.input; window.__s0 = window.__app.game.stats.shots; I.down('primary'); setTimeout(() => I.up('primary'), 600); });
+  await wait(A, () => window.__game.projectiles.bullets.length > 0, null, 20000).then(() => ok(true, `B's bullet flies on A's machine (B was ${bState})`), async () => {
+    const b = await B.evaluate(() => { const app = window.__app, g = app.game; return { shots: g.stats.shots - window.__s0, held: g.inventory.held?.id, mag: g.inventory.held?.mag, state: app.state, cd: g.cooldown, dead: g.player.dead, ready: g.ready, paused: g.paused, menu: app.menuOpen, vis: app.menus.visible, mid: app.menus.id, screen: g.screenUp, death: g.deathShown }; });
+    const a = await A.evaluate(() => ({ got: window.__shots, bullets: window.__game.projectiles.bullets.length }));
+    ok(false, `B's bullet flies on A's machine (B was ${bState}; B ${JSON.stringify(b)}, A ${JSON.stringify(a)})`);
+  });
+
+  // A fills a crate: B has the same in it
+  const crate = await A.evaluate(() => {
+    const g = window.__game, p = g.player, x = Math.floor(p.pos.x) + 2, z = Math.floor(p.pos.z), y = g.world.surfaceY(x, z) + 1;
+    g.world.setBlock(x, y, z, 25);
+    const c = g.crates.get(x, y, z);
+    c.slots[5] = g.inventory.make('gold', 9);
+    g.crates.commit(c);
+    return { x, y, z };
+  });
+  await wait(B, (c) => window.__app.game.crates.get(c.x, c.y, c.z, false)?.slots[5]?.id === 'gold', crate, 20000).then(() => ok(true, "what A puts in a crate is in it on B's machine"), () => ok(false, "what A puts in a crate is in it on B's machine"));
+
+  // A lights TNT: it flashes on B's machine
+  const tnt = await A.evaluate(() => {
+    const g = window.__game, p = g.player, x = Math.floor(p.pos.x) - 6, z = Math.floor(p.pos.z) - 6, y = g.world.surfaceY(x, z) + 1;
+    g.world.setBlock(x, y, z, 32);
+    g.explosives.light(x, y, z);
+    return { x, y, z };
+  });
+  await wait(B, () => window.__app.game.explosives.flashes.size > 0, null, 20000).then(() => ok(true, "A's lit TNT flashes on B's machine"), () => ok(false, "A's lit TNT flashes on B's machine"));
+  // (four seconds of the host's game time: slow in here)
+  await wait(B, (t) => window.__app.game.world.getBlock(t.x, t.y, t.z) === 0, tnt, 240000).then(() => ok(true, "and when it goes off, it's gone there too"), () => ok(false, "and when it goes off, it's gone there too"));
+
+  // A's grenade goes off by B's skeleton: it dies on B's machine, and the kill is A's
+  const kA = await A.evaluate(() => window.__game.stats.kills);
+  const sk = await B.evaluate((n) => {
+    const g = window.__app.game, e = g.enemies.list.find((x) => x.nid === n), p = g.player;
+    if (!e) return null;
+    e.health = 2;
+    return { x: e.pos.x, y: e.pos.y, z: e.pos.z };
+  }, bz);
+  if (sk) {
+    await A.waitForTimeout(1500);
+    await A.evaluate((s) => { const g = window.__game; g.explosives.blast(new g.player.pos.constructor(s.x, s.y + 0.5, s.z), 4, 'grenade', true); }, sk);
+    await wait(B, (n) => window.__app.game.enemies.list.find((x) => x.nid === n)?.dead ?? true, bz, 30000).then(() => ok(true, "A's grenade kills B's skeleton on B's machine"), () => ok(false, "A's grenade kills B's skeleton on B's machine"));
+    await wait(A, (k) => window.__game.stats.kills > k, kA, 30000).then(() => ok(true, 'and the kill is counted for A'), () => ok(false, 'and the kill is counted for A'));
+  } else ok(false, "B's skeleton is still there to blow up");
 
   // B leaves: A keeps B's things; B comes back and has them
   await B.evaluate(() => { const inv = window.__app.game.inventory; inv.slots[7] = inv.make('diamond', 7); });

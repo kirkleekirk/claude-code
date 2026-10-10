@@ -219,6 +219,8 @@ export class Sprites {
     this.mat = new THREE.ShaderMaterial({ vertexShader: SPRITE_VS, fragmentShader: SPRITE_FS, uniforms: this.uniforms, transparent: true, depthWrite: false });
     this.addMat = this.mat.clone();
     this.addMat.blending = THREE.AdditiveBlending;
+    // (a clone gets its own copy of the uniforms: the glowing ones must follow the same scale)
+    this.addMat.uniforms = this.uniforms;
     this.points = new THREE.Points(g, this.mat);
     this.points.frustumCulled = false;
     this.points.renderOrder = 20;
@@ -291,47 +293,5 @@ export class Sprites {
 
   setScale(h, fov) {
     this.uniforms.uScale.value = h / (2 * Math.tan(THREE.MathUtils.degToRad(fov) / 2)) / 60;
-  }
-}
-
-// ---- tracers: streaks of light along a bullet's path --------------------------------------------
-
-export class Tracers {
-  constructor(scene, max = 64) {
-    this.max = max;
-    const g = new THREE.BufferGeometry();
-    this.pos = new Float32Array(max * 6);
-    this.alpha = new Float32Array(max * 2);
-    g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
-    g.setAttribute('aAlpha', new THREE.BufferAttribute(this.alpha, 1).setUsage(THREE.DynamicDrawUsage));
-    const m = new THREE.ShaderMaterial({
-      vertexShader: 'attribute float aAlpha; varying float vA; void main(){ vA = aAlpha; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-      fragmentShader: 'varying float vA; void main(){ gl_FragColor = vec4(vec3(6.0, 4.6, 2.6) * vA, vA); }',
-      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-    });
-    this.lines = new THREE.LineSegments(g, m);
-    this.lines.frustumCulled = false;
-    scene.add(this.lines);
-    this.list = [];
-  }
-  add(a, b) {
-    if (this.list.length >= this.max) this.list.shift();
-    this.list.push({ a: a.clone(), b: b.clone(), life: 0.06 });
-  }
-  update(dt) {
-    let n = 0;
-    for (let i = this.list.length - 1; i >= 0; i--) { this.list[i].life -= dt; if (this.list[i].life <= 0) this.list.splice(i, 1); }
-    for (const t of this.list) {
-      // the visible streak: a stretch of the path near the far end
-      const k = 1 - t.life / 0.06;
-      const s = t.a.clone().lerp(t.b, Math.min(1, k * 0.7 + 0.1));
-      const e = t.a.clone().lerp(t.b, Math.min(1, k * 0.7 + 0.35));
-      this.pos.set([s.x, s.y, s.z, e.x, e.y, e.z], n * 6);
-      this.alpha[n * 2] = 0.0; this.alpha[n * 2 + 1] = t.life / 0.06;
-      n++;
-    }
-    this.lines.geometry.setDrawRange(0, n * 2);
-    this.lines.geometry.attributes.position.needsUpdate = true;
-    this.lines.geometry.attributes.aAlpha.needsUpdate = true;
   }
 }

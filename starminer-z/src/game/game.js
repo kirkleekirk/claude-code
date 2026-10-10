@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import { World } from '../world/world.js';
-import { B, BLOCKS, SOLID, HEIGHT, isTorch } from '../world/blocks.js';
+import { B, BLOCKS, SOLID, HEIGHT, isTorch, isDoor, DOOR, doorBlock } from '../world/blocks.js';
 import { BIOMES } from '../world/gen.js';
 import { Player } from '../entities/player.js';
 import { Inventory } from '../items/inventory.js';
@@ -12,10 +12,13 @@ import { getZombie, TYPES } from '../entities/cmz/types.js';
 import { ViewModel } from '../gfx/viewModel.js';
 import { CmzViewModel } from '../gfx/cmzViewModel.js';
 import { Puppet } from '../entities/puppet.js';
-import { BlockHighlight, Debris, Sprites, Tracers } from '../gfx/effects.js';
+import { BlockHighlight, Debris, Sprites } from '../gfx/effects.js';
 import { BlockItemMaterials, blockItemGeometry } from '../gfx/blockItem.js';
 import { makePropMaterial } from '../gfx/propMaterial.js';
 import { Drops } from './drops.js';
+import { Explosives, EXPLOSIVE } from './explosives.js';
+import { Projectiles } from './projectiles.js';
+import { Crates } from './crates.js';
 import { Enemies } from './enemies.js';
 import { HUD } from '../ui/hud.js';
 import { Crafting } from '../ui/crafting.js';
@@ -39,6 +42,13 @@ const D2R = Math.PI / 180;
 // how fast a gun's kick settles back (the original's recoilDecay, 30 degrees a second)
 const RECOIL_DECAY = 30 * D2R;
 const rand = (a, b) => a + Math.random() * (b - a);
+// the grenade's clips: the pin out, the throw, the hand back (GrenadeCook, GrenadeThrow,
+// GrenadeRelease)
+const GRENADE_COOK = 0.983, GRENADE_THROW = 0.317, GRENADE_RESET = 0.317;
+// what Activate works on: doors, crates, TNT and C4
+const ACTIVATES = new Uint8Array(256);
+for (let id = B.DOOR_LOWER_X; id <= B.DOOR_UPPER_OPEN_Z; id++) ACTIVATES[id] = 1;
+ACTIVATES[B.CRATE] = ACTIVATES[B.TNT] = ACTIVATES[B.C4] = 1;
 
 // input with nothing pressed (the player stands still while a screen has the controls)
 const IDLE = { move: { x: 0, y: 0 }, look: { x: 0, y: 0 }, wheel: 0, lastDevice: 'keyboard', isHeld: () => false, pressed: () => false, consume: () => false };
@@ -65,10 +75,13 @@ export class Game {
     this.highlight = new BlockHighlight(this.scene);
     this.debris = new Debris(this.scene, this.world);
     this.sprites = new Sprites(this.scene);
-    this.tracers = new Tracers(this.scene);
     this.propMat = makePropMaterial(app.sky.uniforms, app.terrain.uniforms, { side: THREE.DoubleSide });
     this.blockMats = new BlockItemMaterials(app.sky.uniforms, app.terrain.uniforms);
     this.drops = new Drops(this.scene, this.world, this.propMat, (b) => this.blockMats.get(b), blockItemGeometry);
+    // what's in the air, what's about to go off, and what's in the crates
+    this.projectiles = new Projectiles(this);
+    this.explosives = new Explosives(this);
+    this.crates = new Crates(this, save ? save.crates : welcome ? welcome.crates : null);
     this.hud = new HUD(app.uiRoot, this);
     this.enemies = new Enemies(this);
     this.audio = app.audio;
@@ -196,6 +209,9 @@ export class Game {
     this.world.dispose();
     this.hud.el.remove();
     this.enemies?.dispose?.();
+    this.projectiles.dispose();
+    this.explosives.dispose();
+    this.marker?.removeFromParent();
     this.crafting?.dispose?.();
     this.viewModel.dispose?.();
     this.puppet?.dispose();
@@ -243,7 +259,8 @@ export class Game {
 
   // Third person: the avatar walks where the player does.
   updatePlayerModel(dt) {
-    const p = this.player;
+    const p = this.player, stage = this.grenadeStage;
+    this.grenadeStage = null;
     const show = this.app.thirdPerson && !p.dead && this.look;
     if (!show) { if (this.puppet) this.puppet.root.visible = false; return; }
     if (!this.puppet) { this.puppet = new Puppet(this.app, this.look); this.scene.add(this.puppet.root); }
@@ -255,6 +272,7 @@ export class Game {
       pos: p.pos, yaw: p.yaw, pitch: p.pitch, vel: p.vel, onGround: p.onGround, held: id,
       use: !!this.viewModel.useNow, shoulder: gun && this.ads, reload: gun && this.reloading > 0, reloadTime: it?.reload,
       dead: false, light: { sky: L.sky / 15, block: L.block / 15 },
+      grenade: stage, holdUse: !!this.grenade, time: this.app.sky.time,
     });
   }
 
@@ -350,7 +368,12 @@ export class Game {
         // (the d-pad too: on an Xbox, Edge takes the View button for itself)
         if (input.consume('view') || input.consume('up')) app.thirdPerson = !app.thirdPerson;
         p.update(dt, input, true);
-        this.handleItems(dt, input);
+        if (this.spent && (this.spent.t -= dt) <= 0) {
+          const i = this.inventory.slots.indexOf(this.spent.slot);
+          if (i >= 0) { this.inventory.slots[i] = null; this.inventory.changed(); }
+          this.spent = null;
+        }
+        if (this.inventory.held && this.inventory.held === this.spent?.slot) { this.handleSpent(input); } else this.handleItems(dt, input);
         if (this.viewModel.useNow) this.uses++;
       }
     }
@@ -404,7 +427,8 @@ export class Game {
     // effects
     this.debris.update(dt);
     this.sprites.update(dt);
-    this.tracers.update(dt);
+    if (live) { this.projectiles.update(dt); this.explosives.update(dt); }
+    this.updateMarker();
     for (const got of this.drops.update(dt, p, this.inventory)) this.audio?.pickup(got.id);
     this.enemies?.update(dt, live);
     this.online?.update(dt);
@@ -419,10 +443,14 @@ export class Game {
     // the view model
     const held = this.inventory.held;
     this.viewModel.setItem(held ? held.id : null);
-    const toTower = Math.atan2(this.towerAt.x - p.pos.x, this.towerAt.z - p.pos.z) - p.yaw + Math.PI;
+    // the compass points to the tower; a locator to where it's set (unset, the world's middle,
+    // as the original's GPSEntity points to its zero)
+    const to = held?.gps ? (held.gps.at ? { x: held.gps.at[0] + 0.5, z: held.gps.at[2] + 0.5 } : { x: 0, z: 0 }) : this.towerAt;
+    const toTower = Math.atan2(to.x - p.pos.x, to.z - p.pos.z) - p.yaw + Math.PI;
     this.viewModel.update(dt, {
       camera: cam, yaw: p.yaw, pitch: p.pitch, bob: bob, bobPhase: p.bobPhase,
       ads: this.ads && !p.sprinting, sprinting: p.sprinting && !this.viewModel.swinging, light: this.light, toTower,
+      time: app.sky.time, grenade: !!this.grenade,
       move: Math.min(1, Math.hypot(p.vel.x, p.vel.z) / 4.4),
     });
     this.viewModel.hidden = app.thirdPerson || p.dead;
@@ -536,6 +564,8 @@ export class Game {
       this.reloading = 0;
       this.dig.progress = 0;
       this.cooldown = Math.max(this.cooldown, 0.2);
+      // (a grenade being cooked isn't thrown: the original sends it only if one's still in hand)
+      this.grenade = null;
       this.audio?.equip(inv.held?.id);
       this.audio?.holding(inv.held ? ITEMS[inv.held.id] : null);
     }
@@ -550,7 +580,7 @@ export class Game {
     this.ads = false;
 
     // Q: one of what's in hand onto the ground in front (the original's DropOneSelectedTrayItem)
-    if (input.consume('drop') && held) {
+    if (input.consume('drop') && held && !this.grenade) {
       const one = { ...held, count: 1 };
       inv.useHeld(1);
       const f = p.forward(new THREE.Vector3());
@@ -559,12 +589,31 @@ export class Game {
       return;
     }
 
+    // B on a pad (the right mouse button): the original's Activate, on a door, a crate, or TNT
+    // or C4, whatever's in hand
+    if (hit && ACTIVATES[hit.id] && (input.consume('activate') || input.consume('back_btn'))) {
+      input.consume('secondary');
+      this.activate(hit);
+    }
+
     if (it && it.kind === 'gun') {
       this.handleGun(dt, input, it, held, eye);
       this.highlight.show(hit, 0);
       return;
     }
     this.spread = 0;
+    if (it && it.kind === 'grenade') { this.handleGrenade(dt, input); this.highlight.show(hit, 0); return; }
+    if (it && (it.tool === 'locator' || it.tool === 'teleporter')) { this.handleGps(input, it, held, hit); this.highlight.show(hit, 0); return; }
+    // a block in hand goes down with either trigger, and nothing's dug with it (the original's
+    // BlockInventoryItem: Use or the left trigger, pressed)
+    if (it && it.kind === 'block') {
+      if ((input.pressed('primary') || input.consume('secondary')) && this.cooldown <= 0) {
+        this.cooldown = it.cooldown;
+        if (hit) this.placeBlock(hit, it);
+      }
+      this.highlight.show(hit, 0);
+      return;
+    }
 
     // Each use waits for the item's cooldown (bare hands, half a second). Holding the button
     // swings again each time it's up (the original's InventoryItem.ProcessInput): at an enemy in
@@ -576,6 +625,8 @@ export class Game {
     const wear = () => { if (it?.uses && inv.wearHeld(1)) this.audio?.toolBreak(); };
     const target = this.enemies?.raycast(eye, fwd, it?.kind === 'melee' ? 2.6 : 2.3, hit ? hit.dist : 99);
     const primary = input.isHeld('primary');
+    // TNT or C4 swung at with anything but a spade: its fuse is lit
+    if (input.pressed('primary') && hit && (hit.id === B.TNT || hit.id === B.C4) && it?.tool !== 'spade') this.explosives.light(hit.x, hit.y, hit.z);
     if (primary && target && this.cooldown <= 0) {
       vm.startSwing(kind, swing * 0.9);
       this.cooldown = cooldown;
@@ -621,48 +672,107 @@ export class Game {
       if (!primary) this.dig.key = '';
     }
     this.highlight.show(hit, Math.min(1, this.dig.progress));
-
-    // placing
-    if (input.consume('secondary') && hit && it && it.kind === 'block') this.placeBlock(hit, it);
   }
 
-  // A block dug out by the player (with `tool` in hand: what comes out of it goes by that).
+  // Is the player looking at something B (the right mouse button) would work? (Then it's not the
+  // pause menu's.)
+  wantsActivate() {
+    const h = this.lookHit;
+    return !!h && !!ACTIVATES[h.id] && !this.player.dead;
+  }
+
+  // The original's Activate (InGameHUD.OnPlayerInput): a door opens or shuts, both halves; a
+  // crate opens; TNT or C4 is lit.
+  activate(hit) {
+    const w = this.world, id = hit.id;
+    if (id === B.TNT || id === B.C4) { this.explosives.light(hit.x, hit.y, hit.z); return; }
+    if (id === B.CRATE) {
+      if (!this.crafting) this.crafting = new Crafting(this.app.uiRoot, this);
+      this.crafting.openCrate(this.crates.get(hit.x, hit.y, hit.z));
+      this.lockFree = true;
+      this.app.input.exitLock();
+      this.audio?.ui?.('click');
+      return;
+    }
+    if (!isDoor(id)) return;
+    const D = DOOR(id), y0 = D.upper ? hit.y - 1 : hit.y;
+    const lower = w.getBlock(hit.x, y0, hit.z), upper = w.getBlock(hit.x, y0 + 1, hit.z);
+    const open = !D.open, alongX = isDoor(lower) ? DOOR(lower).alongX : D.alongX;
+    if (isDoor(lower) && !DOOR(lower).upper) w.setBlock(hit.x, y0, hit.z, doorBlock(false, open, alongX));
+    if (isDoor(upper) && DOOR(upper).upper) w.setBlock(hit.x, y0 + 1, hit.z, doorBlock(true, open, alongX));
+    this.audio?.play?.(open ? 'DoorOpen' : 'DoorClose', new THREE.Vector3(hit.x + 0.5, y0 + 0.5, hit.z + 0.5));
+  }
+
+  // A block dug out by the player (with `tool` in hand: what comes out of it goes by that). A
+  // crate spills what's in it; a door goes whole; what hangs on it falls (InGameHUD.Dig).
   breakBlock(hit, tool = null) {
-    const def = BLOCKS[hit.id];
-    this.world.setBlock(hit.x, hit.y, hit.z, B.AIR);
+    const def = BLOCKS[hit.id], w = this.world;
+    if (hit.id === B.CRATE) this.crates.spill(hit.x, hit.y, hit.z);
+    w.setBlock(hit.x, hit.y, hit.z, B.AIR);
     this.stats.dug++;
-    const L = this.world.lightAt(hit.x, hit.y + 1, hit.z);
+    const L = w.lightAt(hit.x, hit.y + 1, hit.z);
     const light = Math.max(0.25, Math.max(L.sky / 15, L.block / 15));
     this.debris.burst(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, def.color, 14, light);
     this.audio?.breakBlock(hit.id);
     const drop = dropFor(hit.id, tool);
     if (drop) this.drops.spawn(drop, 1, hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
-    // torches resting on this block fall
+    // the other half of a door
+    if (isDoor(hit.id)) {
+      const oy = DOOR(hit.id).upper ? hit.y - 1 : hit.y + 1;
+      if (isDoor(w.getBlock(hit.x, oy, hit.z))) w.setBlock(hit.x, oy, hit.z, B.AIR);
+    }
+    this.dropHangers(hit.x, hit.y, hit.z);
+  }
+
+  // What hangs on a block that's gone, falling as what it is: the torches on it, and a door
+  // standing on it.
+  dropHangers(x, y, z) {
+    const w = this.world;
     for (const [dx, dy, dz, id] of [[0, 1, 0, B.TORCH], [1, 0, 0, B.TORCH_NX], [-1, 0, 0, B.TORCH_PX], [0, 0, 1, B.TORCH_NZ], [0, 0, -1, B.TORCH_PZ]]) {
-      if (this.world.getBlock(hit.x + dx, hit.y + dy, hit.z + dz) === id) {
-        this.world.setBlock(hit.x + dx, hit.y + dy, hit.z + dz, B.AIR);
-        this.drops.spawn('torch', 1, hit.x + dx + 0.5, hit.y + dy + 0.5, hit.z + dz + 0.5);
+      if (w.getBlock(x + dx, y + dy, z + dz) === id) {
+        w.setBlock(x + dx, y + dy, z + dz, B.AIR);
+        this.drops.spawn('torch', 1, x + dx + 0.5, y + dy + 0.5, z + dz + 0.5);
       }
+    }
+    const above = w.getBlock(x, y + 1, z);
+    if (isDoor(above) && !DOOR(above).upper) {
+      w.setBlock(x, y + 1, z, B.AIR);
+      if (isDoor(w.getBlock(x, y + 2, z))) w.setBlock(x, y + 2, z, B.AIR);
+      this.drops.spawn('door', 1, x + 0.5, y + 1.5, z + 0.5);
     }
   }
 
   placeBlock(hit, it) {
     const x = hit.x + hit.nx, y = hit.y + hit.ny, z = hit.z + hit.nz;
-    const cur = this.world.getBlock(x, y, z);
+    const w = this.world, cur = w.getBlock(x, y, z);
     if (cur !== B.AIR && !isTorch(cur)) return;
     let id = it.block;
+    const blocked = (bx, by, bz) => this.player.occupies(bx, by, bz) || this.enemies?.occupies(bx, by, bz)
+      || (this.online && [...this.online.players.values()].some((r) => r.occupies(bx, by, bz)));
     if (id === B.TORCH) {
       // torches go on floors and walls, not ceilings
       if (hit.ny < 0) return;
       if (hit.nx === 1) id = B.TORCH_NX; else if (hit.nx === -1) id = B.TORCH_PX;
       else if (hit.nz === 1) id = B.TORCH_NZ; else if (hit.nz === -1) id = B.TORCH_PZ;
       if (!SOLID[hit.id]) return;
-    } else {
-      if (this.player.occupies(x, y, z)) return;
-      if (this.enemies?.occupies(x, y, z)) return;
-      if (this.online) for (const r of this.online.players.values()) if (r.occupies(x, y, z)) return;
-    }
-    if (!this.world.setBlock(x, y, z, id)) return;
+    } else if (it.door) {
+      // a door (the original's DoorInventoryitem): on something, with room above for its top
+      // half, set across the way the walls either side of it run
+      if (w.getBlock(x, y - 1, z) === B.AIR || w.getBlock(x, y + 1, z) !== B.AIR) return;
+      if (blocked(x, y, z) || blocked(x, y + 1, z)) return;
+      const full = (bx, bz) => w.getBlock(bx, y, bz) !== B.AIR;
+      const xs = [full(x + 1, z), full(x - 1, z)], zs = [full(x, z + 1), full(x, z - 1)];
+      const alongX = (xs[0] && xs[1]) || (!(zs[0] && zs[1]) && (xs[0] || xs[1]));
+      if (!w.setBlock(x, y, z, doorBlock(false, false, alongX))) return;
+      w.setBlock(x, y + 1, z, doorBlock(true, false, alongX));
+      this.placed(it, B.DOOR_LOWER_X);
+      return;
+    } else if (blocked(x, y, z)) return;
+    if (!w.setBlock(x, y, z, id)) return;
+    this.placed(it, id);
+  }
+
+  placed(it, id) {
     this.inventory.useHeld(1);
     this.stats.placed++;
     this.viewModel.startSwing('place', 0.22);
@@ -707,26 +817,65 @@ export class Game {
     this.stats.shots++;
     vm.fire(Math.min(0.12, it.recoil * D2R));
     this.audio?.gunshot(it);
-    // the shot goes where the view points, kick and all; each pellet strays up to the gun's
-    // inaccuracy right or left and up or down (the original's GunshotMessage)
+    // the shot goes where the view points, kick and all (a bullet a touch above, for its fall);
+    // each pellet strays up to the gun's inaccuracy right or left and up or down (the original's
+    // GunshotMessage)
     const p = this.player;
     _q.setFromEuler(_e.set(p.pitch, p.yaw, 0, 'YXZ')).multiply(this.recoil);
     const fwd = _f.set(0, 0, -1).applyQuaternion(_q), up = _u.set(0, 1, 0).applyQuaternion(_q), right = _r.set(1, 0, 0).applyQuaternion(_q);
-    const muzzle = eye.clone().addScaledVector(right, 0.12).addScaledVector(up, -0.1).addScaledVector(fwd, 0.6);
-    const ends = [];
+    const muzzle = this.muzzle(eye, fwd, up, right);
+    const dirs = [];
     for (let k = 0; k < it.pellets; k++) {
-      const dir = fwd.clone().addScaledVector(right, rand(-it.inaccuracy, it.inaccuracy)).addScaledVector(up, rand(-it.inaccuracy, it.inaccuracy)).normalize();
-      ends.push(this.shoot(eye, dir, it, muzzle));
+      const dir = fwd.clone();
+      if (!it.laser && it.gun !== 'rocket') dir.addScaledVector(up, 0.015);
+      dirs.push(dir.addScaledVector(right, rand(-it.inaccuracy, it.inaccuracy)).addScaledVector(up, rand(-it.inaccuracy, it.inaccuracy)).normalize());
     }
+    this.fire(it, eye, muzzle, dirs, true);
     this.applyRecoil(it.recoil);
     this.spread = Math.min(1.5, this.spread + it.recoil * D2R * 4);
-    // online: the others hear it, and see where it went
-    this.online?.shot(it.id, muzzle, ends);
+    // online: the others hear it, and see it go
+    this.online?.shot(it.id, eye, muzzle, dirs);
     // smoke from the muzzle
     if (!it.laser) this.sprites.emit('smoke', muzzle.x, muzzle.y, muzzle.z, { color: 0x9a9a9a, size: 0.12, grow: 0.4, life: 0.7, alpha: 0.25, spread: 0.4, v: fwd.clone().multiplyScalar(1.2) });
+    // a rocket launcher fires its one rocket and it's spent: in hand, empty, till its clip's
+    // played, then gone (RocketLauncherBaseItem.InflictDamage)
+    if (it.gun === 'rocket') { this.spent = { slot: held, t: 0.98 }; vm.spend?.(); return; }
     // each shot wears the gun; worn through, it's gone
     if (inv.wearHeld(1)) { this.audio?.toolBreak(); this.reloading = 0; return; }
     if (held.mag <= 0 && inv.count(it.ammo) > 0) this.startReload(it, false);
+  }
+
+  // where a shot leaves the gun: its barrel's tip in first person, or near enough
+  muzzle(eye, fwd, up, right) {
+    const vm = this.viewModel, tip = !this.app.thirdPerson && vm.item?.muzzle;
+    if (tip && vm.camera) {
+      // the view model's own camera sits at the eye: its tip, from there, into the world
+      tip.getWorldPosition(_v);
+      vm.camera.worldToLocal(_v);
+      const m = eye.clone().addScaledVector(right, _v.x).addScaledVector(up, _v.y).addScaledVector(fwd, -_v.z);
+      if (m.distanceTo(eye) < 1.5) return m;
+    }
+    return eye.clone().addScaledVector(right, 0.12).addScaledVector(up, -0.1).addScaledVector(fwd, 0.6);
+  }
+
+  // A shot (anyone's, mine: this player's): a rocket from the eye, laser bolts from the gun's
+  // tip, bullets from the eye.
+  fire(it, eye, muzzle, dirs, mine) {
+    for (const d of dirs) {
+      if (it.gun === 'rocket') this.projectiles.rocket(eye, d, it, mine);
+      else if (it.laser) this.projectiles.bolt(muzzle, d, it, mine);
+      else this.projectiles.bullet(eye, d, it, mine);
+    }
+  }
+
+  // an empty launcher in hand: nothing to do with it but look about (and change what's in hand)
+  handleSpent(input) {
+    const inv = this.inventory;
+    for (let i = 0; i < 8; i++) if (input.consume(`slot${i + 1}`)) inv.select(i);
+    if (input.wheel) inv.select(inv.selected + input.wheel);
+    if (input.consume('next') || input.consume('rightpad')) inv.select(inv.selected + 1);
+    if (input.consume('prev') || input.consume('leftpad')) inv.select(inv.selected - 1);
+    this.ads = input.isHeld('secondary');
   }
 
   startReload(it, released) {
@@ -743,34 +892,172 @@ export class Game {
     this.recoil.multiply(_q2.setFromAxisAngle(X_AXIS, rand(0.5, 1) * r)).multiply(_q2.setFromAxisAngle(Y_AXIS, rand(-0.25, 0.25) * r));
   }
 
-  // One bullet: the first thing along the ray takes it.
-  shoot(eye, dir, it, muzzle) {
-    const range = it.range;
-    const block = this.world.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, range, (id) => SOLID[id] || id === B.LEAVES || id === B.GLASS);
-    const maxD = block ? block.dist : range;
-    const target = this.enemies?.raycast(eye, dir, maxD, maxD, true);
-    let end;
-    if (target) {
-      end = eye.clone().addScaledVector(dir, target.dist);
-      if (target.enemy.takeDamage(target.y, weaponDamage(it))) this.onKill(target.enemy);
-      this.hud.hitMarker();
-      this.audio?.bulletHit(end);
-      const blood = target.enemy.kind === 'zombie' ? 0x5a0805 : 0xcfc6ac;
-      for (let i = 0; i < 6; i++) this.sprites.emit('blood', end.x, end.y, end.z, { color: blood, size: 0.1, life: 0.5, spread: 2.2, gravity: 9, alpha: 0.95 });
-    } else {
-      end = eye.clone().addScaledVector(dir, maxD);
-      if (block) {
-        const def = BLOCKS[block.id];
-        const px = end.x - dir.x * 0.02, py = end.y - dir.y * 0.02, pz = end.z - dir.z * 0.02;
-        for (let i = 0; i < 5; i++) this.sprites.emit('dust', px, py, pz, { color: def.color, size: 0.07, life: 0.6, spread: 2, gravity: 8, alpha: 0.9 });
-        this.sprites.emit('spark', px, py, pz, { color: 0xffc070, size: 0.05, life: 0.12, spread: 3 });
-        this.audio?.impact(block.id, end);
-        // glass shatters
-        if (block.id === B.GLASS) this.breakBlock(block);
+  // What a shot hit (a bullet's or a laser bolt's; mine: this player's, the one that hurts): one
+  // of the dead takes it, a block shows it, glass breaks, and TNT or C4 goes off.
+  shotHit(hit, it, mine) {
+    const at = hit.at;
+    if (hit.enemy) {
+      if (mine) {
+        if (hit.enemy.takeDamage(hit.y, weaponDamage(it))) this.onKill(hit.enemy);
+        this.hud.hitMarker();
       }
+      this.audio?.bulletHit(at);
+      const blood = hit.enemy.kind === 'zombie' ? 0x5a0805 : 0xcfc6ac;
+      for (let i = 0; i < 6; i++) this.sprites.emit('blood', at.x, at.y, at.z, { color: blood, size: 0.1, life: 0.5, spread: 2.2, gravity: 9, alpha: 0.95 });
+      return;
     }
-    this.tracers.add(muzzle, end);
-    return end;
+    const b = hit.block, def = BLOCKS[b.id], d = hit.dir;
+    const px = at.x - d.x * 0.02, py = at.y - d.y * 0.02, pz = at.z - d.z * 0.02;
+    for (let i = 0; i < 5; i++) this.sprites.emit('dust', px, py, pz, { color: def.color, size: 0.07, life: 0.6, spread: 2, gravity: 8, alpha: 0.9 });
+    this.sprites.emit('spark', px, py, pz, { color: it?.laser ? it.color : 0xffc070, size: 0.05, life: 0.12, spread: 3 });
+    this.audio?.impact(b.id, at);
+    if (!mine) return;
+    if (b.id === B.GLASS) this.breakBlock(b);
+    else if (b.id === B.TNT || b.id === B.C4) this.explosives.detonate(b.x, b.y, b.z, b.id === B.C4 ? EXPLOSIVE.C4 : EXPLOSIVE.TNT, true, true);
+  }
+
+  // A grenade in hand (the original's GrenadeItem and Player.UpdateAnimation): the trigger
+  // pulls the pin and it cooks; let go (or four seconds on) and, once the pin's out, the arm comes
+  // over and it's thrown as the swing ends, with five seconds less however long it cooked.
+  handleGrenade(dt, input) {
+    let n = this.grenade;
+    if (input.pressed('primary') && !n && this.cooldown <= 0) {
+      n = this.grenade = { t: 0, cook: 0, ready: false, throwT: -1 };
+      this.grenadeClip('cook');
+      this.audio?.play?.('GrenadeArm');
+    }
+    if (!n) return;
+    n.t += dt;
+    if (!n.ready) {
+      n.cook += dt;
+      if (!input.isHeld('primary') || n.cook >= 4) n.ready = true;
+    }
+    if (n.ready && n.throwT < 0 && n.t >= GRENADE_COOK) { n.throwT = GRENADE_THROW; this.grenadeClip('throw'); }
+    if (n.throwT < 0) return;
+    n.throwT -= dt;
+    if (n.throwT > 0) return;
+    this.grenade = null;
+    this.throwGrenade(5 - n.cook);
+  }
+
+  // a grenade clip, in first person and on the avatar in third
+  grenadeClip(stage) {
+    this.viewModel.grenade?.(stage);
+    this.grenadeStage = stage;
+  }
+
+  // GrenadeMessage: from a metre out in front of the eye, at 15 m/s the way the view points
+  throwGrenade(fuse) {
+    const p = this.player, eye = p.eye;
+    const dir = p.forward(new THREE.Vector3());
+    const at = eye.clone().add(dir);
+    this.projectiles.grenade(at, dir, fuse, true);
+    this.online?.grenade(at, dir, fuse);
+    this.grenadeClip('reset');
+    // (the next can't be started till the hand's back)
+    this.cooldown = GRENADE_RESET;
+    if (!this.inventory.infinite) this.inventory.useHeld(1);
+  }
+
+  // A locator or a teleporter (the original's GPSItem): the trigger marks the block looked at and
+  // asks for a name for it (a locator wears a tenth each time); reload renames it; a
+  // teleporter's left trigger takes you to where it's marked, and that's it used up.
+  handleGps(input, it, held, hit) {
+    if (input.consume('reload')) { this.nameGps(held); return; }
+    if (input.pressed('primary')) {
+      if (!hit) return;
+      this.audio?.play?.('locator');
+      held.gps = { name: held.gps?.name ?? 'Alpha', at: [hit.x, hit.y, hit.z] };
+      if (it.tool === 'locator' && this.inventory.wearHeld(1)) return;
+      this.nameGps(held);
+      return;
+    }
+    if (it.tool === 'teleporter' && input.consume('secondary')) {
+      const at = held.gps?.at;
+      if (!at) { this.audio?.ui?.('deny'); return; }
+      this.audio?.play?.('Teleport');
+      this.online?.say(`${this.online.myName} Teleported To ${held.gps.name}`);
+      this.teleportToPoint(at[0] + 0.5, at[1], at[2] + 0.5);
+      this.inventory.wearHeld(1);
+    }
+  }
+
+  // The original's keyboard for a locator's name: ten letters at most.
+  nameGps(slot) {
+    this.app.askName?.('Name', 'Enter A Name For This Locator', slot.gps?.name ?? 'Alpha', 10, (name) => {
+      if (name) slot.gps = { ...slot.gps, name: name.slice(0, 10) };
+    });
+  }
+
+  // GameScreen.TeleportToLocation: there, once the ground's in (and out of whatever block it
+  // was, on top of it)
+  teleportToPoint(x, y, z) {
+    const p = this.player;
+    p.pos.set(x, y, z);
+    p.vel.set(0, 0, 0);
+    p.fallStart = null;
+    if (this.enemies) this.enemies.cleared = 50;
+    this.ready = false;
+  }
+
+  // One of this machine's dead killed by an explosion someone set off: the kill is theirs
+  // (KillEnemyMessage), here or on their machine (item: what did it, for the awards).
+  killedBy(e, shooter, item) {
+    const me = this.online ? shooter === this.online.myId : true;
+    if (me) {
+      if (item === 'tnt' || item === 'c4') this.stats.tntKills = (this.stats.tntKills || 0) + 1;
+      else if (item === 'grenade') this.stats.grenadeKills = (this.stats.grenadeKills || 0) + 1;
+      this.onKill(e);
+    } else this.online.killedFor(shooter, e.pos);
+  }
+
+  // A laser bolt on a block: a spark of its colour
+  boltSplash(at, it) {
+    for (let i = 0; i < 4; i++) this.sprites.emit('spark', at.x, at.y, at.z, { color: it?.color ?? 0xff3030, size: 0.06, life: 0.15, spread: 3.5 });
+  }
+
+  // Is a screen of the game's up (the inventory, crafting, a crate)?
+  get screenUp() { return !!this.crafting?.isOpen; }
+
+  // The marker where the locator in hand points (the original's GPSMarkerEntity: its Marker
+  // model, turning, in the locator's colour: gold, or a teleporter's bloodstone)
+  updateMarker() {
+    const s = this.inventory.held, at = s?.gps?.at;
+    if (!at || this.player.dead) { if (this.marker) this.marker.visible = false; return; }
+    if (!this.marker) this.marker = this.makeMarker();
+    const m = this.marker;
+    m.visible = true;
+    m.position.set(at[0] + 0.5, at[1] + 1, at[2] + 0.5);
+    m.rotation.y = (this.time * 2) % (Math.PI * 2);
+    const tint = s.id === 'teleporter' ? 0x8b0000 : 0xffd700;
+    if (m.userData.tint !== tint) {
+      m.userData.tint = tint;
+      m.traverse((o) => { if (o.isMesh && o.userData.recolor) o.material.color.setHex(tint); });
+    }
+  }
+
+  makeMarker() {
+    const M = this.app.cmzPlayer?.items?.models?.marker;
+    let root;
+    if (M) {
+      root = M.scene.clone(true);
+      root.traverse((o) => {
+        if (!o.isMesh) return;
+        o.userData.recolor = o.name.includes('recolor_');
+        o.material = new THREE.MeshBasicMaterial({ color: 0xffffff, map: o.material.map || null, transparent: true, opacity: 0.85, depthWrite: false });
+        o.frustumCulled = false;
+      });
+    } else {
+      // (without the original's model: a diamond on a stalk)
+      root = new THREE.Group();
+      const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.3), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false }));
+      gem.position.y = 0.6;
+      gem.userData.recolor = true;
+      root.add(gem);
+    }
+    root.renderOrder = 18;
+    this.scene.add(root);
+    return root;
   }
 
   // One of the dead killed by the player: now and then it leaves something (the original's
@@ -794,16 +1081,18 @@ export class Game {
   }
 
   digOut(x, y, z) {
-    const id = this.world.getBlock(x, y, z);
-    if (id === B.AIR || !this.world.setBlock(x, y, z, B.AIR)) return;
-    const L = this.world.lightAt(x, y + 1, z);
+    const w = this.world, id = w.getBlock(x, y, z);
+    // (a crate spills what's in it, as the original's EnemyBreakBlocks has it)
+    if (id === B.CRATE) this.crates.spill(x, y, z);
+    if (id === B.AIR || !w.setBlock(x, y, z, B.AIR)) return;
+    const L = w.lightAt(x, y + 1, z);
     this.debris.burst(x + 0.5, y + 0.5, z + 0.5, BLOCKS[id].color, 10, Math.max(0.25, Math.max(L.sky / 15, L.block / 15)));
-    for (const [dx, dy, dz, t] of [[0, 1, 0, B.TORCH], [1, 0, 0, B.TORCH_NX], [-1, 0, 0, B.TORCH_PX], [0, 0, 1, B.TORCH_NZ], [0, 0, -1, B.TORCH_PZ]]) {
-      if (this.world.getBlock(x + dx, y + dy, z + dz) === t) {
-        this.world.setBlock(x + dx, y + dy, z + dz, B.AIR);
-        this.drops.spawn('torch', 1, x + dx + 0.5, y + dy + 0.5, z + dz + 0.5);
-      }
+    if (isDoor(id)) {
+      const oy = DOOR(id).upper ? y - 1 : y + 1;
+      if (isDoor(w.getBlock(x, oy, z))) w.setBlock(x, oy, z, B.AIR);
+      this.drops.spawn('door', 1, x + 0.5, y + 0.5, z + 0.5);
     }
+    this.dropHangers(x, y, z);
   }
 
   // A block someone else changed, online (kind: 0 a player, 1 the dead digging): what it
@@ -812,7 +1101,16 @@ export class Game {
     const L = this.world.lightAt(x, y + 1, z);
     const light = Math.max(0.25, Math.max(L.sky / 15, L.block / 15));
     const at = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5);
-    if (id !== B.AIR) { this.audio?.place?.(BLOCKS[id].sound, at); return; }
+    // a crate gone there is gone here (what was in it went where it was broken)
+    if (was === B.CRATE && id !== B.CRATE) this.crates.remove(x, y, z);
+    // a door opened or shut (the lower half's change makes the sound)
+    if (isDoor(was) && isDoor(id)) {
+      if (!DOOR(id).upper && DOOR(was).open !== DOOR(id).open) this.audio?.play?.(DOOR(id).open ? 'DoorOpen' : 'DoorClose', at);
+      return;
+    }
+    // (an explosion's: its bang was heard)
+    if (kind === 2) { if (was !== B.AIR && id === B.AIR) this.debris.burst(at.x, at.y, at.z, BLOCKS[was].color, 4, light); return; }
+    if (id !== B.AIR) { if (!(isDoor(id) && DOOR(id).upper)) this.audio?.place?.(BLOCKS[id].sound, at); return; }
     if (was === B.AIR) return;
     this.debris.burst(at.x, at.y, at.z, BLOCKS[was].color, kind === 1 ? 10 : 14, light);
     if (kind === 1) this.audio?.enemyDig?.(at); else this.audio?.breakBlock?.(was, at);
@@ -835,6 +1133,8 @@ export class Game {
   onDeath() {
     this.crafting?.close(true);
     this.deathShown = true;
+    this.grenade = null;
+    if (this.spent) { const i = this.inventory.slots.indexOf(this.spent.slot); if (i >= 0) this.inventory.slots[i] = null; this.spent = null; }
     this.stats.deaths++;
     // the original's KillPlayer: what's in the backpack falls where you died (on Hardcore,
     // everything, the hotbar too, and you start again with nothing)
@@ -872,6 +1172,7 @@ export class Game {
       grace: this.grace,
       stats: this.stats,
       edits: this.world.serializeEdits(),
+      crates: this.crates.serialize(),
       guests: this.guests,
       savedAt: Date.now(),
     };

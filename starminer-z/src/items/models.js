@@ -370,7 +370,9 @@ function grenade() {
   return { geo: merge(parts), info: {} };
 }
 
-// the clock, the locator and the teleporter: in a case like the compass's, each with its face
+// the clock, the locator and the teleporter: in a case like the compass's, each with its face,
+// and a hand that turns (the needle): the clock's goes round its 24-hour face once a day, the
+// sun at the top and the moon at the bottom; the locator's points the way to where it's set
 function gadget(kind) {
   const face = { clock: 0xf0ead8, locator: 0x2a6a3a, teleporter: 0x5a2a8a }[kind];
   const rim = { clock: 0x8a6a2a, locator: 0x4a4e54, teleporter: 0x3a3d44 }[kind];
@@ -378,19 +380,22 @@ function gadget(kind) {
   parts.push(place(cyl(0.05, 0.05, 0.018, 24, rim, 0.85), 0, 0, 0));
   parts.push(place(cyl(0.044, 0.044, 0.004, 24, face, 0.1, kind === 'clock' ? 0 : 0.6), 0, 0.009, 0));
   parts.push(place(cyl(0.012, 0.012, 0.012, 10, rim, 0.85), 0, 0, -0.056, Math.PI / 2, 0, 0));
+  const hand = [];
   if (kind === 'clock') {
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2;
       parts.push(place(box(0.003, 0.002, i % 3 ? 0.005 : 0.01, 0x222222), Math.sin(a) * 0.037, 0.012, -Math.cos(a) * 0.037, 0, -a, 0));
     }
-    parts.push(place(box(0.003, 0.002, 0.026, 0x222222), 0.006, 0.013, -0.008, 0, D(-30), 0));
-    parts.push(place(box(0.003, 0.002, 0.034, 0x222222), -0.002, 0.013, 0.012, 0, D(170), 0));
+    parts.push(place(cyl(0.007, 0.007, 0.002, 12, 0xf0c030, 0, 0.8), 0, 0.012, -0.024), place(cyl(0.006, 0.006, 0.002, 12, 0x8090c0, 0, 0.4), 0, 0.012, 0.024));
+    hand.push(place(box(0.003, 0.002, 0.032, 0x222222), 0, 0, -0.014), place(cyl(0.004, 0.004, 0.003, 10, 0x222222), 0, 0, 0));
   } else {
-    // a cross of gridlines and a marker
+    // a cross of gridlines, and the pointer
     parts.push(place(box(0.07, 0.002, 0.002, 0xa0f0b0, 0, 0.8), 0, 0.012, 0), place(box(0.002, 0.002, 0.07, 0xa0f0b0, 0, 0.8), 0, 0.012, 0));
-    parts.push(place(cyl(0.006, 0.006, 0.003, 10, kind === 'locator' ? 0xff4040 : 0xf0c0ff, 0, 1.2), 0.014, 0.013, -0.018));
+    const s = new THREE.Shape();
+    s.moveTo(0, -0.03); s.lineTo(0.007, -0.012); s.lineTo(-0.007, -0.012); s.closePath();
+    hand.push(place(extrude(s, 0.002, 0, kind === 'locator' ? 0xff4040 : 0xf0c0ff, 0.2, 1.2), 0, 0, 0, -Math.PI / 2, 0, 0));
   }
-  return { geo: merge(parts), info: {} };
+  return { geo: merge(parts), info: { needle: true }, needle: merge(hand) };
 }
 
 function door() {

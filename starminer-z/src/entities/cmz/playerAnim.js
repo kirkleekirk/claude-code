@@ -36,21 +36,27 @@ export class CmzPlayerAnimation {
 
   // s: { use: a swing or a shot starts this frame, shoulder: held up to aim, reload: reloading,
   //      reloadTime, move: 0..1 how hard it's walking, back: walking backwards, pitch: radians,
-  //      up positive, dead }
+  //      up positive, dead, grenade: a grenade clip to start ('cook', 'throw', 'reset'),
+  //      holdUse: a grenade's in progress (its clip stays when it's played through) }
   update(dt, s) {
     const A = this.anim, M = this.mode;
     const sh = s.shoulder;
     const use = sh && M.sUse ? M.sUse : M.use, idle = sh && M.sIdle ? M.sIdle : M.idle, walk = sh && M.sWalk ? M.sWalk : M.walk;
     // dying
     if (s.dead) { if (!A.at(5)) A.play('Die', 5, 0.25); } else if (A.at(5)) A.clear(5, 0.25);
-    // a swing or a shot: its clip from the start, once
-    if (s.use) {
+    // a grenade's: the pin out (blending in), the throw, the hand back (Player.UpdateAnimation)
+    if (s.grenade) {
+      A.play({ cook: 'Grenade_Cook', throw: 'Grenade_Throw', reset: 'Grenade_Reset' }[s.grenade], 3, s.grenade === 'cook' ? 0.25 : 0);
+      this.using = true;
+    } else if (s.use) {
+      // a swing or a shot: its clip from the start, once
       A.play(use, 3, 0);
       this.using = true;
     } else if (A.at(3)) {
       const t = A.at(3);
       t.looping = false;
-      if (t.finished) { A.clear(3, 0.25); this.using = false; }
+      // (a grenade's cook holds at its end until it's thrown)
+      if (t.finished && !s.holdUse) { A.clear(3, 0.25); this.using = false; }
     }
     // reloading and raising to the shoulder
     if (this.state === RELOADING && A.at(2)?.finished) this.state = DOWN;

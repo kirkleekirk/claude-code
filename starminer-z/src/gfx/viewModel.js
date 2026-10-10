@@ -116,6 +116,8 @@ export class ViewModel {
     this.itemId = id;
     if (this.itemMesh) { this.holder.remove(this.itemMesh); this.itemMesh = null; }
     this.needle = null;
+    this.clock = false;
+    this.door = !!(id && ITEMS[id]?.door);
     this.info = {};
     this.equip = 0;
     this.reload = 0;
@@ -134,6 +136,7 @@ export class ViewModel {
       const mesh = new THREE.Mesh(m.geo, this.mat);
       this.info = it.kind === 'gun' ? { ...(m.info || {}), scope: !!it.scoped } : m.info || {};
       if (m.needle) {
+        this.clock = it.tool === 'clock';
         this.needle = new THREE.Mesh(m.needle, this.mat);
         this.needle.position.set(0, 0.013, 0);
         mesh.add(this.needle);
@@ -166,6 +169,9 @@ export class ViewModel {
   }
 
   startReload(time) { this.reload = 0.0001; this.reloadTime = time; }
+
+  // a grenade: its throw is a swing
+  grenade(stage) { if (stage === 'throw') this.startSwing('stab', 0.3); }
 
   update(dt, ctx) {
     this.time += dt;
@@ -300,8 +306,9 @@ export class ViewModel {
     if (this.itemMesh) {
       this.itemMesh.position.set(0, 0, 0);
       if (k === 'block') { this.itemMesh.position.set(0, 0.05, -0.05); }
-      // tools a little smaller in the hand, gripped a hand's width up the handle
-      this.itemMesh.scale.setScalar(k === 'tool' ? 0.78 : 1);
+      // tools a little smaller in the hand, gripped a hand's width up the handle; a door held as
+      // a block is, small
+      this.itemMesh.scale.setScalar(k === 'tool' ? 0.78 : this.door ? 0.32 : 1);
       if (k === 'tool') { this.itemMesh.position.set(0, -0.1, 0); this.itemMesh.rotation.set(0, Math.PI / 2, 0); }
       else if (k === 'torch') { this.itemMesh.position.set(0, -0.06, 0); this.itemMesh.rotation.set(0, 0, 0); }
       else if (k === 'knife') this.itemMesh.rotation.set(0, 0, 0);
@@ -314,7 +321,11 @@ export class ViewModel {
       this.arm.position.set(0.0, -0.02, 0.04);
       this.arm.rotation.set(k === 'gun' ? 0.05 : 0.35, k === 'gun' ? 0.25 : 0.1, 0);
     }
-    if (this.needle && ctx.toTower != null) this.needle.rotation.y = ctx.toTower;
+    // the needle points the way (the compass, a locator); the clock's goes round once a day
+    if (this.needle) {
+      if (this.clock) this.needle.rotation.y = -Math.PI * 2 * (ctx.time ?? 0);
+      else if (ctx.toTower != null) this.needle.rotation.y = ctx.toTower;
+    }
     // muzzle flash
     if (this.flash.visible && this.info.muzzle) {
       const mz = this.info.muzzle.clone();

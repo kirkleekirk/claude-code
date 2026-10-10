@@ -27,6 +27,9 @@ export class Inventory {
     const s = { id, count };
     if (it.uses) s.dur = it.uses;
     if (it.kind === 'gun') s.mag = it.mag;
+    // a locator or teleporter: where it points, and its name (the original's GPSItem: none yet,
+    // and "Alpha")
+    if (it.tool === 'locator' || it.tool === 'teleporter') s.gps = { at: null, name: 'Alpha' };
     return s;
   }
 
@@ -170,18 +173,19 @@ export class Inventory {
   }
 
   // ---- the hand ----------------------------------------------------------------------------------
+  // (box: the slots it's working on, these or a crate's)
 
   // Pick up slot i, or half of it (the original's Split: the hand takes the smaller half).
-  lift(i, half = false) {
-    const s = this.slots[i];
+  lift(i, half = false, box = this.slots) {
+    const s = box[i];
     if (!s || this.hand) return false;
     if (half && s.count > 1) {
       const n = Math.floor(s.count / 2);
       s.count -= n;
-      this.hand = { s: { ...s, count: n }, from: i };
+      this.hand = { s: { ...s, count: n }, from: i, box };
     } else {
-      this.slots[i] = null;
-      this.hand = { s, from: i };
+      box[i] = null;
+      this.hand = { s, from: i, box };
     }
     this.changed();
     return true;
@@ -189,48 +193,48 @@ export class Inventory {
 
   // Put the hand down on slot i (one: just one of it). It joins a stack of the same thing as far
   // as that goes; on anything else it swaps, and the hand takes what was there.
-  put(i, one = false) {
+  put(i, one = false, box = this.slots) {
     const h = this.hand;
     if (!h) return false;
-    const t = this.slots[i], max = ITEMS[h.s.id].stack;
+    const t = box[i], max = ITEMS[h.s.id].stack;
     if (t && t.id === h.s.id && max > 1) {
       const n = Math.min(max - t.count, one ? 1 : h.s.count);
       if (n <= 0) return false;
       t.count += n; h.s.count -= n;
       if (h.s.count <= 0) this.hand = null;
     } else if (!t) {
-      if (one && h.s.count > 1) { this.slots[i] = { ...h.s, count: 1 }; h.s.count -= 1; }
-      else { this.slots[i] = h.s; this.hand = null; }
+      if (one && h.s.count > 1) { box[i] = { ...h.s, count: 1 }; h.s.count -= 1; }
+      else { box[i] = h.s; this.hand = null; }
     } else {
-      this.slots[i] = h.s;
-      h.s = t; h.from = i;
+      box[i] = h.s;
+      h.s = t; h.from = i; h.box = box;
     }
     this.changed();
     return true;
   }
 
-  // Back where it came from if that's free, else wherever it goes (the original's
-  // AddInventoryItem). Returns what didn't fit, or null.
+  // Back where it came from if that's free (in the player's own slots), else wherever it goes
+  // among them (the original's AddInventoryItem). Returns what didn't fit, or null.
   restore() {
     const h = this.hand;
     if (!h) return null;
     this.hand = null;
-    if (!this.slots[h.from]) { this.slots[h.from] = h.s; this.changed(); return null; }
+    if ((!h.box || h.box === this.slots) && !this.slots[h.from]) { this.slots[h.from] = h.s; this.changed(); return null; }
     return this.stow(h.s);
   }
 
   // A stack onto stacks of the same thing, then into the first free slot, the hotbar's before
   // the backpack's. Returns what didn't fit, or null.
-  stow(s, from = 0, to = this.slots.length) {
+  stow(s, from = 0, to = this.slots.length, box = this.slots) {
     const max = ITEMS[s.id].stack;
     if (max > 1) {
       for (let k = from; k < to && s.count > 0; k++) {
-        const t = this.slots[k];
+        const t = box[k];
         if (t && t !== s && t.id === s.id && t.count < max) { const n = Math.min(max - t.count, s.count); t.count += n; s.count -= n; }
       }
     }
     let left = s.count > 0 ? s : null;
-    if (left) for (let k = from; k < to; k++) if (!this.slots[k]) { this.slots[k] = left; left = null; break; }
+    if (left) for (let k = from; k < to; k++) if (!box[k]) { box[k] = left; left = null; break; }
     this.changed();
     return left;
   }
@@ -248,13 +252,27 @@ export class Inventory {
     return !left || left.count < before;
   }
 
+  // Slot i of box over to other (a crate's to these, or these to a crate's), as far as it goes
+  // (the original's CrateScreen.SwapSelectedItemLocation).
+  moveAcross(i, box, other) {
+    const s = box[i];
+    if (!s) return false;
+    box[i] = null;
+    const before = s.count;
+    const left = this.stow(s, 0, other.length, other);
+    if (left) box[i] = left;
+    this.changed();
+    return !left || left.count < before;
+  }
+
   serialize() {
     const slots = this.slots.map((s) => (s ? { ...s } : null));
     // something lifted on the inventory screen goes in the save where it came from
     const h = this.hand;
     if (h) {
-      const t = slots[h.from];
-      if (!t) slots[h.from] = { ...h.s };
+      const t = h.box && h.box !== this.slots ? undefined : slots[h.from];
+      if (t === null) slots[h.from] = { ...h.s };
+      else if (!t) { const k = slots.indexOf(null); if (k >= 0) slots[k] = { ...h.s }; }
       else if (t.id === h.s.id && ITEMS[t.id].stack > 1) t.count += h.s.count;
       else { const k = slots.indexOf(null); if (k >= 0) slots[k] = { ...h.s }; }
     }

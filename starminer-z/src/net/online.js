@@ -12,7 +12,7 @@ import { BLOCKS } from '../world/blocks.js';
 import { ITEMS } from '../items/items.js';
 import { PRESETS } from '../entities/avatar/looks.js';
 
-export const PROTOCOL = 2;
+export const PROTOCOL = 3;
 // how often (seconds) each thing goes out
 const STATE_EVERY = 1 / 15, ENEMIES_EVERY = 1 / 8, CLOCK_EVERY = 2, KEEP_EVERY = 15;
 
@@ -83,7 +83,7 @@ export class Online {
     return {
       welcome: {
         v: PROTOCOL, name, seed: g.seed, mode: g.mode, time: sky.time, day: sky.day, grace: g.grace,
-        edits: g.world.serializeEdits(), players, you: g.guests[name] ?? null,
+        edits: g.world.serializeEdits(), crates: g.crates.serialize(), players, you: g.guests[name] ?? null,
       },
     };
   }
@@ -100,6 +100,7 @@ export class Online {
     p.dispose();
     this.players.delete(id);
     this.game.enemies.dropGhosts(id);
+    this.game.crates?.setFocus(id, null);
     this.game.hud.message(`${p.name} ${why === 'quiet' || why === 'gone' ? 'lost their connection' : 'left the game'}`);
     this.app.onOnlineChange?.();
   }
@@ -152,6 +153,51 @@ export class Online {
       }
       case 'shot':
         this.remoteShot(who, m);
+        if (H) this.link.send({ ...m, id: from }, from);
+        break;
+      case 'gren': {
+        // someone's grenade, thrown: it flies here too (it hurts only on their machine)
+        const p = v3(m.p), d = v3(m.d);
+        if (p && d && Number.isFinite(m.f)) g.projectiles.grenade(p, d.normalize(), Math.min(5, m.f), false);
+        if (H) this.link.send({ ...m, id: from }, from);
+        break;
+      }
+      case 'fuse': {
+        // a fuse someone lit: it flashes here too
+        const b = m.b;
+        if (Array.isArray(b) && b.length === 3 && b.every(Number.isInteger)) g.explosives.flash(b[0], b[1], b[2]);
+        if (H) this.link.send({ ...m, id: from }, from);
+        break;
+      }
+      case 'boom': {
+        // an explosion someone set off: the bang, and this player's and this machine's dead's
+        // share of it (the blocks it takes come as changes)
+        const c = v3(m.c), k = m.k;
+        if (c && Number.isInteger(k) && k >= 0 && k <= 4) {
+          if (k <= 1) g.explosives.detonate(Math.floor(c.x), Math.floor(c.y), Math.floor(c.z), k, !!m.o, false, who);
+          else g.explosives.blast(c, k, typeof m.i === 'string' ? m.i : null, false, who);
+        }
+        if (H) this.link.send({ ...m, id: from }, from);
+        break;
+      }
+      case 'crate': {
+        // a crate's slot changed: everyone's the same, in the host's order
+        const b = m.b;
+        if (Array.isArray(b) && b.length === 3 && b.every(Number.isInteger)) {
+          g.crates.receive(b[0], b[1], b[2], m.i, m.s);
+          if (H) this.link.send({ ...m, id: from }, from);
+        }
+        break;
+      }
+      case 'cf': {
+        // where someone is in a crate (null: out of it)
+        const b = Array.isArray(m.b) && m.b.length === 3 && m.b.every(Number.isInteger) ? m.b : null;
+        g.crates.setFocus(who, b, m.i | 0);
+        if (H) this.link.send({ ...m, id: from }, from);
+        break;
+      }
+      case 'say':
+        if (typeof m.s === 'string') g.hud.message(m.s.slice(0, 80));
         if (H) this.link.send({ ...m, id: from }, from);
         break;
       case 'arrow': {
@@ -216,17 +262,21 @@ export class Online {
     if (this.game.grace && m.grace === false) this.game.endGrace();
   }
 
+  // Someone's shot: it flies here as it does there, from where they are (only theirs hurts).
   remoteShot(who, m) {
-    const g = this.game, P = this.players.get(who);
-    if (!Array.isArray(m.e)) return;
-    const from = P ? P.muzzle(new THREE.Vector3()) : v3(m.m);
-    if (!from) return;
-    for (let i = 0; i + 3 <= m.e.length && i < 3 * 12; i += 3) {
-      const end = v3(m.e.slice(i, i + 3));
-      if (end) g.tracers.add(from, end);
+    const g = this.game, P = this.players.get(who), it = ITEMS[m.g];
+    if (!it || it.kind !== 'gun' || !Array.isArray(m.d)) return;
+    const eye = v3(m.o);
+    if (!eye) return;
+    const from = (P && P.muzzle(new THREE.Vector3())) || v3(m.m) || eye;
+    const dirs = [];
+    for (let i = 0; i + 3 <= m.d.length && dirs.length < 12; i += 3) {
+      const d = v3(m.d.slice(i, i + 3));
+      if (d && d.lengthSq() > 0.25) dirs.push(d.normalize());
     }
-    g.audio?.gunshot?.(ITEMS[m.g] || null, from);
-    g.sprites.emit('smoke', from.x, from.y, from.z, { color: 0x9a9a9a, size: 0.12, grow: 0.4, life: 0.7, alpha: 0.25, spread: 0.4 });
+    g.fire(it, eye, from, dirs, false);
+    g.audio?.gunshot?.(it, from);
+    if (!it.laser) g.sprites.emit('smoke', from.x, from.y, from.z, { color: 0x9a9a9a, size: 0.12, grow: 0.4, life: 0.7, alpha: 0.25, spread: 0.4 });
   }
 
   // ---- what goes out ----------------------------------------------------------------------------
@@ -234,10 +284,30 @@ export class Online {
   // a block changed here (kind: 0 a player's doing, 1 the dead digging)
   blockSet(x, y, z, id, kind) { this.sets.push(x, y, z, id, kind | 0); }
 
-  // id: the gun's item
-  shot(id, muzzle, ends) {
-    if (this.link.count) this.link.send({ t: 'shot', g: id, m: arr(muzzle), e: ends.flatMap(arr) });
+  // id: the gun's item; eye, where it was fired from; muzzle, its tip; dirs, each shot's way
+  shot(id, eye, muzzle, dirs) {
+    if (this.link.count) this.link.send({ t: 'shot', g: id, o: arr(eye), m: arr(muzzle), d: dirs.flatMap(arr) });
   }
+
+  grenade(at, dir, fuse) { if (this.link.count) this.link.send({ t: 'gren', p: arr(at), d: arr(dir), f: fuse }); }
+
+  fuse(x, y, z) { if (this.link.count) this.link.send({ t: 'fuse', b: [x, y, z] }); }
+
+  // an explosion here (original: the first of a chain; item: what set it off)
+  boom(c, type, original, item) { if (this.link.count) this.link.send({ t: 'boom', c: arr(c), k: type, o: original ? 1 : 0, i: item ?? null }); }
+
+  // one of this machine's dead killed by someone else's explosion: the kill's theirs
+  killedFor(to, pos) {
+    const msg = { t: 'killed', to, p: arr(pos) };
+    if (this.host) this.link.sendTo(to, msg); else this.link.send(msg);
+  }
+
+  crateSlot(c, i, s) { if (this.link.count) this.link.send({ t: 'crate', b: [c.x, c.y, c.z], i, s }); }
+
+  crateFocus(c, i) { if (this.link.count) this.link.send({ t: 'cf', b: c ? [c.x, c.y, c.z] : null, i }); }
+
+  // a line for everyone (the original's BroadcastTextMessage)
+  say(text) { if (this.link.count) this.link.send({ t: 'say', s: String(text).slice(0, 80) }); }
 
   arrow(from, to) {
     if (this.link.count) this.link.send({ t: 'arrow', f: arr(from), to: arr(to) });

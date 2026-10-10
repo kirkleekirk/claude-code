@@ -72,10 +72,12 @@ export class TouchControls {
         b.classList.add('on');
         this.input.lastDevice = 'touch';
         this.input.down(a);
+        // (the place button opens a door or a crate, as the right mouse button does)
+        if (a === 'secondary') this.input.down('activate');
         // the use button also looks around while it's held, like a second right thumb
         if (a === 'primary' || a === 'secondary') { this.look.id = e.pointerId; this.look.x = e.clientX; this.look.y = e.clientY; }
       });
-      const up = (e) => { b.classList.remove('on'); this.input.up(a); if (this.look.id === e.pointerId) this.look.id = null; };
+      const up = (e) => { b.classList.remove('on'); this.input.up(a); if (a === 'secondary') this.input.up('activate'); if (this.look.id === e.pointerId) this.look.id = null; };
       b.addEventListener('pointerup', up);
       b.addEventListener('pointercancel', up);
     }
@@ -87,7 +89,7 @@ export class TouchControls {
     if (v === this.visible) return;
     this.visible = v;
     this.el.classList.toggle('on', v);
-    if (!v) { this.move.id = null; this.look.id = null; this.stick.style.display = 'none'; for (const a of ['primary', 'secondary', 'jump', 'reload']) this.input.up(a); }
+    if (!v) { this.move.id = null; this.look.id = null; this.stick.style.display = 'none'; for (const a of ['primary', 'secondary', 'activate', 'jump', 'reload']) this.input.up(a); }
   }
 
   padDown(e) {

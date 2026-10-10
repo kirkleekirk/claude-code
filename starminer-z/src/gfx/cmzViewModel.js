@@ -51,6 +51,7 @@ export class CmzViewModel {
     this.lastYaw = null;
     this.lastPitch = 0;
     this.useNow = false;
+    this.grenadeStage = null;
     this.model = null;
     this.setLook({});
   }
@@ -134,6 +135,12 @@ export class CmzViewModel {
 
   startReload(time) { this.reload = 0.0001; this.reloadTime = time; }
 
+  // a rocket launcher fired: its rocket's gone from the barrel
+  spend() { const r = this.item?.obj.getObjectByName('LoadedRocket'); if (r) r.visible = false; }
+
+  // a grenade's clips on the use layer: 'cook' (the pin out), 'throw', 'reset' (the hand back)
+  grenade(stage) { this.grenadeStage = stage; this.useNow = stage === 'throw'; }
+
   blockMaterial(id) { return this.held.blockMats.get(id); }
 
   update(dt, ctx) {
@@ -147,14 +154,20 @@ export class CmzViewModel {
     const it = this.itemId ? ITEMS[this.itemId] : null;
     const gun = it && it.kind === 'gun';
     this.anim.update(dt, {
-      use: this.useNow, shoulder: gun && !!ctx.ads, reload: gun && this.reload > 0, reloadTime: this.reloadTime,
-      move: ctx.move ?? 0, back: false, pitch: 0, dead: false,
+      use: this.useNow && !this.grenadeStage, shoulder: gun && !!ctx.ads, reload: gun && this.reload > 0, reloadTime: this.reloadTime,
+      move: ctx.move ?? 0, back: false, pitch: 0, dead: false, grenade: this.grenadeStage, holdUse: !!ctx.grenade,
     });
     this.useNow = false;
+    this.grenadeStage = null;
     this.ads = this.anim.raised;
     this.headBone.scale.setScalar(0.001);
-    // the compass turns to point at the tower
-    if (this.item?.turn && ctx.toTower != null) this.item.turn.rotation.y = ctx.toTower;
+    // the compass (or a locator) turns to point the way, the clock round with the day (its
+    // ClockEntity: about its own downward axis, once a day)
+    const turn = this.item?.turn;
+    if (turn) {
+      if (this.item.spec.turn === 'clock') turn.rotation.y = -Math.PI * 2 * (ctx.time ?? 0);
+      else if (ctx.toTower != null) turn.rotation.y = ctx.toTower;
+    }
     // the camera drifts against the turn of the view (the original's aim stick, here how fast
     // the view turns), half as far at the shoulder
     if (this.lastYaw == null) { this.lastYaw = ctx.yaw; this.lastPitch = ctx.pitch; }

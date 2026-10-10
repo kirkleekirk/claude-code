@@ -156,6 +156,13 @@ export class HUD {
     const it = slot ? ITEMS[slot.id] : null;
     let name = it ? it.name : 'Bare Hands';
     if (it && it.kind === 'gun') name += ` ${slot.mag ?? 0}/${g.inventory.count(it.ammo)}`;
+    // a locator: its name, and how far it is to where it's set (GPSItem.GetDisplayText; unset,
+    // to the world's middle)
+    if (slot?.gps) {
+      const a = slot.gps.at, P = g.player.pos;
+      const d = a ? Math.hypot(P.x - a[0], P.y - a[1], P.z - a[2]) : Math.hypot(P.x, P.y - 64, P.z);
+      name += `: ${slot.gps.name} - Distance: ${Math.floor(d)}`;
+    }
     this.set('iname', this.iname, name);
     // hearts: ten, each worth a tenth of your health
     const hp = Math.max(0, Math.ceil((s.health / s.maxHealth) * 20));

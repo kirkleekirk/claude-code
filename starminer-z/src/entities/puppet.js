@@ -24,7 +24,8 @@ export class Puppet {
   get muzzle() { return this.item?.muzzle ?? null; }
 
   // s: { pos, yaw, pitch, vel, onGround, held: item id or null, use: a swing or a shot starts
-  //      now, shoulder: a gun up to aim, reload, reloadTime, dead, light: { sky, block } 0..1 }
+  //      now, shoulder: a gun up to aim, reload, reloadTime, dead, light: { sky, block } 0..1,
+  //      grenade: a grenade clip starting now, holdUse: a grenade in progress, time: of day }
   update(dt, s) {
     const m = this.model;
     m.root.position.copy(s.pos);
@@ -40,9 +41,11 @@ export class Puppet {
       }
       const back = s.vel.x * Math.sin(s.yaw) + s.vel.z * Math.cos(s.yaw) > 0.3;
       this.anim.update(dt, {
-        use: !!s.use, shoulder: !!s.shoulder, reload: !!s.reload, reloadTime: s.reloadTime,
-        move: Math.min(1, sp / 4.4), back, pitch: s.pitch, dead: !!s.dead,
+        use: !!s.use && !s.grenade, shoulder: !!s.shoulder, reload: !!s.reload, reloadTime: s.reloadTime,
+        move: Math.min(1, sp / 4.4), back, pitch: s.pitch, dead: !!s.dead, grenade: s.grenade ?? null, holdUse: !!s.holdUse,
       });
+      // a clock in hand goes round with the day
+      if (this.item.turn && this.item.spec.turn === 'clock' && s.time != null) this.item.turn.rotation.y = -Math.PI * 2 * s.time;
       this.held.setLight(m.material.uniforms.uObjLight.value);
       m.update(dt);
       return;

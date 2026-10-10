@@ -281,6 +281,19 @@ export class App {
     this.autosave();
   }
 
+  // The original's on-screen keyboard (Guide.BeginShowKeyboardInput) over the game: a name to
+  // type, given to done(name) unless it's backed out of.
+  askName(title, sub, value, max, done) {
+    if (this.state !== 'playing') return;
+    this.state = 'paused';
+    this.game.paused = !this.game.online;
+    this.menuOpen = true;
+    this.game.crafting?.close?.(true);
+    this.nameAsk = { title, sub, value, max, done };
+    this.menus.reset('name');
+    this.input.exitLock();
+  }
+
   resume() {
     if (this.state !== 'paused') return;
     this.state = 'playing';
@@ -445,8 +458,9 @@ export class App {
     this.input.poll(dt);
     // the front end takes the input first
     if (this.menus.visible) this.menus.update(dt, this.input);
-    // (B too: on an Xbox, Edge may keep the Menu button for itself)
-    else if (this.state === 'playing' && !this.game?.crafting?.isOpen && (this.input.consume('pause') || (!this.game?.player.dead && this.input.consume('back_btn')))) this.pause();
+    // (B too: on an Xbox, Edge may keep the Menu button for itself; but B on a door, a crate or
+    // TNT is the original's Activate)
+    else if (this.state === 'playing' && !this.game?.screenUp && (this.input.consume('pause') || (!this.game?.player.dead && !this.game?.wantsActivate() && this.input.consume('back_btn')))) this.pause();
     const g = this.game;
     if (g) {
       // tests can run the game faster than it renders (simfast=N updates a frame)
@@ -470,7 +484,7 @@ export class App {
       }
       this.sky.update(this.frames < 3 ? 0 : dt);
       this.renderer.gloom = this.sky.gloom;
-      this.touch?.setVisible(this.state === 'playing' && !g.crafting?.isOpen && !g.player.dead);
+      this.touch?.setVisible(this.state === 'playing' && !g.screenUp && !g.player.dead);
       const p = g.player;
       this.audio.update(dt, this.camera, {
         menu: g.attract || this.state === 'menu' || this.state === 'boot' || this.state === 'loading',

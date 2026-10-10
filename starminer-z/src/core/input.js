@@ -57,12 +57,13 @@ export class Input {
       if (e.pointerType === 'touch') return;
       this.lastDevice = 'keyboard';
       if (e.button === 0) this.down('primary');
-      if (e.button === 2) this.down('secondary');
+      // (the right button is the original's Shoulder and its Activate both)
+      if (e.button === 2) { this.down('secondary'); this.down('activate'); }
       if (e.button === 1) this.down('pick');
     });
     this.on(window, 'mouseup', (e) => {
       if (e.button === 0) this.up('primary');
-      if (e.button === 2) this.up('secondary');
+      if (e.button === 2) { this.up('secondary'); this.up('activate'); }
       if (e.button === 1) this.up('pick');
     });
     this.on(el, 'contextmenu', (e) => e.preventDefault());
