@@ -90,8 +90,9 @@ export class World {
 
   update(px, pz, budgetMs = 4) {
     this.lastX = px; this.lastZ = pz;
-    // workers that never answer at all are as good as failed
-    if (this.workers.length && !this.workersAlive && performance.now() - this.workersSince > 8000) {
+    // workers that never answer at all are as good as failed (given time to start on a busy
+    // machine: making the world without them is far slower)
+    if (this.workers.length && !this.workersAlive && performance.now() - this.workersSince > 20000) {
       for (const w of [...this.workers]) this.workerFailed(w);
     }
     const cx = Math.floor(px / CHUNK), cz = Math.floor(pz / CHUNK);
@@ -297,18 +298,22 @@ export class World {
     return !!(c && c.blocks);
   }
 
-  setBlock(x, y, z, id) {
+  // remote: someone else's change (online), kept even where the ground isn't loaded here yet;
+  // anything else is this player's own, and goes to onEdit(x, y, z, id) once made.
+  setBlock(x, y, z, id, remote = false) {
     x = Math.floor(x); y = Math.floor(y); z = Math.floor(z);
     if (y < 1 || y >= HEIGHT - 2) return false;
     const cx = x >> 4, cz = z >> 4;
     const c = this.columns.get(key(cx, cz));
-    if (!c || !c.blocks) return false;
     const i = (x & 15) | ((z & 15) << 4) | (y << 8);
+    if (!c || !c.blocks) {
+      if (remote) this.record(key(cx, cz), i, id);
+      return false;
+    }
     if (c.blocks[i] === id) return false;
     c.blocks[i] = id;
-    let ed = this.edits.get(c.key);
-    if (!ed) { ed = new Map(); this.edits.set(c.key, ed); }
-    ed.set(i, id);
+    this.record(c.key, i, id);
+    if (!remote) this.onEdit?.(x, y, z, id);
     // re-light and re-mesh: this column, and neighbours within light's reach of the edit
     const lx = x & 15, lz = z & 15;
     this.touch(cx, cz);
@@ -322,6 +327,12 @@ export class World {
     // the edited column goes first so the change shows straight away
     this.urgent = c;
     return true;
+  }
+
+  record(k, i, id) {
+    let ed = this.edits.get(k);
+    if (!ed) { ed = new Map(); this.edits.set(k, ed); }
+    ed.set(i, id);
   }
 
   touch(cx, cz) {

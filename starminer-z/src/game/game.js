@@ -11,8 +11,7 @@ import { ITEMS, dropFor, digTime, weaponDamage } from '../items/items.js';
 import { getZombie, TYPES } from '../entities/cmz/types.js';
 import { ViewModel } from '../gfx/viewModel.js';
 import { CmzViewModel } from '../gfx/cmzViewModel.js';
-import { CmzPlayerAnimation } from '../entities/cmz/playerAnim.js';
-import { HeldItems } from '../entities/cmz/held.js';
+import { Puppet } from '../entities/puppet.js';
 import { BlockHighlight, Debris, Sprites, Tracers } from '../gfx/effects.js';
 import { BlockItemMaterials, blockItemGeometry } from '../gfx/blockItem.js';
 import { makePropMaterial } from '../gfx/propMaterial.js';
@@ -20,10 +19,11 @@ import { Drops } from './drops.js';
 import { Enemies } from './enemies.js';
 import { HUD } from '../ui/hud.js';
 import { Crafting } from '../ui/crafting.js';
-import { AvatarModel, bindPosition } from '../entities/avatar/model.js';
+import { AvatarModel } from '../entities/avatar/model.js';
 import { PRESETS } from '../entities/avatar/looks.js';
 import { zombieLook } from '../entities/avatar/zombie.js';
 import { skeletonLook } from '../entities/avatar/skeleton.js';
+import { Online } from '../net/online.js';
 
 const testParams = new URLSearchParams(location.search);
 
@@ -39,16 +39,17 @@ const IDLE = { move: { x: 0, y: 0 }, look: { x: 0, y: 0 }, wheel: 0, lastDevice:
 
 export class Game {
   // attract: the world behind the menus (no player, no HUD, no enemies; a camera drifting by)
-  constructor(app, { seed = 1337, save = null, mode = 'endurance', attract = false } = {}) {
+  // online: { link, welcome }, joining a friend's world (see ../net/online.js)
+  constructor(app, { seed = 1337, save = null, mode = 'endurance', attract = false, online = null } = {}) {
     this.app = app;
     this.mode = mode;
     this.attract = attract;
-    this.seed = save ? save.seed : seed;
-    const R = app.renderer;
+    const welcome = online?.welcome ?? null;
+    this.seed = save ? save.seed : welcome ? welcome.seed : seed;
     this.scene = new THREE.Scene();
     this.scene.add(app.sky.mesh);
     this.camera = app.camera;
-    this.world = new World({ seed: this.seed, scene: this.scene, materials: app.terrain, renderDistance: app.settings.renderDistance, edits: save ? save.edits : null });
+    this.world = new World({ seed: this.seed, scene: this.scene, materials: app.terrain, renderDistance: app.settings.renderDistance, edits: save ? save.edits : welcome ? welcome.edits : null });
     this.player = new Player(this.world);
     this.player.autoClimb = app.settings.autoClimb;
     this.inventory = new Inventory();
@@ -66,9 +67,17 @@ export class Game {
     this.enemies = new Enemies(this);
     this.audio = app.audio;
     this.look = null;
-    this.playerModel = null;
+    this.puppet = null;
     this.preview = null;
     this.lockFree = false;
+    // online: the game in common (null playing alone); the friends who've played in this world,
+    // what they had when they left (name -> { inventory, player, ... }); swings and shots so far
+    this.online = null;
+    this.guests = save?.guests || {};
+    this.uses = 0;
+    // what's changing blocks: 0 the player, 1 the dead digging (online, the others hear which)
+    this.editKind = 0;
+    this.world.onEdit = (x, y, z, id) => this.online?.blockSet(x, y, z, id, this.editKind);
     if (attract) {
       this.hud.el.style.display = 'none';
       this.viewModel.hidden = true;
@@ -103,6 +112,23 @@ export class Game {
       this.player.spawn(p.x, p.y, p.z);
       this.player.yaw = p.yaw; this.player.pitch = p.pitch;
       this.player.health = p.health ?? 100;
+    } else if (welcome) {
+      // a friend's world: its time and sky, and what you had there if you've played in it before
+      this.grace = !!welcome.grace;
+      sky.setTime(welcome.time, welcome.day);
+      const you = welcome.you, at = you?.player;
+      if (you?.inventory) this.inventory.load(you.inventory); else this.starterKit();
+      if (you) { this.maxDistance = you.maxDistance || 0; Object.assign(this.stats, you.stats || {}); }
+      if (at && at.health > 0 && [at.x, at.y, at.z].every(Number.isFinite)) {
+        this.player.spawn(at.x, at.y, at.z);
+        this.player.yaw = at.yaw || 0; this.player.pitch = at.pitch || 0;
+        this.player.health = at.health;
+      } else {
+        const sp = this.spawnSpot(online.link.myId);
+        this.player.spawn(sp.x, sp.y, sp.z);
+        this.player.yaw = Math.PI;
+        this.player.pitch = 0.12;
+      }
     } else if (attract) {
       // late afternoon under the storm: a low sun through the clouds
       sky.setTime(0.69, 1);
@@ -129,6 +155,21 @@ export class Game {
     this.player.onHurt = (n, kind) => { this.hud.hurt(); this.audio?.hurt(kind); if (this.app.vibrate) this.app.vibrate(40); };
     this.inventory.onChange = () => {};
     this.viewModel.setItem(this.inventory.held?.id ?? null);
+    if (online) this.online = new Online(this, online.link, welcome);
+  }
+
+  // Open this game to friends (link: hosting, with its code).
+  startHosting(link) {
+    this.online = new Online(this, link);
+  }
+
+  // Where a player starts, and starts again after dying: the spawn point, and online a couple of
+  // steps round it for each friend (id: their number), so no one starts inside anyone else.
+  spawnSpot(id = this.online?.myId ?? 0) {
+    const sp = this.world.gen.spawnPoint();
+    if (!id) return sp;
+    const a = id * 2.4;
+    return { x: sp.x + Math.cos(a) * 1.6, y: sp.y + 0.5, z: sp.z + Math.sin(a) * 1.6 };
   }
 
   starterKit() {
@@ -143,21 +184,24 @@ export class Game {
   }
 
   dispose() {
+    this.online?.close();
     this.world.dispose();
     this.hud.el.remove();
     this.enemies?.dispose?.();
     this.crafting?.dispose?.();
     this.viewModel.dispose?.();
-    for (const m of [this.playerModel, this.preview]) if (m) { m.dispose(); m.material.dispose(); m.root.removeFromParent(); }
+    this.puppet?.dispose();
+    if (this.preview) { this.preview.dispose(); this.preview.material.dispose(); this.preview.root.removeFromParent(); }
   }
 
   // ---- the player's avatar ---------------------------------------------------------------------
 
   setLook(look) {
+    // (a change of look, not the first one: online, the others see it)
+    if (this.look && this.online) this.online.sendLook();
     this.look = look;
-    if (this.playerModel) { this.playerModel.dispose(); this.playerModel.material.dispose(); this.playerModel.root.removeFromParent(); this.playerModel = null; }
-    this.playerAnim = null;
-    this.playerItem = null;
+    this.puppet?.dispose();
+    this.puppet = null;
     this.viewModel.setArmColors?.(look.skin, look.top?.tint);
     this.viewModel.setLook?.(look);
   }
@@ -193,50 +237,17 @@ export class Game {
   updatePlayerModel(dt) {
     const p = this.player;
     const show = this.app.thirdPerson && !p.dead && this.look;
-    if (!show) { if (this.playerModel) this.playerModel.root.visible = false; return; }
-    const cmz = this.app.cmzPlayer;
-    if (!this.playerModel) {
-      this.playerModel = new AvatarModel(this.look, this.app.sky.uniforms, this.app.terrain.uniforms);
-      this.scene.add(this.playerModel.root);
-      if (cmz) {
-        this.playerAnim = new CmzPlayerAnimation(cmz.clips, cmz.clips.bonesOf(this.playerModel.byName), bindPosition('BASE__Skeleton'), false);
-        this.playerHeld ??= new HeldItems(cmz.items, this.app.sky.uniforms, this.app.terrain.uniforms);
-        this.playerItem = null;
-      }
-    }
-    const m = this.playerModel;
-    m.root.visible = true;
-    m.root.position.copy(p.pos);
-    m.root.rotation.y = p.yaw + Math.PI;
-    const sp = Math.hypot(p.vel.x, p.vel.z);
+    if (!show) { if (this.puppet) this.puppet.root.visible = false; return; }
+    if (!this.puppet) { this.puppet = new Puppet(this.app, this.look); this.scene.add(this.puppet.root); }
+    this.puppet.root.visible = true;
+    const id = this.inventory.held?.id ?? null;
+    const it = id ? ITEMS[id] : null, gun = it && it.kind === 'gun';
     const L = this.world.lightAt(p.pos.x, p.pos.y + 1.4, p.pos.z);
-    if (this.playerAnim) {
-      // the original's clips, with what's in hand on the right hand's prop bone
-      const id = this.inventory.held?.id ?? null;
-      if (!this.playerItem || this.playerItem.id !== id) {
-        this.playerItem?.obj.removeFromParent();
-        this.playerItem = { id, ...this.playerHeld.make(id) };
-        m.byName.RT_PROP__Skeleton.add(this.playerItem.obj);
-        this.playerAnim.setMode(this.playerItem.spec.mode);
-      }
-      const it = id ? ITEMS[id] : null, gun = it && it.kind === 'gun';
-      const back = p.vel.x * Math.sin(p.yaw) + p.vel.z * Math.cos(p.yaw) > 0.3;
-      this.playerAnim.update(dt, {
-        use: !!this.viewModel.useNow, shoulder: gun && this.ads, reload: gun && this.reloading > 0, reloadTime: it?.reload,
-        move: Math.min(1, sp / 4.4), back, pitch: p.pitch, dead: false,
-      });
-      m.setLight(L.sky / 15, L.block / 15);
-      this.playerHeld.setLight(m.material.uniforms.uObjLight.value);
-      m.update(dt);
-      return;
-    }
-    if (!p.onGround && Math.abs(p.vel.y) > 2) m.play('jump', { fade: 0.15, once: true });
-    else if (sp > 5.2) m.play('run', { fade: 0.2, speed: sp / 6 });
-    else if (sp > 0.4) m.play('walk', { fade: 0.2, speed: Math.min(2.4, sp / 1.6) });
-    else m.play('idle', { fade: 0.3 });
-    m.layer.pitch = -p.pitch * 0.5;
-    m.setLight(L.sky / 15, L.block / 15);
-    m.update(dt);
+    this.puppet.update(dt, {
+      pos: p.pos, yaw: p.yaw, pitch: p.pitch, vel: p.vel, onGround: p.onGround, held: id,
+      use: !!this.viewModel.useNow, shoulder: gun && this.ads, reload: gun && this.reloading > 0, reloadTime: it?.reload,
+      dead: false, light: { sky: L.sky / 15, block: L.block / 15 },
+    });
   }
 
   // ---- crafting -------------------------------------------------------------------------------------
@@ -291,9 +302,11 @@ export class Game {
     const app = this.app, sky = app.sky, p = this.player;
     this.time += dt;
     const playing = !this.paused && !app.menuOpen;
+    // online the world doesn't stop for anyone's menu
+    const live = this.ready && (playing || !!this.online);
 
     // the clock, and the endless night of the deep Edge and Hell on Earth
-    if (playing && this.ready) sky.advance(dt);
+    if (live) sky.advance(dt);
     this.nightT = (this.nightT || 0) - dt;
     if (this.nightT <= 0) {
       this.nightT = 0.25;
@@ -306,12 +319,7 @@ export class Game {
       this.depth = this.depthUnderGround(p.pos);
       sky.outdoors = this.depth <= 2 && p.pos.y > 32;
     }
-    if (this.grace && (sky.day > 1 || sky.time > GRACE_ENDS)) {
-      this.grace = false;
-      sky.setGloom(1, false);
-      this.hud.message('The sky is turning...');
-      this.audio?.storm?.();
-    }
+    if (this.grace && (sky.day > 1 || sky.time > GRACE_ENDS)) this.endGrace();
     const day = this.dayNumber;
     if (day !== this.lastDay) {
       this.lastDay = day;
@@ -320,17 +328,22 @@ export class Game {
       this.audio?.dawn();
     }
 
-    // the player (standing still while the crafting screen is up; the world goes on)
+    // the player (standing still while the crafting screen is up, or a menu online; the world
+    // goes on)
     const crafting = this.crafting?.isOpen;
-    if (playing && this.ready && !p.dead) {
-      if (crafting) {
+    if (live && !p.dead) {
+      if (!playing) {
+        p.update(dt, IDLE, false);
+      } else if (crafting) {
         p.update(dt, IDLE, false);
         this.crafting.update(dt, input);
       } else {
         if (input.consume('inventory')) this.openCrafting();
-        if (input.consume('view')) app.thirdPerson = !app.thirdPerson;
+        // (the d-pad too: on an Xbox, Edge takes the View button for itself)
+        if (input.consume('view') || input.consume('up')) app.thirdPerson = !app.thirdPerson;
         p.update(dt, input, true);
         this.handleItems(dt, input);
+        if (this.viewModel.useNow) this.uses++;
       }
     }
     if (p.inLava && !this.wasInLava) this.audio?.douse();
@@ -375,7 +388,8 @@ export class Game {
     this.sprites.update(dt);
     this.tracers.update(dt);
     for (const got of this.drops.update(dt, p, this.inventory)) this.audio?.pickup(got.id);
-    this.enemies?.update(dt, playing && this.ready);
+    this.enemies?.update(dt, live);
+    this.online?.update(dt);
     this.updatePlayerModel(dt);
     this.updatePreview(dt);
     if (this.testAvatars) for (const m of this.testAvatars) {
@@ -436,6 +450,15 @@ export class Game {
     const p = this.player;
     for (let i = 0; i < 120 && p.collides(p.pos.x, p.pos.y, p.pos.z); i++) p.pos.y += 1;
     if (!this.lastDayShown) { this.lastDayShown = true; this.hud.showDay(this.dayNumber); }
+  }
+
+  // The first day's clear sky gives way to the storm, for good.
+  endGrace() {
+    if (!this.grace) return;
+    this.grace = false;
+    this.app.sky.setGloom(1, false);
+    this.hud.message('The sky is turning...');
+    this.audio?.storm?.();
   }
 
   // The original's clock: its Day counts up from 0.4, so each new day begins 0.4 of the way
@@ -590,6 +613,7 @@ export class Game {
     } else {
       if (this.player.occupies(x, y, z)) return;
       if (this.enemies?.occupies(x, y, z)) return;
+      if (this.online) for (const r of this.online.players.values()) if (r.occupies(x, y, z)) return;
     }
     if (!this.world.setBlock(x, y, z, id)) return;
     this.inventory.useHeld(1);
@@ -636,13 +660,16 @@ export class Game {
       const spreadDeg = it.spread * (this.ads ? 0.35 : 1) * (p.onGround ? 1 : 1.8) + this.spread * 2.5;
       this.spread = Math.min(1.5, this.spread + it.recoil * 4);
       const muzzle = eye.clone().add(new THREE.Vector3(0.12, -0.1, 0).applyQuaternion(this.camera.quaternion)).addScaledVector(fwd, 0.6);
+      const ends = [];
       for (let k = 0; k < it.pellets; k++) {
         const dir = fwd.clone();
         const a = Math.random() * Math.PI * 2, r = Math.tan(THREE.MathUtils.degToRad(spreadDeg)) * Math.sqrt(Math.random());
         const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion), right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
         dir.addScaledVector(up, Math.sin(a) * r).addScaledVector(right, Math.cos(a) * r).normalize();
-        this.shoot(eye, dir, it, muzzle);
+        ends.push(this.shoot(eye, dir, it, muzzle));
       }
+      // online: the others hear it, and see where it went
+      this.online?.shot(it.gun, muzzle, ends);
       // smoke from the muzzle
       this.sprites.emit('smoke', muzzle.x, muzzle.y, muzzle.z, { color: 0x9a9a9a, size: 0.12, grow: 0.4, life: 0.7, alpha: 0.25, spread: 0.4, v: fwd.clone().multiplyScalar(1.2) });
       if (held.mag <= 0 && inv.count(it.ammo) > 0) setTimeout(() => {}, 0);
@@ -678,6 +705,7 @@ export class Game {
       }
     }
     this.tracers.add(muzzle, end);
+    return end;
   }
 
   // One of the dead killed by the player: now and then it leaves something (the original's
@@ -696,6 +724,11 @@ export class Game {
 
   // A block the dead dig out: no drop, but what hangs on it falls.
   removeBlock(x, y, z) {
+    this.editKind = 1;
+    try { this.digOut(x, y, z); } finally { this.editKind = 0; }
+  }
+
+  digOut(x, y, z) {
     const id = this.world.getBlock(x, y, z);
     if (id === B.AIR || !this.world.setBlock(x, y, z, B.AIR)) return;
     const L = this.world.lightAt(x, y + 1, z);
@@ -706,6 +739,30 @@ export class Game {
         this.drops.spawn('torch', 1, x + dx + 0.5, y + dy + 0.5, z + dz + 0.5);
       }
     }
+  }
+
+  // A block someone else changed, online (kind: 0 a player, 1 the dead digging): what it
+  // looks and sounds like where it happens.
+  remoteBlockFx(x, y, z, was, id, kind) {
+    const L = this.world.lightAt(x, y + 1, z);
+    const light = Math.max(0.25, Math.max(L.sky / 15, L.block / 15));
+    const at = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5);
+    if (id !== B.AIR) { this.audio?.place?.(BLOCKS[id].sound, at); return; }
+    if (was === B.AIR) return;
+    this.debris.burst(at.x, at.y, at.z, BLOCKS[was].color, kind === 1 ? 10 : 14, light);
+    if (kind === 1) this.audio?.enemyDig?.(at); else this.audio?.breakBlock?.(was, at);
+  }
+
+  // Online: over to another player (a few steps from them), once the ground there is in.
+  teleportTo(id) {
+    const r = this.online?.players.get(id), p = this.player;
+    if (!r || p.dead) return false;
+    p.pos.set(r.pos.x + 0.7, r.pos.y + 0.3, r.pos.z + 0.7);
+    p.vel.set(0, 0, 0);
+    p.fallStart = null;
+    p.yaw = r.yaw;
+    this.ready = false;
+    return true;
   }
 
   // ---- death -------------------------------------------------------------------------------
@@ -721,7 +778,7 @@ export class Game {
   respawn() {
     this.deathShown = false;
     this.app.hideDeath();
-    const sp = this.world.gen.spawnPoint();
+    const sp = this.spawnSpot();
     this.player.spawn(sp.x, sp.y, sp.z);
     this.player.yaw = Math.PI;
     this.enemies?.clearNear?.(sp, 40);
@@ -745,6 +802,7 @@ export class Game {
       grace: this.grace,
       stats: this.stats,
       edits: this.world.serializeEdits(),
+      guests: this.guests,
       savedAt: Date.now(),
     };
   }

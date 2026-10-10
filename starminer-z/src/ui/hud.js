@@ -1,11 +1,14 @@
 // The in-game HUD, laid out like CastleMiner Z on the Xbox 360.
 
+import { Vector3 } from 'three';
 import { ITEMS } from '../items/items.js';
 import { iconFor } from '../items/icons.js';
 import { HOTBAR } from '../items/inventory.js';
 
 const HEART_FULL = '<svg viewBox="0 0 20 18"><path d="M10 17.2 1.9 9.4A5 5 0 0 1 10 2.6a5 5 0 0 1 8.1 6.8Z" fill="#e21d27" stroke="#3a0004" stroke-width="1.4"/><path d="M5.2 4.2a2.6 2.6 0 0 0-2.3 2.4" stroke="#ff9a9a" stroke-width="1.3" fill="none" stroke-linecap="round"/></svg>';
 const HEART_HALF = '<svg viewBox="0 0 20 18"><path d="M10 17.2 1.9 9.4A5 5 0 0 1 10 2.6a5 5 0 0 1 8.1 6.8Z" fill="rgba(40,10,10,.55)" stroke="#3a0004" stroke-width="1.4"/><path d="M10 17.2 1.9 9.4A5 5 0 0 1 10 2.6Z" fill="#e21d27"/></svg>';
+const _v = new Vector3();
+
 const HEART_EMPTY = '<svg viewBox="0 0 20 18"><path d="M10 17.2 1.9 9.4A5 5 0 0 1 10 2.6a5 5 0 0 1 8.1 6.8Z" fill="rgba(40,10,10,.55)" stroke="#3a0004" stroke-width="1.4"/></svg>';
 
 export class HUD {
@@ -14,7 +17,9 @@ export class HUD {
     const el = document.createElement('div');
     el.className = 'hud ui';
     el.innerHTML = `
+      <div class="tags"></div>
       <div class="fps txt"></div>
+      <div class="net txt"></div>
       <div class="look txt"></div>
       <div class="dist txt"><div>Distance - Max</div><div class="dv">0 - 0</div></div>
       <div class="cross"><i></i><i></i><i></i><i></i></div>
@@ -46,6 +51,8 @@ export class HUD {
     this.vig = this.$('.vignette');
     this.scope = this.$('.scope');
     this.hintEl = this.$('.hint');
+    this.netEl = this.$('.net');
+    this.tagsEl = this.$('.tags');
     this.hotbar = this.$('.hotbar');
     this.slots = [];
     for (let i = 0; i < HOTBAR; i++) {
@@ -97,6 +104,35 @@ export class HUD {
 
   hitMarker() { this.hitTimer = 0.12; this.hitEl.classList.add('on'); }
 
+  // ---- names over other players' heads (online) ----------------------------------------------
+
+  addTag(name) {
+    const el = document.createElement('div');
+    el.className = 'tag txt';
+    el.textContent = name;
+    el.style.display = 'none';
+    this.tagsEl.appendChild(el);
+    return { el, shown: false };
+  }
+
+  // over the point pos (null: not shown), as the camera sees it
+  placeTag(tag, pos, cam) {
+    let show = false;
+    if (pos && cam) {
+      const d = cam.position.distanceTo(pos);
+      _v.copy(pos).project(cam);
+      show = _v.z > -1 && _v.z < 1 && Math.abs(_v.x) < 1.1 && Math.abs(_v.y) < 1.1 && d < 160;
+      if (show) {
+        const W = this.el.clientWidth, H = this.el.clientHeight;
+        tag.el.style.transform = `translate(${(((_v.x + 1) / 2) * W).toFixed(1)}px, ${(((1 - _v.y) / 2) * H).toFixed(1)}px) translate(-50%, -100%)`;
+        tag.el.style.opacity = d > 60 ? '0.65' : '1';
+      }
+    }
+    if (show !== tag.shown) { tag.shown = show; tag.el.style.display = show ? '' : 'none'; }
+  }
+
+  removeTag(tag) { tag.el.remove(); }
+
   hurt() {
     this.vig.classList.add('on');
     this.hearts.classList.remove('hurt');
@@ -111,6 +147,8 @@ export class HUD {
     this.el.style.display = s.visible ? '' : 'none';
     if (!s.visible) return;
     this.set('fps', this.fps, s.fps);
+    const o = g.online;
+    this.set('net', this.netEl, o ? (o.host ? `Online · Code ${o.code} · ${o.count} player${o.count === 1 ? '' : 's'}` : `Online · ${o.count} players`) : '');
     this.set('look', this.look, s.lookName || '');
     this.set('dist', this.dv, `${s.distance} - ${s.maxDistance}`);
     // item name, with ammo for guns

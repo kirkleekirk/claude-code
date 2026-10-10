@@ -5,6 +5,7 @@
 import { logoSVG } from './logo.js';
 import { AWARDS } from '../game/awards.js';
 import { PRESETS, SKIN_TONES, HAIR_COLORS, SHIRT_TINTS } from '../entities/avatar/looks.js';
+import { ALPHABET, CODE_LENGTH, cleanCode } from '../net/link.js';
 
 export const MENU_CSS = /* css */ `
 .menu { position: absolute; inset: 0; display: none; pointer-events: auto; z-index: 5; }
@@ -50,10 +51,26 @@ export const MENU_CSS = /* css */ `
 .menu .loading .lbl { font-size: 1.25em; font-weight: 800; margin-bottom: 0.25em; }
 .menu .loading .bar { height: 1.15em; background: #000; border: 0.08em solid rgba(255,255,255,0.75); box-shadow: 0 0.15em 0.5em rgba(0,0,0,0.6); }
 .menu .loading .bar b { display: block; height: 100%; width: 0; background: linear-gradient(180deg, #ffffff 0%, #e2e5e8 45%, #a8adb3 55%, #d7dadd 100%); transition: width 0.25s; }
-.menu .note { position: absolute; left: 4.5%; bottom: 3.2%; font-size: 0.62em; font-weight: 600; color: rgba(255,255,255,0.55); max-width: 46em; }
+.menu .note { position: absolute; left: 4.5%; bottom: 3.2%; font-size: 0.62em; font-weight: 600; color: rgba(255,255,255,0.55); max-width: 46em; white-space: pre-line; }
+.menu .item .val.text { gap: 0.18em; min-width: 0; }
+.menu .val.text .cb { display: inline-grid; place-items: center; width: 1.25em; height: 1.45em; border: 0.08em solid rgba(255,255,255,0.45); background: rgba(0,0,0,0.35); font-weight: 800; }
+.menu .item.sel .val.text .cb.at { border-color: var(--menu-hi); }
+.menu .val.text .cb.ed { background: var(--menu-hi); border-color: #fff; color: #fff; }
+.menu .val.text .free { min-width: 6em; padding: 0 0.25em; border-bottom: 0.08em solid rgba(255,255,255,0.45); }
+.menu .item.sel .val.text .free::after { content: ''; display: inline-block; width: 0.08em; height: 1em; margin-left: 0.06em; vertical-align: -0.12em; background: var(--menu-hi); animation: pulse 1s steps(2) infinite; }
+.menu .val.text .free .ed { background: var(--menu-hi); }
+.menu .bigcode { display: flex; gap: 0.25em; font-size: 2.6em; font-weight: 800; letter-spacing: 0.02em; margin: 0.1em 0 0.35em; }
+.menu .bigcode b { display: inline-grid; place-items: center; width: 1.2em; height: 1.4em; background: rgba(0,0,0,0.45); border: 0.05em solid rgba(255,255,255,0.6); }
+.menu .who { font-size: 0.85em; font-weight: 700; color: var(--ink-dim); margin-bottom: 0.9em; }
 `;
 
+// what a name may be made of, and the order a pad steps through it
+const NAME_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 ';
+const nameChar = (c) => (/^[\p{L}\p{N} _'.-]$/u.test(c) ? c : '');
+
 const yes = (b) => (b ? 'On' : 'Off');
+// text from elsewhere (a friend's name, an error), shown as text
+const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 export class Menus {
   constructor(app) {
@@ -72,6 +89,9 @@ export class Menus {
     this.lastAxis = 0;
     this.visible = false;
     this.hintKey = '';
+    // the code being typed on the Join screen, and a text row a pad is changing ({ it, pos })
+    this.joinCode = '';
+    this.edit = null;
     el.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
@@ -103,25 +123,95 @@ export class Menus {
           items: [
             m ? { label: 'Continue Game', small: `Day ${m.days ?? m.day} · ${m.maxDistance ?? 0} m`, on: () => app.continueGame() } : null,
             { label: 'New World', on: () => (m ? this.open('confirmNew') : app.newWorld()) },
+            { label: 'Host Online Game', on: () => this.open('host') },
+            { label: 'Join Online Game', on: () => this.open('join') },
             { label: 'Back', on: () => this.back() },
           ].filter(Boolean),
         };
       }
+      case 'host': {
+        const m = app.saveInfo();
+        return {
+          id, title: 'Host Online Game',
+          sub: "Play your world with friends. Once it's loaded you'll get a code to give them, and they join with it. Online, the game doesn't stop for the pause menu.",
+          items: [
+            m ? { label: 'Continue Game', small: `Day ${m.days ?? m.day} · ${m.maxDistance ?? 0} m`, on: () => app.continueGame({ host: true }) } : null,
+            { label: 'New World', on: () => (m ? this.open('confirmNew', { host: true }) : app.newWorld({ host: true })) },
+            { label: 'Back', on: () => this.back() },
+          ].filter(Boolean),
+        };
+      }
+      case 'join': return {
+        id, title: 'Join Online Game', typing: true,
+        sub: 'Type the code from your friend\'s screen (it\'s under Invite Friends in their pause menu).',
+        items: [
+          { label: 'Code', kind: 'text', fixed: true, max: CODE_LENGTH, cycle: ALPHABET, filter: cleanCode, get: () => this.joinCode, set: (v) => { this.joinCode = v; }, enter: () => app.joinOnline(this.joinCode) },
+          { label: 'Your Name', kind: 'text', max: 16, cycle: NAME_CHARS, filter: nameChar, get: () => app.profile.name ?? app.netName(), set: (v) => app.setName(v), enter: () => app.joinOnline(this.joinCode) },
+          { label: 'Join', on: () => app.joinOnline(this.joinCode) },
+          { label: 'Back', on: () => this.back() },
+        ],
+      };
       case 'confirmNew': return {
         id, title: 'Start A New World?', sub: 'Your current world and everything in it will be lost.',
-        items: [{ label: 'No', on: () => this.back() }, { label: 'Yes', on: () => app.newWorld() }],
+        items: [{ label: 'No', on: () => this.back() }, { label: 'Yes', on: () => app.newWorld({ host: !!arg?.host }) }],
       };
-      case 'pause': return {
-        id, dim: true, small: true,
-        items: [
-          { label: 'Return To Game', on: () => app.resume() },
-          { label: 'Options', on: () => this.open('options') },
-          { label: 'Choose Avatar', on: () => this.open('avatar') },
-          { label: 'Awards', on: () => this.open('awards') },
-          { label: 'Help & Controls', on: () => this.open('help') },
-          { label: 'Save And Quit', on: () => app.quitToMenu() },
-        ],
-        back: () => app.resume(),
+      case 'pause': {
+        const o = app.game?.online, guest = o && !o.host, others = o ? o.players.size : 0;
+        return {
+          id, dim: true, small: true,
+          sub: o ? (guest ? `Online · ${o.count} players` : `Online · Code ${o.code} · ${o.count} player${o.count === 1 ? '' : 's'}`) : '',
+          items: [
+            { label: 'Return To Game', on: () => app.resume() },
+            guest ? null : { label: 'Invite Friends', small: o ? `Code ${o.code}` : '', on: () => { app.hostOnline(); this.open('invite'); } },
+            others ? { label: 'Teleport To Player', on: () => this.open('teleport') } : null,
+            { label: 'Options', on: () => this.open('options') },
+            { label: 'Choose Avatar', on: () => this.open('avatar') },
+            { label: 'Awards', on: () => this.open('awards') },
+            { label: 'Help & Controls', on: () => this.open('help') },
+            guest ? { label: 'Leave Game', on: () => app.leaveOnline() }
+              : { label: 'Save And Quit', on: () => (others ? this.open('confirmEnd') : app.quitToMenu()) },
+          ].filter(Boolean),
+          back: () => app.resume(),
+        };
+      }
+      case 'invite': {
+        const o = app.game?.online;
+        const names = o ? [`${o.myName} (you)`, ...[...o.players.values()].map((p) => p.name)].join(', ') : '';
+        const html = o
+          ? `<div><div class="bigcode txt">${[...o.code].map((c) => `<b>${c}</b>`).join('')}</div><div class="who txt">Here now: ${esc(names)}</div></div>`
+          : '';
+        return {
+          id, title: 'Invite Friends', small: true, dim: true, html,
+          sub: o ? 'Your friends open StarMiner Z, choose Play Game, then Join Online Game, and type this code. Up to seven can join.'
+            : app.hosting ? 'Opening your game to friends...'
+              : app.hostError ? `Couldn't open your game online. ${app.hostError}` : '',
+          items: [
+            !o && !app.hosting && app.hostError ? { label: 'Try Again', on: () => { app.hostOnline(); this.refresh(); } } : null,
+            { label: 'Back', on: () => this.back() },
+          ].filter(Boolean),
+        };
+      }
+      case 'teleport': {
+        const o = app.game?.online;
+        const list = o ? [...o.players.values()] : [];
+        return {
+          id, title: 'Teleport To Player', small: true, dim: true,
+          sub: list.length ? '' : 'No one else is here.',
+          items: [
+            ...list.map((p) => ({ label: esc(p.name), small: p.dead ? 'dead' : '', off: p.dead, on: () => { if (app.game.teleportTo(p.id)) app.resume(); } })),
+            { label: 'Back', on: () => this.back() },
+          ],
+        };
+      }
+      case 'confirmEnd': return {
+        id, title: 'End The Game?', small: true, dim: true,
+        sub: 'Your friends will go back to their menus. Your world is saved, with what they have, for next time.',
+        items: [{ label: 'No', on: () => this.back() }, { label: 'Yes', on: () => app.quitToMenu() }],
+      };
+      case 'notice': return {
+        id, title: arg?.title || '', sub: arg?.sub || '',
+        items: [{ label: 'OK', on: () => { this.reset('main'); if (arg?.then) this.open(arg.then); } }],
+        back: () => { this.reset('main'); if (arg?.then) this.open(arg.then); },
       };
       case 'options': return {
         id, title: 'Options', rows: true, small: true, dim: app.state === 'paused',
@@ -178,11 +268,17 @@ export class Menus {
           <b>Crafting</b><span>E or Tab</span><b>Camera</b><span>V</span><b>Pause</b><span>Esc</span></div>
           <h3>Xbox Controller</h3>
           <div class="grid"><b>Move / Look</b><span>Left / right stick</span><b>Jump</b><span>A</span><b>Dig / Shoot</b><span>Right trigger</span><b>Place / Aim</b><span>Left trigger</span>
-          <b>Reload</b><span>X</span><b>Crafting</b><span>Y</span><b>Items</b><span>Bumpers, d-pad</span><b>Sprint</b><span>Left stick click</span><b>Pause</b><span>Start</span></div>
+          <b>Reload</b><span>X</span><b>Crafting</b><span>Y</span><b>Items</b><span>Bumpers, d-pad left and right</span><b>Sprint</b><span>Left stick click</span>
+          <b>Camera</b><span>D-pad up, or Back</span><b>Pause</b><span>Start or B</span></div>
           <h3>Touch</h3>
           <p>Left thumb moves, right thumb looks. Hold the dig button to dig or fire; tap place to build or aim. Tap the hotbar to switch items.</p>
           <h3>Inventory</h3>
           <p>On the crafting screen, click or tap something in the backpack or the hotbar to pick it up, then a slot to put it there, or drag it. Shift-click sends a stack across, backpack to hotbar or back; right-click picks up half a stack, or puts down one. With a controller, go right into the backpack (the hotbar is under it): A picks up and puts down, the right stick splits.</p>
+          <h3>Playing Online</h3>
+          <p>To host, choose Play Game, then Host Online Game (or Invite Friends from the pause menu of a game you're in). You get a five-letter code: your friends choose Join Online Game and type it. Up to eight can play. Everyone plays in the host's world, saved on the host's machine, and what each friend carries is kept with it for when they come back. Each player's dead come for that player, and anyone can shoot them. Online, the game goes on while the pause menu is up, and Teleport To Player there takes you to a friend.</p>
+          <p>Keep the game in front: a browser stops running a page whose tab is hidden. Online play needs an internet connection, and doesn't work inside the Claude artifact viewer.</p>
+          <h3>On an Xbox</h3>
+          <p>In Microsoft Edge, hold the Menu button and choose Use game controls, so the controller plays the game instead of moving a pointer. B pauses and the d-pad's up changes the camera, because Edge keeps the View button for itself (if the controller stops answering, press the Xbox button twice). If it runs slowly, turn off Edge's "Apps can add a border" setting (Settings, System) and lower View Distance in Options.</p>
         </div>`,
         items: [{ label: 'Back', on: () => this.back() }],
       };
@@ -196,7 +292,7 @@ export class Menus {
           <h3>From your copy of CastleMiner Z</h3>
           <p>${this.ripped()}</p>
           <h3>Built with</h3>
-          <p>three.js (MIT). Fonts: Archivo Black and Open Sans (SIL Open Font License).</p>
+          <p>three.js and PeerJS (MIT). Fonts: Archivo Black and Open Sans (SIL Open Font License).</p>
         </div>`,
         items: [{ label: 'Back', on: () => this.back() }],
       };
@@ -228,7 +324,7 @@ export class Menus {
   // ---- navigation ------------------------------------------------------------------------------
 
   open(id, arg) {
-    if (this.cur) this.stack.push(this.cur.id);
+    if (this.cur) this.stack.push([this.cur.id, this.cur.arg]);
     this.show(id, arg);
   }
 
@@ -236,21 +332,27 @@ export class Menus {
 
   back() {
     const prev = this.stack.pop();
-    if (prev) this.show(prev);
+    if (prev) this.show(prev[0], prev[1]);
     else if (this.cur?.back) this.cur.back();
   }
 
   reset(id, arg) { this.stack = []; this.show(id, arg); }
 
+  // a message with an OK (then: a screen to go on to from the main menu)
+  notice(title, sub, then = null) { this.reset('notice', { title, sub, then }); }
+
   show(id, arg) {
     const s = this.build(id, arg);
     if (!s) return;
     s.sel = 0;
+    s.arg = arg;
     this.cur = s;
+    this.edit = null;
     this.visible = true;
     this.el.classList.add('on');
     this.el.classList.toggle('dim', !!s.dim);
     this.el.classList.toggle('small-logo', !!s.small);
+    this.typing(s);
     this.render();
     this.app.onMenuScreen?.(s);
   }
@@ -259,10 +361,94 @@ export class Menus {
     this.visible = false;
     this.cur = null;
     this.stack = [];
+    this.edit = null;
+    this.typing(null);
     this.el.classList.remove('on');
   }
 
-  refresh() { if (this.cur) { const sel = this.cur.sel; const s = this.build(this.cur.id); if (s) { s.sel = Math.min(sel, (s.items || []).length - 1); this.cur = s; this.render(); } } }
+  refresh() {
+    if (!this.cur) return;
+    const sel = this.cur.sel, s = this.build(this.cur.id, this.cur.arg);
+    if (!s) return;
+    s.sel = Math.min(sel, (s.items || []).length - 1);
+    s.arg = this.cur.arg;
+    this.cur = s;
+    if (this.edit) this.edit.it = s.items.find((x) => x.label === this.edit.it.label) || null;
+    if (!this.edit?.it) this.edit = null;
+    this.render();
+  }
+
+  // ---- typing (the Join screen) ---------------------------------------------------------------
+
+  // a screen with text on it takes the keys you type (arrows, Enter and Esc still steer)
+  typing(s) {
+    const input = this.app.input;
+    if (input) input.textSink = s?.typing ? (ch) => this.type(ch) : null;
+  }
+
+  // the text row a key goes to: the one chosen, or the first
+  textItem() {
+    const s = this.cur, it = s?.items?.[s.sel];
+    return it?.kind === 'text' ? it : s?.items?.find((x) => x.kind === 'text') || null;
+  }
+
+  type(ch) {
+    const it = this.textItem();
+    if (!it) return;
+    let v = it.get() || '';
+    if (ch === '\b') v = v.trimEnd().slice(0, -1);
+    else {
+      const c = it.filter ? it.filter(ch) : ch;
+      if (!c) return;
+      v = v.trimEnd();
+      if (v.length >= it.max) return;
+      v += c;
+    }
+    it.set(v);
+    this.edit = null;
+    this.refresh();
+  }
+
+  // A pad changes text a letter at a time: up and down step through the letters, left and right
+  // move along, X rubs one out, A or B is done.
+  editText(it, ax, ay, del) {
+    const E = this.edit;
+    let v = it.get() || '';
+    const last = it.fixed ? it.max - 1 : Math.min(it.max - 1, v.length);
+    if (ax) E.pos = Math.max(0, Math.min(last, E.pos + ax));
+    if (ay || del) {
+      const chars = [...v.padEnd(E.pos + 1, ' ')];
+      if (del) chars[E.pos] = ' ';
+      else {
+        const cy = it.cycle, k = cy.indexOf(chars[E.pos]);
+        chars[E.pos] = cy[((k < 0 ? (ay > 0 ? -1 : 0) : k) + ay + cy.length) % cy.length];
+      }
+      v = chars.join('');
+      if (!it.fixed) v = v.trimEnd();
+      it.set(it.fixed ? v.slice(0, it.max) : v);
+    }
+    this.app.audio?.ui?.('move');
+    this.refresh();
+  }
+
+  // a text row: boxes for a code, a line for a name
+  textHTML(it) {
+    const v = it.get() || '';
+    const E = this.edit?.it === it ? this.edit : null;
+    if (it.fixed) {
+      const at = E ? E.pos : Math.min(v.trimEnd().length, it.max - 1);
+      let h = '';
+      for (let i = 0; i < it.max; i++) {
+        const c = (v[i] || ' ').trim();
+        h += `<span class="cb${E && i === at ? ' ed' : !E && i === at ? ' at' : ''}">${esc(c) || '&nbsp;'}</span>`;
+      }
+      return `<span class="val text">${h}</span>`;
+    }
+    let h = '';
+    [...v].forEach((c, i) => { h += E && i === E.pos ? `<span class="ed">${esc(c) === ' ' ? '&nbsp;' : esc(c)}</span>` : esc(c); });
+    if (E && E.pos >= v.length) h += '<span class="ed">&nbsp;</span>';
+    return `<span class="val text"><span class="free">${h || '&nbsp;'}</span></span>`;
+  }
 
   setLoading(f, label) {
     const b = this.screenEl.querySelector('.loading .bar b');
@@ -285,14 +471,14 @@ export class Menus {
       if (s.html) h += `<div style="margin-bottom:0.8em;max-height:58vh;display:flex">${s.html}</div>`;
       h += `<div class="items${s.rows ? ' rows' : ''}">`;
       (s.items || []).forEach((it, i) => {
-        const val = it.kind === 'choice' ? `<span class="val"><span class="ar">◀</span><span>${it.fmt(it.get())}</span><span class="ar">▶</span></span>` : '';
+        const val = it.kind === 'choice' ? `<span class="val"><span class="ar">◀</span><span>${it.fmt(it.get())}</span><span class="ar">▶</span></span>`
+          : it.kind === 'text' ? this.textHTML(it) : '';
         const small = it.small ? `<small>${it.small}</small>` : '';
         h += `<div class="item${i === s.sel ? ' sel' : ''}${it.off ? ' off' : ''}" data-i="${i}"><span>${it.label}</span>${small}${val}</div>`;
       });
       h += '</div>';
     }
     this.screenEl.innerHTML = h;
-    this.noteEl.textContent = s.note ? 'StarMiner Z is a fan remake inspired by CastleMiner Z (DigitalDNA Games). Not affiliated with DigitalDNA Games or Microsoft.' : '';
     this.screenEl.querySelectorAll('.item').forEach((d) => {
       const i = +d.dataset.i;
       d.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') this.select(i); });
@@ -304,22 +490,44 @@ export class Menus {
           // the left third steps back, anywhere else forward
           const r = d.getBoundingClientRect();
           this.step(it, e.clientX < r.left + r.width * 0.33 && r.width > 200 ? -1 : 1);
-        } else this.activate(i);
+        } else if (it.kind === 'text') this.pointText(it, e);
+        else this.activate(i);
       });
     });
     if (s.press) this.screenEl.querySelector('.press')?.addEventListener('pointerdown', () => this.pressStart());
+    this.hintKey = '';
     this.renderHints();
   }
 
   renderHints() {
-    const s = this.cur, dev = this.app.input?.lastDevice;
-    const key = `${s?.id}|${dev}`;
+    const s = this.cur, app = this.app, dev = app.input?.lastDevice;
+    // on an Xbox, until the controller is heard from: how to give it to the game
+    const xbox = app.isXbox && !app.input?.padActive && (s?.id === 'title' || s?.id === 'main');
+    const key = `${s?.id}|${dev}|${!!this.edit}|${xbox}`;
     if (key === this.hintKey) return;
     this.hintKey = key;
-    if (!s || s.press || s.loading || this.app.isTouch) { this.hintsEl.innerHTML = ''; return; }
+    this.noteEl.textContent = [
+      s?.note ? 'StarMiner Z is a fan remake inspired by CastleMiner Z (DigitalDNA Games). Not affiliated with DigitalDNA Games or Microsoft.' : '',
+      xbox ? 'On an Xbox: hold the Menu button on the controller and choose "Use game controls" to play with it.' : '',
+    ].filter(Boolean).join('\n');
+    if (!s || s.press || s.loading || app.isTouch) { this.hintsEl.innerHTML = ''; return; }
+    if (this.edit) {
+      this.hintsEl.innerHTML = '<span>Up / Down Letter</span><span>Left / Right Move</span><span><span class="btn x">X</span> Delete</span><span><span class="btn a">A</span> Done</span>';
+      return;
+    }
     this.hintsEl.innerHTML = dev === 'pad'
       ? '<span><span class="btn a">A</span> Select</span><span><span class="btn b">B</span> Back</span>'
-      : '<span><span class="key">Enter</span> Select</span><span><span class="key">Esc</span> Back</span>';
+      : `${s.typing ? '<span>Type To Fill In</span>' : ''}<span><span class="key">Enter</span> Select</span><span><span class="key">Esc</span> Back</span>`;
+  }
+
+  // a tap on a text row brings up the device's keyboard (a mouse just picks the row: type away)
+  pointText(it, e) {
+    if (e.pointerType === 'mouse') return;
+    let v = null;
+    try { v = window.prompt(it.label, (it.get() || '').trim()); } catch { v = null; }
+    if (v == null) return;
+    it.set([...v].map((c) => (it.filter ? it.filter(c) : c)).join('').slice(0, it.max));
+    this.refresh();
   }
 
   select(i) {
@@ -361,7 +569,19 @@ export class Menus {
     if (!it || it.off) return;
     this.app.audio?.ui?.('select');
     if (it.kind === 'choice') this.step(it, 1);
+    else if (it.kind === 'text') this.activateText(it);
     else it.on?.();
+  }
+
+  // A on a text row: change it a letter at a time; Enter: on with what it's for
+  activateText(it) {
+    const dev = this.app.input?.lastDevice;
+    if (dev === 'pad') {
+      const v = (it.get() || '').trimEnd();
+      this.edit = { it, pos: Math.min(v.length, it.max - 1) };
+      this.render();
+    } else if (dev === 'touch') this.pointText(it, { pointerType: 'touch' });
+    else it.enter?.();
   }
 
   pressStart() {
@@ -401,6 +621,12 @@ export class Menus {
       }
     }
     this.lastAxis = stick;
+    if (this.edit) {
+      const del = input.consume('reload');
+      if (accept || backBtn) { this.edit = null; this.app.audio?.ui?.('select'); this.render(); return; }
+      if (ax || ay || del) this.editText(this.edit.it, ax, ay, del);
+      return;
+    }
     if (ay) this.move(-ay);
     const it = s.items?.[s.sel];
     if (ax && it?.kind === 'choice') this.step(it, ax);

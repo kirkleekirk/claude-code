@@ -41,6 +41,10 @@ const SKELETON_LENGTHS = {
   death5: 2.3, death6: 2.9667, death7: 2.6333, standup: 2.1333, standup2: 3.4667, walk_archer1: 1.3, idle_archer1: 3.3, atack_archer1: 1.6333,
 };
 
+// every clip the dead play, numbered the same on every machine (online, a body's clip goes by
+// its number)
+export const CLIP_NAMES = [...new Set([...Object.keys(LENGTHS), ...Object.keys(SKELETON_LENGTHS)])];
+
 // Without the original's bodies: the avatar rig, playing the nearest of its own clips.
 function standIn(name, zombie) {
   if (/^arise|^standup/.test(name)) return 'climb';
@@ -102,6 +106,13 @@ class AvatarBody {
   }
 }
 
+// A body for one of the dead of this type: the original's model, or (stand: { look, shared })
+// one built on the avatar rig.
+export function enemyBody(game, type, stand) {
+  const T = TYPES[type], bodies = game.app.cmzBodies;
+  return bodies && !stand ? new CmzBody(bodies, T.model, T.skin, game.app.sky.uniforms, game.app.terrain.uniforms) : new AvatarBody(game, T, stand.look, stand.shared);
+}
+
 export class Enemy {
   // type: an index into TYPES; pkg: its rolled speeds (initPackage); stand: for the stand-in
   // bodies, { look, shared }
@@ -135,8 +146,8 @@ export class Enemy {
     this.gone = false;
     this.dist = 0;
     this.growl = null;
-    const bodies = game.app.cmzBodies;
-    this.body = bodies && !stand ? new CmzBody(bodies, T.model, T.skin, game.app.sky.uniforms, game.app.terrain.uniforms) : new AvatarBody(game, T, stand.look, stand.shared);
+    this.opacity = 1;
+    this.body = enemyBody(game, type, stand);
     this.root = this.body.root;
     this.clip = { name: '', t: 0, dur: 1, speed: 1, loop: false };
     this.state = null;
@@ -609,7 +620,7 @@ const DIE = {
   update(e, dt) {
     if (!e.finished) return;
     e.frustration -= dt;
-    e.body.opacity = Math.min(1, Math.max(0, e.frustration / 0.6));
+    e.body.opacity = e.opacity = Math.min(1, Math.max(0, e.frustration / 0.6));
     if (e.frustration < 0) e.remove();
   },
 };

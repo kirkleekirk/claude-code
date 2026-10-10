@@ -31,6 +31,9 @@ export const CSS = /* css */ `
 .hud .look { position: absolute; top: 2.1em; left: 0; right: 0; text-align: center; font-weight: 700; font-size: 0.82em; letter-spacing: 0.01em; }
 .hud .dist { position: absolute; top: 2.1em; right: 4.4em; text-align: center; font-weight: 700; font-size: 0.82em; line-height: 1.3; }
 .hud .fps { position: absolute; top: 0.6em; left: 0.8em; font-size: 0.7em; opacity: 0.8; }
+.hud .net { position: absolute; top: 0.55em; left: 0; right: 0; text-align: center; font-size: 0.68em; font-weight: 700; opacity: 0.85; white-space: nowrap; }
+.hud .tags { position: absolute; inset: 0; overflow: hidden; }
+.hud .tag { position: absolute; left: 0; top: 0; font-size: 0.8em; font-weight: 800; white-space: nowrap; will-change: transform; }
 .hud .cross { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
 .hud .cross i { position: absolute; background: #fff; box-shadow: 0 0 0.12em rgba(0,0,0,0.9); }
 .hud .cross i:nth-child(1) { left: -0.07em; top: -0.62em; width: 0.14em; height: 0.36em; }

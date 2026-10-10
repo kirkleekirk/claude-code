@@ -30,8 +30,20 @@ export class Input {
     this.padIndex = -1;
     this.padPrev = [];
     this.touch = null; // set by the touch overlay
+    // a screen with text on it (the Join screen) takes the keys you type: textSink(char), '\b'
+    // to rub one out
+    this.textSink = null;
+    // a controller has been heard from (on an Xbox, Edge only lets the game have it in its
+    // "game controls" mode)
+    this.padActive = false;
     this.listeners = [];
     this.on(window, 'keydown', (e) => {
+      if (this.textSink && (e.key.length === 1 || e.key === 'Backspace') && !e.ctrlKey && !e.metaKey && !e.altKey && this.isGameKey(e)) {
+        e.preventDefault();
+        this.lastDevice = 'keyboard';
+        this.textSink(e.key === 'Backspace' ? '\b' : e.key);
+        return;
+      }
       if (e.repeat) { if (KEYMAP[e.code] && this.isGameKey(e)) e.preventDefault(); return; }
       const a = KEYMAP[e.code];
       this.lastDevice = 'keyboard';
@@ -104,7 +116,7 @@ export class Input {
       const dz = (v, d = 0.18) => (Math.abs(v) < d ? 0 : (v - Math.sign(v) * d) / (1 - d));
       const ax = dz(pad.axes[0] || 0), ay = dz(pad.axes[1] || 0);
       const rx = dz(pad.axes[2] || 0, 0.12), ry = dz(pad.axes[3] || 0, 0.12);
-      if (ax || ay || rx || ry) this.lastDevice = 'pad';
+      if (ax || ay || rx || ry) { this.lastDevice = 'pad'; this.padActive = true; }
       mx += ax; my -= ay;
       // response curve: fine aim near the centre, fast turns at the edge
       const curve = (v) => Math.sign(v) * Math.pow(Math.abs(v), 1.8);
@@ -115,7 +127,7 @@ export class Input {
         if (!a) return;
         const v = typeof b === 'object' ? b.pressed || b.value > 0.4 : b > 0.4;
         const was = this.padPrev[i];
-        if (v && !was) { this.down(a); this.lastDevice = 'pad'; }
+        if (v && !was) { this.down(a); this.lastDevice = 'pad'; this.padActive = true; }
         if (!v && was) this.up(a);
         this.padPrev[i] = v;
       });

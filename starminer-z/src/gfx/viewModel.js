@@ -149,10 +149,13 @@ export class ViewModel {
     this.swing = 0;
     this.swingKind = kind;
     this.swingTime = time;
+    // (true for the frame a swing or a shot starts: the avatar's clip starts with it)
+    this.useNow = true;
     return true;
   }
 
   fire(kick = 0.05) {
+    this.useNow = true;
     this.recoil.v.z += kick * 18;
     this.recoil.v.x += kick * 10 * (1 + Math.random() * 0.4);
     this.recoil.v.y += (Math.random() - 0.5) * kick * 4;
@@ -319,5 +322,6 @@ export class ViewModel {
       const s = 0.12 + Math.random() * 0.08;
       this.flash.scale.set(s, s, 1);
     }
+    this.useNow = false;
   }
 }

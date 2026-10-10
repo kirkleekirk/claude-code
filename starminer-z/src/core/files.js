@@ -18,8 +18,10 @@ function body(f) {
 }
 
 export function fileFetch(url) {
-  const f = PACKED?.[url];
-  if (!f) return fetch(url);
+  if (!PACKED) return fetch(url);
+  // a packed page has everything it's going to have (the friends' copy has none of it)
+  const f = PACKED[url];
+  if (!f) return Promise.resolve(new Response(null, { status: 404 }));
   return Promise.resolve(new Response(body(f), { headers: { 'Content-Type': f.t } }));
 }
 

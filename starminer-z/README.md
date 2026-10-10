@@ -45,6 +45,38 @@ bloodstone roof over the Underworld.
 
 Controls: keyboard and mouse, an Xbox controller, or touch (see Help & Controls in the game).
 
+### Playing online
+
+Up to eight players can play together in one world, as in CastleMiner Z:
+
+- To host, choose Play Game, then Host Online Game (or Invite Friends from the pause menu of a
+  game you're in). Once the world has loaded you get a five-letter code.
+- Your friends choose Join Online Game and type the code (with a controller, A on the code
+  changes it a letter at a time).
+- Everyone plays in the host's world, which is saved on the host's machine. Block changes go to
+  everyone, and the time of day is the host's.
+- Each player's machine runs the dead that come for that player (as the original does), and the
+  others see them and can shoot them. A kill counts for whoever made it.
+- What each friend carries is kept with the host's world, for when they come back.
+- Online, the game goes on behind the pause menu, and Teleport To Player there takes you to a
+  friend.
+
+The browsers connect to each other directly (WebRTC, through [PeerJS](https://peerjs.com)). The
+public PeerJS server only introduces them, or `?peer=host:port` names another (`npx peerjs
+--port 9000` runs one). Online play needs a page that may open connections: the downloaded copy
+or any ordinary web address, not the Claude artifact viewer.
+
+### On an Xbox
+
+The game runs in Microsoft Edge on an Xbox Series X|S, from a web address (Edge there can't open
+files).
+
+- In Edge, hold the Menu button and choose Use game controls, so the controller plays the game
+  instead of moving a pointer.
+- B pauses and the d-pad's up changes the camera: Edge keeps the View button for itself.
+- The game starts on Medium graphics there. Turning off Edge's "Apps can add a border" setting
+  helps it run smoothly.
+
 ## Developing
 
 ```
@@ -53,13 +85,17 @@ npm run dev             # http://localhost:5173 (add ?play to skip the menus)
 npm test                # world generation, meshing and lighting checks
 npm run build           # dist/
 npm run build:artifact  # one self-contained page: dist-artifact/starminer-z.html
-npm run build:download  # one file to open straight from disk: dist-download/starminer-z.html
+npm run build:download  # files to open straight from disk: dist-download/starminer-z.html, -friends.html
 npm run build:avatar -- <path to XNAGameStudio/Samples>   # rebuilds src/assets/avatarData.js
 ```
 
 A page opened from disk can't fetch the files beside it, so the download build packs
-whatever is in `local-assets/` into the file itself; that copy is yours alone and isn't for
-passing round.
+whatever is in `local-assets/` into `starminer-z.html` itself; that copy is yours alone and isn't
+for passing round. `starminer-z-friends.html` is the same game with nothing ripped in it, to give
+to the friends you play with online.
+
+Online tests run against a local PeerJS server: start one on 127.0.0.1:9000 and add
+`&peer=127.0.0.1:9000` to both players' addresses.
 
 Test helpers: `tools/shoot.mjs` (screenshots in headless Chromium), `tools/flow.mjs` (walks the
 menus with key presses), `tools/sim.mjs` (runs the game and reports what the enemies do),
@@ -95,7 +131,7 @@ from parts.
 - The character rig, avatar part meshes, clothing and face textures and animations come from the
   Avatar Animation Pack for XNA Game Studio 4.0 by Microsoft Corporation, used under the
   Microsoft Permissive License (Ms-PL); see `LICENSE-avatar.txt`.
-- three.js (MIT). Fonts: Archivo Black, Open Sans and Saira Semi Condensed (SIL Open Font
+- three.js and PeerJS (MIT). Fonts: Archivo Black, Open Sans and Saira Semi Condensed (SIL Open Font
   License), from Google Fonts.
 - CastleMiner Z's sounds, music, models and animations (when you rip them from your own copy;
   see above) belong to DigitalDNA Games and aren't distributed here.

@@ -18,6 +18,7 @@
 
 import * as THREE from 'three';
 import { Enemy } from '../entities/enemy.js';
+import { Ghost, GHOST_FLOATS } from '../net/remote.js';
 import { TYPES, getZombie, getAbovegroundEnemy, getBelowgroundEnemy, initPackage, randomFloat, randomInt } from '../entities/cmz/types.js';
 import { zombieLook } from '../entities/avatar/zombie.js';
 import { skeletonLook } from '../entities/avatar/skeleton.js';
@@ -47,6 +48,10 @@ export class Enemies {
     this.firstContact = 20;
     this.leftToSpawn = 0;
     this.nextT = 0;
+    // online: each one numbered, so the other machines can tell them apart; and theirs, as
+    // they show here ("owner:number" -> Ghost)
+    this.nextId = 0;
+    this.ghosts = new Map();
   }
 
   // ---- the clock and the distance -------------------------------------------------------------
@@ -88,25 +93,58 @@ export class Enemies {
     return s;
   }
 
+  // without the original's bodies: the look one of this type wears on the avatar rig
+  standFor(T) {
+    if (this.game.app.cmzBodies) return null;
+    const key = T.kind === 'zombie' ? `z${T.skin}` : 's';
+    if (!this.looks) this.looks = new Map();
+    let look = this.looks.get(key);
+    if (!look) { look = T.kind === 'zombie' ? zombieLook(1 + T.skin) : skeletonLook(1); this.looks.set(key, look); }
+    return { look, shared: this.shared(look) };
+  }
+
   spawn(type, x, y, z, midnight = 0) {
     const g = this.game, T = TYPES[type];
-    let stand = null;
-    if (!g.app.cmzBodies) {
-      const key = T.kind === 'zombie' ? `z${T.skin}` : 's';
-      if (!this.looks) this.looks = new Map();
-      let look = this.looks.get(key);
-      if (!look) { look = T.kind === 'zombie' ? zombieLook(1 + T.skin) : skeletonLook(1); this.looks.set(key, look); }
-      stand = { look, shared: this.shared(look) };
-    }
-    const e = new Enemy(g, type, x, y, z, initPackage(T, midnight), stand);
+    const e = new Enemy(g, type, x, y, z, initPackage(T, midnight), this.standFor(T));
+    // (kept within what a 32-bit float holds exactly)
+    e.nid = this.nextId = (this.nextId % 16000000) + 1;
     g.scene.add(e.root);
     this.list.push(e);
     return e;
   }
 
+  // ---- other players' dead (online) ------------------------------------------------------------
+
+  // A snapshot of the dead one machine runs (see enemySnapshot): whatever's new appears, what's
+  // missing is gone.
+  ghostsFrom(owner, f, now) {
+    const seen = new Set();
+    for (let o = 0; o + GHOST_FLOATS <= f.length; o += GHOST_FLOATS) {
+      const nid = f[o], type = f[o + 1];
+      if (!TYPES[type]) continue;
+      const key = `${owner}:${nid}`;
+      let gh = this.ghosts.get(key);
+      if (!gh) { gh = new Ghost(this.game, owner, nid, type, this.standFor(TYPES[type])); this.ghosts.set(key, gh); }
+      gh.receive(f, o, now);
+      seen.add(key);
+    }
+    for (const [key, gh] of this.ghosts) if (gh.owner === owner && !seen.has(key)) { gh.dispose(); this.ghosts.delete(key); }
+  }
+
+  dropGhosts(owner) {
+    for (const [key, gh] of this.ghosts) if (owner == null || gh.owner === owner) { gh.dispose(); this.ghosts.delete(key); }
+  }
+
+  // ours and theirs
+  *bodies() {
+    yield* this.list;
+    yield* this.ghosts.values();
+  }
+
   // ---- every frame ----------------------------------------------------------------------------
 
   update(dt, active) {
+    if (this.ghosts.size) { const now = performance.now(); for (const gh of this.ghosts.values()) gh.update(dt, now); }
     if (!active) return;
     const g = this.game, p = g.player;
     if (this.list.length < MAX_TOTAL && !p.dead) this.spawning(dt);
@@ -290,7 +328,7 @@ export class Enemies {
   attenuate(p) {
     let k = 1;
     const vx = p.vel.x, vz = p.vel.z, vl = Math.hypot(vx, vz);
-    for (const e of this.list) {
+    for (const e of this.bodies()) {
       if (!e.blocking) continue;
       const dx = e.pos.x - p.pos.x, dy = e.pos.y - p.pos.y, dz = e.pos.z - p.pos.z;
       const d2 = dx * dx + dy * dy + dz * dz;
@@ -309,7 +347,10 @@ export class Enemies {
   // ---- the archers' arrows ---------------------------------------------------------------------
 
   // Off at 25 m/s on an arc that drops onto the target, if one does; straight at it if not.
-  shootArrow(from, to) {
+  // (Online it flies on every machine, from the same place the same way: remote, one of
+  // another machine's archers shot it.)
+  shootArrow(from, to, remote = false) {
+    if (!remote) this.game.online?.arrow(from, to);
     const v = ballistic(from, to, 25, 10) || to.clone().sub(from).normalize().multiplyScalar(25);
     if (!this.arrowGeo) {
       this.arrowGeo = new THREE.BoxGeometry(0.035, 0.035, 0.7);
@@ -359,7 +400,7 @@ export class Enemies {
   raycast(o, d, maxDist, blockDist = Infinity, bullet = false) {
     const lim = Math.min(maxDist, blockDist);
     let best = null;
-    for (const e of this.list) {
+    for (const e of this.bodies()) {
       const dx = e.pos.x - o.x, dz = e.pos.z - o.z;
       if (dx * dx + dz * dz > (lim + 2) * (lim + 2)) continue;
       const h = e.intersect(o, d, lim);
@@ -371,7 +412,7 @@ export class Enemies {
   }
 
   occupies(x, y, z) {
-    for (const e of this.list) if (e.occupies(x, y, z)) return true;
+    for (const e of this.bodies()) if (e.occupies(x, y, z)) return true;
     return false;
   }
 
@@ -384,6 +425,7 @@ export class Enemies {
   dispose() {
     for (const e of this.list) e.dispose();
     this.list.length = 0;
+    this.dropGhosts();
     for (const a of this.arrows) a.mesh.removeFromParent();
     this.arrows.length = 0;
     for (const s of this.geos.values()) s.geo.dispose();

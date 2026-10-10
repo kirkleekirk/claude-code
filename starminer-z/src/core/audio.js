@@ -314,14 +314,15 @@ export class Audio {
   land() { this.play('FootStep'); }
   // the original is quiet while you swing at a block; it sounds when the block comes out
   dig() {}
-  breakBlock(id) { this.play(DIG[id] || 'punch'); }
-  place() { this.play('Place'); }
+  // (pos: someone else's, online, out in the world; yours play in your head)
+  breakBlock(id, pos = null) { this.play(DIG[id] || 'punch', pos); }
+  place(_sound, pos = null) { this.play('Place', pos); }
   pickup() { this.play('pickupitem'); }
   drop() { this.play('dropitem'); }
   equip() { this.play('Click'); }
   melee(hit) { if (hit) this.play('punch'); }
   toolBreak() {}
-  gunshot(gun) { this.play((GUNS[gun] || GUNS.assault)[0]); }
+  gunshot(gun, _mat, pos = null) { this.play((GUNS[gun] || GUNS.assault)[0], pos); }
   reload(gun) { this.play((GUNS[gun] || GUNS.pistol)[1]); }
   reloadDone() {}
   dryFire() {}

@@ -1,8 +1,14 @@
-// Builds the game as one HTML file to download and open straight from disk (double-click it):
-// dist-download/starminer-z.html. Everything is inside it, three.js and the world workers too,
-// so it runs offline (only the fonts come from the web). A page opened from disk can't fetch the
-// files beside it, so whatever has been ripped into local-assets/ is packed in as well; that file
-// is then yours alone, like local-assets/ itself, and isn't for passing round.
+// Builds the game as one HTML file to download and open straight from disk (double-click it).
+// Everything is inside it, three.js and the world workers too, so it runs offline (only the fonts,
+// and the online service when you play with friends, come from the web). Two of them:
+//
+//   dist-download/starminer-z.html          yours: a page opened from disk can't fetch the files
+//                                           beside it, so whatever has been ripped into
+//                                           local-assets/ is packed in. Like local-assets/ itself,
+//                                           it isn't for passing round.
+//   dist-download/starminer-z-friends.html  the same game with none of that in it, to give to
+//                                           friends to join you online (silent, with the dead
+//                                           built on the avatar rig, unless they rip their own)
 //
 //   npm run build:download
 
@@ -42,9 +48,9 @@ const walk = (dir) => {
 };
 if (existsSync(la)) walk(la);
 // a script's text can't hold '</script', and is safest with no '<' at all
-const pack = JSON.stringify(packed).replace(/</g, '\\u003c');
+const pack = (files) => JSON.stringify(files).replace(/</g, '\\u003c');
 
-const html = `<!doctype html>
+const page = (files) => `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -58,11 +64,14 @@ const html = `<!doctype html>
 </head>
 <body>
 <div id="app"></div>
-<script>window.__SMZ_FILES__ = ${pack};</script>
+<script>window.__SMZ_FILES__ = ${pack(files)};</script>
 <script type="module">${code}</script>
 </body>
 </html>
 `;
 
-writeFileSync(join(out, 'starminer-z.html'), html);
-console.log(`wrote dist-download/starminer-z.html (${(html.length / 1048576).toFixed(1)} MB; ${Object.keys(packed).length} ripped files packed, ${(bytes / 1048576).toFixed(1)} MB of them)`);
+const mine = page(packed), friends = page({});
+writeFileSync(join(out, 'starminer-z.html'), mine);
+writeFileSync(join(out, 'starminer-z-friends.html'), friends);
+console.log(`wrote dist-download/starminer-z.html (${(mine.length / 1048576).toFixed(1)} MB; ${Object.keys(packed).length} ripped files packed, ${(bytes / 1048576).toFixed(1)} MB of them)`);
+console.log(`wrote dist-download/starminer-z-friends.html (${(friends.length / 1048576).toFixed(1)} MB; nothing ripped in it)`);

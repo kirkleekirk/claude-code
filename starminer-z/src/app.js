@@ -24,14 +24,18 @@ import { loadCmzClips } from './entities/cmz/avatarAnim.js';
 import { loadCmzItems } from './entities/cmz/held.js';
 import { PRESETS } from './entities/avatar/looks.js';
 import { Audio } from './core/audio.js';
+import { Link, cleanCode, onlineSupported, CODE_LENGTH } from './net/link.js';
+import { PROTOCOL, cleanName, cleanProfile } from './net/online.js';
 
 const params = new URLSearchParams(location.search);
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+// Edge on an Xbox: a controller, no mouse, and a console's share of the GPU
+const isXbox = /xbox/i.test(navigator.userAgent);
 const SIMFAST = Math.max(1, parseInt(params.get('simfast') || '1', 10));
 const ATTRACT_SEED = 1337;
 
 const DEFAULTS = {
-  quality: isTouch ? 'medium' : 'high',
+  quality: isTouch || isXbox ? 'medium' : 'high',
   renderDistance: null,
   fov: 72,
   sensitivity: 1,
@@ -65,6 +69,7 @@ export class App {
   constructor(root) {
     this.root = root;
     this.isTouch = isTouch;
+    this.isXbox = isXbox;
     root.style.cssText = 'position:fixed;inset:0;overflow:hidden;background:#000;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none';
     this.canvas = document.createElement('canvas');
     this.canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;outline:none';
@@ -99,6 +104,7 @@ export class App {
     const gl = this.renderer.gl;
     this.camera = new THREE.PerspectiveCamera(this.settings.fov, 1, 0.06, 1200);
     this.input = new Input(this.canvas);
+    if (isXbox) this.input.lastDevice = 'pad';
     this.input.sens = this.settings.sensitivity;
     this.input.invertY = this.settings.invertY;
     this.menus = new Menus(this);
@@ -127,7 +133,7 @@ export class App {
     this.sky.onThunder = () => this.audio.thunder();
     document.addEventListener('pointerlockchange', () => this.onLockChange());
     document.addEventListener('visibilitychange', () => { if (document.hidden) this.autosave(); });
-    window.addEventListener('pagehide', () => this.autosave());
+    window.addEventListener('pagehide', () => { this.autosave(); this.game?.online?.close(); });
     this.last = performance.now();
     this.frames = 0;
     this.fpsAcc = 0; this.fpsN = 0;
@@ -160,6 +166,11 @@ export class App {
     this.game?.showPreview?.(s.avatar ? this.look() : null);
   }
 
+  // the name the others see online: the one you gave, or your avatar's
+  netName() {
+    return cleanName(this.profile.name) || (PRESETS[this.profile.preset] || PRESETS[0]).name;
+  }
+
   look() {
     const p = this.profile, base = PRESETS[p.preset] || PRESETS[0];
     return {
@@ -175,6 +186,12 @@ export class App {
     try { localStorage.setItem('starminer.profile', JSON.stringify(this.profile)); } catch { /* storage blocked */ }
     this.game?.setLook?.(this.look());
     this.game?.showPreview?.(this.look());
+  }
+
+  // the name the others see online (empty: the avatar's)
+  setName(v) {
+    this.profile.name = String(v ?? '').slice(0, 16);
+    try { localStorage.setItem('starminer.profile', JSON.stringify(this.profile)); } catch { /* storage blocked */ }
   }
 
   setSetting(key, v) {
@@ -202,24 +219,26 @@ export class App {
 
   // ---- games -------------------------------------------------------------------------------------
 
-  newWorld() {
+  // host: open it to friends once it's loaded
+  newWorld({ host = false } = {}) {
     this.input.requestLock();
     deleteSave();
     this.meta = null;
-    this.startGame({ seed: (Math.random() * 2 ** 31) | 0 });
+    this.startGame({ seed: (Math.random() * 2 ** 31) | 0, host });
   }
 
-  async continueGame() {
+  async continueGame({ host = false } = {}) {
     this.input.requestLock();
     this.menus.reset('loading');
     const save = await loadGame();
-    if (!save) { this.newWorld(); return; }
-    this.startGame({ save });
+    if (!save) { this.newWorld({ host }); return; }
+    this.startGame({ save, host });
   }
 
   startGame(opts) {
     if (this.game) this.game.dispose();
-    this.menus.reset('loading');
+    this.menus.reset('loading', opts.online ? 'Joining Game...' : undefined);
+    this.pendingHost = !!opts.host;
     this.game = new Game(this, opts);
     this.game.setLook(this.look());
     this.state = 'loading';
@@ -241,6 +260,7 @@ export class App {
     this.menus.hide();
     this.menuOpen = false;
     this.game.paused = false;
+    if (this.pendingHost) { this.pendingHost = false; this.hostOnline(); }
     if (params.has('craft')) this.game.openCrafting();
     if (params.has('pause')) { this.pause(); if (params.get('pause')) this.menus.open(params.get('pause')); }
     if (!this.isTouch && this.input.lastDevice !== 'pad' && !this.input.locked) this.input.requestLock();
@@ -249,7 +269,8 @@ export class App {
   pause() {
     if (this.state !== 'playing') return;
     this.state = 'paused';
-    this.game.paused = true;
+    // (online the game goes on behind the menu)
+    this.game.paused = !this.game.online;
     this.menuOpen = true;
     this.game.crafting?.close?.(true);
     this.menus.reset('pause');
@@ -275,9 +296,83 @@ export class App {
   async autosave() {
     const g = this.game;
     if (!g || g.attract || !g.ready || this.state === 'loading') return;
+    // in a friend's world: it's theirs to save, and they keep what you have
+    if (g.online && !g.online.host) { g.online.keep(); return; }
     const data = g.serialize();
     this.meta = { day: data.day, days: data.days, maxDistance: data.maxDistance, savedAt: data.savedAt, seed: data.seed };
     await saveGame(data);
+  }
+
+  // ---- online ------------------------------------------------------------------------------------
+
+  // Open the game in progress to friends: they join with the code it gets.
+  async hostOnline() {
+    const g = this.game;
+    if (!g || g.attract || g.online || this.hosting) return;
+    if (!onlineSupported()) { this.hostError = "This browser can't play online."; g.hud.message(this.hostError); this.onOnlineChange(); return; }
+    this.hosting = true;
+    this.hostError = '';
+    this.onOnlineChange();
+    g.hud.message('Opening your game to friends...');
+    const link = new Link();
+    try {
+      await link.host();
+    } catch (e) {
+      link.close();
+      this.hosting = false;
+      this.hostError = e.message;
+      if (this.game === g) g.hud.message(`Couldn't open your game online. ${e.message}`);
+      this.onOnlineChange();
+      return;
+    }
+    this.hosting = false;
+    if (this.game !== g) { link.close(); return; }
+    g.startHosting(link);
+    g.hud.message(`Your game is open to friends. Code: ${link.code}`);
+    this.onOnlineChange();
+  }
+
+  // Join a friend's game by its code.
+  async joinOnline(code) {
+    code = cleanCode(code);
+    if (code.length !== CODE_LENGTH) { this.menus.notice("That's Not A Code", `A game code is ${CODE_LENGTH} letters and numbers, like K7M2Q.`, 'join'); return; }
+    if (!onlineSupported()) { this.menus.notice("Can't Play Online", "This browser can't play online.", 'join'); return; }
+    this.menus.reset('loading', 'Connecting...');
+    const link = new Link();
+    let welcome;
+    try {
+      welcome = await link.join(code, { v: PROTOCOL, name: this.netName(), prof: cleanProfile(this.profile) });
+    } catch (e) {
+      link.close();
+      this.menus.notice("Couldn't Join", e.message, 'join');
+      return;
+    }
+    this.input.requestLock();
+    this.startGame({ online: { link, welcome } });
+  }
+
+  // A guest whose host has gone: back to the menu, saying why.
+  lostHost(why) {
+    const o = this.game?.online;
+    if (!o || o.host || o.closed) return;
+    o.close(true);
+    this.pendingNotice = { title: 'Disconnected', sub: why };
+    this.hideDeath();
+    this.input.exitLock();
+    this.menus.reset('loading');
+    this.attract();
+  }
+
+  // Leave a friend's game (what you have goes to them first).
+  leaveOnline() {
+    this.game?.online?.close();
+    this.menus.reset('loading');
+    this.attract();
+  }
+
+  // who's in, the code: the menus showing them redraw
+  onOnlineChange() {
+    if (this.menus?.visible && ['pause', 'invite', 'teleport'].includes(this.menus.id)) this.menus.refresh();
   }
 
   onLockChange() {
@@ -347,7 +442,8 @@ export class App {
     this.input.poll(dt);
     // the front end takes the input first
     if (this.menus.visible) this.menus.update(dt, this.input);
-    else if (this.state === 'playing' && !this.game?.crafting?.isOpen && this.input.consume('pause')) this.pause();
+    // (B too: on an Xbox, Edge may keep the Menu button for itself)
+    else if (this.state === 'playing' && !this.game?.crafting?.isOpen && (this.input.consume('pause') || (!this.game?.player.dead && this.input.consume('back_btn')))) this.pause();
     const g = this.game;
     if (g) {
       // tests can run the game faster than it renders (simfast=N updates a frame)
@@ -355,7 +451,12 @@ export class App {
       const ready = g.ready ? 1 : g.world.readiness(g.player.pos.x, g.player.pos.z, 2);
       if (this.state === 'boot' && g.attract) {
         this.menus.setLoading(0.6 + ready * 0.4);
-        if (g.ready) { this.state = 'menu'; this.menus.reset(params.get('menu') || (this.titleShown ? 'main' : 'title')); this.titleShown = true; }
+        if (g.ready) {
+          this.state = 'menu';
+          this.menus.reset(params.get('menu') || (this.titleShown ? 'main' : 'title'));
+          this.titleShown = true;
+          if (this.pendingNotice) { const n = this.pendingNotice; this.pendingNotice = null; this.menus.notice(n.title, n.sub); }
+        }
       } else if (this.state === 'loading') {
         this.menus.setLoading(ready);
         if (g.ready) this.enterGame();
