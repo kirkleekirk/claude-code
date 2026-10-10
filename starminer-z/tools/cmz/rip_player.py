@@ -23,13 +23,19 @@ BONES = ['BASE', 'BACKA', 'LF_H', 'RT_H', 'SC_BASE', 'BACKB', 'LF_K', 'LF_SC_H',
          'RT_FINGC', 'RT_FINGD', 'RT_PROP', 'RT_SPECIAL', 'RT_THUMB', 'LF_FINGA1', 'LF_FINGB1', 'LF_FINGC1', 'LF_FINGD1',
          'LF_THUMB1', 'RT_FINGA1', 'RT_FINGB1', 'RT_FINGC1', 'RT_FINGD1', 'RT_THUMB1', 'LF_FINGA2', 'LF_FINGB2', 'LF_FINGC2',
          'LF_FINGD2', 'LF_THUMB2', 'RT_FINGA2', 'RT_FINGB2', 'RT_FINGC2', 'RT_FINGD2', 'RT_THUMB2']
-CLIP_DIRS = [('AvatarAnimation', ''), ('Weapons/M294/Animation', 'M294/')]
+CLIP_DIRS = [('AvatarAnimation', ''), ('Weapons/M294/Animation', 'M294/'), ('SpaceWeapons/Animations', 'Space/')]
 
 # the things in hand: our name -> the original's model
 ITEMS = {
     'pickaxe': 'PickAxe', 'spade': 'Spade', 'axe': 'Axe', 'knife': 'Knife', 'compass': 'Compass',
     'pistol': 'Colt', 'assault': 'AK', 'rifle': 'BoltRifle', 'shotgun': 'PumpShotgun', 'smg': 'M11',
     'ore': 'Ore', 'bars': 'Bars', 'gems': 'Gems', 'ammo': 'Ammo',
+    # the later updates': the light machine gun, the laser guns, the rocket launcher and its
+    # rocket, the laser sword, the grenade, gunpowder, the locator, teleporter and clock, the door
+    'lmg': 'Weapons/M294/Model', 'laser_assault': 'SpaceWeapons/AK', 'laser_rifle': 'SpaceWeapons/BoltRifle',
+    'laser_pistol': 'SpaceWeapons/Colt', 'laser_smg': 'SpaceWeapons/M11', 'laser_shotgun': 'SpaceWeapons/PumpShotgun',
+    'rpg': 'Weapons/Rpg', 'rocket': 'Weapons/RPGGrenade', 'saber': 'Saber', 'grenade': 'Grenade', 'gunpowder': 'GunPowder',
+    'locator': 'Locator', 'teleporter': 'Teleporter', 'clock': 'Clock', 'door': 'WoodDoor', 'torch': 'Torch',
 }
 
 def b64(fmt, vals):
@@ -132,7 +138,10 @@ def item(name, rel, content, out):
                      'pbrMetallicRoughness': {'baseColorFactor': list(fx.get('diffuse', [1, 1, 1])) + [fx.get('alpha', 1)], 'metallicFactor': 0, 'roughnessFactor': 1},
                      'extras': {'specular': fx.get('specular', [0, 0, 0]), 'power': fx.get('power', 1)}}
                 if fx.get('texture'):
-                    t = xnb.parse(xnb.read_xnb(os.path.join(content, *fx['texture'].split('\\')) + '.xnb'))['object']
+                    # (a texture's name is relative to its model's folder)
+                    tp = os.path.normpath(os.path.join(content, os.path.dirname(rel), *fx['texture'].split('\\')))
+                    if not os.path.exists(tp + '.xnb'): tp = os.path.join(content, *fx['texture'].split('\\'))
+                    t = xnb.parse(xnb.read_xnb(tp + '.xnb'))['object']
                     rgba = xnb.texture_rgba(t, False, True)
                     images.append({'uri': 'data:image/png;base64,' + base64.b64encode(png_bytes(t['w'], t['h'], rgba)).decode()})
                     textures.append({'source': len(images) - 1, 'sampler': 0})
@@ -179,7 +188,7 @@ def items(content, out):
     index = {}
     for name, rel in ITEMS.items():
         index[name] = item(name, rel, content, out)
-        print(f'{name:8} {rel:12} {index[name]["bytes"]:7} bytes  meshes {index[name]["meshes"]}  tip {index[name]["barrelTip"]}')
+        print(f'{name:14} {rel:24} {index[name]["bytes"]:8} bytes  meshes {index[name]["meshes"]}  tip {index[name]["barrelTip"]}')
     json.dump(index, open(os.path.join(out, 'items', 'index.json'), 'w'), indent=1)
 
 if __name__ == '__main__':

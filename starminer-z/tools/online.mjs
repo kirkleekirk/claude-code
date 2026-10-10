@@ -55,9 +55,15 @@ try {
   await wait(A, () => window.__game.online.players.size === 1 && [...window.__game.online.players.values()][0].heard);
   await wait(B, () => window.__app.game.online.players.size === 1 && [...window.__app.game.online.players.values()][0].heard);
   // (until A's view of B has caught up)
-  await A.waitForFunction(() => { const r = [...window.__game.online.players.values()][0]; return r.tag.shown && r.pos.distanceTo(r.target) < 0.5; }, null, { timeout: 30000, polling: 300 }).catch(() => {});
-  const seen = await A.evaluate(() => { const r = [...window.__game.online.players.values()][0]; return { name: r.name, x: r.pos.x, z: r.pos.z, vis: r.puppet.root.visible, tag: r.tag.shown }; });
-  const bp = await B.evaluate(() => { const p = window.__app.game.player; return { x: p.pos.x, z: p.pos.z }; });
+  // (until A's view of B has caught up with where B has got to: B may still be settling)
+  let seen, bp;
+  for (let k = 0; k < 20; k++) {
+    await A.waitForFunction(() => { const r = [...window.__game.online.players.values()][0]; return r.tag.shown && r.pos.distanceTo(r.target) < 0.5; }, null, { timeout: 30000, polling: 300 }).catch(() => {});
+    seen = await A.evaluate(() => { const r = [...window.__game.online.players.values()][0]; return { name: r.name, x: r.pos.x, z: r.pos.z, vis: r.puppet.root.visible, tag: r.tag.shown }; });
+    bp = await B.evaluate(() => { const p = window.__app.game.player; return { x: p.pos.x, z: p.pos.z }; });
+    if (Math.hypot(seen.x - bp.x, seen.z - bp.z) < 1.5) break;
+    await A.waitForTimeout(1000);
+  }
   ok(seen.name === 'Bea', `A sees B by name (${seen.name})`);
   ok(Math.hypot(seen.x - bp.x, seen.z - bp.z) < 1.5, `A sees B where B is (${seen.x.toFixed(1)},${seen.z.toFixed(1)} vs ${bp.x.toFixed(1)},${bp.z.toFixed(1)})`);
   ok(seen.vis && seen.tag, `B's avatar and name tag show on A (${seen.vis}, ${seen.tag})`);
@@ -78,9 +84,9 @@ try {
   // a change far off, where B hasn't the ground loaded, is kept for when B gets there
   await A.evaluate(() => window.__game.world.setBlock(1000, 70, 1000, 1, true));
   await A.evaluate(() => { window.__game.online.blockSet(1000, 70, 1000, 1, 0); });
-  await B.waitForTimeout(1500);
-  const far = await B.evaluate(() => { const e = window.__app.game.world.edits.get(`${1000 >> 4},${1000 >> 4}`); return e ? [...e.values()] : null; });
-  ok(far && far.includes(1), 'a change where B has no ground is kept for later');
+  // (headless frames are slow: give it time to come through)
+  await wait(B, () => { const e = window.__app.game.world.edits.get(`${1000 >> 4},${1000 >> 4}`); return !!e && [...e.values()].includes(1); }, null, 20000)
+    .then(() => ok(true, 'a change where B has no ground is kept for later'), () => ok(false, 'a change where B has no ground is kept for later'));
 
   // one of A's dead shows on B; B shoots it; it dies on A, and the kill is B's
   const zid = await A.evaluate(() => {
@@ -113,7 +119,8 @@ try {
 
   // the clock is the host's
   await A.evaluate(() => window.__app.sky.setTime(0.8, 3));
-  await B.waitForFunction(() => window.__app.sky.day === 3, null, { timeout: 30000, polling: 300 }).catch(() => {});
+  // (the host sends it every 2 s of its game time, which runs slow in a headless browser)
+  await B.waitForFunction(() => window.__app.sky.day === 3, null, { timeout: 90000, polling: 300 }).catch(() => {});
   const clk = await B.evaluate(() => ({ t: window.__app.sky.time, d: window.__app.sky.day }));
   ok(clk.d === 3 && Math.abs(clk.t - 0.8) < 0.01, `B's clock follows the host's (day ${clk.d}, ${clk.t.toFixed(3)})`);
 

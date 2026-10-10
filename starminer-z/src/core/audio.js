@@ -31,11 +31,12 @@ const GROUND = 64;
 // Hell's moaning starts 37 blocks under the original's y = 0 and is full 10 below that
 const HELL_TOP = GROUND - 37;
 
-// each gun's shot and reload
+// a gun's shot and reload, when the item doesn't name its own
 const GUNS = {
   pistol: ['GunShot4', 'Reload'], smg: ['GunShot2', 'Reload'], lmg: ['GunShot2', 'Reload'],
   assault: ['GunShot3', 'AssaultReload'], rifle: ['GunShot1', 'AssaultReload'], shotgun: ['Shotgun', 'ShotGunReload'],
 };
+const gunCues = (it) => [it?.shot || (GUNS[it?.gun] || GUNS.assault)[0], it?.reloadSound || (GUNS[it?.gun] || GUNS.pistol)[1]];
 
 // the sound a block makes coming out (the original's Player.GetDigSound)
 const DIG = { [B.SAND]: 'Sand', [B.SNOW]: 'Sand', [B.SNOW_GRASS]: 'Sand', [B.LEAVES]: 'leaves' };
@@ -320,10 +321,17 @@ export class Audio {
   pickup() { this.play('pickupitem'); }
   drop() { this.play('dropitem'); }
   equip() { this.play('Click'); }
+  // what's in hand now: a laser sword hums while it's held (its OnItemEquipped)
+  holding(it) {
+    if (this.hum && !(it?.laser && it.kind === 'tool')) { this.stop(this.hum); this.hum = null; }
+    if (it?.laser && it.kind === 'tool' && !this.hum?.playing) this.hum = this.play('LightSaber');
+  }
+  saberSwing() { this.play('LightSaberSwing'); }
   melee(hit) { if (hit) this.play('punch'); }
   toolBreak() {}
-  gunshot(gun, _mat, pos = null) { this.play((GUNS[gun] || GUNS.assault)[0], pos); }
-  reload(gun) { this.play((GUNS[gun] || GUNS.pistol)[1]); }
+  // it: the gun's item (pos: someone else's, online)
+  gunshot(it, pos = null) { this.play(gunCues(it)[0], pos); }
+  reload(it) { this.play(gunCues(it)[1]); }
   reloadDone() {}
   dryFire() {}
   impact(_id, pos) { this.play('BulletHitDirt', pos); }

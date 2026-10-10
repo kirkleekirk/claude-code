@@ -12,7 +12,7 @@ import { BLOCKS } from '../world/blocks.js';
 import { ITEMS } from '../items/items.js';
 import { PRESETS } from '../entities/avatar/looks.js';
 
-export const PROTOCOL = 1;
+export const PROTOCOL = 2;
 // how often (seconds) each thing goes out
 const STATE_EVERY = 1 / 15, ENEMIES_EVERY = 1 / 8, CLOCK_EVERY = 2, KEEP_EVERY = 15;
 
@@ -203,7 +203,8 @@ export class Online {
   applyHit(m, by) {
     const e = this.game.enemies.list.find((x) => x.nid === m.e);
     if (!e || e.dead || !Number.isFinite(m.h) || !Number.isFinite(m.dmg)) return;
-    if (!e.takeDamage(e.pos.y + m.h, { dmg: Math.min(m.dmg, 10), type: m.ty })) return;
+    // (no more than the hardest-hitting thing there is: a rocket)
+    if (!e.takeDamage(e.pos.y + m.h, { dmg: Math.min(m.dmg, 100), type: m.ty })) return;
     // their kill
     const msg = { t: 'killed', to: by, p: arr(e.pos) };
     if (this.host) this.link.sendTo(by, msg); else this.link.send(msg);
@@ -224,7 +225,7 @@ export class Online {
       const end = v3(m.e.slice(i, i + 3));
       if (end) g.tracers.add(from, end);
     }
-    g.audio?.gunshot?.(m.g, null, from);
+    g.audio?.gunshot?.(ITEMS[m.g] || null, from);
     g.sprites.emit('smoke', from.x, from.y, from.z, { color: 0x9a9a9a, size: 0.12, grow: 0.4, life: 0.7, alpha: 0.25, spread: 0.4 });
   }
 
@@ -233,8 +234,9 @@ export class Online {
   // a block changed here (kind: 0 a player's doing, 1 the dead digging)
   blockSet(x, y, z, id, kind) { this.sets.push(x, y, z, id, kind | 0); }
 
-  shot(gun, muzzle, ends) {
-    if (this.link.count) this.link.send({ t: 'shot', g: gun, m: arr(muzzle), e: ends.flatMap(arr) });
+  // id: the gun's item
+  shot(id, muzzle, ends) {
+    if (this.link.count) this.link.send({ t: 'shot', g: id, m: arr(muzzle), e: ends.flatMap(arr) });
   }
 
   arrow(from, to) {

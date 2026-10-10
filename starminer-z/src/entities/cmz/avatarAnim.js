@@ -31,7 +31,25 @@ const REG = {
   SMGIdle: ['SMGIdle', 1, [5]], SMGWalk: ['SMGWalk', 1, [5]], SMGShoot: ['SMGShoot', 1, [5]], SMGReload: ['SMGReload', 0, [5]],
   SMGShoulder: ['SMGShoulder', 0, [5]], SMGShoulderIdle: ['SMGShoulderIdle', 1, [5]], SMGShoulderWalk: ['SMGShoulderWalk', 1, [5]], SMGShoulderShoot: ['SMGShoulderShoot', 1, [5]],
   PumpShotgunShoot: ['PumpShotgunShoot', 1, [5]], PumpShotgunReload: ['PumpShotgunReload', 0, [5]], PumpShotgunShoulderShoot: ['PumpShotgunShoulderShoot', 1, [5]],
+  // the later updates': the rocket launcher, the laser guns, the light machine gun, the grenade
+  RPGIdle: ['RPGHold', 1, [5]], RPGWalk: ['RPGWalk', 1, [5]], RPGShoot: ['RPGShoot', 1, [5]],
+  LaserShotgunReload: ['Space/PumpShotgunReload', 0, [5]], LaserShotgunShoulderShoot: ['Space/PumpShotgunShoulderShoot', 1, [5]], LaserShotgunShoot: ['Space/PumpShotgunShoot', 1, [5]],
+  Grenade_Reset: ['GrenadeRelease', 1, [5]], Grenade_Throw: ['GrenadeThrow', 1, [5]], Grenade_Cook: ['GrenadeCook', 1, [5]],
+  GrenadeIdle: ['GrenadeIdle', 1, [16]], GrenadeWalk: ['GrenadeWalk', 1, [16]],
 };
+// each laser gun's eight, from the SpaceWeapons clips, and the light machine gun's
+for (const [name, from, idle, run] of [['LaserGun', 'Assault', 'HoldAssultIdle', 'AKRun'], ['LaserSMG', 'SMG', 'SMGIdle', 'SMGWalk'],
+  ['LaserPistol', 'Pistol', 'HoldPistolIdle', 'PistolWalk'], ['LaserRifle', 'Rifle', 'RifleIdle', 'RifleWalk']]) {
+  Object.assign(REG, {
+    [`${name}Reload`]: [`Space/${from}Reload`, 0, [5]], [`${name}Shoulder`]: [`Space/${from}Shoulder`, 0, [5]],
+    [`${name}ShoulderIdle`]: [`Space/${from}ShoulderIdle`, 1, [5]], [`${name}ShoulderWalk`]: [`Space/${from}ShoulderWalk`, 1, [5]],
+    [`${name}ShoulderShoot`]: [`Space/${from}ShoulderShoot`, 1, [5]], [`${name}Shoot`]: [`Space/${from}Shoot`, 1, [5]],
+    [`${name}Idle`]: [`Space/${idle}`, 1, [5]], [`${name}Run`]: [`Space/${run}`, 1, [5]],
+  });
+}
+for (const c of ['Idle', 'Walk', 'ShoulderWalk', 'Shoot', 'ShoulderIdle', 'ShoulderShoot']) REG[`LMG${c}`] = [`M294/${c}`, 1, [5]];
+REG.LMGShoulder = ['M294/Shoulder', 0, [5]];
+REG.LMGReload = ['M294/Reload', 0, [5]];
 
 // What each kind of thing in hand plays (Player.UpdateAnimation, by the item's
 // PlayerAnimationMode): standing, walking, using it; a gun's raising to the shoulder, its reload,
@@ -44,9 +62,17 @@ export const MODES = {
   assault: { idle: 'GunIdle', walk: 'GunRun', use: 'GunShoot', shoulder: 'GunShoulder', reload: 'GunReload', sIdle: 'GunShoulderIdle', sWalk: 'GunShoulderWalk', sUse: 'GunShoulderShoot' },
   shotgun: { idle: 'GunIdle', walk: 'GunRun', use: 'PumpShotgunShoot', shoulder: 'GunShoulder', reload: 'PumpShotgunReload', sIdle: 'GunShoulderIdle', sWalk: 'GunShoulderWalk', sUse: 'PumpShotgunShoulderShoot' },
 };
-for (const g of ['Pistol', 'Rifle', 'SMG']) {
-  MODES[g.toLowerCase()] = { idle: `${g}Idle`, walk: `${g}Walk`, use: `${g}Shoot`, shoulder: `${g}Shoulder`, reload: `${g}Reload`, sIdle: `${g}ShoulderIdle`, sWalk: `${g}ShoulderWalk`, sUse: `${g}ShoulderShoot` };
-}
+const gunMode = (g, walk = 'Walk') => ({ idle: `${g}Idle`, walk: `${g}${walk}`, use: `${g}Shoot`, shoulder: `${g}Shoulder`, reload: `${g}Reload`, sIdle: `${g}ShoulderIdle`, sWalk: `${g}ShoulderWalk`, sUse: `${g}ShoulderShoot` });
+for (const g of ['Pistol', 'Rifle', 'SMG', 'LMG']) MODES[g.toLowerCase()] = gunMode(g);
+MODES.laser_assault = gunMode('LaserGun', 'Run');
+MODES.laser_smg = gunMode('LaserSMG', 'Run');
+MODES.laser_pistol = gunMode('LaserPistol', 'Run');
+MODES.laser_rifle = gunMode('LaserRifle', 'Run');
+MODES.laser_shotgun = { ...gunMode('LaserGun', 'Run'), use: 'LaserShotgunShoot', reload: 'LaserShotgunReload', sUse: 'LaserShotgunShoulderShoot' };
+// a grenade is held, and thrown with its own clips (see playerAnim.js)
+MODES.grenade = { idle: 'GrenadeIdle', walk: 'GrenadeWalk', use: 'GenericUse' };
+// a rocket launcher: held on the shoulder (its own clips), raised as a rifle is
+MODES.rpg = { idle: 'RPGIdle', walk: 'RPGWalk', use: 'RPGShoot', shoulder: 'GunShoulder', reload: 'PumpShotgunReload', sIdle: 'GunShoulderIdle', sWalk: 'GunShoulderWalk', sUse: 'PumpShotgunShoulderShoot' };
 
 const _q = new THREE.Quaternion(), _v = new THREE.Vector3();
 

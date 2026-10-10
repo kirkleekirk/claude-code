@@ -1,211 +1,220 @@
-// The crafting screen, laid out like CastleMiner Z's: categories down the left, each with its
-// list of kinds and a column of what you can make, the chosen one large with what it takes,
-// and the backpack on the right. The hotbar stays where it is, under it all. The world doesn't
-// stop while you craft.
+// The inventory and crafting screens, laid out as the later CastleMiner Z lays them out on its
+// 1280 x 720 screen (16 of its pixels to the em here), on one panel in the middle:
 //
-// Mouse and touch: click a category, a kind, a thing; click it again (or Craft) to make it.
-// Items move by the original's inventory screen rules: click one in the backpack or hotbar to
-// pick it up and click a slot to put it down (or drag it there); it joins a stack of the same
-// thing, or swaps with what's there. Shift-click sends a stack across, backpack to hotbar or
-// back; right-click picks up half a stack, or puts down one. A number key puts the item under
-// the pointer on that hotbar slot.
-// Pad and keyboard: up and down in a column, left and right between columns (the backpack is
-// the fourth, the hotbar under it), A / Enter to craft or to pick up and put down, the right
-// stick to split a stack, the bumpers to change category, B to put back what's held or close,
-// Esc / Y / E to close.
+// The inventory (the original's BlockPickerScreen): what's chosen, named, at the top; the
+// backpack, four rows of eight, and the hotbar under it. A (or a click) picks a stack up and
+// puts it down, joining a stack of the same thing or swapping with what's there; the right
+// stick (or a right-click) splits a stack, or puts down one; X (Q) drops it on the ground, as
+// does letting go of it outside the panel; Y (E) goes to crafting; B puts back what's held, and
+// closes. Shift-click sends a stack across, backpack to hotbar or back, and a number key puts
+// the thing under the pointer on that hotbar slot.
+//
+// Crafting (the original's CraftingUIScreen): the recipes you know of down the left, the ones
+// you can make first (PlayerInventory.DiscoverRecipies: you know a recipe once you carry what it
+// makes, one of its components, or a gun it makes the bullets for), the chosen one's components
+// in a row beside it, and the backpack and hotbar below. Up and down (or the wheel) go through
+// the recipes, left and right through the components; A (or a click on it) makes the chosen
+// thing, or on a component goes to its recipe; B (or Y, E, Esc) goes back to the inventory.
+// Shift-click makes as many as you can.
+//
+// The world doesn't stop while either is up.
 
+import { Vector3 } from 'three';
 import { ITEMS, RECIPES } from '../items/items.js';
 import { iconFor } from '../items/icons.js';
 import { HOTBAR, PACK } from '../items/inventory.js';
 
+const P = (v) => `${v / 16}em`;
+// where things are on the panel, in the original's pixels from its corner (the panel is 810 x
+// 602 in the middle of the screen: the original's positions, less (235, 59))
+const PANEL = { w: 810, h: 602 };
+const CELL = 59;
+const GRID = { x: 169, y: 275 }, TRAY = { x: 169, y: 525 };
+const TEXT = { x: 169, y: 20 };
+const TO_CRAFT = { x: 169, y: 101 }, DROP = { x: 169, y: 239 }, SPLIT = { x: 494, y: 239 };
+const LIST = { x: 39, y: 184, step: 77 }, INGS = { x: 131, y: 184, step: 77 }, PRESS = { x: 131, y: 151 };
+const TILE = 76, SELECTOR = 68;
+
 export const CRAFT_CSS = /* css */ `
-.craft { position: absolute; inset: 0; display: none; pointer-events: auto; z-index: 4; font-family: 'Saira Semi Condensed', 'Saira Condensed', 'Arial Narrow', var(--ui-font); background: rgba(0, 0, 0, 0.32); }
+.craft { position: absolute; inset: 0; display: none; pointer-events: auto; z-index: 4; font-family: 'Saira Semi Condensed', 'Saira Condensed', 'Arial Narrow', var(--ui-font); }
 .craft.on { display: block; }
-.craft .cp { position: absolute; background: linear-gradient(180deg, rgba(20, 50, 76, 0.93), rgba(14, 38, 60, 0.93)); border: 0.1em solid rgba(110, 168, 210, 0.8); box-shadow: 0 0.3em 1.2em rgba(0,0,0,0.5), inset 0 0 0 0.06em rgba(0,0,0,0.5); }
-.craft .tab { position: absolute; top: -1.7em; left: 1em; height: 1.7em; padding: 0 1.6em; background: linear-gradient(180deg, rgba(24, 58, 86, 0.95), rgba(20, 50, 76, 0.95)); border: 0.1em solid rgba(110, 168, 210, 0.8); border-bottom: none; clip-path: polygon(0.7em 0, calc(100% - 0.7em) 0, 100% 100%, 0 100%); color: #ff7a30; font-weight: 700; font-size: 0.95em; line-height: 1.75em; letter-spacing: 0.02em; text-transform: uppercase; }
-.craft .left { left: 15%; top: 7.5%; width: 37.5em; height: 33.6em; }
-.craft .right { left: calc(15% + 39.6em); top: 14%; width: 15.8em; height: 30.2em; }
-.craft .cats { position: absolute; left: 0.9em; top: 1em; width: 15em; display: flex; flex-direction: column; gap: 0.6em; }
-.craft .cat { position: relative; height: 2.25em; background: linear-gradient(180deg, #17405f, #102f4b); border: 0.08em solid #4a7ea6; display: flex; align-items: center; justify-content: flex-end; padding-right: 3.6em; color: #5cb8ff; font-weight: 700; cursor: pointer; text-shadow: 0 0.06em 0.1em rgba(0,0,0,0.6); }
-.craft .cat span { font-size: 1.32em; }
-.craft .cat svg { position: absolute; right: 0.55em; top: 50%; width: 1.9em; height: 1.9em; transform: translateY(-50%); color: #5cb8ff; }
-.craft .cat::after { content: ''; position: absolute; right: 3em; top: 0.35em; bottom: 0.35em; width: 0.06em; background: rgba(120, 170, 210, 0.35); }
-.craft .cat.sel { border: 0.12em solid #ffffff; color: #ffffff; background: linear-gradient(180deg, #1d4d72, #133a5a); }
-.craft .cat.sel svg { color: #ffffff; }
-.craft .focus0 .cat.sel, .craft .focus1 .sub.sel, .craft .focus2 .tile.sel { box-shadow: 0 0 0.6em rgba(140, 200, 255, 0.55); }
-.craft .detail { position: absolute; left: 0.9em; top: 12.4em; width: 15em; height: 16.3em; border: 0.08em solid #4a7ea6; background: rgba(10, 30, 48, 0.55); padding: 0.85em; }
-.craft .big { width: 7.6em; height: 7.6em; border: 0.1em solid #0a1a28; background: rgba(8, 24, 40, 0.75); box-shadow: inset 0 0 0 0.08em rgba(255,255,255,0.08); display: grid; place-items: center; }
-.craft .big img { width: 6.5em; height: 6.5em; }
-.craft .comps { position: absolute; left: 9.1em; top: 1.3em; right: 0.5em; color: #a9cfee; font-size: 0.86em; line-height: 1.45; font-weight: 600; }
-.craft .comps b { font-weight: 600; color: #a9cfee; }
-.craft .comps .no { color: #ff7a6a; }
-.craft .dname { margin-top: 0.4em; color: #4fb4ff; font-size: 1.45em; font-weight: 700; line-height: 1.1; }
-.craft .ddesc { color: #a9cfee; font-size: 0.86em; font-weight: 600; line-height: 1.35; margin-top: 0.2em; }
-.craft .makes { color: #ffd27a; font-size: 0.8em; font-weight: 700; margin-top: 0.25em; }
-.craft .cbtn { position: absolute; left: 0.85em; right: 0.85em; bottom: 0.75em; height: 2em; display: flex; align-items: center; justify-content: center; gap: 0.4em; border: 0.08em solid #4a7ea6; background: linear-gradient(180deg, #1f5a86, #154468); color: #fff; font-weight: 700; font-size: 1.05em; cursor: pointer; }
-.craft .cbtn.no { opacity: 0.45; cursor: default; }
-.craft .cbtn .btn { font-family: var(--ui-font); }
-.craft .subs { position: absolute; left: 17.3em; top: 7.3em; width: 6.1em; display: flex; flex-direction: column; gap: 0.38em; }
-.craft .sub { height: 1.55em; background: linear-gradient(180deg, #1f5480, #183f62); border: 0.06em solid #2c5f88; color: #6cc3ff; font-weight: 700; font-size: 0.86em; padding-left: 0.55em; line-height: 1.45em; white-space: nowrap; overflow: hidden; cursor: pointer; box-shadow: 0.15em 0.15em 0 rgba(0,0,0,0.35); }
-.craft .sub.sel { border: 0.1em solid #ffffff; color: #ffffff; background: transparent; }
-.craft .tiles { position: absolute; left: 24.3em; top: 1.5em; width: 3.7em; display: flex; flex-direction: column; gap: 0.4em; }
-.craft .tile { position: relative; width: 3.6em; height: 3.6em; background: rgba(24, 62, 92, 0.65); border: 0.06em solid #24506f; display: grid; place-items: center; cursor: pointer; }
-.craft .tile img { width: 3em; height: 3em; }
-.craft .tile.no img { opacity: 0.35; filter: saturate(0.4); }
-.craft .tile.sel { border: 0.12em solid #ffffff; }
-.craft .tile .n { position: absolute; right: 0.15em; bottom: 0.05em; font-size: 0.7em; font-weight: 700; color: #fff; text-shadow: 0 0.06em 0.12em #000; }
-.craft .need { position: absolute; left: 0.9em; bottom: 0.9em; display: flex; gap: 0.4em; align-items: center; }
-.craft .need .arrow { width: 0; height: 0; border-top: 0.75em solid transparent; border-bottom: 0.75em solid transparent; border-left: 0.9em solid #4fb4ff; margin-right: 0.3em; }
-.craft .need .tile { width: 3.3em; height: 3.3em; }
-.craft .need .tile img { width: 2.7em; height: 2.7em; }
-.craft .need .tile .n { font-size: 0.85em; left: 0.2em; right: auto; }
-.craft .need .tile.short .n { color: #ff7a6a; }
-.craft .grid { position: absolute; left: 0.85em; top: 0.9em; display: grid; grid-template-columns: repeat(4, 3.4em); gap: 0.12em; }
-.craft .grid .slot, .craft .carry { width: 3.4em; height: 3.4em; background: rgba(24, 60, 90, 0.55); border: 0.06em solid rgba(60, 100, 130, 0.65); }
-.craft .grid .slot { cursor: pointer; }
-.craft .grid .slot:hover, .hud.crafting .slot:hover { border-color: #fff; }
-.craft .grid .slot.cur, .hud.crafting .slot.cur { outline: 0.16em solid #fff; outline-offset: 0.06em; box-shadow: 0 0 0.7em rgba(255, 255, 255, 0.6); z-index: 1; }
-.craft .grid .slot.cur.hold, .hud.crafting .slot.cur.hold { outline-color: #ff4a3a; }
-.craft .grid .slot .n, .craft .carry .n { font-size: 0.8em; color: #fff; }
-/* the hotbar stays the HUD's, lifted over the screen so things can go on it */
-.hud.crafting .bottom { z-index: 5; }
-.hud.crafting .hotbar .slot { cursor: pointer; }
-.craft .ihelp { position: absolute; left: 0; right: 0; bottom: -2em; display: flex; flex-wrap: wrap; gap: 0.2em 1em; font-family: var(--ui-font); font-size: 0.72em; font-weight: 700; color: #fff; }
-.craft .ihelp span { display: inline-flex; gap: 0.35em; align-items: center; }
-.craft .carry { position: fixed; pointer-events: none; z-index: 9; background: transparent; border: none; display: none; transform: translate(-50%, -50%); }
-.craft .carry img { position: absolute; inset: 0.15em; width: calc(100% - 0.3em); height: calc(100% - 0.3em); }
-.craft .carry .n { position: absolute; right: 0.15em; bottom: 0.05em; font-weight: 700; text-shadow: 0 0.06em 0.12em #000; }
-.craft .help { position: absolute; left: 0; bottom: -2em; display: flex; gap: 1.4em; font-family: var(--ui-font); font-size: 0.78em; font-weight: 700; color: #fff; }
-.craft .help span { display: inline-flex; gap: 0.35em; align-items: center; }
-.craft .x { position: absolute; right: 0.4em; top: 0.3em; width: 1.6em; height: 1.6em; display: grid; place-items: center; color: #9fd0ff; font-size: 1.1em; font-weight: 700; cursor: pointer; font-family: var(--ui-font); }
-@media (max-aspect-ratio: 4/3) {
-  .craft .left { left: 2%; }
-  .craft .right { left: auto; right: 2%; }
-}
-/* phones held upright: the two panels stacked, a little smaller */
-@media (max-aspect-ratio: 1/1) {
-  .craft { font-size: min(var(--ui-size, 16px), 2.3vw); }
-  .craft .left { left: 2%; top: 4%; }
-  .craft .right { left: 2%; right: auto; top: calc(4% + 36.5em); }
-}
+.craft .ip { position: absolute; left: 50%; top: 50%; width: ${P(PANEL.w)}; height: ${P(PANEL.h)}; transform: translate(-50%, -50%); }
+/* the panel, as the original's BlockUIBack (its own art, when it's been ripped) */
+.craft .ip .back { position: absolute; inset: 0; }
+html:not(.cmz-ui) .craft .ip .back { border-radius: ${P(14)}; background: linear-gradient(180deg, rgba(74, 80, 76, 0.9), rgba(58, 64, 61, 0.9)); border: ${P(3)} solid #a9aea8; box-shadow: inset 0 0 0 ${P(2)} rgba(0,0,0,0.6), 0 ${P(4)} ${P(18)} rgba(0,0,0,0.5); }
+.craft .frame { position: absolute; display: none; border: ${P(4)} solid #b9beb8; border-style: outset; background: rgba(28, 32, 30, 0.55); }
+html:not(.cmz-ui) .craft .frame { display: block; }
+.craft .cell { position: absolute; width: ${P(CELL)}; height: ${P(CELL)}; cursor: pointer; }
+.craft .ic { position: absolute; inset: 0; }
+.craft .ic img { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.craft .ic .n { position: absolute; left: ${P(8)}; bottom: ${P(1)}; font-family: var(--ui-font); font-size: ${P(15)}; font-weight: 700; color: #fff; text-shadow: 0 0 ${P(2)} #000, ${P(1)} ${P(1)} 0 #000, -${P(1)} -${P(1)} 0 #000; pointer-events: none; }
+.craft .ic .wear { position: absolute; left: ${P(9)}; right: ${P(9)}; bottom: ${P(9)}; height: ${P(7)}; background: #000; pointer-events: none; }
+.craft .ic .wear b { position: absolute; left: ${P(1)}; top: ${P(1)}; bottom: ${P(1)}; background: rgb(67, 188, 0); }
+html:not(.cmz-ui) .craft .grid .cell { background: rgba(14, 16, 15, 0.55); box-shadow: inset 0 0 0 ${P(1.5)} rgba(150, 156, 150, 0.6); }
+.craft .tile { position: absolute; width: ${P(TILE)}; height: ${P(TILE)}; cursor: pointer; }
+html:not(.cmz-ui) .craft .tile { background: rgba(20, 24, 22, 0.75); box-shadow: inset 0 0 0 ${P(3)} #9aa09a, inset 0 0 0 ${P(5)} rgba(0,0,0,0.6); }
+.craft .tile.dim { opacity: 0.5; filter: brightness(0.25); }
+.craft .tile .ic { left: ${P(4)}; top: ${P(4)}; width: ${P(CELL)}; height: ${P(CELL)}; right: auto; bottom: auto; }
+.craft .sel { position: absolute; width: ${P(SELECTOR)}; height: ${P(SELECTOR)}; pointer-events: none; }
+html:not(.cmz-ui) .craft .sel { box-shadow: inset 0 0 0 ${P(4)} #fff, 0 0 ${P(6)} rgba(255,255,255,0.5); border-radius: ${P(4)}; }
+html:not(.cmz-ui) .craft .sel.hold { box-shadow: inset 0 0 0 ${P(4)} #ff2a1a, 0 0 ${P(6)} rgba(255,40,20,0.5); }
+/* (the original tints its selector red while something's held) */
+.cmz-ui .craft .sel.hold { filter: sepia(1) saturate(40) hue-rotate(-45deg) brightness(0.9); }
+.craft .sel .ic { left: ${P(4)}; top: ${P(4)}; width: ${P(CELL)}; height: ${P(CELL)}; right: auto; bottom: auto; }
+.craft .t { position: absolute; color: #fff; white-space: nowrap; text-shadow: 0 0 ${P(2)} #000, ${P(2)} ${P(2)} 0 #000, -${P(2)} -${P(2)} 0 #000, ${P(2)} -${P(2)} 0 #000, -${P(2)} ${P(2)} 0 #000; }
+.craft .big { font-size: ${P(24)}; font-weight: 700; line-height: 1.15; }
+.craft .small { font-size: ${P(16)}; font-weight: 600; line-height: 1.3; text-shadow: 0 0 ${P(2)} #000, ${P(1)} ${P(1)} 0 #000, -${P(1)} -${P(1)} 0 #000; }
+.craft .t .btn { font-family: var(--ui-font); vertical-align: 0.08em; }
+.craft .link { cursor: pointer; pointer-events: auto; }
+.craft .link:hover { color: #ffe9a0; }
+.craft .page { display: none; }
+.craft.inv .page.inv, .craft.cr .page.cr { display: block; }
+.craft .help { position: absolute; left: 0; right: 0; top: calc(100% + ${P(8)}); display: flex; justify-content: center; flex-wrap: wrap; gap: ${P(4)} ${P(22)}; font-family: var(--ui-font); font-size: ${P(14)}; font-weight: 700; color: #fff; text-shadow: 0 ${P(1)} ${P(2)} #000; }
+.craft .help span { display: inline-flex; gap: ${P(6)}; align-items: center; }
+.craft .close { position: absolute; right: ${P(10)}; top: ${P(8)}; width: ${P(30)}; height: ${P(30)}; display: grid; place-items: center; color: #e8ece8; font-size: ${P(20)}; font-weight: 700; cursor: pointer; font-family: var(--ui-font); text-shadow: 0 0 ${P(3)} #000; }
+.craft .carry { position: fixed; pointer-events: none; z-index: 9; width: ${P(CELL)}; height: ${P(CELL)}; display: none; transform: translate(-50%, -50%); }
+/* the hotbar is in the panel while it's up */
+.hud.crafting .bottom .hotbar { visibility: hidden; }
+/* phones held upright: a little smaller */
+@media (max-aspect-ratio: 1/1) { .craft { font-size: min(var(--ui-size, 16px), 1.9vw); } }
 `;
 
-// the categories, CastleMiner Z's four, and the kinds within each
-const CATS = [
-  { id: 'materials', name: 'Materials', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 20 14 10M14 10l3-6 3 3-6 3M10 4l10 10M7 7l3-3"/></svg>' },
-  { id: 'tools', name: 'Tools', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 21 15 7M4 7c4-4 10-4 15 1-4-2-8-2-11 1"/></svg>' },
-  { id: 'weapons', name: 'Weapons', icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 7h17l1.5-1.5H22V11h-6.5l-1.2 1.6H11L9.6 19H5.2l1.5-7.4H2z"/></svg>' },
-  { id: 'structures', name: 'Structures', icon: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="14" y="3" width="6" height="6"/><rect x="8" y="9" width="6" height="6"/><rect x="14" y="9" width="6" height="6"/><rect x="2" y="15" width="6" height="6"/><rect x="8" y="15" width="6" height="6"/><rect x="14" y="15" width="6" height="6"/></svg>' },
-];
-const ORDER = {
-  materials: ['Wood', 'Metals'],
-  tools: ['PickAxes', 'Spades', 'Axes', 'Compass'],
-  weapons: ['Ammo', 'Knives', 'Pistols', 'Shotguns', 'Rifles', 'Assault Rifles', "SMG's"],
-  structures: ['Lights', 'Walls', 'Blocks'],
-};
-
-function groupOf(rec) {
-  const it = ITEMS[rec.out];
-  if (rec.tab === 'ammo') return ['weapons', 'Ammo'];
-  if (it.kind === 'tool') return ['tools', { pick: 'PickAxes', spade: 'Spades', axe: 'Axes', compass: 'Compass' }[it.tool]];
-  if (it.kind === 'melee') return ['weapons', 'Knives'];
-  if (it.kind === 'gun') return ['weapons', { pistol: 'Pistols', smg: "SMG's", assault: 'Assault Rifles', shotgun: 'Shotguns', rifle: 'Rifles' }[it.gun]];
-  if (rec.out === 'wood' || rec.out === 'stick') return ['materials', 'Wood'];
-  if (['copper', 'iron', 'gold'].includes(rec.out)) return ['materials', 'Metals'];
-  if (rec.out === 'torch' || rec.out === 'lantern') return ['structures', 'Lights'];
-  if (rec.out.endsWith('_wall')) return ['structures', 'Walls'];
-  return ['structures', 'Blocks'];
+// One item's icon, as the original's InventoryItem.Draw2D draws it: its count bottom left, and
+// for something that wears out, how much is left of it.
+function iconHtml(slot, cls = '') {
+  if (!slot) return '';
+  const it = ITEMS[slot.id];
+  const wear = it.uses > 1 && slot.dur != null ? `<span class="wear"><b style="width:calc(${Math.max(0, Math.min(1, slot.dur / it.uses))} * (100% - ${P(2)}))"></b></span>` : '';
+  const n = slot.count > 1 ? `<span class="n">${slot.count}</span>` : '';
+  return `<span class="ic ${cls}">${wear}<img alt="" draggable="false" src="${iconFor(slot.id)}">${n}</span>`;
 }
 
-// category -> [{ name, recipes }]
-function buildTree() {
-  const tree = {};
-  for (const c of CATS) tree[c.id] = ORDER[c.id].map((name) => ({ name, recipes: [] }));
-  for (const r of RECIPES) {
-    const [cat, sub] = groupOf(r);
-    const list = tree[cat];
-    let g = list.find((x) => x.name === sub);
-    if (!g) { g = { name: sub, recipes: [] }; list.push(g); }
-    g.recipes.push(r);
-  }
-  for (const c of CATS) tree[c.id] = tree[c.id].filter((g) => g.recipes.length);
-  return tree;
-}
+const SP = (name) => `sp-${name}`;
 
 export class Crafting {
   constructor(parent, game) {
     this.game = game;
-    this.tree = buildTree();
-    this.cat = 2; // Weapons first, as the original opened
-    this.sub = 0;
-    this.tile = 0;
-    this.focus = 2;
-    this.cursor = HOTBAR; // the pad's place in the backpack (or on the hotbar)
+    this.page = 'inv';
     this.isOpen = false;
+    // the inventory's selector: x 0-7, y 0-3 the backpack's rows, 4 the hotbar
+    this.at = { x: 0, y: 4 };
+    // crafting: the recipes known, the chosen one, and which of its components (0: none)
+    this.known = [];
+    this.recipe = null;
+    this.ing = 0;
     this.drag = null;
+    this.pointer = false;
     const el = document.createElement('div');
-    el.className = 'craft ui';
+    el.className = 'craft ui inv';
     el.innerHTML = `
-      <div class="cp left"><div class="tab">Crafting</div><div class="x">✕</div>
-        <div class="cats"></div><div class="detail"></div><div class="subs"></div><div class="tiles"></div><div class="need"></div>
-        <div class="help txt"></div>
+      <div class="ip">
+        <div class="back ${SP('BlockUIBack')}"></div>
+        <div class="frame" style="left:${P(GRID.x - 8)};top:${P(GRID.y - 8)};width:${P(CELL * 8 + 8)};height:${P(CELL * 4 + 8)}"></div>
+        <div class="frame" style="left:${P(TRAY.x - 8)};top:${P(TRAY.y - 8)};width:${P(CELL * 8 + 8)};height:${P(CELL + 8)}"></div>
+        <div class="close">✕</div>
+        <div class="t name" style="left:${P(TEXT.x)};top:${P(TEXT.y)}"><div class="big nm"></div><div class="small d1"></div><div class="small d2"></div></div>
+        <div class="page inv">
+          <div class="t link tocraft" style="left:${P(TO_CRAFT.x)};top:${P(TO_CRAFT.y)}"><div class="big"><span class="btn y">Y</span> To Craft</div></div>
+          <div class="t link drop" style="left:${P(DROP.x)};top:${P(DROP.y)}"><div class="big"><span class="btn x">X</span> Drop Item</div></div>
+          <div class="t split" style="left:${P(SPLIT.x)};top:${P(SPLIT.y)}"><div class="big">Split Items <span class="btn rs">RS</span></div></div>
+        </div>
+        <div class="page cr">
+          <div class="t" style="left:${P(PRESS.x)};top:${P(PRESS.y - 28)}"><div class="big">Press <span class="btn a">A</span> To Create Item</div><div class="big">Components: </div></div>
+          <div class="list"></div>
+          <div class="ings"></div>
+        </div>
+        <div class="grid"></div>
+        <div class="sel ${SP('Selector')}"></div>
+        <div class="help"></div>
       </div>
-      <div class="cp right"><div class="tab">Inventory</div><div class="grid"></div><div class="ihelp txt"></div></div>
-      <div class="carry slot"><img alt=""><span class="n"></span></div>`;
+      <div class="carry"></div>`;
     parent.appendChild(el);
     this.el = el;
     this.$ = (s) => el.querySelector(s);
-    this.left = this.$('.left');
+    this.panel = this.$('.ip');
+    this.selEl = this.$('.sel');
     this.carryEl = this.$('.carry');
-    this.$('.x').addEventListener('pointerdown', (e) => { e.stopPropagation(); this.close(); });
-    // the backpack; the hotbar is the HUD's own, which takes things while this is up
+    // the backpack and the hotbar's cells (by inventory slot)
     const grid = this.$('.grid');
-    this.packEls = [];
-    for (let i = 0; i < PACK; i++) {
-      const s = document.createElement('div');
-      s.className = 'slot';
-      s.dataset.slot = HOTBAR + i;
-      s.innerHTML = '<img alt="" draggable="false"><span class="n"></span>';
-      grid.appendChild(s);
-      this.packEls.push(s);
+    this.cells = [];
+    for (let i = 0; i < HOTBAR + PACK; i++) {
+      const c = document.createElement('div');
+      c.className = 'cell';
+      const { x, y } = this.cellAt(i);
+      c.style.left = P(x); c.style.top = P(y);
+      c.dataset.slot = i;
+      grid.appendChild(c);
+      this.cells[i] = c;
     }
-    game.hud.slots.forEach((S, i) => { S.el.dataset.slot = i; });
-    this.slotEls = [...game.hud.slots.map((S) => S.el), ...this.packEls];
-    const down = (e) => {
-      if (!this.isOpen) return;
-      const t = e.target.closest?.('[data-slot]');
-      if (!t) return;
-      // ahead of the HUD's own handler, which would pick that slot to hold
+    this.$('.close').addEventListener('pointerdown', (e) => { e.stopPropagation(); this.close(); });
+    this.$('.tocraft').addEventListener('pointerdown', (e) => { e.stopPropagation(); this.showCrafting(); });
+    this.$('.drop').addEventListener('pointerdown', (e) => { e.stopPropagation(); this.dropHeld(false); });
+    grid.addEventListener('pointerdown', (e) => {
+      const t = e.target.closest('[data-slot]');
+      if (!t || !this.isOpen) return;
       e.stopPropagation();
       e.preventDefault();
       this.slotDown(+t.dataset.slot, e);
-    };
-    grid.addEventListener('pointerdown', down);
-    this.hotbarEl = game.hud.hotbar;
-    this.hotbarEl.addEventListener('pointerdown', down, true);
-    const noMenu = (e) => { if (this.isOpen) e.preventDefault(); };
-    el.addEventListener('contextmenu', noMenu);
-    this.hotbarEl.addEventListener('contextmenu', noMenu);
-    // let go of the backdrop: what's held goes back where it came from
-    el.addEventListener('pointerdown', (e) => {
-      if (e.target !== el || !game.inventory.hand) return;
-      this.putBack();
+    });
+    grid.addEventListener('pointerover', (e) => {
+      const t = e.target.closest('[data-slot]');
+      if (!t || !this.isOpen || this.page !== 'inv') return;
+      this.pointer = true;
+      const i = +t.dataset.slot;
+      this.at = i < HOTBAR ? { x: i, y: 4 } : { x: (i - HOTBAR) % 8, y: Math.floor((i - HOTBAR) / 8) };
       this.render();
     });
+    this.$('.list').addEventListener('pointerdown', (e) => {
+      const t = e.target.closest('[data-r]');
+      if (!t) return;
+      e.stopPropagation();
+      this.clickRecipe(+t.dataset.r, e.shiftKey);
+    });
+    this.$('.ings').addEventListener('pointerdown', (e) => {
+      const t = e.target.closest('[data-g]');
+      if (!t) return;
+      e.stopPropagation();
+      const g = +t.dataset.g;
+      if (this.ing === g) this.toComponentRecipe(); else { this.ing = g; this.sound('move'); this.render(); }
+    });
+    this.$('.ings').addEventListener('pointerover', (e) => {
+      const t = e.target.closest('[data-g]');
+      if (t && this.ing !== +t.dataset.g) { this.ing = +t.dataset.g; this.render(); }
+    });
+    // a click (or right-click) outside the panel lets go of what's held: onto the ground
+    el.addEventListener('pointerdown', (e) => {
+      if (e.target !== el || !game.inventory.hand || this.page !== 'inv') return;
+      this.dropHeld(e.button === 2);
+    });
+    el.addEventListener('wheel', (e) => {
+      if (this.page !== 'cr') return;
+      e.preventDefault();
+      this.moveRecipe(e.deltaY > 0 ? 1 : -1);
+    }, { passive: false });
+    el.addEventListener('contextmenu', (e) => e.preventDefault());
     this.onMove = (e) => { this.mx = e.clientX; this.my = e.clientY; if (this.isOpen) { this.pointer = true; this.placeCarry(); } };
     this.onUp = (e) => this.slotUp(e);
     window.addEventListener('pointermove', this.onMove);
     window.addEventListener('pointerup', this.onUp);
     window.addEventListener('pointercancel', this.onUp);
-    this.render();
   }
 
-  get group() { return this.tree[CATS[this.cat].id][this.sub]; }
-  get recipe() { return this.group?.recipes[this.tile]; }
+  // where slot i's cell is on the panel
+  cellAt(i) {
+    if (i < HOTBAR) return { x: TRAY.x + i * CELL, y: TRAY.y };
+    const k = i - HOTBAR;
+    return { x: GRID.x + (k % 8) * CELL, y: GRID.y + Math.floor(k / 8) * CELL };
+  }
+
+  get slot() { return this.at.y >= 4 ? this.at.x : HOTBAR + this.at.y * 8 + this.at.x; }
+
+  sound(kind) { this.game.audio?.ui?.(kind); }
 
   open() {
     this.isOpen = true;
     this.drag = null;
+    this.page = 'inv';
+    this.at = { x: this.game.inventory.selected, y: 4 };
     this.el.classList.add('on');
     this.game.hud.el.classList.add('crafting');
     this.render();
@@ -219,7 +228,6 @@ export class Crafting {
     this.putBack();
     this.el.classList.remove('on');
     this.game.hud.el.classList.remove('crafting');
-    for (const s of this.slotEls) s.classList.remove('cur', 'hold');
     this.game.closedCrafting(quiet);
   }
 
@@ -231,26 +239,84 @@ export class Crafting {
     this.el.remove();
   }
 
-  // ---- what's chosen -----------------------------------------------------------------------------
+  // ---- the two pages -------------------------------------------------------------------------------
 
-  setCat(i) { this.cat = (i + CATS.length) % CATS.length; this.sub = 0; this.tile = 0; this.render(); this.game.audio?.ui?.('move'); }
-  setSub(i) { const n = this.tree[CATS[this.cat].id].length; this.sub = (i + n) % n; this.tile = 0; this.render(); this.game.audio?.ui?.('move'); }
-  setTile(i) { const n = this.group.recipes.length; this.tile = (i + n) % n; this.render(); this.game.audio?.ui?.('move'); }
+  // The original's ShowCraftingScreen: what's held goes back first, and the recipes known are
+  // worked out afresh, the first of them chosen.
+  showCrafting() {
+    this.putBack();
+    this.page = 'cr';
+    this.known = this.game.inventory.discoveredRecipes(RECIPES);
+    this.recipe = this.known[0] || null;
+    this.ing = 0;
+    this.sound('move');
+    this.render();
+  }
 
-  craft() {
-    const r = this.recipe, g = this.game;
-    if (!r) return;
-    if (!g.inventory.craft(r)) { g.audio?.ui?.('deny'); return; }
-    g.stats.crafted++;
-    if (ITEMS[r.out].kind === 'gun') g.stats.guns = (g.stats.guns || 0) + 1;
+  showInventory() {
+    this.page = 'inv';
+    this.sound('move');
+    this.render();
+  }
+
+  get recipeIndex() { return this.known.indexOf(this.recipe); }
+
+  moveRecipe(d) {
+    const i = this.recipeIndex + d;
+    if (i < 0 || i >= this.known.length) return false;
+    this.recipe = this.known[i];
+    this.ing = 0;
+    this.sound('move');
+    this.render();
+    return true;
+  }
+
+  // A click on one of the recipes on show: the chosen one is made (all you can, with shift);
+  // another is gone to.
+  clickRecipe(i, all) {
+    if (i === this.recipeIndex && !this.ing) { this.craft(all); return; }
+    if (!this.known[i]) return;
+    this.recipe = this.known[i];
+    this.ing = 0;
+    this.sound('move');
+    this.render();
+  }
+
+  // A on a component: over to its recipe, if it has one you know of.
+  toComponentRecipe() {
+    const want = this.recipe?.in[this.ing - 1]?.[0];
+    const r = want && this.known.find((k) => k.out === want);
+    if (!r) { this.sound('deny'); return; }
+    this.recipe = r;
+    this.ing = 0;
+    this.sound('move');
+    this.render();
+  }
+
+  craft(all = false) {
+    const r = this.recipe, g = this.game, inv = g.inventory;
+    if (!r || !inv.canCraft(r)) { this.sound('deny'); return; }
+    let n = 0;
+    do {
+      if (!inv.craft(r)) break;
+      n++;
+      g.stats.crafted++;
+      if (ITEMS[r.out].kind === 'gun') g.stats.guns = (g.stats.guns || 0) + 1;
+    } while (all && inv.canCraft(r) && n < 999);
+    if (!n) { this.sound('deny'); return; }
+    this.ing = 0;
     g.audio?.craft?.(r.out);
+    // what's known now (the same recipe still chosen)
+    this.known = inv.discoveredRecipes(RECIPES);
+    if (!this.known.includes(r)) this.recipe = this.known[0] || null;
     this.render();
   }
 
   // ---- the backpack and the hotbar ---------------------------------------------------------------
 
-  // A press on slot i (CastleMiner Z's inventory screen, by mouse or touch).
+  // A press on slot i, by mouse or touch (the original's BlockPickerScreen rules).
   slotDown(i, e) {
+    if (this.page !== 'inv') return;
     const inv = this.game.inventory;
     this.pointer = true;
     this.mx = e.clientX; this.my = e.clientY;
@@ -260,214 +326,229 @@ export class Crafting {
     else if (inv.hand) did = inv.put(i);
     else if ((did = inv.lift(i))) this.drag = { from: i, x: e.clientX, y: e.clientY };
     if (!did) return;
-    this.cursor = i;
-    this.game.audio?.ui?.('move');
+    this.at = i < HOTBAR ? { x: i, y: 4 } : { x: (i - HOTBAR) % 8, y: Math.floor((i - HOTBAR) / 8) };
+    this.sound('move');
     this.render();
   }
 
   // Let go: a click leaves it in the hand, to put down with another; a drag puts it where it's
-  // let go, and anything it swapped with goes back where it came from.
+  // let go (anything it swapped with goes back where it came from), and off the panel drops it.
   slotUp(e) {
     const d = this.drag, inv = this.game.inventory;
     this.drag = null;
     if (!d || !this.isOpen || !inv.hand) return;
     if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < 10) return;
-    const i = this.slotAt(e.clientX, e.clientY);
-    if (i != null && i !== d.from) {
-      inv.put(i);
+    const hit = document.elementFromPoint(e.clientX, e.clientY);
+    const t = hit?.closest?.('[data-slot]');
+    if (t && +t.dataset.slot !== d.from) {
+      inv.put(+t.dataset.slot);
       if (inv.hand) inv.put(d.from);
-      this.cursor = i;
+    } else if (!this.panel.contains(hit)) {
+      this.dropHeld(false);
+      return;
     }
     this.putBack();
-    this.game.audio?.ui?.('move');
+    this.sound('move');
     this.render();
-  }
-
-  slotAt(x, y) {
-    if (x == null) return null;
-    const t = document.elementFromPoint(x, y)?.closest?.('[data-slot]');
-    return t ? +t.dataset.slot : null;
   }
 
   // what's held back in the inventory (and if somehow there's no room, on the ground)
   putBack() {
     const g = this.game, left = g.inventory.restore();
-    if (left) { const p = g.player.pos; g.drops.spawn(left.id, left.count, p.x, p.y + 1, p.z); }
+    if (left) { const p = g.player.pos; g.drops.spawn(left.id, left.count, p.x, p.y + 1, p.z, null, left); }
   }
 
-  // The pad's cursor: four across the backpack's eight rows, then the eight of the hotbar.
-  moveCursor(dx, dy) {
-    let i = this.cursor;
-    if (i >= HOTBAR) {
-      const k = i - HOTBAR;
-      let r = Math.floor(k / 4), c = k % 4;
-      if (dx < 0 && c === 0) { this.focus = 2; this.render(); return; }
-      c = Math.min(3, c + dx);
-      r += dy;
-      i = r > 7 ? Math.min(HOTBAR - 1, c * 2) : HOTBAR + Math.max(0, r) * 4 + c;
-    } else {
-      if (dx < 0 && i === 0) { this.focus = 2; this.render(); return; }
-      i = dy < 0 ? HOTBAR + 28 + (i >> 1) : Math.max(0, Math.min(HOTBAR - 1, i + dx));
+  // X (Q): what's held onto the ground (one: just one of it), or else the chosen stack.
+  dropHeld(one) {
+    const g = this.game, inv = g.inventory, p = g.player.pos;
+    let s = null;
+    if (inv.hand) {
+      const h = inv.hand;
+      if (one && h.s.count > 1) { s = { ...h.s, count: 1 }; h.s.count--; } else { s = h.s; inv.hand = null; }
+    } else if (inv.slots[this.slot]) {
+      s = inv.slots[this.slot];
+      inv.slots[this.slot] = null;
     }
-    if (i !== this.cursor) this.game.audio?.ui?.('move');
-    this.cursor = i;
-    this.renderInv();
+    if (!s) return;
+    inv.changed();
+    // thrown a little way out in front
+    const f = g.player.forward(new Vector3());
+    g.drops.spawn(s.id, s.count, p.x + f.x * 0.6, p.y + 1.2, p.z + f.z * 0.6, f.clone().multiplyScalar(4).setY(2), s, true);
+    g.audio?.drop?.();
+    this.render();
+  }
+
+  // the pad's A on the selector: pick up, or put down (joining, or swapping with what's there)
+  padUse() {
+    const inv = this.game.inventory, i = this.slot;
+    this.pointer = false;
+    if (!(inv.hand ? inv.put(i) : inv.lift(i))) return;
+    this.sound('move');
+    this.render();
+  }
+
+  // the right stick: pick up half (the smaller half) of the stack, or with something in hand,
+  // put one down on an empty slot, or take up half of a stack of the same thing
+  padSplit() {
+    const inv = this.game.inventory, i = this.slot, h = inv.hand, t = inv.slots[i];
+    this.pointer = false;
+    let did = false;
+    if (!h) did = inv.lift(i, true);
+    else if (!t) did = inv.put(i, true);
+    else if (t.id === h.s.id && ITEMS[t.id].stack > 1) {
+      const n = t.count > 1 ? Math.floor(t.count / 2) : 1;
+      const room = ITEMS[t.id].stack - h.s.count;
+      const k = Math.min(n, room);
+      if (k > 0) { h.s.count += k; t.count -= k; if (t.count <= 0) inv.slots[i] = null; inv.changed(); did = true; }
+    } else did = inv.put(i);
+    if (!did) return;
+    this.sound('move');
+    this.render();
   }
 
   placeCarry() {
     const c = this.carryEl, h = this.game.inventory.hand;
-    if (!h) { c.style.display = 'none'; return; }
-    let x = this.mx, y = this.my;
-    if (!this.pointer || x == null) {
-      // held over the pad's cursor
-      const r = this.slotEls[this.cursor].getBoundingClientRect();
-      x = r.left + r.width * 0.62; y = r.top + r.height * 0.38;
-    }
+    if (!h || !this.pointer || this.mx == null || this.page !== 'inv') { c.style.display = 'none'; return; }
     c.style.display = 'block';
-    c.style.left = `${x}px`;
-    c.style.top = `${y}px`;
+    c.style.left = `${this.mx}px`;
+    c.style.top = `${this.my}px`;
   }
 
   // ---- drawing ----------------------------------------------------------------------------------------
 
   render() {
     if (!this.isOpen) return;
-    const inv = this.game.inventory;
-    const cats = this.$('.cats');
-    cats.innerHTML = CATS.map((c, i) => `<div class="cat${i === this.cat ? ' sel' : ''}" data-i="${i}"><span>${c.name}</span>${c.icon}</div>`).join('');
-    cats.querySelectorAll('.cat').forEach((d) => d.addEventListener('pointerdown', (e) => { e.stopPropagation(); this.focus = 0; this.setCat(+d.dataset.i); }));
-    const groups = this.tree[CATS[this.cat].id];
-    const subs = this.$('.subs');
-    subs.innerHTML = groups.map((g, i) => `<div class="sub${i === this.sub ? ' sel' : ''}" data-i="${i}">${g.name}</div>`).join('');
-    subs.querySelectorAll('.sub').forEach((d) => d.addEventListener('pointerdown', (e) => { e.stopPropagation(); this.focus = 1; this.setSub(+d.dataset.i); }));
-    const tiles = this.$('.tiles');
-    tiles.innerHTML = this.group.recipes.map((r, i) => {
-      const ok = inv.canCraft(r);
-      return `<div class="tile${i === this.tile ? ' sel' : ''}${ok ? '' : ' no'}" data-i="${i}"><img alt="" draggable="false" src="${iconFor(r.out)}">${r.n > 1 ? `<span class="n">${r.n}</span>` : ''}</div>`;
-    }).join('');
-    tiles.querySelectorAll('.tile').forEach((d) => d.addEventListener('pointerdown', (e) => {
-      e.stopPropagation();
-      const i = +d.dataset.i;
-      this.focus = 2;
-      if (i === this.tile) this.craft(); else this.setTile(i);
-    }));
-    this.left.className = `cp left focus${this.focus}`;
-    // the chosen thing
-    const r = this.recipe, it = ITEMS[r.out];
-    const ok = inv.canCraft(r);
-    const comps = r.in.map(([id, n]) => {
-      const have = inv.count(id);
-      return `<div class="${have >= n ? '' : 'no'}">${ITEMS[id].name} ${n}<b> (${have})</b></div>`;
-    }).join('');
-    const pad = this.game.app.input.lastDevice === 'pad';
-    this.$('.detail').innerHTML = `
-      <div class="big"><img alt="" draggable="false" src="${iconFor(r.out)}"></div>
-      <div class="comps">Components:${comps}</div>
-      <div class="dname">${it.name}</div>
-      <div class="ddesc">${it.desc || ''}</div>
-      ${r.n > 1 ? `<div class="makes">Makes ${r.n}</div>` : ''}
-      <div class="cbtn${ok ? '' : ' no'}">${pad ? '<span class="btn a">A</span>' : ''}Craft</div>`;
-    this.$('.detail .cbtn').addEventListener('pointerdown', (e) => { e.stopPropagation(); this.craft(); });
-    this.$('.need').innerHTML = `<div class="arrow"></div>${r.in.map(([id, n]) => {
-      const have = inv.count(id);
-      return `<div class="tile${have >= n ? '' : ' short'}"><img alt="" draggable="false" src="${iconFor(id)}"><span class="n">${have}</span></div>`;
-    }).join('')}`;
-    const touch = this.game.app.isTouch;
-    this.$('.help').innerHTML = pad
-      ? '<span><span class="btn a">A</span> Craft</span><span>LB / RB Category</span><span><span class="btn b">B</span> Close</span>'
-      : touch ? '' : '<span><span class="key">Enter</span> Craft</span><span><span class="key">Esc</span> Close</span>';
-    this.$('.ihelp').innerHTML = pad
-      ? '<span><span class="btn a">A</span> Move</span><span>RS Split</span>'
-      : touch ? '<span>Tap or drag to move</span>'
-        : '<span><span class="key">Shift</span> + click: across</span><span>Right-click: split</span>';
-    this.renderInv();
+    const inv = this.game.inventory, cr = this.page === 'cr';
+    this.el.classList.toggle('inv', !cr);
+    this.el.classList.toggle('cr', cr);
+    // the backpack and the hotbar (in the hand's place, nothing)
+    const h = inv.hand;
+    for (let i = 0; i < this.cells.length; i++) {
+      const s = inv.slots[i];
+      const key = s ? `${s.id}|${s.count}|${s.dur ?? ''}` : '';
+      if (this.cells[i].dataset.key !== key) { this.cells[i].dataset.key = key; this.cells[i].innerHTML = iconHtml(s); }
+    }
+    // what's named at the top: on the inventory, what's held or chosen; crafting, the chosen
+    // recipe's thing or component
+    let named = null;
+    if (cr) {
+      const r = this.recipe;
+      named = r ? (this.ing > 0 ? r.in[this.ing - 1]?.[0] : r.out) : null;
+    } else named = h ? h.s.id : inv.slots[this.slot]?.id ?? null;
+    const it = named ? ITEMS[named] : null;
+    this.$('.nm').textContent = it ? it.name : '';
+    this.$('.d1').textContent = it?.desc || '';
+    this.$('.d2').textContent = it?.desc2 || '';
+    // the selector, and what's held in it (or at the pointer)
+    const sel = this.selEl;
+    if (cr) {
+      const x = this.ing > 0 ? INGS.x + (this.ing - 1) * INGS.step : LIST.x;
+      sel.style.left = P(x - 2); sel.style.top = P(LIST.y - 2);
+      sel.classList.remove('hold');
+      sel.innerHTML = '';
+      sel.style.display = this.recipe ? '' : 'none';
+      this.renderRecipes();
+    } else {
+      const { x, y } = this.cellAt(this.slot);
+      sel.style.left = P(x - 4); sel.style.top = P(y - 4);
+      sel.style.display = '';
+      sel.classList.toggle('hold', !!h);
+      sel.innerHTML = h && !this.pointer ? iconHtml(h.s) : '';
+    }
+    this.carryEl.innerHTML = h ? iconHtml(h.s) : '';
+    this.placeCarry();
+    // the help along the bottom
+    const pad = this.game.app.input.lastDevice === 'pad', touch = this.game.app.isTouch;
+    this.$('.help').innerHTML = pad ? '' : touch
+      ? (cr ? '<span>Tap the chosen thing to make it</span><span>Tap a component for its recipe</span>' : '<span>Tap or drag to move things</span>')
+      : cr ? '<span><span class="key">Enter</span> Make it</span><span><span class="key">Shift</span>+click: as many as you can</span><span><span class="key">E</span> / <span class="key">Esc</span> Back</span>'
+        : '<span><span class="key">E</span> Crafting</span><span><span class="key">Q</span> Drop</span><span><span class="key">Shift</span>+click: across</span><span>Right-click: split</span><span><span class="key">Esc</span> Close</span>';
   }
 
-  renderInv() {
-    const inv = this.game.inventory;
-    this.packEls.forEach((s, k) => {
-      const sl = inv.slots[HOTBAR + k];
-      const img = s.querySelector('img'), n = s.querySelector('.n');
-      if (!sl) { img.style.display = 'none'; img.removeAttribute('src'); n.textContent = ''; return; }
-      img.style.display = '';
-      img.src = iconFor(sl.id);
-      n.textContent = ITEMS[sl.id].stack > 1 && sl.count > 1 ? sl.count : '';
-    });
-    // the pad's cursor, red while it holds something (as the original's)
-    this.slotEls.forEach((s, i) => {
-      s.classList.toggle('cur', this.focus === 3 && i === this.cursor);
-      s.classList.toggle('hold', !!inv.hand);
-    });
-    const h = inv.hand;
-    if (h) {
-      this.carryEl.querySelector('img').src = iconFor(h.s.id);
-      this.carryEl.querySelector('.n').textContent = h.s.count > 1 ? h.s.count : '';
+  // the recipes on show (two either side of the chosen one) and its components
+  renderRecipes() {
+    const inv = this.game.inventory, r = this.recipe, at = this.recipeIndex;
+    let list = '';
+    for (let k = -2; k <= 2; k++) {
+      const i = at + k, q = this.known[i];
+      if (!q) continue;
+      const ok = inv.canCraft(q);
+      list += `<div class="tile ${SP('SingleGrid')}${ok ? '' : ' dim'}" data-r="${i}" style="left:${P(LIST.x)};top:${P(LIST.y + k * LIST.step)}">${iconHtml({ id: q.out, count: q.n })}</div>`;
     }
-    this.placeCarry();
+    this.$('.list').innerHTML = list;
+    this.$('.ings').innerHTML = !r ? '' : r.in.map(([id, n], j) => {
+      const ok = inv.count(id) >= n;
+      return `<div class="tile ${SP('SingleGrid')}${ok ? '' : ' dim'}" data-g="${j + 1}" style="left:${P(INGS.x + j * INGS.step)};top:${P(INGS.y)}">${iconHtml({ id, count: n })}</div>`;
+    }).join('');
   }
 
   // ---- pad and keyboard ----------------------------------------------------------------------------
 
   update(dt, input) {
     if (!this.isOpen) return;
-    const inv = this.game.inventory;
-    // B puts back what's held before it closes, as the original's did
-    const back = input.consume('back_btn');
-    if (back && inv.hand) { this.putBack(); this.game.audio?.ui?.('move'); this.render(); }
-    else if (back || input.consume('inventory') || input.consume('pause')) { this.close(); return; }
-    if (input.consume('accept') || input.consume('jump')) {
-      if (this.focus === 3) this.cursorUse(false);
-      else if (this.focus === 2) this.craft(); else { this.focus++; this.render(); }
+    const inv = this.game.inventory, cr = this.page === 'cr';
+    if (input.consume('pause')) {
+      // Start: the pause menu (what's held goes back first); Esc, back a page or out
+      if (input.lastDevice === 'pad') { this.close(true); this.game.app.pause?.(); return; }
+      if (cr) this.showInventory(); else this.close();
+      return;
     }
-    if (input.consume('crouch') && this.focus === 3) this.cursorUse(true);
-    if (input.consume('next') || input.consume('reload')) this.setCat(this.cat + 1);
-    if (input.consume('prev') || input.consume('drop')) this.setCat(this.cat - 1);
-    let dy = 0, dx = 0;
+    if (input.consume('back_btn')) {
+      if (cr) this.showInventory();
+      else if (inv.hand) { this.putBack(); this.sound('move'); this.render(); } else this.close();
+      return;
+    }
+    if (input.consume('inventory')) { if (cr) this.showInventory(); else this.showCrafting(); return; }
+    // the stick and the d-pad, with a repeat
+    let dx = 0, dy = 0;
     if (input.consume('fwd') || input.consume('up')) dy = -1;
     if (input.consume('back') || input.consume('down')) dy = 1;
     if (input.consume('left') || input.consume('leftpad')) dx = -1;
     if (input.consume('right') || input.consume('rightpad')) dx = 1;
-    // the stick, with a repeat
     const sy = -input.move.y, sx = input.move.x;
     const ax = Math.abs(sx) > 0.6 ? Math.sign(sx) : 0, ay = Math.abs(sy) > 0.6 ? Math.sign(sy) : 0;
     const key = `${ax},${ay}`;
     if ((ax || ay) && !dx && !dy) {
+      // (the original's: half a second before it repeats, then every tenth)
       if (key !== this.stickKey) this.stickT = 0;
       this.stickT -= dt;
-      if (this.stickT <= 0) { this.stickT = key === this.stickKey ? 0.14 : 0.36; dx = ax; dy = ay; }
-    }
+      if (this.stickT <= 0) { this.stickT = key === this.stickKey && this.stickRepeat ? 0.1 : 0.5; this.stickRepeat = key === this.stickKey; dx = ax; dy = ay; }
+    } else if (!ax && !ay) this.stickRepeat = false;
     this.stickKey = key;
     if (dx || dy) this.pointer = false;
-    if (this.focus === 3) { if (dx || dy) this.moveCursor(dx, dy); }
-    else {
-      if (dx) { this.focus = Math.max(0, Math.min(3, this.focus + dx)); this.render(); }
-      if (dy) {
-        if (this.focus === 0) this.setCat(this.cat + dy);
-        else if (this.focus === 1) this.setSub(this.sub + dy);
-        else this.setTile(this.tile + dy);
+    if (cr) {
+      if (input.consume('prev')) dx = -1;
+      if (input.consume('next')) dx = 1;
+      if (dy) this.moveRecipe(dy);
+      if (dx && this.recipe) {
+        const g = Math.max(0, Math.min(this.recipe.in.length, this.ing + dx));
+        if (g !== this.ing) { this.ing = g; this.sound('move'); this.render(); }
+      }
+      if (input.consume('accept') || input.consume('jump')) { if (this.ing > 0) this.toComponentRecipe(); else this.craft(); }
+    } else {
+      if (dx || dy) {
+        const x = (this.at.x + dx + 8) % 8, y = (this.at.y + dy + 5) % 5;
+        this.at = { x, y };
+        this.sound('move');
+        this.render();
+      }
+      if (input.consume('accept') || input.consume('jump')) this.padUse();
+      if (input.consume('crouch')) this.padSplit();
+      if (input.consume('reload') || input.consume('drop')) this.dropHeld(false);
+      // a number key puts what's held, or what's under the pointer (or the selector), on that slot
+      for (let k = 0; k < HOTBAR; k++) {
+        if (!input.consume(`slot${k + 1}`)) continue;
+        const under = this.pointer ? document.elementFromPoint(this.mx, this.my)?.closest?.('[data-slot]') : null;
+        const at = under ? +under.dataset.slot : this.slot;
+        if (inv.hand) inv.put(k);
+        else if (at !== k && (inv.slots[at] || inv.slots[k])) inv.swap(at, k);
+        else continue;
+        this.sound('move');
+        this.render();
       }
     }
-    // a number key puts what's held, or what's under the pointer (or the cursor), on that slot
-    for (let k = 0; k < HOTBAR; k++) {
-      if (!input.consume(`slot${k + 1}`)) continue;
-      const at = this.pointer ? this.slotAt(this.mx, this.my) : this.focus === 3 ? this.cursor : null;
-      if (inv.hand) inv.put(k);
-      else if (at != null && at !== k && (inv.slots[at] || inv.slots[k])) inv.swap(at, k);
-      else continue;
-      this.game.audio?.ui?.('move');
-      this.render();
-    }
-    // keep counts fresh (things get picked up while the screen is open)
+    // keep it fresh (things get picked up while it's open)
     this.t = (this.t || 0) - dt;
-    if (this.t <= 0) { this.t = 0.5; this.renderInv(); }
-  }
-
-  // A (or Enter) on the cursor: pick up or put down; the right stick: half, or one.
-  cursorUse(half) {
-    const inv = this.game.inventory, i = this.cursor;
-    this.pointer = false;
-    if (!(inv.hand ? inv.put(i, half) : inv.lift(i, half))) return;
-    this.game.audio?.ui?.('move');
-    this.render();
+    if (this.t <= 0) { this.t = 0.5; this.render(); }
   }
 }

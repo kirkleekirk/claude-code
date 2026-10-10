@@ -7,7 +7,7 @@ import { B, BLOCKS, SOLID, HEIGHT, isTorch } from '../world/blocks.js';
 import { BIOMES } from '../world/gen.js';
 import { Player } from '../entities/player.js';
 import { Inventory } from '../items/inventory.js';
-import { ITEMS, dropFor, digTime, weaponDamage } from '../items/items.js';
+import { ITEMS, dropFor, digTime, weaponDamage, STARTER_KIT } from '../items/items.js';
 import { getZombie, TYPES } from '../entities/cmz/types.js';
 import { ViewModel } from '../gfx/viewModel.js';
 import { CmzViewModel } from '../gfx/cmzViewModel.js';
@@ -32,7 +32,13 @@ const START_TIME = 0.4;
 // when the grace period ends: early on the first afternoon
 const GRACE_ENDS = 0.62;
 
-const _v = new THREE.Vector3(), _f = new THREE.Vector3();
+const _v = new THREE.Vector3(), _f = new THREE.Vector3(), _u = new THREE.Vector3(), _r = new THREE.Vector3();
+const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _e = new THREE.Euler();
+const X_AXIS = new THREE.Vector3(1, 0, 0), Y_AXIS = new THREE.Vector3(0, 1, 0), NO_TURN = new THREE.Quaternion();
+const D2R = Math.PI / 180;
+// how fast a gun's kick settles back (the original's recoilDecay, 30 degrees a second)
+const RECOIL_DECAY = 30 * D2R;
+const rand = (a, b) => a + Math.random() * (b - a);
 
 // input with nothing pressed (the player stands still while a screen has the controls)
 const IDLE = { move: { x: 0, y: 0 }, look: { x: 0, y: 0 }, wheel: 0, lastDevice: 'keyboard', isHeld: () => false, pressed: () => false, consume: () => false };
@@ -91,6 +97,8 @@ export class Game {
     this.dig = { key: '', progress: 0 };
     this.cooldown = 0;
     this.reloading = 0;
+    // a gun's kick: a turn of the view that settles back (the original's RecoilRotation)
+    this.recoil = new THREE.Quaternion();
     this.spread = 0;
     this.time = 0;
     this.lookHit = null;
@@ -172,18 +180,18 @@ export class Game {
     return { x: sp.x + Math.cos(a) * 1.6, y: sp.y + 0.5, z: sp.z + Math.sin(a) * 1.6 };
   }
 
+  // The original's SetDefaultInventory: a stone pickaxe, the compass, a pistol and a knife, 200
+  // bullets and 16 torches (on Hardcore, nothing at all).
   starterKit() {
     const inv = this.inventory;
     inv.slots.fill(null);
-    inv.slots[0] = inv.make('pick_stone');
-    inv.slots[1] = inv.make('compass');
-    inv.slots[2] = inv.make('pistol');
-    inv.slots[3] = inv.make('torch', 16);
-    inv.slots[4] = inv.make('bullets', 200);
+    inv.hand = null;
+    if (this.difficulty !== 'hardcore') for (const [id, n] of STARTER_KIT) inv.add(id, n);
     inv.selected = 0;
   }
 
   dispose() {
+    this.audio?.holding?.(null);
     this.online?.close();
     this.world.dispose();
     this.hud.el.remove();
@@ -359,6 +367,10 @@ export class Game {
     cam.position.copy(eye);
     const shake = p.hurtTimer > 0 ? p.hurtTimer * 0.03 : 0;
     cam.rotation.set(p.pitch + (Math.random() - 0.5) * shake, p.yaw + (Math.random() - 0.5) * shake, Math.cos(p.bobPhase) * 0.004 * bob, 'YXZ');
+    // a gun's kick turns the view, and settles back at 30 degrees a second
+    const kick = 2 * Math.acos(Math.min(1, Math.abs(this.recoil.w)));
+    if (kick > 0) this.recoil.slerpQuaternions(NO_TURN, this.recoil, Math.max(0, kick - RECOIL_DECAY * dt) / kick);
+    cam.quaternion.multiply(this.recoil);
     if (app.thirdPerson && !p.dead) {
       // behind the shoulder, pulled in short of any wall
       const back = p.forward(_v).negate();
@@ -367,9 +379,15 @@ export class Game {
       cam.position.addScaledVector(back, d);
       cam.position.y += 0.25;
     }
-    const fov = app.settings.fov * (p.sprinting ? 1.06 : 1) / (this.viewModel.ads > 0.5 && this.viewModel.info.scope ? ITEMS[this.inventory.held?.id]?.zoom || 1 : 1 + this.viewModel.ads * 0.12);
-    cam.fov += (fov - cam.fov) * Math.min(1, dt * 10);
+    // at the shoulder a gun narrows the view by its magnification (the original's
+    // ShoulderMagnification), as far as it's raised, and the aim slows (a quarter as fast on a
+    // stick, as in the original; with a mouse, as far as the view narrows)
+    const gunIn = ITEMS[this.inventory.held?.id], zoom = gunIn?.kind === 'gun' ? gunIn.zoom || 1 : 1;
+    const base = app.settings.fov * (p.sprinting ? 1.06 : 1), up = this.viewModel.ads;
+    const fov = THREE.MathUtils.lerp(base, base / zoom, up);
+    if (up > 0) cam.fov = fov; else cam.fov += (fov - cam.fov) * Math.min(1, dt * 10);
     cam.updateProjectionMatrix();
+    app.input.aim = up > 0 ? { pad: 0.25, mouse: 1 / THREE.MathUtils.lerp(1, zoom, up) } : null;
     cam.updateMatrixWorld();
 
     // the world streams around the player
@@ -423,8 +441,9 @@ export class Game {
       lookName: this.lookHit ? BLOCKS[this.lookHit.id].name : 'Air',
       distance: dist, maxDistance: this.maxDistance,
       health: p.health, maxHealth: p.maxHealth,
-      spread: it && it.kind === 'gun' ? 0.25 + this.spread * 1.4 : 0,
-      scoped: it && it.kind === 'gun' && it.zoom && this.viewModel.ads > 0.85,
+      // the crosshair opens with how far a shot can stray, and the kick
+      spread: it && it.kind === 'gun' ? 0.25 + it.inaccuracy * 8 + this.spread * 1.4 : 0,
+      scoped: !!(it && it.kind === 'gun' && it.scoped && this.viewModel.ads > 0.95),
     });
   }
 
@@ -512,7 +531,14 @@ export class Game {
     if (input.consume('prev')) inv.select(inv.selected - 1);
     if (input.consume('rightpad')) inv.select(inv.selected + 1);
     if (input.consume('leftpad')) inv.select(inv.selected - 1);
-    if (inv.selected !== this.lastSelected) { this.lastSelected = inv.selected; this.reloading = 0; this.dig.progress = 0; this.cooldown = Math.max(this.cooldown, 0.2); this.audio?.equip(inv.held?.id); }
+    if (inv.selected !== this.lastSelected) {
+      this.lastSelected = inv.selected;
+      this.reloading = 0;
+      this.dig.progress = 0;
+      this.cooldown = Math.max(this.cooldown, 0.2);
+      this.audio?.equip(inv.held?.id);
+      this.audio?.holding(inv.held ? ITEMS[inv.held.id] : null);
+    }
 
     const eye = p.eye;
     const fwd = p.forward(_f);
@@ -523,24 +549,41 @@ export class Game {
     this.cooldown -= dt;
     this.ads = false;
 
+    // Q: one of what's in hand onto the ground in front (the original's DropOneSelectedTrayItem)
+    if (input.consume('drop') && held) {
+      const one = { ...held, count: 1 };
+      inv.useHeld(1);
+      const f = p.forward(new THREE.Vector3());
+      this.drops.spawn(one.id, 1, eye.x + f.x * 0.6, eye.y - 0.3, eye.z + f.z * 0.6, f.clone().multiplyScalar(4).setY(2), one, true);
+      this.audio?.drop?.();
+      return;
+    }
+
     if (it && it.kind === 'gun') {
-      this.handleGun(dt, input, it, held, eye, fwd, hit);
+      this.handleGun(dt, input, it, held, eye);
       this.highlight.show(hit, 0);
       return;
     }
     this.spread = 0;
 
-    // melee first: an enemy in reach takes the hit instead of the block behind it
+    // Each use waits for the item's cooldown (bare hands, half a second). Holding the button
+    // swings again each time it's up (the original's InventoryItem.ProcessInput): at an enemy in
+    // reach, a hit; at a block, a dig, which wears what's swung and brings the block out once it's
+    // been dug long enough (its TimeToDig with this item).
+    const cooldown = it ? it.cooldown : 0.5;
+    const swing = Math.min(0.6, Math.max(0.25, cooldown));
+    const kind = !it ? 'punch' : it.kind === 'melee' ? 'stab' : 'tool';
+    const wear = () => { if (it?.uses && inv.wearHeld(1)) this.audio?.toolBreak(); };
     const target = this.enemies?.raycast(eye, fwd, it?.kind === 'melee' ? 2.6 : 2.3, hit ? hit.dist : 99);
     const primary = input.isHeld('primary');
     if (primary && target && this.cooldown <= 0) {
-      const rate = it && it.kind === 'melee' ? it.rate : 0.45;
-      vm.startSwing(it ? (it.kind === 'melee' ? 'stab' : 'tool') : 'punch', rate * 0.9);
-      this.cooldown = rate;
+      vm.startSwing(kind, swing * 0.9);
+      this.cooldown = cooldown;
       if (target.enemy.takeDamage(target.y, weaponDamage(it))) this.onKill(target.enemy);
       this.hud.hitMarker();
       this.audio?.melee(true);
-      if (it && it.durability) inv.wearHeld(1);
+      if (it?.laser) this.audio?.saberSwing();
+      wear();
       this.dig.progress = 0;
       this.highlight.show(hit, 0);
       return;
@@ -551,36 +594,40 @@ export class Game {
       const key = `${hit.x},${hit.y},${hit.z}`;
       if (this.dig.key !== key) { this.dig.key = key; this.dig.progress = 0; }
       const t = digTime(BLOCKS[hit.id], it);
-      const kind = !it ? 'punch' : it.kind === 'melee' ? 'stab' : 'tool';
-      if (vm.startSwing(kind, kind === 'punch' ? 0.3 : 0.34)) {
+      if (t !== Infinity) this.dig.progress += t > 0 ? dt / t : 1;
+      if (this.cooldown <= 0) {
+        this.cooldown = cooldown;
+        vm.startSwing(kind, swing);
+        if (it?.laser) this.audio?.saberSwing();
         this.audio?.dig(BLOCKS[hit.id].sound, t === Infinity);
-        if (t !== Infinity) this.sprites.emit('dust', hit.x + 0.5 + hit.nx * 0.52, hit.y + 0.5 + hit.ny * 0.52, hit.z + 0.5 + hit.nz * 0.52, { color: BLOCKS[hit.id].color, size: 0.08, life: 0.5, spread: 1.6, gravity: 6, alpha: 0.9 });
-      }
-      if (t !== Infinity) {
-        this.dig.progress += dt / t;
-        if (this.dig.progress >= 1) {
-          this.breakBlock(hit);
+        if (t !== Infinity && this.dig.progress >= 1) {
+          this.breakBlock(hit, it);
           this.dig.progress = 0;
           this.dig.key = '';
-          if (it && it.durability) { if (inv.wearHeld(1)) this.audio?.toolBreak(); }
+        } else if (t !== Infinity) {
+          this.sprites.emit('dust', hit.x + 0.5 + hit.nx * 0.52, hit.y + 0.5 + hit.ny * 0.52, hit.z + 0.5 + hit.nz * 0.52, { color: BLOCKS[hit.id].color, size: 0.08, life: 0.5, spread: 1.6, gravity: 6, alpha: 0.9 });
         }
-      } else if (vm.swing < 0.05 && !this.toldTier) {
+        wear();
+      }
+      if (t === Infinity && !this.toldTier && hit.id !== B.TNT && hit.id !== B.C4) {
         this.toldTier = true;
         this.hud.hint(`You need a better pick to dig ${BLOCKS[hit.id].name}`, 2.5);
         setTimeout(() => { this.toldTier = false; }, 3000);
       }
     } else {
-      if (primary && !hit) vm.startSwing(it ? 'tool' : 'punch', 0.32);
-      this.dig.progress = Math.max(0, this.dig.progress - dt * 2);
+      if (primary && !hit && this.cooldown <= 0) { this.cooldown = cooldown; vm.startSwing(kind, swing); }
+      // (letting go, or looking away, starts the dig over, as in the original)
+      this.dig.progress = 0;
       if (!primary) this.dig.key = '';
     }
-    this.highlight.show(hit, this.dig.progress);
+    this.highlight.show(hit, Math.min(1, this.dig.progress));
 
     // placing
     if (input.consume('secondary') && hit && it && it.kind === 'block') this.placeBlock(hit, it);
   }
 
-  breakBlock(hit) {
+  // A block dug out by the player (with `tool` in hand: what comes out of it goes by that).
+  breakBlock(hit, tool = null) {
     const def = BLOCKS[hit.id];
     this.world.setBlock(hit.x, hit.y, hit.z, B.AIR);
     this.stats.dug++;
@@ -588,7 +635,7 @@ export class Game {
     const light = Math.max(0.25, Math.max(L.sky / 15, L.block / 15));
     this.debris.burst(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, def.color, 14, light);
     this.audio?.breakBlock(hit.id);
-    const drop = dropFor(hit.id);
+    const drop = dropFor(hit.id, tool);
     if (drop) this.drops.spawn(drop, 1, hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
     // torches resting on this block fall
     for (const [dx, dy, dz, id] of [[0, 1, 0, B.TORCH], [1, 0, 0, B.TORCH_NX], [-1, 0, 0, B.TORCH_PX], [0, 0, 1, B.TORCH_NZ], [0, 0, -1, B.TORCH_PZ]]) {
@@ -622,60 +669,78 @@ export class Game {
     this.audio?.place(BLOCKS[id].sound);
   }
 
-  handleGun(dt, input, it, held, eye, fwd, hit) {
+  // A gun in hand, by the original's GunInventoryItem.ProcessInput: the trigger fires once its
+  // cooldown is up (held down, for an automatic); each shot kicks the view, wears the gun, and
+  // an empty clip reloads itself. A reload loads what it can of the clip (a shotgun one shell at
+  // a time, round again until it's full), and pulling the trigger stops it.
+  handleGun(dt, input, it, held, eye) {
     const vm = this.viewModel, inv = this.inventory;
     this.ads = input.isHeld('secondary') || testParams.has('ads');
     this.spread = Math.max(0, this.spread - dt * 3.5);
-    // reload
     const ammoLeft = inv.count(it.ammo);
-    const wantReload = input.consume('reload') || (input.isHeld('primary') && held.mag <= 0 && this.cooldown <= 0);
+    const canReload = held.mag < it.mag && ammoLeft > 0;
+    if (canReload && input.consume('reload') && !(this.reloading > 0)) this.startReload(it, !input.isHeld('primary'));
     if (this.reloading > 0) {
-      this.reloading -= dt;
-      if (this.reloading <= 0) {
-        const need = it.mag - held.mag;
-        const got = inv.remove(it.ammo, Math.min(need, inv.count(it.ammo)));
-        held.mag += got;
-        this.audio?.reloadDone(it.gun);
+      if (this.reloadReleased && input.pressed('primary')) { this.reloading = 0; vm.reload = 0; }
+      else {
+        this.reloading -= dt;
+        if (this.reloading <= 0) {
+          const n = Math.min(it.mag - held.mag, inv.count(it.ammo), it.perReload);
+          if (n > 0) held.mag += inv.remove(it.ammo, n);
+          this.audio?.reloadDone(it);
+          // more to load (a shotgun's next shell)
+          if (held.mag < it.mag && inv.count(it.ammo) > 0) this.startReload(it, this.reloadReleased);
+        }
+        return;
       }
-      return;
     }
-    if (wantReload && held.mag < it.mag && ammoLeft > 0) {
-      this.reloading = it.reload;
-      vm.startReload(it.reload);
-      this.audio?.reload(it.gun);
-      return;
-    }
-    if (wantReload && held.mag <= 0 && ammoLeft <= 0 && input.pressed('primary')) { this.audio?.dryFire(); this.hud.hint('Out of Bullets', 1.5); return; }
     // fire
     const trigger = it.auto ? input.isHeld('primary') : input.pressed('primary');
-    if (trigger && this.cooldown <= 0 && held.mag > 0) {
-      this.cooldown = 60 / it.rpm;
-      held.mag--;
-      this.stats.shots++;
-      vm.fire(it.recoil * (this.ads ? 0.6 : 1));
-      this.audio?.gunshot(it.gun, it.mat);
-      const p = this.player;
-      p.pitch += it.recoil * (this.ads ? 0.35 : 0.55) * (0.7 + Math.random() * 0.6);
-      p.yaw += (Math.random() - 0.5) * it.recoil * 0.4;
-      const spreadDeg = it.spread * (this.ads ? 0.35 : 1) * (p.onGround ? 1 : 1.8) + this.spread * 2.5;
-      this.spread = Math.min(1.5, this.spread + it.recoil * 4);
-      const muzzle = eye.clone().add(new THREE.Vector3(0.12, -0.1, 0).applyQuaternion(this.camera.quaternion)).addScaledVector(fwd, 0.6);
-      const ends = [];
-      for (let k = 0; k < it.pellets; k++) {
-        const dir = fwd.clone();
-        const a = Math.random() * Math.PI * 2, r = Math.tan(THREE.MathUtils.degToRad(spreadDeg)) * Math.sqrt(Math.random());
-        const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion), right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
-        dir.addScaledVector(up, Math.sin(a) * r).addScaledVector(right, Math.cos(a) * r).normalize();
-        ends.push(this.shoot(eye, dir, it, muzzle));
-      }
-      // online: the others hear it, and see where it went
-      this.online?.shot(it.gun, muzzle, ends);
-      // smoke from the muzzle
-      this.sprites.emit('smoke', muzzle.x, muzzle.y, muzzle.z, { color: 0x9a9a9a, size: 0.12, grow: 0.4, life: 0.7, alpha: 0.25, spread: 0.4, v: fwd.clone().multiplyScalar(1.2) });
-      if (held.mag <= 0 && inv.count(it.ammo) > 0) setTimeout(() => {}, 0);
-    } else if (trigger && held.mag <= 0) {
-      this.audio?.dryFire();
+    if (!trigger || this.cooldown > 0) return;
+    if (held.mag <= 0) {
+      if (canReload) this.startReload(it, false);
+      else if (input.pressed('primary')) { this.audio?.dryFire(); this.hud.hint(`Out of ${ITEMS[it.ammo]?.name || 'ammo'}`, 1.5); }
+      return;
     }
+    this.cooldown = it.cooldown;
+    held.mag--;
+    this.stats.shots++;
+    vm.fire(Math.min(0.12, it.recoil * D2R));
+    this.audio?.gunshot(it);
+    // the shot goes where the view points, kick and all; each pellet strays up to the gun's
+    // inaccuracy right or left and up or down (the original's GunshotMessage)
+    const p = this.player;
+    _q.setFromEuler(_e.set(p.pitch, p.yaw, 0, 'YXZ')).multiply(this.recoil);
+    const fwd = _f.set(0, 0, -1).applyQuaternion(_q), up = _u.set(0, 1, 0).applyQuaternion(_q), right = _r.set(1, 0, 0).applyQuaternion(_q);
+    const muzzle = eye.clone().addScaledVector(right, 0.12).addScaledVector(up, -0.1).addScaledVector(fwd, 0.6);
+    const ends = [];
+    for (let k = 0; k < it.pellets; k++) {
+      const dir = fwd.clone().addScaledVector(right, rand(-it.inaccuracy, it.inaccuracy)).addScaledVector(up, rand(-it.inaccuracy, it.inaccuracy)).normalize();
+      ends.push(this.shoot(eye, dir, it, muzzle));
+    }
+    this.applyRecoil(it.recoil);
+    this.spread = Math.min(1.5, this.spread + it.recoil * D2R * 4);
+    // online: the others hear it, and see where it went
+    this.online?.shot(it.id, muzzle, ends);
+    // smoke from the muzzle
+    if (!it.laser) this.sprites.emit('smoke', muzzle.x, muzzle.y, muzzle.z, { color: 0x9a9a9a, size: 0.12, grow: 0.4, life: 0.7, alpha: 0.25, spread: 0.4, v: fwd.clone().multiplyScalar(1.2) });
+    // each shot wears the gun; worn through, it's gone
+    if (inv.wearHeld(1)) { this.audio?.toolBreak(); this.reloading = 0; return; }
+    if (held.mag <= 0 && inv.count(it.ammo) > 0) this.startReload(it, false);
+  }
+
+  startReload(it, released) {
+    this.reloading = it.reload;
+    this.reloadReleased = released;
+    this.viewModel.startReload(it.reload);
+    this.audio?.reload(it);
+  }
+
+  // The original's ApplyRecoil: the view kicks up by half to all of the gun's recoil, and left or
+  // right by up to a quarter of it.
+  applyRecoil(deg) {
+    const r = deg * D2R;
+    this.recoil.multiply(_q2.setFromAxisAngle(X_AXIS, rand(0.5, 1) * r)).multiply(_q2.setFromAxisAngle(Y_AXIS, rand(-0.25, 0.25) * r));
   }
 
   // One bullet: the first thing along the ray takes it.
@@ -771,6 +836,11 @@ export class Game {
     this.crafting?.close(true);
     this.deathShown = true;
     this.stats.deaths++;
+    // the original's KillPlayer: what's in the backpack falls where you died (on Hardcore,
+    // everything, the hotbar too, and you start again with nothing)
+    const p = this.player.pos, hard = this.difficulty === 'hardcore';
+    for (const s of this.inventory.takeAll(hard)) this.drops.spawn(s.id, s.count, p.x, p.y + 1, p.z, null, s);
+    if (hard) this.starterKit();
     this.audio?.death();
     this.app.showDeath(this.maxDistance, this.dayNumber);
   }

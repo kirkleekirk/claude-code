@@ -10,7 +10,7 @@
 //   uv   Uint16 x2   texture coordinates, in 1/16 repeat
 //   data Uint8  x4   [texture layer, normal << 5 | ao << 3, sky light, block light]
 
-import { B, CHUNK, HEIGHT, OPAQUE, LIGHT, RENDER, FACES, TEX } from './blocks.js';
+import { B, CHUNK, HEIGHT, OPAQUE, LIGHT, RENDER, FACES, TEX, isDoor, DOOR } from './blocks.js';
 
 const RW = 48; // region width
 const RA = RW * RW; // one horizontal layer of the region
@@ -232,6 +232,7 @@ export class Mesher {
     if (ymax >= 0) {
       for (let d = 0; d < 6; d++) this.meshDir(d, ymin, ymax);
       this.torches(ymin, ymax);
+      this.doors(ymin, ymax);
     }
     return {
       opaque: outs.opaque.finish(this.flips.opaque),
@@ -427,6 +428,46 @@ export class Mesher {
     }
   }
 }
+
+// Doors: a plank panel 3/16 thick across the middle of the cell when shut, and against its
+// hinge side when open, lit by the cell it's in.
+Mesher.prototype.doors = function doors(ymin, ymax) {
+  const R = this.blocks;
+  for (let y = ymin; y <= ymax; y++) for (let z = 0; z < 16; z++) for (let x = 0; x < 16; x++) {
+    const i = y * RA + (z + 16) * RW + x + 16;
+    if (isDoor(R[i])) this.door(x, y, z, R[i], i);
+  }
+};
+
+Mesher.prototype.door = function door(x, y, z, id, i) {
+  const o = this.outs.cutout, D = DOOR(id);
+  const sky = Math.min(255, this.sky[i] * 17), blk = Math.min(255, this.blk[i] * 17);
+  const S = 16, T = 3, M0 = (S - T) / 2;
+  let a0, a1, b0, b1;
+  if (!D.open) [a0, a1, b0, b1] = D.alongX ? [0, S, M0, M0 + T] : [M0, M0 + T, 0, S];
+  else [a0, a1, b0, b1] = D.alongX ? [0, T, 0, S] : [0, S, 0, T];
+  const X0 = x * S + a0, X1 = x * S + a1, Z0 = z * S + b0, Z1 = z * S + b1, Y0 = y * S, Y1 = y * S + S;
+  const tex = FACES[id * 6];
+  // each face: its corners (bottom left, bottom right, top right, top left) and the texture's
+  // width across it (the panel's faces take it all; its edges a strip)
+  const faces = [
+    [[X1, Y0, Z1], [X1, Y0, Z0], [X1, Y1, Z0], [X1, Y1, Z1], 0, Z1 - Z0],
+    [[X0, Y0, Z0], [X0, Y0, Z1], [X0, Y1, Z1], [X0, Y1, Z0], 1, Z1 - Z0],
+    [[X0, Y0, Z1], [X1, Y0, Z1], [X1, Y1, Z1], [X0, Y1, Z1], 4, X1 - X0],
+    [[X1, Y0, Z0], [X0, Y0, Z0], [X0, Y1, Z0], [X1, Y1, Z0], 5, X1 - X0],
+    [[X0, Y1, Z0], [X0, Y1, Z1], [X1, Y1, Z1], [X1, Y1, Z0], 2, 0],
+    [[X0, Y0, Z1], [X0, Y0, Z0], [X1, Y0, Z0], [X1, Y0, Z1], 3, 0],
+  ];
+  for (const [a, b, c, d, nrm, w] of faces) {
+    // the tops and bottoms are the panel's edge: a strip of the frame
+    const u0 = 0, u1 = w || T, v0 = nrm >= 2 && nrm <= 3 ? 1 : 16, v1 = nrm >= 2 && nrm <= 3 ? 0 : 0;
+    o.vert(a[0], a[1], a[2], u0, v0, tex, nrm, 3, sky, blk);
+    o.vert(b[0], b[1], b[2], u1, v0, tex, nrm, 3, sky, blk);
+    o.vert(c[0], c[1], c[2], u1, v1, tex, nrm, 3, sky, blk);
+    o.vert(d[0], d[1], d[2], u0, v1, tex, nrm, 3, sky, blk);
+    this.flips.cutout.push(0);
+  }
+};
 
 // For each direction, the region steps (t1, t2) from the cell in front of the face to the
 // cells that touch each of the quad's four corners, in the corner order quad() emits.

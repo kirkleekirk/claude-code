@@ -15,7 +15,15 @@ const BASE = 'local-assets/items/';
 
 // CMZColors, the original's colours for what things are made of
 const MAT = { wood: 0x8b4513, stone: 0xa9a9a9, copper: 0xb87333, iron: 0x808080, gold: 0xffd700, diamond: 0x00ffff, bloodstone: 0x8b0000 };
-const COAL = 0x000000, BRASS = 0xeae396, DARK_GRAY = 0xa9a9a9;
+const COAL = 0x000000, BRASS = 0xeae396, DARK_GRAY = 0xa9a9a9, WHITE = 0xffffff;
+// the ores' chunks (CMZColors.IronOre, CopperOre; gold ore is just gold)
+const ORES = { coal: [COAL, COAL], iron_ore: [0xb7410e, WHITE], copper_ore: [0x639283, WHITE], gold_ore: [MAT.gold, WHITE] };
+// the Ammo model's bullet and its case, for each kind of round (a casing is the case alone)
+const AMMO = {
+  bullets: [DARK_GRAY, BRASS], bullets_iron: [0xd3d3d3, BRASS], bullets_gold: [0xffd700, MAT.iron], bullets_diamond: [0x00ffff, MAT.gold],
+  bullets_bloodstone: [0x8b0000, MAT.diamond], bullets_laser: [0x32cd32, DARK_GRAY],
+  casing_brass: [null, BRASS], casing_iron: [null, MAT.iron], casing_gold: [null, MAT.gold], casing_diamond: [null, MAT.diamond],
+};
 
 const X = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0);
 const place = (q, p, s = 1) => ({ q, p: new THREE.Vector3(...p), s });
@@ -35,16 +43,27 @@ export function heldSpec(id) {
   const it = id ? ITEMS[id] : null;
   if (!it) return { mode: 'fist' };
   if (it.kind === 'tool' && it.tool === 'compass') return { model: 'compass', at: COMPASS, mode: 'generic', compass: true };
+  // the clock, the locator and the teleporter sit in the hand as the compass does
+  if (it.kind === 'tool' && (it.tool === 'clock' || it.tool === 'locator' || it.tool === 'teleporter')) return { model: it.tool, at: COMPASS, mode: 'generic' };
+  // a laser sword is held as it is, its beam the colour of what it's made of
+  if (it.kind === 'tool' && it.laser) return { model: 'saber', at: HAND, mode: 'tool', beam: it.beam };
   if (it.kind === 'tool') return { model: { pick: 'pickaxe', spade: 'spade', axe: 'axe' }[it.tool], at: TOOL, mode: 'tool', tint: MAT[it.mat] };
   if (it.kind === 'melee') return { model: 'knife', at: HAND, mode: 'tool', tint: MAT[it.mat] };
+  // a rocket launcher has its rocket in the barrel (the guided one is grey)
+  if (it.kind === 'gun' && it.gun === 'rocket') return { model: 'rpg', at: HAND, mode: 'rpg', gun: true, rocket: true, shade: it.guided ? 0x808080 : WHITE };
+  if (it.kind === 'gun' && it.laser) return { model: `laser_${it.gun}`, at: HAND, mode: `laser_${it.gun}`, tint: it.color, gun: true };
   if (it.kind === 'gun') return { model: it.gun, at: HAND, mode: it.gun, tint: MAT[it.mat], gun: true };
+  if (it.kind === 'grenade') return { model: 'grenade', at: HAND, mode: 'grenade' };
   if (id === 'torch') return { own: true, at: TORCH, mode: 'tool' };
+  if (it.door) return { model: 'door', at: { ...TOOL, s: 0.1 }, mode: 'block' };
   if (it.kind === 'block') return { block: it.block, at: BLOCK, mode: 'block' };
   if (id === 'stick') return { model: 'pickaxe', at: TOOL, mode: 'generic', tint: null };
-  if (id === 'coal') return { model: 'ore', at: ORE, mode: 'generic', tint: COAL, tint2: COAL };
+  if (ORES[id]) return { model: 'ore', at: ORE, mode: 'generic', tint: ORES[id][0], tint2: ORES[id][1] };
   if (id === 'copper' || id === 'iron' || id === 'gold') return { model: 'bars', at: SMALL, mode: 'generic', tint: MAT[id] };
   if (id === 'diamond') return { model: 'gems', at: SMALL, mode: 'generic', tint: MAT.diamond };
-  if (id === 'bullets') return { model: 'ammo', at: SMALL, mode: 'generic', tint: DARK_GRAY, tint2: BRASS };
+  if (AMMO[id]) return { model: 'ammo', at: SMALL, mode: 'generic', tint: AMMO[id][0], tint2: AMMO[id][1] };
+  if (id === 'rockets') return { model: 'rocket', at: SMALL, mode: 'generic' };
+  if (id === 'gunpowder' || id === 'explosive_powder') return { model: 'gunpowder', at: SMALL, mode: 'generic', tint: id === 'gunpowder' ? WHITE : 0xff0000 };
   return { own: true, at: SMALL, mode: 'generic' };
 }
 
@@ -111,14 +130,17 @@ export class HeldItems {
       m.traverse((o) => {
         if (o.name === 'BarrelTip') out.muzzle = o;
         if (!o.isMesh) return;
-        const tint = o.name.includes('recolor2_') ? spec.tint2 ?? 0xffffff : o.name.includes('recolor_') ? spec.tint : 0xffffff;
+        const tint = o.name.includes('recolor2_') ? spec.tint2 ?? 0xffffff : o.name.includes('recolor_') ? spec.tint : spec.shade ?? 0xffffff;
         if (tint === null) { o.visible = false; return; }
         const src = o.material;
         const spec2 = src.userData?.specular?.[0] ?? 0;
-        o.geometry = paint(o.geometry.clone(), tint, Math.min(0.6, spec2 * 1.4));
+        // (a laser sword's beam glows)
+        if (o.name === 'Beam' && spec.beam != null) o.geometry = paint(o.geometry.clone(), spec.beam, 0, 1.2);
+        else o.geometry = paint(o.geometry.clone(), tint, Math.min(0.6, spec2 * 1.4));
         o.material = this.material(src.map);
         o.frustumCulled = false;
       });
+      if (spec.rocket && out.muzzle && this.L.models.rocket) this.loadRocket(m, out.muzzle);
       if (spec.compass) {
         const turn = new THREE.Group();
         turn.add(m);
@@ -138,6 +160,29 @@ export class HeldItems {
       }
     }
     return out;
+  }
+
+  // The rocket in a launcher's barrel (RocketLauncherBaseInventoryItemClass.CreateEntity): just
+  // off the barrel's tip, pointing the way the barrel does, at 0.65 of its size.
+  loadRocket(gun, tip) {
+    gun.updateMatrixWorld(true);
+    tip.updateMatrix();
+    const left = new THREE.Vector3().setFromMatrixColumn(tip.matrix, 0).negate().normalize();
+    const at = new THREE.Vector3(0.01, -0.005, 0.01).applyMatrix4(tip.matrix);
+    // XNA's CreateWorld: its forward (-z) along the barrel, kept upright
+    const z = left.clone().negate(), x = new THREE.Vector3(0, 1, 0).cross(z).normalize(), y = z.clone().cross(x);
+    const r = this.L.models.rocket.scene.clone(true);
+    r.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+    r.position.copy(at);
+    r.scale.setScalar(0.65);
+    r.traverse((o) => {
+      if (!o.isMesh) return;
+      const src = o.material;
+      o.geometry = paint(o.geometry.clone(), 0xffffff, 0);
+      o.material = this.material(src.map);
+      o.frustumCulled = false;
+    });
+    (tip.parent || gun).add(r);
   }
 
   setLight(v) {

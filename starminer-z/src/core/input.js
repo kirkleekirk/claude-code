@@ -106,7 +106,9 @@ export class Input {
     if (this.held.has('back')) my -= 1;
     if (this.held.has('right')) mx += 1;
     if (this.held.has('left')) mx -= 1;
-    let lx = this.mouse.dx * 0.0022 * this.sens, ly = this.mouse.dy * 0.0022 * this.sens;
+    // (aim: set by the game while a gun's at the shoulder, how much slower to turn)
+    const ms = this.aim?.mouse ?? 1, ps = this.aim?.pad ?? 1;
+    let lx = this.mouse.dx * 0.0022 * this.sens * ms, ly = this.mouse.dy * 0.0022 * this.sens * ms;
     this.mouse.dx = this.mouse.dy = 0;
     // gamepad
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
@@ -120,8 +122,8 @@ export class Input {
       mx += ax; my -= ay;
       // response curve: fine aim near the centre, fast turns at the edge
       const curve = (v) => Math.sign(v) * Math.pow(Math.abs(v), 1.8);
-      lx += curve(rx) * 3.2 * dt * this.sens;
-      ly += curve(ry) * 2.4 * dt * this.sens;
+      lx += curve(rx) * 3.2 * dt * this.sens * ps;
+      ly += curve(ry) * 2.4 * dt * this.sens * ps;
       pad.buttons.forEach((b, i) => {
         const a = PADMAP[i];
         if (!a) return;

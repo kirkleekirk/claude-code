@@ -120,7 +120,9 @@ export class ViewModel {
     this.equip = 0;
     this.reload = 0;
     const it = id ? ITEMS[id] : null;
-    this.kind = !it ? 'hand' : it.kind === 'gun' ? 'gun' : it.kind === 'block' && id !== 'torch' ? 'block' : it.kind === 'tool' && it.tool === 'compass' ? 'compass' : it.kind === 'melee' ? 'knife' : it.kind === 'tool' ? 'tool' : id === 'torch' ? 'torch' : 'small';
+    this.kind = !it ? 'hand' : it.kind === 'gun' ? 'gun' : it.kind === 'block' && id !== 'torch' && !it.door ? 'block'
+      : it.kind === 'tool' && ['compass', 'clock', 'locator', 'teleporter'].includes(it.tool) ? 'compass' : it.kind === 'melee' ? 'knife'
+        : it.kind === 'tool' && it.laser ? 'knife' : it.kind === 'tool' ? 'tool' : id === 'torch' ? 'torch' : 'small';
     if (!it) return;
     if (this.kind === 'block') {
       const mesh = new THREE.Mesh(blockItemGeometry(), this.blockMats.get(it.block));
@@ -130,7 +132,7 @@ export class ViewModel {
       const m = itemModel(id);
       if (!m) return;
       const mesh = new THREE.Mesh(m.geo, this.mat);
-      this.info = m.info || {};
+      this.info = it.kind === 'gun' ? { ...(m.info || {}), scope: !!it.scoped } : m.info || {};
       if (m.needle) {
         this.needle = new THREE.Mesh(m.needle, this.mat);
         this.needle.position.set(0, 0.013, 0);

@@ -304,7 +304,90 @@ const painters = {
     const streak = Math.abs((u + v) - 0.6) < 0.03 || Math.abs((u + v) - 0.75) < 0.015;
     return streak ? [240, 250, 255, 200] : [0, 0, 0, 0];
   },
+  // the original's explosives: a bundle of sticks with a paper band round it, red for TNT and
+  // green for C4, and the sticks' ends on top
+  tnt_side: (u, v) => sticksSide(u, v, 0xb3261c, 0x6a1208, 'TNT', 301),
+  tnt_top: (u, v) => sticksTop(u, v, 0xc23a24, 0x5a1006, 0xe8b070, 303),
+  c4_side: (u, v) => sticksSide(u, v, 0x2c7a30, 0x0e3a12, 'C4', 305),
+  c4_top: (u, v) => sticksTop(u, v, 0x3a8a3a, 0x0e3010, 0xc8a070, 307),
+  // Space Goo: a glowing green, darker where it's thick
+  slime: (u, v) => {
+    const n = fbm(u, v, 4, 4, 311), w = worley(u, v, 4, 313);
+    let c = mixc(hex(0x1e8a2a), hex(0x8cff7a), clamp(0.55 + n * 0.8));
+    c = mixc(c, hex(0x0a4a14), smooth(0.25, 0.0, w.f1) * 0.5);
+    // bubbles catching the light
+    if (w.f1 < 0.06 && w.id > 0.5) c = mixc(c, hex(0xe8ffd8), 0.7);
+    return c;
+  },
+  // the rock that fell from space: near black, with a glassy blue fleck
+  space_rock: (u, v) => {
+    let c = rockColor(u, v, 321, 0x4a4a52, 0x24242a);
+    const w = worley(u, v, 7, 323);
+    if (w.f1 < 0.09 * (0.5 + w.id)) c = mixc(c, hex(0x6a8aa8), 0.6 * smooth(0.09, 0.0, w.f1));
+    if (hashi(Math.floor(u * N), Math.floor(v * N), 325) < 0.02) c = mixc(c, hex(0xa8c8e8), 0.6);
+    return c;
+  },
+  // a plank door in its frame: the lower half with the handle, the upper with a brace
+  door_lower: (u, v) => doorPanel(u, v, false),
+  door_upper: (u, v) => doorPanel(u, v, true),
 };
+
+// a 3 x 5 block letter (rows top to bottom), for the explosives' bands
+const GLYPHS = { T: ['111', '010', '010', '010', '010'], N: ['101', '111', '111', '111', '101'], C: ['111', '100', '100', '100', '111'], 4: ['101', '101', '111', '001', '001'] };
+function glyphAt(text, u, v, u0, v0, cell) {
+  const w = text.length * 4 - 1;
+  const gx = Math.floor((u - u0) / cell), gy = Math.floor((v - v0) / cell);
+  if (gx < 0 || gy < 0 || gx >= w || gy >= 5) return false;
+  const ch = text[Math.floor(gx / 4)], col = gx % 4;
+  return col < 3 && GLYPHS[ch][gy][col] === '1';
+}
+
+function sticksSide(u, v, base, dark, label, seed) {
+  // six sticks across, each shaded round
+  const k = (u * 6) % 1;
+  const round = Math.sin(k * Math.PI);
+  let c = mixc(hex(dark), hex(base), 0.35 + 0.65 * round);
+  c = mulc(c, 0.92 + 0.12 * pnoise(u, v, 16, seed));
+  // the paper band, with the name on it
+  if (v > 0.36 && v < 0.64) {
+    c = mixc(hex(0xb8b4a8), hex(0xf0ece0), 0.4 + 0.6 * round * 0.5 + 0.3);
+    const cell = 0.045, w = (label.length * 4 - 1) * cell;
+    if (glyphAt(label, u, v, 0.5 - w / 2, 0.5 - 2.5 * cell, cell)) c = hex(0x1c1a18);
+  }
+  return c;
+}
+
+function sticksTop(u, v, base, dark, fuse, seed) {
+  // the sticks' ends, six by six, and a fuse in the middle
+  const cu = (u * 6) % 1 - 0.5, cv = (v * 6) % 1 - 0.5;
+  const r = Math.hypot(cu, cv);
+  if (r > 0.46) return mulc(hex(dark), 0.6);
+  let c = mixc(hex(base), hex(dark), smooth(0.25, 0.46, r));
+  c = mixc(c, hex(fuse), smooth(0.14, 0.05, r));
+  return mulc(c, 0.92 + 0.12 * pnoise(u, v, 16, seed));
+}
+
+function doorPanel(u, v, upper) {
+  const fx = Math.min(u, 1 - u);
+  const grain = pnoise(u * 4, v * 0.4, 16, upper ? 333 : 331);
+  // four planks
+  const plank = Math.floor(u * 4), pu = (u * 4) % 1;
+  let c = mixc(hex(0x6e4826), hex(0x9a6c3c), clamp(0.5 + grain + 0.06 * (plank % 2)));
+  if (pu < 0.06) c = mulc(c, 0.6);
+  // the frame
+  if (fx < 0.08) c = mulc(hex(0x5a3a1e), 0.9 + 0.2 * grain);
+  if (upper) {
+    if (v < 0.08) c = mulc(hex(0x5a3a1e), 0.9 + 0.2 * grain);
+    // a brace across
+    if (Math.abs(v - 0.55) < 0.07 && fx >= 0.08) c = mulc(hex(0x7a5230), 0.85 + 0.2 * grain);
+  } else {
+    if (v > 0.92) c = mulc(hex(0x5a3a1e), 0.9 + 0.2 * grain);
+    if (Math.abs(v - 0.3) < 0.07 && fx >= 0.08) c = mulc(hex(0x7a5230), 0.85 + 0.2 * grain);
+    // the handle
+    if (Math.hypot(u - 0.8, v - 0.12) < 0.05) c = hex(0x2a2a2c);
+  }
+  return c;
+}
 
 function orePainter(seed, colors, opts = {}) {
   return (u, v) => {

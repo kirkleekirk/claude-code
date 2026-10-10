@@ -9,7 +9,8 @@ import { Renderer, QUALITY } from './gfx/renderer.js';
 import { Sky } from './gfx/sky.js';
 import { makeTerrainMaterials } from './gfx/terrainMaterial.js';
 import { blockTextureArray } from './gfx/blockTextures.js';
-import { buildIcons } from './items/icons.js';
+import { buildIcons, buildCmzIcons } from './items/icons.js';
+import { loadUiSheet } from './ui/sheet.js';
 import { Input } from './core/input.js';
 import { injectCSS } from './ui/style.js';
 import { Menus, MENU_CSS } from './ui/menus.js';
@@ -122,9 +123,11 @@ export class App {
     // the original's own bodies for the dead, and its clips and items for the player, if the
     // ripped files are there
     const cmzOn = !params.has('nocmz');
-    const [, cmz, clips, items] = await Promise.all([loadAvatarAssets(), cmzOn && loadCmzBodies(), cmzOn && loadCmzClips(), cmzOn && loadCmzItems()]);
+    const [, cmz, clips, items] = await Promise.all([loadAvatarAssets(), cmzOn && loadCmzBodies(), cmzOn && loadCmzClips(), cmzOn && loadCmzItems(), cmzOn && loadUiSheet()]);
     this.cmzBodies = cmz || null;
     this.cmzPlayer = clips && items ? { clips, items } : null;
+    // the icons from the original's own models
+    if (items) buildCmzIcons(gl, items);
     this.menus.setLoading(0.6);
     this.audio = new Audio(this);
     // sound can only start once the player has done something

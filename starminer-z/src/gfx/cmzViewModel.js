@@ -108,7 +108,8 @@ export class CmzViewModel {
     this.anim.setMode(this.item.spec.mode);
     // what the game asks of a gun (its scope, and so on)
     const it = id ? ITEMS[id] : null;
-    this.info = it && it.kind === 'gun' ? (itemModel(id)?.info || {}) : {};
+    // (only the guns the original calls Scoped look through a scope at the shoulder)
+    this.info = it && it.kind === 'gun' ? { ...(itemModel(id)?.info || {}), scope: !!it.scoped } : {};
     this.swing = 0; this.swinging = false;
     this.reload = 0;
   }

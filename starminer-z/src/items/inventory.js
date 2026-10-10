@@ -1,5 +1,6 @@
 // The player's items: 8 hotbar slots and 32 in the backpack, as in the original.
-// A slot is null or { id, count, dur, mag } (dur: wear left on a tool; mag: rounds loaded in a gun).
+// A slot is null or { id, count, dur, mag } (dur: uses left in something that wears out, out of
+// its item's `uses`; mag: rounds loaded in a gun).
 // On the inventory screen a stack can be lifted out of its slot into the hand, as the original's
 // screen holds one: { s, from }.
 
@@ -24,7 +25,7 @@ export class Inventory {
   make(id, count = 1) {
     const it = ITEMS[id];
     const s = { id, count };
-    if (it.durability) s.dur = it.durability;
+    if (it.uses) s.dur = it.uses;
     if (it.kind === 'gun') s.mag = it.mag;
     return s;
   }
@@ -88,11 +89,12 @@ export class Inventory {
     return true;
   }
 
-  // Wear the held tool down; it breaks at zero.
+  // Wear the held thing by one use (the original's InflictDamage: twice over when nothing's used
+  // up, as in Creative); it's gone once it's worn through. Returns true when it is.
   wearHeld(n = 1) {
     const s = this.slots[this.selected];
     if (!s || s.dur == null) return false;
-    s.dur -= n;
+    s.dur -= this.infinite ? n * 2 : n;
     if (s.dur <= 0) { this.slots[this.selected] = null; this.changed(); return true; }
     return false;
   }
@@ -101,6 +103,8 @@ export class Inventory {
     return recipe.in.every(([id, n]) => this.count(id) >= n);
   }
 
+  // The original's Craft: the components out of the backpack, then the hotbar (in Creative,
+  // nothing's used up), and what's made in where it fits.
   craft(recipe) {
     if (!this.canCraft(recipe)) return false;
     // make sure there's room for what comes out
@@ -108,9 +112,49 @@ export class Inventory {
     const free = this.slots.filter((s) => !s).length;
     const stackRoom = this.slots.reduce((a, s) => a + (s && s.id === recipe.out ? it.stack - s.count : 0), 0);
     if (free === 0 && stackRoom < recipe.n) return false;
-    for (const [id, n] of recipe.in) this.remove(id, n);
+    if (!this.infinite) for (const [id, n] of recipe.in) this.remove(id, n);
     this.add(recipe.out, recipe.n);
     return true;
+  }
+
+  // ---- what you know how to make --------------------------------------------------------------
+
+  // The original's Discovered: a recipe is known once you carry what it makes, one of its
+  // components, or a gun it makes the bullets for.
+  discovered(recipe) {
+    for (const s of this.slots) {
+      if (!s) continue;
+      if (s.id === recipe.out) return true;
+      const it = ITEMS[s.id];
+      if (it.kind === 'gun' && it.ammo === recipe.out) return true;
+      if (recipe.in.some(([id]) => id === s.id)) return true;
+    }
+    return false;
+  }
+
+  // The original's DiscoverRecipies: what you can make now, then the rest of what you know of,
+  // then the recipes for their components (and theirs), in the cookbook's order. Knowing
+  // nothing, the first recipe.
+  discoveredRecipes(cookbook) {
+    const out = [], seen = new Set();
+    const take = (r) => { if (!seen.has(r)) { seen.add(r); out.push(r); } };
+    for (const r of cookbook) if (this.discovered(r) && this.canCraft(r)) take(r);
+    for (const r of cookbook) if (this.discovered(r) && !this.canCraft(r)) take(r);
+    for (let i = 0; i < out.length; i++) {
+      for (const [id] of out[i].in) for (const r of cookbook) if (r.out === id) take(r);
+    }
+    if (!out.length && cookbook.length) out.push(cookbook[0]);
+    return out;
+  }
+
+  // Everything in the backpack (and, all: the hotbar too) out of it, as stacks to drop (the
+  // original's DropAll, on dying).
+  takeAll(all = false) {
+    const out = [];
+    for (let i = all ? 0 : HOTBAR; i < this.slots.length; i++) if (this.slots[i]) { out.push(this.slots[i]); this.slots[i] = null; }
+    if (all && this.hand) { out.push(this.hand.s); this.hand = null; }
+    this.changed();
+    return out;
   }
 
   swap(a, b) {

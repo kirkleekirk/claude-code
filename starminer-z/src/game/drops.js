@@ -18,11 +18,13 @@ export class Drops {
     scene.add(this.group);
   }
 
-  spawn(id, count, x, y, z, v = null) {
+  // slot: the very stack, when it's one that was carried (a worn tool keeps its wear, a gun what's
+  // in its clip); thrown: dropped by the player, who has a moment to get away from it
+  spawn(id, count, x, y, z, v = null, slot = null, thrown = false) {
     const it = ITEMS[id];
     if (!it) return;
     let mesh;
-    if (it.kind === 'block' && id !== 'torch') {
+    if (it.kind === 'block' && id !== 'torch' && !it.door) {
       mesh = new THREE.Mesh(this.blockGeo(), this.blockMatFor(it.block));
       mesh.scale.setScalar(0.25);
     } else {
@@ -33,7 +35,7 @@ export class Drops {
     }
     mesh.position.set(x, y, z);
     this.group.add(mesh);
-    this.list.push({ id, count, mesh, v: v || new THREE.Vector3((Math.random() - 0.5) * 2.5, 3 + Math.random() * 1.5, (Math.random() - 0.5) * 2.5), age: 0, spin: Math.random() * 6, rest: false });
+    this.list.push({ id, count, slot, mesh, v: v || new THREE.Vector3((Math.random() - 0.5) * 2.5, 3 + Math.random() * 1.5, (Math.random() - 0.5) * 2.5), age: thrown ? -2 : 0, spin: Math.random() * 6, rest: false });
   }
 
   // returns the drops picked up this frame: [{ id, count }]
@@ -51,7 +53,9 @@ export class Drops {
         d.v.lerp(to.normalize().multiplyScalar(9), Math.min(1, dt * 10));
         p.addScaledVector(d.v, dt);
         if (dist < 0.45) {
-          const left = inventory.add(d.id, d.count);
+          let left;
+          if (d.slot) { const rest = inventory.stow({ ...d.slot, count: d.count }); left = rest ? rest.count : 0; }
+          else left = inventory.add(d.id, d.count);
           if (left < d.count) out.push({ id: d.id, count: d.count - left });
           if (left > 0) { d.count = left; d.age = -1.5; continue; }
           this.group.remove(d.mesh);

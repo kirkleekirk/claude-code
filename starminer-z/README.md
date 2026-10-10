@@ -43,6 +43,13 @@ The zones run in rings out from the tower, as in the original:
 Then the zones come round again in reverse. Under everything, about forty blocks down, a
 bloodstone roof over the Underworld.
 
+Items and crafting are the later CastleMiner Z's, with its own numbers: the bloodstone tier, light
+machine guns, laser guns and swords, rocket launchers, grenades, TNT and C4, crates, doors, the
+clock, locator and teleporter, and its 107 recipes. The inventory and crafting screens are laid
+out as its are: you learn a recipe once you carry what it makes, one of the things it takes, or
+a gun it makes the bullets for. Tools and guns wear out as they're used. When you die, your
+backpack falls where you fell; the hotbar stays with you.
+
 Controls: keyboard and mouse, an Xbox controller, or touch (see Help & Controls in the game).
 
 ### Playing online
@@ -121,10 +128,11 @@ None of these files are in this repository. They come out of your own copy of th
 python3 tools/cmz/rip_audio.py  <Content> local-assets/audio    # needs ffmpeg
 python3 tools/cmz/rip_models.py <Content> local-assets/models
 python3 tools/cmz/rip_player.py <Content> local-assets          # avatar clips and held items
+python3 tools/cmz/rip_ui.py     <Content> local-assets          # the inventory and crafting panel
 ```
 
-Without them the game is silent, the dead are built on the avatar rig, and what you hold is drawn
-from parts.
+Without them the game is silent, the dead are built on the avatar rig, what you hold is drawn
+from parts, and the inventory has a panel of its own.
 
 ## Credits
 

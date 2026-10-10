@@ -606,15 +606,16 @@ export class WorldGen {
       for (let y = y0; y <= base + h; y++) for (let x = -r; x <= r; x++) for (let z = -r; z <= r; z++) put(x, y, z, B.BEDROCK);
       y0 = base + h + 1;
     }
-    // the lantern tip: a lantern on each corner of the top and a stack in the middle
+    // the lantern tip: a lantern on each corner of the top and a stack in the middle (the
+    // original's FixedLanterns, that no one can dig out)
     const top = base + TOWER.height;
     const r = TOWER.tiers[TOWER.tiers.length - 1][0];
-    for (const [x, z] of [[-r, -r], [r, -r], [-r, r], [r, r]]) put(x, top + 1, z, B.LANTERN);
-    put(0, top + 1, 0, B.LANTERN);
-    put(0, top + 2, 0, B.LANTERN);
-    put(0, top + 3, 0, B.LANTERN);
+    for (const [x, z] of [[-r, -r], [r, -r], [-r, r], [r, r]]) put(x, top + 1, z, B.FIXED_LANTERN);
+    put(0, top + 1, 0, B.FIXED_LANTERN);
+    put(0, top + 2, 0, B.FIXED_LANTERN);
+    put(0, top + 3, 0, B.FIXED_LANTERN);
     // and one on each ledge where the tower steps in
-    for (const [tr, th] of TOWER.tiers.slice(0, -1)) for (const [x, z] of [[-tr, -tr], [tr, -tr], [-tr, tr], [tr, tr]]) put(x, base + th + 1, z, B.LANTERN);
+    for (const [tr, th] of TOWER.tiers.slice(0, -1)) for (const [x, z] of [[-tr, -tr], [tr, -tr], [-tr, tr], [tr, tr]]) put(x, base + th + 1, z, B.FIXED_LANTERN);
   }
 
   // Where a new player stands: south of the tower, about thirty meters out, on the ground.

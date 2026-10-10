@@ -1,4 +1,6 @@
-// Every block type in the world, shared by the main thread and the world workers.
+// Every block type in the world, shared by the main thread and the world workers: CastleMiner
+// Z's (its later updates' too: TNT and C4, the doors, Space Goo and space rock from the crash
+// sites, the lantern fixed atop the start tower), with a few of this game's own.
 //
 // id: a byte in the chunk arrays. tex: texture layer names (see gfx/blockTextures.js),
 // either one name for all faces or { top, bottom, side }. render: how the mesher draws it.
@@ -38,6 +40,24 @@ export const B = {
   TORCH_NX: 29,
   TORCH_PZ: 30,
   TORCH_NZ: 31,
+  TNT: 32,
+  C4: 33,
+  // Space Goo, glowing where the aliens' rock came down
+  SLIME: 34,
+  // a crash site's rock, and the same put down by a player
+  SPACE_ROCK: 35,
+  SPACE_ROCK_BUILT: 36,
+  // the lantern at the top of the start tower: it can't be dug
+  FIXED_LANTERN: 37,
+  // doors: a lower and an upper half, shut or open, in a wall along x or along z
+  DOOR_LOWER_X: 38,
+  DOOR_LOWER_Z: 39,
+  DOOR_UPPER_X: 40,
+  DOOR_UPPER_Z: 41,
+  DOOR_LOWER_OPEN_X: 42,
+  DOOR_LOWER_OPEN_Z: 43,
+  DOOR_UPPER_OPEN_X: 44,
+  DOOR_UPPER_OPEN_Z: 45,
 };
 
 // Texture layers, in array order. The mesher refers to layers by index.
@@ -46,6 +66,7 @@ export const TEXTURES = [
   'wood', 'coal_ore', 'copper_ore', 'iron_ore', 'gold_ore', 'diamond_ore', 'bedrock', 'lava', 'bloodstone',
   'lantern', 'torch', 'tower_stone', 'tower_top', 'copper_wall', 'iron_wall', 'gold_wall', 'diamond_wall',
   'crate_side', 'crate_top', 'glass', 'snow_side', 'lantern_top',
+  'tnt_side', 'tnt_top', 'c4_side', 'c4_top', 'slime', 'space_rock', 'door_lower', 'door_upper',
 ];
 export const TEX = Object.fromEntries(TEXTURES.map((n, i) => [n, i]));
 
@@ -56,7 +77,7 @@ function def(id, props) {
     name: props.name,
     solid: props.solid ?? true,
     opaque: props.opaque ?? true,
-    render: props.render ?? 'opaque', // 'none' | 'opaque' | 'cutout' | 'translucent' | 'torch'
+    render: props.render ?? 'opaque', // 'none' | 'opaque' | 'cutout' | 'translucent' | 'torch' | 'door'
     light: props.light ?? 0,
     hardness: props.hardness ?? 1,
     tool: props.tool ?? 'pick',
@@ -110,19 +131,39 @@ def(B.CRATE, { name: 'Crate', tex: { top: 'crate_top', bottom: 'crate_top', side
 def(B.GLASS, { name: 'Glass', tex: 'glass', opaque: false, render: 'cutout', hardness: 0.4, tool: 'none', sound: 'glass', color: 0xd0e8f0, drop: 0 });
 for (const id of [B.TORCH_PX, B.TORCH_NX, B.TORCH_PZ, B.TORCH_NZ]) def(id, { name: 'Torch', tex: 'torch', solid: false, opaque: false, render: 'torch', light: 13, hardness: 0.05, tool: 'none', sound: 'wood', color: 0xffa040, drop: B.TORCH });
 def(B.SNOW_GRASS, { name: 'Snow', tex: { top: 'snow', side: 'snow_side', bottom: 'dirt' }, hardness: 0.7, tool: 'spade', drop: B.DIRT, sound: 'snow', color: 0xe8eef4 });
+def(B.TNT, { name: 'TNT', tex: { top: 'tnt_top', bottom: 'tnt_top', side: 'tnt_side' }, hardness: 1, tool: 'spade', sound: 'dirt', color: 0xb02a1e });
+def(B.C4, { name: 'C4', tex: { top: 'c4_top', bottom: 'c4_top', side: 'c4_side' }, hardness: 1, tool: 'spade', sound: 'dirt', color: 0x2a6a2a });
+def(B.SLIME, { name: 'Space Goo', tex: 'slime', light: 15, emissive: 0.7, hardness: 4, tier: 6, sound: 'dirt', color: 0x40c040 });
+def(B.SPACE_ROCK, { name: 'Space Rock', tex: 'space_rock', hardness: 4, tier: 6, sound: 'stone', color: 0x4a4a50 });
+def(B.SPACE_ROCK_BUILT, { name: 'Space Rock', tex: 'space_rock', hardness: 4, tier: 6, sound: 'stone', color: 0x4a4a50 });
+def(B.FIXED_LANTERN, { name: 'Lantern', tex: { top: 'lantern_top', bottom: 'lantern_top', side: 'lantern' }, light: 15, emissive: 0.85, breakable: false, sound: 'glass', color: 0xffd060 });
+// a door is a panel, not a cube; shut, it stops you (and the dead) like a wall
+for (const [id, upper, open] of [[B.DOOR_LOWER_X, 0, 0], [B.DOOR_LOWER_Z, 0, 0], [B.DOOR_UPPER_X, 1, 0], [B.DOOR_UPPER_Z, 1, 0],
+  [B.DOOR_LOWER_OPEN_X, 0, 1], [B.DOOR_LOWER_OPEN_Z, 0, 1], [B.DOOR_UPPER_OPEN_X, 1, 1], [B.DOOR_UPPER_OPEN_Z, 1, 1]]) {
+  def(id, { name: 'Door', tex: upper ? 'door_upper' : 'door_lower', solid: !open, opaque: false, render: 'door', hardness: 1, tool: 'none', sound: 'wood', color: 0x8a6438, drop: B.DOOR_LOWER_X });
+}
 
 export const BLOCKS = defs;
 export const BLOCK_COUNT = defs.length;
 export const isTorch = (id) => id === B.TORCH || (id >= B.TORCH_PX && id <= B.TORCH_NZ);
+export const isDoor = (id) => id >= B.DOOR_LOWER_X && id <= B.DOOR_UPPER_OPEN_Z;
+// a door's parts: is it the upper half, is it open, does its panel run along x
+export const DOOR = (id) => ({ upper: [B.DOOR_UPPER_X, B.DOOR_UPPER_Z, B.DOOR_UPPER_OPEN_X, B.DOOR_UPPER_OPEN_Z].includes(id),
+  open: id >= B.DOOR_LOWER_OPEN_X, alongX: [B.DOOR_LOWER_X, B.DOOR_UPPER_X, B.DOOR_LOWER_OPEN_X, B.DOOR_UPPER_OPEN_X].includes(id) });
+// the door block with these parts
+export function doorBlock(upper, open, alongX) {
+  if (open) return upper ? (alongX ? B.DOOR_UPPER_OPEN_X : B.DOOR_UPPER_OPEN_Z) : (alongX ? B.DOOR_LOWER_OPEN_X : B.DOOR_LOWER_OPEN_Z);
+  return upper ? (alongX ? B.DOOR_UPPER_X : B.DOOR_UPPER_Z) : (alongX ? B.DOOR_LOWER_X : B.DOOR_LOWER_Z);
+}
 
 // Flat lookup tables for the hot loops in the mesher and the physics.
 export const OPAQUE = new Uint8Array(256);
 export const SOLID = new Uint8Array(256);
 export const LIGHT = new Uint8Array(256);
-export const RENDER = new Uint8Array(256); // 0 none, 1 opaque, 2 cutout, 3 translucent, 4 torch
+export const RENDER = new Uint8Array(256); // 0 none, 1 opaque, 2 cutout, 3 translucent, 4 torch, 5 door
 export const FACES = new Uint8Array(256 * 6);
 export const EMISSIVE = new Uint8Array(256);
-const R = { none: 0, opaque: 1, cutout: 2, translucent: 3, torch: 4 };
+const R = { none: 0, opaque: 1, cutout: 2, translucent: 3, torch: 4, door: 5 };
 for (const d of defs) {
   if (!d) continue;
   OPAQUE[d.id] = d.opaque ? 1 : 0;

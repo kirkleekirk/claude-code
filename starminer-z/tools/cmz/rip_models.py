@@ -1,5 +1,5 @@
-# Exports CastleMiner Z's enemies from your own copy of the game: the zombie and the four
-# skeletons (meshes, skins and every animation clip) as glTF binaries (.glb) for three.js, and
+# Exports CastleMiner Z's enemies from your own copy of the game: the zombie, the four skeletons,
+# the alien, the felguard and the dragon (meshes, skins and every animation clip) as glTF binaries (.glb) for three.js, and
 # their skins (the texture variants the game swaps between) as PNGs. Writes <out>/<name>.glb,
 # <out>/<texture>.png and <out>/index.json. The ripped files are DigitalDNA's: they stay in
 # local-assets/, which git ignores.
@@ -15,12 +15,23 @@ MODELS = {
     'skeleton_axes': 'Enemies/Skeletons/SkeletonAxes',
     'skeleton_sword': 'Enemies/Skeletons/SkeletonSword',
     'skeleton_archer': 'Enemies/Skeletons/SkeletonArcher',
+    # the later updates': the alien, the felguard (the demon of Hell), and the dragon, drawn as a
+    # body and, below it, its feet
+    'alien': 'Enemies/Alien/alien',
+    'felguard': 'Enemies/Demon/Demon',
+    'dragon': 'Enemies/Dragon/DragonBodyHigh',
+    'dragon_feet': 'Enemies/Dragon/DragonFeetHigh',
 }
 # EnemyType's texture table, in its order: zombies 0-6, skeletons 7-11
 TEXTURES = ['Enemies/Zombies/zombie-01_0', 'Enemies/Zombies/zombie-06', 'Enemies/Zombies/zombie-10', 'Enemies/Zombies/zombie-11',
             'Enemies/Zombies/zombie-13', 'Enemies/Zombies/zombie-14', 'Enemies/Zombies/zombie-17',
             'Enemies/Skeletons/skele-01_0', 'Enemies/Skeletons/skele-04', 'Enemies/Skeletons/skele-05', 'Enemies/Skeletons/skele-06',
-            'Enemies/Skeletons/skele-07']
+            'Enemies/Skeletons/skele-07',
+            # then the felguard's (12) and the alien's (13), and the dragons' (14-18, in DragonType's
+            # texture table's order: fire, forest, ice, lizard, skeleton)
+            'Enemies/Demon/demon_0', 'Enemies/Alien/warrior_0',
+            'Enemies/Dragon/dragon-01_0', 'Enemies/Dragon/dragon-09', 'Enemies/Dragon/dragon-25', 'Enemies/Dragon/dragon-27',
+            'Enemies/Dragon/dragon-35']
 
 FLOAT, USHORT, UBYTE, SHORT = 5126, 5123, 5121, 5122
 # the skeletons share one rig and one set of clips: the clips go in the first, the others are meshes

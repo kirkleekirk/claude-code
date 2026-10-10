@@ -265,15 +265,17 @@ export class Menus {
           <h3>Keyboard & Mouse</h3>
           <div class="grid"><b>Move</b><span>W A S D</span><b>Look</b><span>Mouse</span><b>Jump</b><span>Space</span><b>Sprint</b><span>Shift</span><b>Crouch</b><span>C or Ctrl</span>
           <b>Dig / Shoot</b><span>Left click</span><b>Place / Aim</b><span>Right click</span><b>Reload</b><span>R</span><b>Items</b><span>1-8 or the wheel</span>
-          <b>Crafting</b><span>E or Tab</span><b>Camera</b><span>V</span><b>Pause</b><span>Esc</span></div>
+          <b>Inventory</b><span>E or Tab</span><b>Drop</b><span>Q</span><b>Camera</b><span>V</span><b>Pause</b><span>Esc</span></div>
           <h3>Xbox Controller</h3>
           <div class="grid"><b>Move / Look</b><span>Left / right stick</span><b>Jump</b><span>A</span><b>Dig / Shoot</b><span>Right trigger</span><b>Place / Aim</b><span>Left trigger</span>
-          <b>Reload</b><span>X</span><b>Crafting</b><span>Y</span><b>Items</b><span>Bumpers, d-pad left and right</span><b>Sprint</b><span>Left stick click</span>
+          <b>Reload</b><span>X</span><b>Inventory</b><span>Y</span><b>Items</b><span>Bumpers, d-pad left and right</span><b>Sprint</b><span>Left stick click</span>
           <b>Camera</b><span>D-pad up, or Back</span><b>Pause</b><span>Start or B</span></div>
           <h3>Touch</h3>
           <p>Left thumb moves, right thumb looks. Hold the dig button to dig or fire; tap place to build or aim. Tap the hotbar to switch items.</p>
-          <h3>Inventory</h3>
-          <p>On the crafting screen, click or tap something in the backpack or the hotbar to pick it up, then a slot to put it there, or drag it. Shift-click sends a stack across, backpack to hotbar or back; right-click picks up half a stack, or puts down one. With a controller, go right into the backpack (the hotbar is under it): A picks up and puts down, the right stick splits.</p>
+          <h3>Inventory and Crafting</h3>
+          <p>On the inventory screen, click or tap something in the backpack or the hotbar to pick it up, then a slot to put it there, or drag it. Shift-click sends a stack across, backpack to hotbar or back; right-click picks up half a stack, or puts down one. Q, or letting go of it outside the panel, drops it. With a controller, the d-pad or the stick moves the selector: A picks up and puts down, the right stick splits, X drops.</p>
+          <p>Y (or E) goes to crafting. The recipes you know are down the left, the ones you can make first: you learn one once you carry what it makes, one of the things it takes, or a gun it makes the bullets for. Up and down choose a recipe, left and right its components; A makes it, or on a component goes to that component's recipe. Shift-click makes as many as you can. Y, E or B goes back.</p>
+          <p>When you die, what's in your backpack falls where you fell. The hotbar stays with you.</p>
           <h3>Playing Online</h3>
           <p>To host, choose Play Game, then Host Online Game (or Invite Friends from the pause menu of a game you're in). You get a five-letter code: your friends choose Join Online Game and type it. Up to eight can play. Everyone plays in the host's world, saved on the host's machine, and what each friend carries is kept with it for when they come back. Each player's dead come for that player, and anyone can shoot them. Online, the game goes on while the pause menu is up, and Teleport To Player there takes you to a friend.</p>
           <p>Keep the game in front: a browser stops running a page whose tab is hidden. Online play needs an internet connection, and doesn't work inside the Claude artifact viewer.</p>

@@ -178,9 +178,9 @@ export class HUD {
       S.img.src = iconFor(sl.id);
       S.img.style.display = '';
       S.n.textContent = def.stack > 1 && sl.count > 1 ? sl.count : '';
-      if (sl.dur != null && def.durability) {
+      if (sl.dur != null && def.uses > 1) {
         S.dur.style.display = '';
-        const f = Math.max(0, sl.dur / def.durability);
+        const f = Math.max(0, sl.dur / def.uses);
         S.bar.style.width = `${(f * 100).toFixed(0)}%`;
         S.bar.style.background = f > 0.5 ? 'var(--dura)' : f > 0.2 ? '#e0c030' : '#e03030';
       } else S.dur.style.display = 'none';

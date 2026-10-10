@@ -352,6 +352,34 @@ def read_reflective(r, a):
     return f(r)
 
 C = 'Microsoft.Xna.Framework.Content.'
+# DigitalDNA's own effect (DNA.Drawing.Effects.DNAEffect+Reader): the effect file, its textures by
+# parameter name, then each other parameter as a type code (0 int, 1 string, 2 bool, 3 float,
+# 4-6 vectors, 7 matrix) and a count (0: one value, else an array)
+def read_dna_effect(r, a):
+    out = {'dnaEffect': r.str(), 'textures': {}, 'params': {}}
+    for _ in range(r.i32()):
+        name = r.str()
+        out['textures'][name] = r.str()
+    one = [r.i32, r.str, r.bool, r.f32, lambda: r.f32s(2), lambda: r.f32s(3), lambda: r.f32s(4), lambda: r.f32s(16)]
+    for _ in range(r.i32()):
+        name, t, n = r.str(), r.u8(), r.i32()
+        if t >= len(one): raise ValueError(f'DNAEffect parameter {name}: type {t}')
+        out['params'][name] = one[t]() if n == 0 else [one[t]() for _ in range(n)]
+    # the diffuse map, for whatever draws it as a plain textured model
+    tex = out['textures']
+    out['texture'] = next((v for k, v in tex.items() if 'diffuse' in k.lower()), next(iter(tex.values()), ''))
+    return out
+
+# DigitalDNA's sprite sheet (DNA.Drawing.SpriteManager+SpriteManagerReader): the texture, then
+# each sprite's name and rectangle on it (x, y, width, height)
+def read_sprites(r, a):
+    tex = r.obj()
+    sprites = {}
+    for _ in range(r.i32()):
+        name = r.str()
+        sprites[name] = [r.i32(), r.i32(), r.i32(), r.i32()]
+    return {'texture': tex, 'sprites': sprites}
+
 READERS = {
     C + 'StringReader': lambda r, a: r.str(),
     C + 'Int32Reader': lambda r, a: r.i32(),
@@ -378,7 +406,9 @@ READERS = {
     C + 'Texture2DReader': read_tex2d,
     C + 'ExternalReferenceReader': lambda r, a: {'external': r.str()},
     'DNA.Drawing.Skeleton+Reader': read_skeleton,
+    'DNA.Drawing.Effects.DNAEffect+Reader': read_dna_effect,
     'DNA.Drawing.Animation.AnimationClip+Reader': read_clip,
+    'DNA.Drawing.SpriteManager+SpriteManagerReader': read_sprites,
 }
 
 def parse(x, big=None):

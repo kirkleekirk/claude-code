@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { ITEMS, TIERS } from './items.js';
+import { ITEMS } from './items.js';
 import { paint } from '../gfx/propMaterial.js';
 
 const D = THREE.MathUtils.degToRad;
@@ -31,7 +31,7 @@ const rbox = (w, h, d, r, color, metal = 0, emi = 0) => paint(strip(new RoundedB
 const box = (w, h, d, color, metal = 0, emi = 0) => paint(strip(new THREE.BoxGeometry(w, h, d)), color, metal, emi);
 const cyl = (r0, r1, len, seg, color, metal = 0, emi = 0) => paint(strip(new THREE.CylinderGeometry(r0, r1, len, seg)), color, metal, emi);
 // a cylinder lying along z
-const tube = (r, len, seg, color, metal = 0) => place(cyl(r, r, len, seg, color, metal), 0, 0, 0, Math.PI / 2, 0, 0);
+const tube = (r, len, seg, color, metal = 0, emi = 0) => place(cyl(r, r, len, seg, color, metal, emi), 0, 0, 0, Math.PI / 2, 0, 0);
 function extrude(shape, depth, bevel, color, metal = 0, emi = 0) {
   const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2, curveSegments: 10 });
   g.translate(0, 0, -depth / 2);
@@ -44,8 +44,12 @@ function merge(parts) {
 }
 
 const WOOD = 0x8a5226, WOOD_D = 0x5e3416, GRIP = 0x2a2a2c, BLACK = 0x1c1d20;
-const METAL = { iron: 0x3c3f45, gold: 0xd4a42c, diamond: 0x8fd6e2 };
-const METALNESS = { iron: 0.75, gold: 0.9, diamond: 0.6 };
+// guns by what they're made of ('space': the laser guns' white shells)
+const METAL = { iron: 0x3c3f45, gold: 0xd4a42c, diamond: 0x8fd6e2, bloodstone: 0x7a1414, copper: 0xb06a3a, space: 0xd6dbe1 };
+const METALNESS = { iron: 0.75, gold: 0.9, diamond: 0.6, bloodstone: 0.5, copper: 0.85, space: 0.35 };
+// tools' heads and blades
+const TOOL_COLORS = { wood: 0x8a5a2e, stone: 0x8b877f, copper: 0xc0703e, iron: 0xb9bdc2, gold: 0xf0c443, diamond: 0x9ce6ef, bloodstone: 0x9a1a1a };
+const TIERS = Object.fromEntries(Object.entries(TOOL_COLORS).map(([k, color]) => [k, { color }]));
 
 // ---- tools --------------------------------------------------------------------------------
 
@@ -114,7 +118,7 @@ function axe(mat) {
 }
 
 function knife(mat) {
-  const c = mat === 'iron' ? 0xc8ccd2 : TIERS[mat].color;
+  const c = mat === 'iron' ? 0xc8ccd2 : TOOL_COLORS[mat];
   const parts = [];
   const s = new THREE.Shape();
   s.moveTo(0, -0.012);
@@ -287,6 +291,115 @@ function rifle(mat) {
   return { geo: merge(parts), info: { muzzle: new THREE.Vector3(0, 0.085, -0.73), sight: new THREE.Vector3(0, 0.14, 0), eject: new THREE.Vector3(0.03, 0.09, 0.0), twoHand: true, scope: true } };
 }
 
+function lmg(mat) {
+  const m = METAL[mat], mm = METALNESS[mat];
+  const dark = mat === 'iron' ? 0x2a2b2e : m;
+  const parts = [];
+  // a long receiver, a heavy barrel in a perforated shroud, a box magazine, a bipod
+  parts.push(place(rbox(0.06, 0.075, 0.36, 0.008, m, mm), 0, 0.06, -0.02));
+  parts.push(place(rbox(0.05, 0.02, 0.3, 0.006, dark, mm * 0.8), 0, 0.105, -0.02));
+  parts.push(place(tube(0.024, 0.34, 12, 0x2c2e32, 0.7), 0, 0.065, -0.36));
+  for (let i = 0; i < 6; i++) parts.push(place(tube(0.026, 0.012, 12, BLACK, 0.6), 0, 0.065, -0.24 - i * 0.045));
+  parts.push(place(tube(0.012, 0.22, 10, 0x1d1e21, 0.85), 0, 0.065, -0.62));
+  parts.push(place(tube(0.018, 0.05, 10, 0x2a2b2e, 0.8), 0, 0.065, -0.74));
+  parts.push(place(rbox(0.08, 0.1, 0.11, 0.008, 0x3a3d33, 0.3), 0.01, -0.02, -0.06));
+  parts.push(place(box(0.008, 0.16, 0.008, BLACK, 0.7), 0.03, -0.03, -0.55, D(20), 0, D(-15)));
+  parts.push(place(box(0.008, 0.16, 0.008, BLACK, 0.7), -0.03, -0.03, -0.55, D(20), 0, D(15)));
+  // carry handle, grip, stock
+  parts.push(place(rbox(0.012, 0.03, 0.12, 0.004, BLACK), 0, 0.13, -0.15));
+  parts.push(place(rbox(0.034, 0.1, 0.046, 0.008, GRIP), 0, -0.02, 0.08, D(-16), 0, 0));
+  parts.push(place(box(0.008, 0.006, 0.07, m, mm), 0, 0.012, 0.03));
+  const s = new THREE.Shape();
+  s.moveTo(0, 0.035); s.lineTo(0.26, 0.01); s.lineTo(0.27, -0.09); s.lineTo(0.22, -0.1); s.lineTo(0, -0.03); s.closePath();
+  const stock = extrude(s, 0.05, 0.008, dark, mm * 0.5);
+  place(stock, 0, 0.07, 0.16, 0, -Math.PI / 2, 0);
+  parts.push(stock);
+  return { geo: merge(parts), info: { muzzle: new THREE.Vector3(0, 0.065, -0.77), sight: new THREE.Vector3(0, 0.13, 0), eject: new THREE.Vector3(0.035, 0.07, -0.05), twoHand: true } };
+}
+
+// a laser gun: the shape of its kind in a white shell, with a glowing strip of its colour along
+// the barrel
+function laserGun(gun, color) {
+  const base = ({ pistol, assault, smg, shotgun, rifle })[gun]('space');
+  const mz = base.info.muzzle;
+  const len = -mz.z - 0.06;
+  const strip = place(box(0.012, 0.008, len, color, 0, 1.3), 0, mz.y + 0.022, mz.z + len / 2 + 0.02);
+  const ring = place(tube(0.02, 0.012, 12, color, 0, 1.3), 0, mz.y, mz.z + 0.01);
+  return { geo: merge([base.geo, strip, ring]), info: { ...base.info, glow: color } };
+}
+
+// a laser sword: a ribbed metal hilt and its beam, down the hand's -z
+function saber(color) {
+  const parts = [];
+  parts.push(place(tube(0.018, 0.2, 14, 0x9ea4ab, 0.85), 0, 0, 0.02));
+  for (let i = 0; i < 5; i++) parts.push(place(tube(0.02, 0.012, 14, BLACK, 0.4), 0, 0, 0.07 - i * 0.025));
+  parts.push(place(tube(0.024, 0.04, 14, 0x5a5f66, 0.8), 0, 0, -0.09));
+  parts.push(place(box(0.01, 0.014, 0.03, 0xd02020, 0.2, 0.6), 0, 0.02, -0.02));
+  parts.push(place(tube(0.012, 0.8, 12, color, 0, 1.6), 0, 0, -0.51));
+  parts.push(place(tube(0.02, 0.76, 12, color, 0, 0.7), 0, 0, -0.5));
+  return { geo: merge(parts), info: { reach: 0.9 } };
+}
+
+// a rocket launcher: a tube over the shoulder with a rocket's nose at the front (the guided one
+// grey, with its tracking box)
+function launcher(guided) {
+  const body = guided ? 0x6e7268 : 0x4a5a3a, dark = 0x22241f;
+  const parts = [];
+  parts.push(place(tube(0.045, 0.92, 16, body, 0.3), 0, 0.07, -0.12));
+  parts.push(place(tube(0.05, 0.08, 16, dark, 0.4), 0, 0.07, 0.32));
+  parts.push(place(tube(0.05, 0.06, 16, dark, 0.4), 0, 0.07, -0.56));
+  // the rocket's nose in the muzzle
+  parts.push(place(cyl(0.0, 0.04, 0.12, 14, 0x5a5e58, 0.5), 0, 0.07, -0.65, -Math.PI / 2, 0, 0));
+  parts.push(place(rbox(0.032, 0.1, 0.044, 0.008, GRIP), 0, -0.02, 0.0, D(-12), 0, 0));
+  parts.push(place(rbox(0.032, 0.09, 0.04, 0.008, GRIP), 0, -0.015, -0.25, D(-6), 0, 0));
+  parts.push(place(box(0.008, 0.006, 0.06, dark, 0.6), 0, 0.012, -0.04));
+  parts.push(place(rbox(0.03, 0.05, 0.08, 0.006, dark, 0.5), -0.06, 0.1, -0.12));
+  if (guided) parts.push(place(rbox(0.06, 0.06, 0.12, 0.008, 0x3a3d40, 0.6), 0, 0.15, -0.2), place(tube(0.022, 0.004, 14, 0xd02020, 0.2, 0.8), 0, 0.15, -0.262));
+  return { geo: merge(parts), info: { muzzle: new THREE.Vector3(0, 0.07, -0.72), sight: new THREE.Vector3(0, 0.13, 0), twoHand: true } };
+}
+
+function grenade() {
+  const parts = [];
+  const g = new THREE.SphereGeometry(0.035, 12, 10).toNonIndexed();
+  g.scale(1, 1.25, 1);
+  parts.push(paint(strip(g), 0x3d4a2a, 0.2));
+  for (let i = 0; i < 4; i++) parts.push(place(cyl(0.0362, 0.0362, 0.004, 12, 0x2c351e, 0.2), 0, -0.03 + i * 0.02, 0));
+  parts.push(place(cyl(0.014, 0.016, 0.02, 10, 0x6a6d70, 0.8), 0, 0.05, 0));
+  parts.push(place(box(0.012, 0.07, 0.006, 0x8a8d90, 0.8), 0.02, 0.03, 0, 0, 0, D(-12)));
+  parts.push(place(paint(strip(new THREE.TorusGeometry(0.012, 0.0025, 6, 14)), 0xb8bcc0, 0.9), -0.02, 0.064, 0, 0, Math.PI / 2, 0));
+  return { geo: merge(parts), info: {} };
+}
+
+// the clock, the locator and the teleporter: in a case like the compass's, each with its face
+function gadget(kind) {
+  const face = { clock: 0xf0ead8, locator: 0x2a6a3a, teleporter: 0x5a2a8a }[kind];
+  const rim = { clock: 0x8a6a2a, locator: 0x4a4e54, teleporter: 0x3a3d44 }[kind];
+  const parts = [];
+  parts.push(place(cyl(0.05, 0.05, 0.018, 24, rim, 0.85), 0, 0, 0));
+  parts.push(place(cyl(0.044, 0.044, 0.004, 24, face, 0.1, kind === 'clock' ? 0 : 0.6), 0, 0.009, 0));
+  parts.push(place(cyl(0.012, 0.012, 0.012, 10, rim, 0.85), 0, 0, -0.056, Math.PI / 2, 0, 0));
+  if (kind === 'clock') {
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      parts.push(place(box(0.003, 0.002, i % 3 ? 0.005 : 0.01, 0x222222), Math.sin(a) * 0.037, 0.012, -Math.cos(a) * 0.037, 0, -a, 0));
+    }
+    parts.push(place(box(0.003, 0.002, 0.026, 0x222222), 0.006, 0.013, -0.008, 0, D(-30), 0));
+    parts.push(place(box(0.003, 0.002, 0.034, 0x222222), -0.002, 0.013, 0.012, 0, D(170), 0));
+  } else {
+    // a cross of gridlines and a marker
+    parts.push(place(box(0.07, 0.002, 0.002, 0xa0f0b0, 0, 0.8), 0, 0.012, 0), place(box(0.002, 0.002, 0.07, 0xa0f0b0, 0, 0.8), 0, 0.012, 0));
+    parts.push(place(cyl(0.006, 0.006, 0.003, 10, kind === 'locator' ? 0xff4040 : 0xf0c0ff, 0, 1.2), 0.014, 0.013, -0.018));
+  }
+  return { geo: merge(parts), info: {} };
+}
+
+function door() {
+  const parts = [place(rbox(0.36, 0.72, 0.05, 0.01, 0x8a6438), 0, 0.36, 0)];
+  parts.push(place(box(0.3, 0.02, 0.054, 0x5e4224), 0, 0.2, 0), place(box(0.3, 0.02, 0.054, 0x5e4224), 0, 0.52, 0));
+  parts.push(place(cyl(0.012, 0.012, 0.03, 8, 0x888888, 0.9), 0.13, 0.36, 0.03, Math.PI / 2, 0, 0));
+  return { geo: merge(parts), info: {} };
+}
+
 // ---- small things ----------------------------------------------------------------------------
 
 function lump(color, metal, seed, size = 0.05, rough = 0.3) {
@@ -319,13 +432,38 @@ function gem() {
   return { geo: merge([paint(g, 0xa8f0f8, 0.95, 0.15)]), info: {} };
 }
 
-function bullets() {
+// three rounds: their heads (null: casings, no heads) and their cases
+function bullets(head = 0xb06030, cases = 0xc89a3a, emi = 0) {
   const parts = [];
   for (let i = 0; i < 3; i++) {
     const x = (i - 1) * 0.022;
-    parts.push(place(cyl(0.008, 0.008, 0.05, 10, 0xc89a3a, 0.9), x, 0.025, 0));
-    parts.push(place(cyl(0.002, 0.008, 0.02, 10, 0xb06030, 0.9), x, 0.06, 0));
+    parts.push(place(cyl(0.008, 0.008, 0.05, 10, cases, 0.9), x, 0.025, 0));
+    if (head != null) parts.push(place(cyl(0.002, 0.008, 0.02, 10, head, 0.9, emi), x, 0.06, 0));
   }
+  return { geo: merge(parts), info: {} };
+}
+
+// the ore: a lump of rock with the metal showing in it
+function ore(color, seed) {
+  const parts = [lump(0x6e6a64, 0.1, seed, 0.05, 0.3)];
+  for (let i = 0; i < 4; i++) {
+    const a = i * 1.7 + seed;
+    parts.push(place(lump(color, 0.7, seed + i + 1, 0.016, 0.4), Math.cos(a) * 0.036, 0.008 + (i % 2) * 0.012, Math.sin(a) * 0.036));
+  }
+  return { geo: merge(parts), info: {} };
+}
+
+function powder(color) {
+  const parts = [place(cyl(0.006, 0.055, 0.04, 14, color, 0.05), 0, 0.02, 0)];
+  for (let i = 0; i < 5; i++) parts.push(place(lump(color, 0.05, i + 2, 0.012, 0.5), Math.cos(i * 1.3) * 0.045, 0.004, Math.sin(i * 1.3) * 0.045));
+  return { geo: merge(parts), info: {} };
+}
+
+function rocketShell() {
+  const parts = [place(cyl(0.022, 0.022, 0.14, 12, 0x5a5e58, 0.5), 0, 0.07, 0)];
+  parts.push(place(cyl(0.0, 0.022, 0.06, 12, 0x6a6e68, 0.5), 0, 0.17, 0));
+  parts.push(place(cyl(0.023, 0.023, 0.012, 12, 0xc89a3a, 0.9), 0, 0.12, 0));
+  for (let i = 0; i < 4; i++) parts.push(place(box(0.004, 0.04, 0.03, 0x3a3d38, 0.4), Math.cos(i * Math.PI / 2) * 0.026, 0.02, Math.sin(i * Math.PI / 2) * 0.026, 0, -i * Math.PI / 2, 0));
   return { geo: merge(parts), info: {} };
 }
 
@@ -335,26 +473,44 @@ function stick() {
 
 // ---- the lookup -------------------------------------------------------------------------------
 
+// rounds: [head, case] (a casing has no head)
+const ROUNDS = {
+  bullets: [0xb06030, 0xc89a3a], bullets_iron: [0xc8ccd0, 0xc89a3a], bullets_gold: [0xf2c443, 0xb9bdc2], bullets_diamond: [0x9ce6ef, 0xf2c443],
+  bullets_bloodstone: [0x9a1a1a, 0x9ce6ef], bullets_laser: [0x40ff60, 0x6a6a6a, 1.2], casing_brass: [null, 0xc89a3a], casing_iron: [null, 0xb9bdc2],
+  casing_gold: [null, 0xf2c443], casing_diamond: [null, 0x9ce6ef],
+};
+const ORE_FLECKS = { copper_ore: [0x4f9a7a, 1], iron_ore: [0xb7612e, 2], gold_ore: [0xf2c443, 4] };
+
 const cache = new Map();
 export function itemModel(id) {
   if (cache.has(id)) return cache.get(id);
   const it = ITEMS[id];
   let r = null;
   if (!it) r = null;
+  else if (it.kind === 'tool' && it.laser) r = saber(it.beam);
   else if (it.kind === 'tool' && it.tool === 'pick') r = pickaxe(it.mat);
   else if (it.kind === 'tool' && it.tool === 'spade') r = spade(it.mat);
   else if (it.kind === 'tool' && it.tool === 'axe') r = axe(it.mat);
   else if (it.kind === 'tool' && it.tool === 'compass') { r = compass(); r.needle = needle(); }
+  else if (it.kind === 'tool') r = gadget(it.tool);
   else if (it.kind === 'melee') r = knife(it.mat);
-  else if (it.kind === 'gun') r = ({ pistol, assault, smg, shotgun, rifle })[it.gun](it.mat);
+  else if (it.kind === 'gun' && it.gun === 'rocket') r = launcher(!!it.guided);
+  else if (it.kind === 'gun' && it.laser) r = laserGun(it.gun, it.color);
+  else if (it.kind === 'gun') r = ({ pistol, assault, smg, shotgun, rifle, lmg })[it.gun](it.mat);
+  else if (it.kind === 'grenade') r = grenade();
+  else if (it.door) r = door();
   else if (id === 'torch') r = torch();
   else if (id === 'stick') r = stick();
   else if (id === 'coal') r = { geo: merge([lump(0x1a1a1c, 0.35, 3)]), info: {} };
+  else if (ORE_FLECKS[id]) r = ore(...ORE_FLECKS[id]);
   else if (id === 'copper') r = ingot(0xc87444, 0.9);
   else if (id === 'iron') r = ingot(0xc4c8cc, 0.9);
   else if (id === 'gold') r = ingot(0xf2c443, 0.95);
   else if (id === 'diamond') r = gem();
-  else if (id === 'bullets') r = bullets();
+  else if (ROUNDS[id]) r = bullets(...ROUNDS[id]);
+  else if (id === 'rockets') r = rocketShell();
+  else if (id === 'gunpowder') r = powder(0x4a4a4e);
+  else if (id === 'explosive_powder') r = powder(0xc02818);
   cache.set(id, r);
   return r;
 }
