@@ -1,0 +1,8 @@
+node_modules/
+dist/
+dist-artifact/
+dist-download/
+tools/out/
+# CastleMiner Z's own audio, models and animations, ripped from your copy (tools/cmz): never committed
+local-assets/
+__pycache__/
