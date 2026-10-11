@@ -32,7 +32,7 @@ const log = (...a) => console.log(`[${((Date.now() - T0) / 1000).toFixed(0)}s]`,
 try {
   // A: a new Survival world, Normal, kept (an Endurance world isn't, and can't be joined once
   // it's begun: that's at the end)
-  await A.goto(`${BASE}?${PEER}&rd=4&time=0.45&q=low${extra}`);
+  await A.goto(`${BASE}?${PEER}&rd=4&time=0.45&q=low&seed=1337${extra}`);
   await wait(A, () => window.__app?.state === 'menu', null, 240000);
   await A.evaluate(() => window.__app.startWorld({ mode: 'survival', difficulty: 'normal' }));
   await wait(A, () => window.__app.state === 'playing' && window.__app.game?.ready, null, 240000);
@@ -212,6 +212,18 @@ try {
     b.pos.set(at.x, at.y, at.z); b.velocity = b.targetVelocity = 0; b.targetAltitude = at.y; b.orient();
   };
   const above = await B.evaluate(() => { const p = window.__app.game.player; if (p.dead) window.__app.game.respawn(); return { x: p.pos.x + 6, y: p.pos.y + 24, z: p.pos.z + 6 }; });
+  // (nothing between B and where the dragon will be: trees and hills differ from world to world)
+  await B.evaluate((at) => {
+    const g = window.__app.game, w = g.world, e = g.player.eye;
+    for (let k = 0; k <= 120; k++) {
+      const f = k / 120, x = e.x + (at.x - e.x) * f, y = e.y + (at.y - e.y) * f, z = e.z + (at.z - e.z) * f;
+      for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++) for (let dz = -2; dz <= 2; dz++) {
+        const bx = Math.floor(x) + dx, by = Math.floor(y) + dy, bz = Math.floor(z) + dz;
+        if (by > Math.floor(g.player.pos.y) - 1 && w.getBlock(bx, by, bz) !== 0) w.setBlock(bx, by, bz, 0);
+      }
+    }
+  }, above);
+  await A.waitForTimeout(3000);
   await A.evaluate(([fz, at]) => { const g = window.__game; g.dragons.spawnDragon(0, true); new Function('g', 'at', `(${fz})(g, at)`)(g, at); }, [freeze.toString(), above]);
   await wait(B, () => window.__app.game.dragons.client?.got, null, 60000).then(() => ok(true, "A's dragon flies on B's machine"), () => ok(false, "A's dragon flies on B's machine"));
   const dpos = await Promise.all([A.evaluate(() => window.__game.dragons.brain.pos.toArray()), B.evaluate(() => window.__app.game.dragons.client.pos.toArray())]);

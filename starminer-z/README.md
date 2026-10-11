@@ -176,8 +176,8 @@ menus with key presses), `tools/sim.mjs` (runs the game and reports what the ene
 `tools/eval.mjs` (runs a module in the page), `tools/cmz/hold.html?item=pistol` (the avatar
 holding something, posed by the original's clips, from four sides). In the game,
 `?play&horde=4&skel=2&archer=1` puts some of the dead in front of you, `&slot=2` picks a hotbar
-slot, `&third` starts in third person, `&ads` aims, and `?nocmz` leaves out everything ripped
-from the original.
+slot, `&third` starts in third person, `&ads` aims, `?seed=N` makes every new world from one
+seed, and `?nocmz` leaves out everything ripped from the original.
 
 ### The original's sounds, bodies and hands
 

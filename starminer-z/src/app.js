@@ -34,6 +34,9 @@ const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in win
 // Edge on an Xbox: a controller, no mouse, and a console's share of the GPU
 const isXbox = /xbox/i.test(navigator.userAgent);
 const SIMFAST = Math.max(1, parseInt(params.get('simfast') || '1', 10));
+// (tests: every new world from this seed)
+const SEED = params.has('seed') ? parseInt(params.get('seed'), 10) : null;
+const newSeed = () => (Number.isFinite(SEED) ? SEED : (Math.random() * 2 ** 31) | 0);
 const ATTRACT_SEED = 1337;
 
 const DEFAULTS = {
@@ -239,7 +242,7 @@ export class App {
   startEndurance({ host = false } = {}) {
     this.input.requestLock();
     this.setSession(null);
-    this.startGame({ seed: (Math.random() * 2 ** 31) | 0, mode: 'endurance', difficulty: 'easy', host });
+    this.startGame({ seed: newSeed(), mode: 'endurance', difficulty: 'easy', host });
   }
 
   // Survival, Dragon Endurance or Creative, in one of your worlds (id) or a new one; a world
@@ -258,7 +261,7 @@ export class App {
     id = newWorldId();
     this.pendingWorld = { id, name: worldName(cleanName(this.profile.name) || null), creative };
     this.setSession({ id, mode, difficulty });
-    this.startGame({ seed: (Math.random() * 2 ** 31) | 0, worldId: id, mode, difficulty, creative, host });
+    this.startGame({ seed: newSeed(), worldId: id, mode, difficulty, creative, host });
   }
 
   async deleteWorld(id) {
