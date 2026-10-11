@@ -1,31 +1,48 @@
-// Awards: milestones kept across every world you play (your furthest trip and longest life are
-// bests; kills, digging, building and the rest add up). Kept in localStorage when it's there.
+// Awards: the later CastleMiner Z's achievements (its CastleMinerZAchievementManager), with
+// their names, goals and progress lines. Kept across every game you play, counted only in
+// Endurance, as the original counts them: the furthest out and the deepest down are bests; the
+// rest add up. Kept in localStorage when it's there.
 
 const KEY = 'starminer.awards';
 
+// stat: what it goes by; goal; best: a furthest-ever rather than a running total; unit (or one
+// and many, or yes and no), for its progress line ("(3/100) Enemies Killed")
+const award = (id, name, desc, stat, goal, extra = {}) => ({ id, name, desc, stat, goal, ...extra });
+
 export const AWARDS = [
-  { id: 'steps', name: 'First Steps', desc: 'Travel 50 meters from the start tower', stat: 'maxDistance', goal: 50, best: true },
-  { id: 'wanderer', name: 'Wanderer', desc: 'Travel 250 meters', stat: 'maxDistance', goal: 250, best: true },
-  { id: 'desert', name: 'Dune Walker', desc: 'Reach the Desert, 950 meters out', stat: 'maxDistance', goal: 950, best: true },
-  { id: 'peaks', name: 'Mountaineer', desc: 'Reach the Mountains, 1,600 meters out', stat: 'maxDistance', goal: 1600, best: true },
-  { id: 'arctic', name: 'Frostbite', desc: 'Reach the Arctic, 2,300 meters out', stat: 'maxDistance', goal: 2300, best: true },
-  { id: 'hell', name: 'Into The Fire', desc: 'Reach Hell, 3,400 meters out', stat: 'maxDistance', goal: 3400, best: true },
-  { id: 'night', name: 'Survivor', desc: 'Live to see Day 2', stat: 'days', goal: 2, best: true },
-  { id: 'week', name: 'Hard To Kill', desc: 'Live to see Day 7', stat: 'days', goal: 7, best: true },
-  { id: 'month', name: 'Endurance', desc: 'Live to see Day 30', stat: 'days', goal: 30, best: true },
-  { id: 'blood', name: 'First Blood', desc: 'Put down one of the dead', stat: 'kills', goal: 1 },
-  { id: 'hunter', name: 'Hunter', desc: 'Kill 50 enemies', stat: 'kills', goal: 50 },
-  { id: 'exterminator', name: 'Exterminator', desc: 'Kill 500 enemies', stat: 'kills', goal: 500 },
-  { id: 'bones', name: 'Bone Collector', desc: 'Kill 10 skeletons', stat: 'skeletons', goal: 10 },
-  { id: 'miner', name: 'Miner', desc: 'Dig 100 blocks', stat: 'dug', goal: 100 },
-  { id: 'excavator', name: 'Excavator', desc: 'Dig 2,500 blocks', stat: 'dug', goal: 2500 },
-  { id: 'builder', name: 'Builder', desc: 'Place 100 blocks', stat: 'placed', goal: 100 },
-  { id: 'architect', name: 'Architect', desc: 'Place 1,000 blocks', stat: 'placed', goal: 1000 },
-  { id: 'handy', name: 'Handy', desc: 'Craft 25 things', stat: 'crafted', goal: 25 },
-  { id: 'gunsmith', name: 'Gunsmith', desc: 'Craft a gun', stat: 'guns', goal: 1 },
-  { id: 'diamond', name: 'Diamonds!', desc: 'Dig up a diamond', stat: 'diamonds', goal: 1 },
-  { id: 'trigger', name: 'Trigger Happy', desc: 'Fire 1,000 rounds', stat: 'shots', goal: 1000 },
+  // PlayTimeAchievement: hours online in Endurance
+  award('timer1', 'Short Timer', 'Play Online For 1 Hours.', 'onlineTime', 3600, { hours: 1 }),
+  award('timer10', 'Veteren MinerZ', 'Play Online For 10 Hours.', 'onlineTime', 36000, { hours: 10 }),
+  award('timer100', 'MinerZ Potato', 'Play Online For 100 Hours.', 'onlineTime', 360000, { hours: 100 }),
+  // DistaceTraveledAchievement: metres from the start
+  ...[[50, 'First Contact'], [200, 'Leaving Home'], [1000, 'Desert Crawler'], [2300, 'Mountain Man'], [3000, 'Deep Freeze'], [3600, 'Hell On Earth'], [5000, 'Around the World']]
+    .map(([d, name]) => award(`dist${d}`, name, `Travel At Least ${d}`, 'maxDistance', d, { best: true, unit: 'Distance Traveled' })),
+  // DepthTraveledAchievement: metres below the old ground
+  award('deep20', 'Deep Digger', 'Travel Down At Least 20', 'maxDepth', 20, { best: true, unit: 'Distance Traveled' }),
+  award('deep40', 'Welcome To Hell', 'Travel Down At Least 40', 'maxDepth', 40, { best: true, unit: 'Distance Traveled' }),
+  // DaysPastAchievement: days lived through
+  ...[[1, 'Survived The Night'], [7, 'A Week Later'], [28, '28 Days Later'], [100, 'Survivor'], [196, '28 Weeks Later'], [365, 'Anniversary']]
+    .map(([d, name]) => award(`days${d}`, name, `Survive for ${d} days`, 'daysSurvived', d, { unit: 'Days Survived' })),
+  // TotalCraftedAchievement
+  ...[[1, 'Tinkerer'], [100, 'Crafter'], [1000, 'Master Craftsman']].map(([n, name]) => award(`craft${n}`, name, `Craft ${n} items`, 'crafted', n, { unit: 'Items Crafted' })),
+  // TotalKillsAchievement
+  ...[[1, 'Self Defense'], [100, 'No Fear'], [1000, 'Zombie Slayer']].map(([n, name]) => award(`kills${n}`, name, `Kill ${n} Enemies`, 'kills', n, { unit: 'Enemies Killed' })),
+  award('undead', 'Dragon Slayer', 'Kill The Undead Dragon', 'undeadDragonKills', 1, { yes: 'Undead Dragon Killed', no: 'Undead Dragon Not Killed' }),
+  award('alien', 'Alien Encounter', 'Find An Alien', 'alienEncounters', 1, { one: 'Alien Encounter', many: 'Alien Encounters' }),
+  award('laser', 'Alien Technology', 'Kill An Enemy With A Laser Weapon', 'laserKills', 1, { one: 'Enemy Killed', many: 'Enemies Killed' }),
+  award('tnt', 'Demolition Expert', 'Craft TNT', 'tntCrafted', 1, { one: 'TNT Crafted', many: 'TNT Crafted' }),
+  award('missile', 'Air Defense', 'Kill A Dragon With A Guided Missile', 'dragonsKilledWithGuidedMissile', 1, { one: 'Dragon Killed', many: 'Dragons Killed' }),
+  award('fire', 'Fire In The Hole', 'Kill An Enemy With TNT', 'tntKills', 1, { one: 'Enemy Killed', many: 'Enemies Killed' }),
+  award('boom', 'Boom', 'Kill An Enemy With A Grenade', 'grenadeKills', 1, { one: 'Enemy Killed', many: 'Enemies Killed' }),
 ];
+
+// the original's ProgressTowardsUnlockMessage
+export function progressLine(a, v) {
+  if (a.hours) return `(${Math.floor(v / 3600)}/${a.hours}) hours played`;
+  if (a.unit) return `(${Math.floor(v)}/${a.goal}) ${a.unit}`;
+  if (a.yes) return v > 0 ? a.yes : a.no;
+  return `${Math.floor(v)} ${v === 1 ? a.one : a.many}`;
+}
 
 export class Awards {
   constructor() {
@@ -39,6 +56,7 @@ export class Awards {
   }
 
   value(a) { return this.data.totals[a.stat] || 0; }
+  total(stat) { return this.data.totals[stat] || 0; }
   isUnlocked(a) { return !!this.data.unlocked[a.id]; }
   get count() { return AWARDS.filter((a) => this.isUnlocked(a)).length; }
 
@@ -50,18 +68,18 @@ export class Awards {
     const s = game.stats;
     const last = this.seen.get(game) || {};
     const T = this.data.totals;
-    // bests: the furthest out, the most days
-    for (const a of AWARDS) {
-      if (!a.best) continue;
-      const v = s[a.stat] || 0;
-      if (v > (T[a.stat] || 0)) { T[a.stat] = v; this.dirty = true; }
-    }
-    // totals: what this game has added since last time (a loaded game starts from where it was)
-    for (const k of new Set(AWARDS.filter((a) => !a.best).map((a) => a.stat))) {
-      const v = s[k] || 0;
-      const d = v - (last[k] ?? v);
-      if (d > 0) { T[k] = (T[k] || 0) + d; this.dirty = true; }
-      last[k] = v;
+    const stats = new Set(AWARDS.map((a) => a.stat));
+    for (const k of stats) {
+      const a = AWARDS.find((x) => x.stat === k), v = s[k] || 0;
+      if (a.best) {
+        // bests: the furthest out, the deepest down
+        if (v > (T[k] || 0)) { T[k] = v; this.dirty = true; }
+      } else {
+        // totals: what this game has added since last time (a loaded game starts from where it was)
+        const d = v - (last[k] ?? v);
+        if (d > 0) { T[k] = (T[k] || 0) + d; this.dirty = true; }
+        last[k] = v;
+      }
     }
     this.seen.set(game, last);
     for (const a of AWARDS) {
@@ -72,6 +90,13 @@ export class Awards {
       game.audio?.award?.();
     }
     if (this.dirty) this.save();
+  }
+
+  // Erase Storage: every award and stat too
+  erase() {
+    this.data = { unlocked: {}, totals: {} };
+    this.seen = new WeakMap();
+    this.save();
   }
 
   save() {

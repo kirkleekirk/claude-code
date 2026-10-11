@@ -21,6 +21,10 @@
 //
 // Which of the dead it is (how tough, how fast, how hard it digs) goes by distance, as in the
 // original's table (../entities/cmz/types.js). 50 at most in all.
+//
+// By mode and difficulty (./modes.js): no one at all with No Enemies; new ground brings the dead
+// only in Endurance and on Normal or Hardcore; Easy waits far longer between them (45 seconds
+// down to 20, against 5 down to 1); Dragon Endurance has no dead on the surface.
 
 import * as THREE from 'three';
 import { Enemy } from '../entities/enemy.js';
@@ -30,6 +34,7 @@ import { zombieLook } from '../entities/avatar/zombie.js';
 import { skeletonLook } from '../entities/avatar/skeleton.js';
 import { buildAvatarGeometry } from '../entities/avatar/model.js';
 import { SOLID, B, HEIGHT } from '../world/blocks.js';
+import { RULES } from './modes.js';
 
 // the original's y = 0 is our y = 64; Hell starts 40 below it
 const GROUND = 64;
@@ -102,8 +107,8 @@ export class Enemies {
     return Math.min(0.79, Math.max(0, m));
   }
 
-  // the shortest wait between them, by distance (the original's Endurance numbers)
-  minSpawnTime(dist) { return lerp(5, 1, dist / 3450); }
+  // the shortest wait between them, by distance (GetMinEnemySpawnTime)
+  minSpawnTime(dist) { return RULES.quickSpawns(this.game) ? lerp(5, 1, dist / 3450) : lerp(45, 20, dist / 3450); }
 
   // ---- making them ------------------------------------------------------------------------------
 
@@ -180,7 +185,8 @@ export class Enemies {
     const g = this.game, p = g.player;
     this.felguardT -= dt;
     this.addSound(-2 * dt);
-    if (this.list.length < MAX_TOTAL && !p.dead) this.spawning(dt);
+    // (No Enemies: no one comes)
+    if (this.list.length < MAX_TOTAL && !p.dead && !RULES.noEnemies(g)) this.spawning(dt);
     for (const e of this.list) e.update(dt);
     this.updateArrows(dt);
     // the dead in your way slow you down (the original's AttentuateVelocity)
@@ -217,8 +223,8 @@ export class Enemies {
       }
     } else this.zombieFest = false;
 
-    // new ground (Endurance): every 40 m or so further out than you've been
-    if (flat > this.cleared) {
+    // new ground (Endurance, Normal and Hardcore): every 40 m or so further out than you've been
+    if (RULES.freshGround(g) && flat > this.cleared) {
       this.firstContact = -1;
       if (sun > 0.01) {
         if (!this.leftToSpawn) this.nextT = randomFloat(2);
@@ -227,7 +233,7 @@ export class Enemies {
       const b = Math.floor(1.5 + flat / 40) * 40;
       this.cleared = randomFloat(b - 10, b + 10);
     }
-    if (this.firstContact > 0) {
+    if (RULES.freshGround(g) && this.firstContact > 0) {
       this.firstContact -= dt;
       if (this.firstContact < 0) { this.nextT = randomFloat(2); this.leftToSpawn += randomInt(2, 5); }
     }
@@ -239,7 +245,7 @@ export class Enemies {
       }
     }
 
-    if (this.localSurface < MAX_SURFACE) {
+    if (RULES.surfaceDead(g) && this.localSurface < MAX_SURFACE) {
       this.tSurface += dt;
       this.spawnAboveground(pos);
     }

@@ -50,6 +50,20 @@ function cleanMigration(m) {
   return out;
 }
 
+// distance along a ray to a player standing at pos (their box), or null
+export function rayPlayer(o, d, max, pos) {
+  let t0 = 0, t1 = max;
+  const lo = [pos.x - 0.35, pos.y, pos.z - 0.35], hi = [pos.x + 0.35, pos.y + 1.8, pos.z + 0.35], oo = [o.x, o.y, o.z], dd = [d.x, d.y, d.z];
+  for (let i = 0; i < 3; i++) {
+    if (Math.abs(dd[i]) < 1e-9) { if (oo[i] < lo[i] || oo[i] > hi[i]) return null; continue; }
+    let a = (lo[i] - oo[i]) / dd[i], b = (hi[i] - oo[i]) / dd[i];
+    if (a > b) { const s = a; a = b; b = s; }
+    t0 = Math.max(t0, a); t1 = Math.min(t1, b);
+    if (t0 > t1) return null;
+  }
+  return t0;
+}
+
 // a snapshot's floats, however the wire delivered them
 function floats(d) {
   if (d instanceof Float32Array) return d;
@@ -92,6 +106,9 @@ export class Online {
     if (h.v !== PROTOCOL) return { refuse: "Your copy of StarMiner Z isn't the same version as the host's. Play from the same copy." };
     if (!g.ready) return { refuse: 'The host is still loading. Try again in a moment.' };
     const base = cleanName(h.name) || `Player ${id + 1}`;
+    if (this.app.bans()[base]) return { refuse: 'The host has banned you from this game.' };
+    // (the original: an Endurance game can't be joined once it's begun)
+    if (g.begun) return { refuse: "That game of Endurance has already begun: friends can join one only until the host is 100 m out or into the second day." };
     const taken = new Set([this.myName, ...[...this.players.values()].map((p) => p.name)]);
     let name = base;
     for (let k = 2; taken.has(name); k++) name = `${base} ${k}`;
@@ -106,6 +123,7 @@ export class Online {
         v: PROTOCOL, name, seed: g.seed, mode: g.mode, time: sky.time, day: sky.day, grace: g.grace,
         edits: g.world.serializeEdits(), crates: g.crates.serialize(), players, you: g.guests[name] ?? null,
         dragon: g.dragons?.welcomeInfo() ?? null,
+        difficulty: g.difficulty, creative: g.creative, pvp: g.pvp,
       },
     };
   }
@@ -123,7 +141,7 @@ export class Online {
     this.players.delete(id);
     this.game.enemies.dropGhosts(id);
     this.game.crates?.setFocus(id, null);
-    this.game.hud.message(`${p.name} ${why === 'quiet' || why === 'gone' ? 'lost their connection' : 'left the game'}`);
+    if (why !== 'kicked') this.game.hud.message(`${p.name} ${why === 'quiet' || why === 'gone' ? 'lost their connection' : 'left the game'}`);
     this.app.onOnlineChange?.();
   }
 
@@ -261,6 +279,23 @@ export class Online {
         if (H && m.to !== this.myId) { this.link.sendTo(m.to, m); break; }
         if (m.info && typeof m.info === 'object') g.dragons?.handleMigrate(cleanMigration(m.info));
         break;
+      // the host's: everyone starts the game over; PVP on or off; you're out
+      case 'restart':
+        if (!H) g.restartLevel();
+        break;
+      case 'pvp':
+        if (!H) g.pvp = m.v ? 1 : 0;
+        break;
+      case 'kick':
+        if (!H) this.app.kicked(!!m.ban);
+        break;
+      // a swing at a player, PVP: to the machine of the one swung at
+      case 'mp': {
+        if (H && m.to !== this.myId) { this.link.sendTo(m.to, { ...m, by: from }); break; }
+        const at = v3(m.p);
+        if (at && g.pvp) g.meleeHit(m.w, at);
+        break;
+      }
       case 'look':
         this.players.get(who)?.setLook(cleanProfile(m.prof));
         if (H) this.link.send({ ...m, id: from }, from);
@@ -363,6 +398,40 @@ export class Online {
 
   // a line for everyone (the original's BroadcastTextMessage)
   say(text) { if (this.link.count) this.link.send({ t: 'say', s: String(text).slice(0, 80) }); }
+
+  // the host: start the game over for everyone; PVP on or off
+  restart() { if (this.host && this.link.count) this.link.send({ t: 'restart' }); }
+
+  sendPvp(v) { if (this.host && this.link.count) this.link.send({ t: 'pvp', v }); }
+
+  // the host: put a player out of the game (ban: and keep them out)
+  kick(id, ban = false) {
+    const p = this.players.get(id);
+    if (!this.host || !p) return;
+    const line = `${p.name} has been ${ban ? 'banned' : 'kicked'} by the host`;
+    this.say(line);
+    this.game.hud.message(line);
+    if (ban) this.app.ban(p.name);
+    this.link.sendTo(id, { t: 'kick', ban: ban ? 1 : 0 });
+    setTimeout(() => this.link.lost(id, 'kicked'), 400);
+  }
+
+  // PVP: a swing that hit another player (w: what it was), from at
+  meleePlayer(to, w, at) {
+    const m = { t: 'mp', to, w: w ?? null, p: arr(at) };
+    if (this.host) this.link.sendTo(to, { ...m, by: 0 }); else this.link.send(m);
+  }
+
+  // the first other player along a ray (PVP): { id, dist } or null
+  playerOnRay(o, d, max) {
+    let best = null;
+    for (const p of this.players.values()) {
+      if (p.dead) continue;
+      const t = rayPlayer(o, d, max, p.pos);
+      if (t != null && (!best || t < best.dist)) best = { id: p.id, dist: t };
+    }
+    return best;
+  }
 
   // the dragon's messages (the host's to everyone; a guest's to the host, who passes them on)
   dragonRequest(type, forBiome) { this.link.send({ t: 'dreq', k: type, b: forBiome ? 1 : 0 }); }

@@ -24,6 +24,8 @@ export class HUD {
       <div class="dist txt"><div>Distance - Max</div><div class="dv">0 - 0</div></div>
       <div class="cross"><i></i><i></i><i></i><i></i></div>
       <div class="hit"></div>
+      <div class="redness"></div>
+      <div class="arrows"></div>
       <div class="lock"></div>
       <div class="scope"></div>
       <div class="vignette"></div>
@@ -56,6 +58,10 @@ export class HUD {
     this.netEl = this.$('.net');
     this.tagsEl = this.$('.tags');
     this.hotbar = this.$('.hotbar');
+    this.redEl = this.$('.redness');
+    this.arrowsEl = this.$('.arrows');
+    // the arrows pointing at what hurt you (InGameHUD's DamageIndicators): { at, t, el }
+    this.arrows = [];
     this.slots = [];
     for (let i = 0; i < HOTBAR; i++) {
       const s = document.createElement('div');
@@ -80,10 +86,11 @@ export class HUD {
     el[prop] = value;
   }
 
+  // (the original's: three seconds in, three on show, three out)
   showDay(n) {
     this.dayEl.textContent = `Day ${n}`;
     this.dayEl.classList.add('on');
-    this.dayTimer = 4;
+    this.dayTimer = 6;
   }
 
   message(text) {
@@ -135,7 +142,15 @@ export class HUD {
 
   removeTag(tag) { tag.el.remove(); }
 
-  hurt() {
+  // hurt, from somewhere (or nowhere: a fall, lava)
+  hurt(from = null) {
+    if (from) {
+      const el = document.createElement('div');
+      el.className = `arrow${document.documentElement.classList.contains('cmz-ui') ? ' spf-DamageArrow spm-DamageArrow' : ''}`;
+      this.arrowsEl.appendChild(el);
+      this.arrows.push({ at: from.clone(), t: 3, el });
+      if (this.arrows.length > 8) this.arrows.shift().el.remove();
+    }
     this.vig.classList.add('on');
     this.hearts.classList.remove('hurt');
     void this.hearts.offsetWidth;
@@ -166,13 +181,42 @@ export class HUD {
       name += `: ${slot.gps.name} - Distance: ${Math.floor(d)}`;
     }
     this.set('iname', this.iname, name);
-    // hearts: ten, each worth a tenth of your health
-    const hp = Math.max(0, Math.ceil((s.health / s.maxHealth) * 20));
-    if (this.cache.hp !== hp) {
-      this.cache.hp = hp;
-      let h = '';
-      for (let i = 0; i < 10; i++) h += hp >= (i + 1) * 2 ? HEART_FULL : hp === i * 2 + 1 ? HEART_HALF : HEART_EMPTY;
-      this.hearts.innerHTML = h;
+    // hearts: ten, each worth a tenth of your health (with the original's art: its row of
+    // hearts over their outlines, filled as far as your health goes)
+    const f = Math.max(0, Math.min(1, s.health / s.maxHealth));
+    if (document.documentElement.classList.contains('cmz-ui')) {
+      if (!this.hbar) {
+        this.hearts.innerHTML = '<div class="hbar sp-HealthBarEmpty sz"><div class="fill"><div class="sp-HealthBarFull sz"></div></div></div>';
+        this.hbar = this.hearts.querySelector('.fill');
+        this.cache.hp = null;
+      }
+      const w = `${(f * 100).toFixed(1)}%`;
+      if (this.cache.hp !== w) { this.cache.hp = w; this.hbar.style.width = w; }
+    } else {
+      const hp = Math.max(0, Math.ceil(f * 20));
+      if (this.cache.hp !== hp) {
+        this.cache.hp = hp;
+        let h = '';
+        for (let i = 0; i < 10; i++) h += hp >= (i + 1) * 2 ? HEART_FULL : hp === i * 2 + 1 ? HEART_HALF : HEART_EMPTY;
+        this.hearts.innerHTML = h;
+      }
+    }
+    // the screen goes red the more you're hurt
+    const red = s.dead ? 0 : (1 - f) * 0.47;
+    const rk = red.toFixed(3);
+    if (this.cache.red !== rk) { this.cache.red = rk; this.redEl.style.opacity = rk; }
+    // the arrows: three seconds each, fading over the last third, round the middle of the screen
+    for (let i = this.arrows.length - 1; i >= 0; i--) {
+      const a = this.arrows[i];
+      a.t -= dt;
+      if (a.t <= 0 || s.dead || !s.pos) { a.el.remove(); this.arrows.splice(i, 1); continue; }
+      const dx = a.at.x - s.pos.x, dz = a.at.z - s.pos.z;
+      // into the player's own frame (they face -z at yaw 0)
+      const c = Math.cos(s.yaw), sn = Math.sin(s.yaw);
+      const lx = dx * c - dz * sn, lz = dx * sn + dz * c;
+      const ang = Math.atan2(lx, -lz), fade = a.t / 3 > 0.33 ? 1 : (a.t / 3) * 3;
+      a.el.style.transform = `translate(-50%, -100%) rotate(${ang.toFixed(3)}rad) translateY(-9.4em)`;
+      a.el.style.opacity = fade.toFixed(2);
     }
     // hotbar
     for (let i = 0; i < HOTBAR; i++) {
@@ -197,7 +241,7 @@ export class HUD {
     // crosshair opens up with a gun's spread
     this.cross.classList.toggle('gun', !!(it && it.kind === 'gun'));
     this.cross.style.setProperty('--spread', `${(s.spread || 0).toFixed(2)}em`);
-    this.cross.style.display = s.scoped ? 'none' : '';
+    this.cross.style.display = s.scoped || s.shoulder ? 'none' : '';
     this.scope.classList.toggle('on', !!s.scoped);
     // the guided launcher's box round the dragon: green while it locks on, red once it has
     // (InGameHUD's MissleLocking and MissleLock, on the original's 720-line screen)

@@ -8,9 +8,32 @@ Microsoft.
 
 ## Playing
 
-Endurance: start by the bedrock tower and see how far you can get from it. A day lasts 16
-minutes, starting mid-morning. The first day is under a clear alien sky; early that afternoon a
-storm rolls in for good.
+The game modes are the later CastleMiner Z's:
+
+- **Endurance**: start by the bedrock tower and see how far you can get from it. It's a new world
+  every time and isn't kept; the awards count only here. Alone, dying starts it over (back at
+  the tower on the first morning, with nothing travelled).
+- **Survival**: a world of your own, kept, to mine and build in, at a difficulty of your choosing:
+  No Enemies, Easy (the dead come only at night, and more slowly; dragons don't break your
+  blocks), Normal (fresh ground brings them too), or Hardcore (you start with nothing and lose
+  everything you carry when you die). You come back at the start when you die, and the pause
+  menu's Teleport takes you to the surface, the start, or a friend (not on Hardcore).
+- **Dragon Endurance**: your world, kept, and wave after wave of dragons over it, a Fire Dragon
+  first, then each kind in turn, each 100 tougher than the last (15 less for each one killed),
+  10 to 30 seconds apart. No dead on the surface. Kill the Undead Dragon in Endurance to unlock
+  it.
+- **Creative**: Survival with nothing used up. Blocks, ammo and grenades last for ever, and
+  making something takes nothing from what you carry (though tools wear twice as fast). A world
+  played in Creative stays a Creative world.
+
+You can keep as many worlds as you like: Create World, or pick one from the list (Delete A World
+removes one). The one world kept before there were several becomes a world of its own in the
+list. Options has Brightness, the Release Notes and Erase Storage (every world and award). The
+31 awards are the original's, with their progress counted across your Endurance games.
+
+A day lasts 16 minutes, starting mid-morning. The first day is under a clear alien sky; early that
+afternoon a storm rolls in for good. The HUD is the later version's: the health bar, the screen
+going red as you're hurt, and arrows round the middle pointing to whatever hurt you.
 
 The dead follow CastleMiner Z's own rules, read from the original's code:
 
@@ -85,12 +108,17 @@ Controls: keyboard and mouse, an Xbox controller, or touch (see Help & Controls 
 
 Up to eight players can play together in one world, as in CastleMiner Z:
 
-- To host, choose Play Game, then Host Online Game (or Invite Friends from the pause menu of a
-  game you're in). Once the world has loaded you get a five-letter code.
-- Your friends choose Join Online Game and type the code (with a controller, A on the code
-  changes it a letter at a time).
-- Everyone plays in the host's world, which is saved on the host's machine. Block changes go to
-  everyone, and the time of day is the host's.
+- To host, choose Host Online and a mode (or Invite Friends from the pause menu of a game you're
+  in). Once the world has loaded you get a five-letter code.
+- Your friends choose Join Online and type the code (with a controller, A on the code changes it
+  a letter at a time).
+- Everyone plays in the host's world, mode and difficulty; a kept world is saved on the host's
+  machine. Block changes go to everyone, and the time of day is the host's.
+- An Endurance game can be joined only until it has begun: the host 100 m out, or into the second
+  day. Dying in one, you come back by the nearest friend still standing after 20 seconds; once
+  everyone's down, the host starts it over for all.
+- The host's Host Options kick or ban a player (Clear Ban List lets them back), start the game
+  over for everyone, and turn PVP on: then bullets, laser bolts and swings hurt other players.
 - Each player's machine runs the dead that come for that player (as the original does), and the
   others see them and can shoot them. A kill counts for whoever made it.
 - What each friend carries is kept with the host's world, for when they come back.
@@ -120,7 +148,7 @@ files).
 
 ```
 npm install
-npm run dev             # http://localhost:5173 (add ?play to skip the menus)
+npm run dev             # http://localhost:5173 (?play skips the menus; &mode=survival|dragon, &diff=noenemies|easy|normal|hardcore, &creative)
 npm test                # world generation, meshing and lighting checks
 npm run build           # dist/
 npm run build:artifact  # one self-contained page: dist-artifact/starminer-z.html
@@ -134,7 +162,14 @@ for passing round. `starminer-z-friends.html` is the same game with nothing ripp
 to the friends you play with online.
 
 Online tests run against a local PeerJS server: start one on 127.0.0.1:9000 and add
-`&peer=127.0.0.1:9000` to both players' addresses.
+`&peer=127.0.0.1:9000` to both players' addresses. `tools/online.mjs` plays two of them against
+each other in headless Chromium (`BASE=<dev server url>/ node tools/online.mjs <out dir>`).
+
+`tools/checks/` holds a headless check for each part of the later version: `things.mjs` (the new
+items at work), `crash-sites.mjs`, `dragons.mjs` and `modes.mjs` (the modes, worlds, menus and
+HUD). Each takes the dev server's address and a folder for its screenshots
+(`node tools/checks/modes.mjs http://localhost:5173 out`), and `&nocmz` as a third argument runs
+it without the ripped files.
 
 Test helpers: `tools/shoot.mjs` (screenshots in headless Chromium), `tools/flow.mjs` (walks the
 menus with key presses), `tools/sim.mjs` (runs the game and reports what the enemies do),
@@ -160,7 +195,7 @@ None of these files are in this repository. They come out of your own copy of th
 python3 tools/cmz/rip_audio.py  <Content> local-assets/audio    # needs ffmpeg
 python3 tools/cmz/rip_models.py <Content> local-assets/models  # the dead, the aliens, the Felguard, the dragons
 python3 tools/cmz/rip_player.py <Content> local-assets          # avatar clips, held items, the locator's marker
-python3 tools/cmz/rip_ui.py     <Content> local-assets          # the inventory and crafting panel, the missile lock
+python3 tools/cmz/rip_ui.py     <Content> local-assets          # the inventory and crafting panel, the HUD's sprites
 ```
 
 Without them the game is silent, the dead are built on the avatar rig, the dragons are built of

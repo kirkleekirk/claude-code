@@ -440,6 +440,12 @@ export class Audio {
           if (d - last <= 10) this.playMusic(s.name);
         }
       }
+      // the crash sites' own theme, under an asteroid's rock when nothing else is playing (the
+      // original's CraterFoundTransitionMusicTrigger: once, till you've been out from under it a
+      // minute)
+      const C = this.crater || (this.crater = { done: false, t: 60 });
+      if (!C.done && (info.rock || 0) >= 1 && !this.music?.playing && !this.wanted) { C.done = true; C.t = 60; this.playMusic('SpaceTheme'); }
+      else if (C.done) { C.t -= dt; if (C.t <= 0) { C.t = 60; if (!info.rock) C.done = false; } }
     }
     if (this.fading > 0) {
       this.fading += dt;

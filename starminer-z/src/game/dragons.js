@@ -28,6 +28,7 @@ import { B, SOLID, HEIGHT, isDoor, DOOR } from '../world/blocks.js';
 import { randomFloat, randomInt } from '../entities/cmz/types.js';
 import { weaponDamage } from '../items/items.js';
 import { makeDragonModel, CLIP_LEN } from '../entities/dragon.js';
+import { RULES } from './modes.js';
 
 // the original's y = 0 is our y = 64
 const GROUND = 64;
@@ -1023,11 +1024,8 @@ export class Dragons {
     return !!this.game.world.raycast(a.x, a.y, a.z, d.x, d.y, d.z, len, sees);
   }
 
-  // Endurance or Dragon Endurance, or a hard game: their fireballs break blocks
-  get breaksBlocks() {
-    const g = this.game;
-    return g.mode === 'endurance' || g.mode === 'dragon' || g.difficulty === 'hard' || g.difficulty === 'hardcore';
-  }
+  // Endurance or Dragon Endurance, or a Normal or Hardcore game: their fireballs break blocks
+  get breaksBlocks() { return RULES.quickSpawns(this.game); }
 
   sound(name, at) { return this.game.audio?.play?.(name, at, 1, LOUD) ?? null; }
 
@@ -1038,7 +1036,7 @@ export class Dragons {
     const g = this.game, o = g.online, host = !o || o.host;
     this.t += dt;
     if (this.pending && !this.client && this.t > (this.pendingT ?? Infinity)) this.pending = false;
-    if (!g.attract && g.difficulty !== 'noenemies' && !g.player.dead && g.ready) {
+    if (!g.attract && !RULES.noEnemies(g) && !g.player.dead && g.ready) {
       if (g.mode === 'dragon') {
         // Dragon Endurance: one after another, each tougher
         if (host && !this.pending && !this.client && this.t > this.enduranceT) {

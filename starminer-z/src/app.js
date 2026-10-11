@@ -18,7 +18,8 @@ import { CRAFT_CSS } from './ui/crafting.js';
 import { TouchControls, TOUCH_CSS } from './ui/touch.js';
 import { Game } from './game/game.js';
 import { Awards } from './game/awards.js';
-import { saveGame, loadGame, deleteSave, saveMeta } from './game/save.js';
+import { listWorlds, loadWorld, saveWorld, deleteWorld, eraseWorlds, newWorldId, worldName, worldInfo, updateWorldInfo, migrateOldSave } from './game/save.js';
+import { RULES } from './game/modes.js';
 import { loadAvatarAssets } from './entities/avatar/assets.js';
 import { loadCmzBodies } from './entities/cmz/bodies.js';
 import { loadCmzClips } from './entities/cmz/avatarAnim.js';
@@ -37,6 +38,7 @@ const ATTRACT_SEED = 1337;
 
 const DEFAULTS = {
   quality: isTouch || isXbox ? 'medium' : 'high',
+  brightness: 1,
   renderDistance: null,
   fov: 72,
   sensitivity: 1,
@@ -91,7 +93,15 @@ export class App {
     this.fps = 60;
     this.game = null;
     this.saveTimer = 0;
-    this.meta = saveMeta();
+    this.worlds = listWorlds();
+    // the kept world being played, to carry on in after the page is updated mid-game
+    this.session = null;
+    try { this.session = JSON.parse(localStorage.getItem('starminer.current') || 'null'); } catch { /* storage blocked */ }
+  }
+
+  setSession(s) {
+    this.session = s;
+    try { if (s) localStorage.setItem('starminer.current', JSON.stringify(s)); else localStorage.removeItem('starminer.current'); } catch { /* storage blocked */ }
   }
 
   saveSettings() {
@@ -141,12 +151,16 @@ export class App {
     this.frames = 0;
     this.fpsAcc = 0; this.fpsN = 0;
     this.loop = this.loop.bind(this);
+    // (the one world kept before there were several: into the list)
+    await migrateOldSave();
+    this.worlds = listWorlds();
+    const S = this.session;
     if (params.has('play') || params.has('test')) {
-      // straight into a world (tests and screenshots)
-      this.startGame({ seed: parseInt(params.get('seed') || '1337', 10) });
-    } else if (boot.resume && this.meta) {
-      const save = await loadGame();
-      if (save) this.startGame({ save }); else this.attract();
+      // straight into a world (tests and screenshots: mode=, diff=, creative)
+      this.startGame({ seed: parseInt(params.get('seed') || '1337', 10), mode: params.get('mode') || 'endurance', difficulty: params.get('diff') || 'easy', creative: params.has('creative') });
+    } else if (boot.resume && S?.id && worldInfo(S.id)) {
+      const save = await loadWorld(S.id);
+      if (save) this.startGame({ save, worldId: S.id, mode: S.mode, difficulty: S.difficulty }); else this.attract();
     } else {
       this.attract();
     }
@@ -155,15 +169,14 @@ export class App {
 
   // ---- the front end ---------------------------------------------------------------------------
 
-  // A world turning behind the menus: the save's own world if there is one.
+  // A world turning behind the menus: the one you played last, if there is one.
   attract() {
     if (this.game) this.game.dispose();
-    this.game = new Game(this, { seed: this.meta?.seed ?? ATTRACT_SEED, attract: true });
+    this.setSession(null);
+    this.game = new Game(this, { seed: this.worlds[0]?.seed ?? ATTRACT_SEED, attract: true });
     this.state = 'boot';
     this.applySettings();
   }
-
-  saveInfo() { return this.meta; }
 
   onMenuScreen(s) {
     this.game?.showPreview?.(s.avatar ? this.look() : null);
@@ -222,20 +235,42 @@ export class App {
 
   // ---- games -------------------------------------------------------------------------------------
 
-  // host: open it to friends once it's loaded
-  newWorld({ host = false } = {}) {
+  // Endurance: a new world every time, not kept (host: open it to friends once it's loaded)
+  startEndurance({ host = false } = {}) {
     this.input.requestLock();
-    deleteSave();
-    this.meta = null;
-    this.startGame({ seed: (Math.random() * 2 ** 31) | 0, host });
+    this.setSession(null);
+    this.startGame({ seed: (Math.random() * 2 ** 31) | 0, mode: 'endurance', difficulty: 'easy', host });
   }
 
-  async continueGame({ host = false } = {}) {
+  // Survival, Dragon Endurance or Creative, in one of your worlds (id) or a new one; a world
+  // first played in Creative stays a Creative world
+  async startWorld({ id = null, mode, difficulty, creative = false, host = false }) {
     this.input.requestLock();
     this.menus.reset('loading');
-    const save = await loadGame();
-    if (!save) { this.newWorld({ host }); return; }
-    this.startGame({ save, host });
+    if (id) {
+      const save = await loadWorld(id);
+      if (!save) { this.menus.notice("Couldn't Load That World", 'It may have been made by a newer copy of the game, or storage is blocked here.'); return; }
+      if (creative && !save.creative) { save.creative = true; updateWorldInfo(id, { creative: true }); }
+      this.setSession({ id, mode, difficulty });
+      this.startGame({ save, worldId: id, mode, difficulty, creative, host });
+      return;
+    }
+    id = newWorldId();
+    this.pendingWorld = { id, name: worldName(cleanName(this.profile.name) || null), creative };
+    this.setSession({ id, mode, difficulty });
+    this.startGame({ seed: (Math.random() * 2 ** 31) | 0, worldId: id, mode, difficulty, creative, host });
+  }
+
+  async deleteWorld(id) {
+    await deleteWorld(id);
+    this.worlds = listWorlds();
+  }
+
+  // Erase Storage: all the worlds, and the awards
+  async eraseStorage() {
+    await eraseWorlds();
+    this.awards.erase();
+    this.worlds = [];
   }
 
   startGame(opts) {
@@ -314,9 +349,12 @@ export class App {
     if (!g || g.attract || !g.ready || this.state === 'loading') return;
     // in a friend's world: it's theirs to save, and they keep what you have
     if (g.online && !g.online.host) { g.online.keep(); return; }
+    // (an Endurance world isn't kept)
+    if (!RULES.kept(g) || !g.worldId) return;
     const data = g.serialize();
-    this.meta = { day: data.day, days: data.days, maxDistance: data.maxDistance, savedAt: data.savedAt, seed: data.seed };
-    await saveGame(data);
+    const was = worldInfo(g.worldId) || (this.pendingWorld?.id === g.worldId ? this.pendingWorld : null);
+    await saveWorld(g.worldId, data, { name: was?.name || worldName(null), creative: g.creative });
+    this.worlds = listWorlds();
   }
 
   // ---- online ------------------------------------------------------------------------------------
@@ -379,6 +417,18 @@ export class App {
     this.attract();
   }
 
+  // Put out of a friend's game by its host.
+  kicked(ban) {
+    const o = this.game?.online;
+    if (!o || o.host || o.closed) return;
+    o.close(true);
+    this.pendingNotice = ban ? { title: 'Banned', sub: 'The host banned you from this game.' } : { title: 'Kicked', sub: 'The host kicked you from the game.' };
+    this.hideDeath();
+    this.input.exitLock();
+    this.menus.reset('loading');
+    this.attract();
+  }
+
   // Leave a friend's game (what you have goes to them first).
   leaveOnline() {
     this.game?.online?.close();
@@ -388,7 +438,22 @@ export class App {
 
   // who's in, the code: the menus showing them redraw
   onOnlineChange() {
-    if (this.menus?.visible && ['pause', 'invite', 'teleport'].includes(this.menus.id)) this.menus.refresh();
+    if (this.menus?.visible && ['pause', 'invite', 'teleport', 'teleportMenu', 'hostOptions', 'pickPlayer'].includes(this.menus.id)) this.menus.refresh();
+  }
+
+  // The host's ban list (the original keeps it with the player's stats): name -> when
+  bans() {
+    try { return JSON.parse(localStorage.getItem('starminer.bans') || '{}') || {}; } catch { return {}; }
+  }
+
+  ban(name) {
+    const b = this.bans();
+    b[name] = Date.now();
+    try { localStorage.setItem('starminer.bans', JSON.stringify(b)); } catch { /* storage blocked */ }
+  }
+
+  clearBans() {
+    try { localStorage.removeItem('starminer.bans'); } catch { /* storage blocked */ }
   }
 
   onLockChange() {
@@ -397,21 +462,35 @@ export class App {
     if (!this.input.locked && this.state === 'playing' && !this.isTouch && this.input.lastDevice !== 'pad' && !this.game?.lockFree) this.pause();
   }
 
-  showDeath(dist, day) {
+  // The death screen (InGameHUD's): in Endurance how far you got, and what pressing will do:
+  // respawn, restart, or (online, everyone down) wait for the host; or how long till you can
+  showDeath({ lines = [], press = null, count = null } = {}) {
     if (!this.deathEl) {
       this.deathEl = document.createElement('div');
       this.deathEl.className = 'death ui txt';
       this.uiRoot.appendChild(this.deathEl);
       this.deathEl.addEventListener('pointerdown', () => this.input.down('accept'));
     }
-    const press = this.isTouch ? 'Tap To Respawn' : this.input.lastDevice === 'pad' ? 'Press <span class="btn a">A</span> To Respawn' : 'Press <span class="key">Space</span> To Respawn';
-    this.deathEl.innerHTML = `<div>Distance Traveled: ${dist}</div><div>In ${day} Day${day === 1 ? '' : 's'}</div><div class="press">${press}</div>`;
-    this.deathEl.classList.add('on');
-    if (this.game) this.game.lockFree = true;
-    this.input.exitLock();
+    const dev = this.isTouch ? 'touch' : this.input.lastDevice === 'pad' ? 'pad' : 'key';
+    const key = `${lines.join('|')}|${press}|${count}|${dev}`;
+    if (key !== this.deathKey) {
+      this.deathKey = key;
+      const what = press === 'Restart' ? 'Restart' : 'Respawn';
+      const prompt = press === 'wait' ? 'Waiting For Host To Restart'
+        : count != null ? `Respawn In: ${count}`
+          : !press ? ''
+            : dev === 'touch' ? `Tap To ${what}` : dev === 'pad' ? `Press <span class="btn a">A</span> To ${what}` : `Press <span class="key">Space</span> To ${what}`;
+      this.deathEl.innerHTML = `${lines.map((l) => `<div>${l}</div>`).join('')}<div class="press">${prompt}</div>`;
+    }
+    if (!this.deathEl.classList.contains('on')) {
+      this.deathEl.classList.add('on');
+      if (this.game) this.game.lockFree = true;
+      this.input.exitLock();
+    }
   }
 
   hideDeath() {
+    this.deathKey = '';
     this.deathEl?.classList.remove('on');
     if (this.game) this.game.lockFree = false;
     this.input.requestLock();
@@ -488,9 +567,10 @@ export class App {
       const p = g.player;
       this.audio.update(dt, this.camera, {
         menu: g.attract || this.state === 'menu' || this.state === 'boot' || this.state === 'loading',
-        time: this.sky.time, depth: g.depth || 0, y: p.pos.y, pos: p.pos,
+        time: this.sky.time, depth: g.depth || 0, y: p.pos.y, pos: p.pos, rock: g.underRock || 0,
       });
-      this.renderer.exposure = parseFloat(params.get('ex') || this.autoExposure(dt));
+      // (Brightness, the original's setting, on top of the eye's own)
+      this.renderer.exposure = parseFloat(params.get('ex') || this.autoExposure(dt)) * (this.settings.brightness ?? 1);
       g.sprites.setScale(this.renderer.size.H, this.camera.fov);
       this.renderer.render(g.scene, this.camera, g.viewModel.scene, g.viewModel.camera);
       window.__readiness = ready;

@@ -61,7 +61,13 @@ export const CSS = /* css */ `
 .slot .n { position: absolute; right: 0.18em; bottom: 0.08em; font-size: 0.62em; font-weight: 700; pointer-events: none; }
 .slot .dur { position: absolute; left: 0.25em; right: 0.25em; bottom: 0.2em; height: 0.16em; background: rgba(0,0,0,0.6); pointer-events: none; }
 .slot .dur b { display: block; height: 100%; background: var(--dura); }
-.hud .day { position: absolute; left: 2.2em; bottom: 2em; font-size: 2.4em; font-weight: 800; opacity: 0; transition: opacity 1.2s; }
+.hud .day { position: absolute; left: 2.2em; bottom: 2em; font-size: 2.4em; font-weight: 800; opacity: 0; transition: opacity 3s; }
+.hud .redness { position: absolute; inset: 0; background: rgb(217, 0, 0); opacity: 0; pointer-events: none; }
+.hud .arrows { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; }
+.hud .arrow { position: absolute; left: 0; top: 0; width: 3em; height: 3em; transform-origin: 50% 100%; background-color: rgb(139, 0, 0); background-blend-mode: multiply; }
+html:not(.cmz-ui) .hud .arrow { clip-path: polygon(50% 0, 100% 100%, 0 100%); background: linear-gradient(rgba(139,0,0,0.25), rgb(139,0,0)); }
+.hud .hbar { position: relative; }
+.hud .hbar .fill { position: absolute; left: 0; top: 0; height: 100%; overflow: hidden; }
 .hud .day.on { opacity: 0.85; }
 .hud .feed { position: absolute; left: 1.4em; top: 34%; display: flex; flex-direction: column; gap: 0.15em; font-size: 0.72em; font-weight: 600; }
 .hud .feed div { transition: opacity 0.6s; }

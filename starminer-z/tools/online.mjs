@@ -1,6 +1,8 @@
 // Two players in headless Chromium: A hosts, B joins by code, and what they share is checked
-// (seeing each other, block changes, each other's dead, hits and kills, the clock, leaving and
-// coming back, the host ending it). Needs the dev server and a PeerJS server (peer-server.mjs):
+// (seeing each other, block changes, each other's dead, hits and kills, the clock, the dragons,
+// leaving and coming back, the host's options: PVP, kick, ban, restart; the host ending it; and
+// an Endurance game: dying online, starting over, and closed once it's begun). Needs the dev
+// server and a PeerJS server (peer-server.mjs):
 //   node tools/peer-server.mjs 9000 &
 //   node tools/online.mjs [out dir]       (BASE=dev server URL, PEER=peer=host:port)
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
@@ -28,8 +30,13 @@ const T0 = Date.now();
 const log = (...a) => console.log(`[${((Date.now() - T0) / 1000).toFixed(0)}s]`, ...a);
 
 try {
-  await A.goto(`${BASE}?play&${PEER}&rd=4&time=0.45&q=low${extra}`);
-  await wait(A, () => window.__game?.ready, null, 240000);
+  // A: a new Survival world, Normal, kept (an Endurance world isn't, and can't be joined once
+  // it's begun: that's at the end)
+  await A.goto(`${BASE}?${PEER}&rd=4&time=0.45&q=low${extra}`);
+  await wait(A, () => window.__app?.state === 'menu', null, 240000);
+  await A.evaluate(() => window.__app.startWorld({ mode: 'survival', difficulty: 'normal' }));
+  await wait(A, () => window.__app.state === 'playing' && window.__app.game?.ready, null, 240000);
+  await A.evaluate(() => { window.__game = window.__app.game; });
   log('A ready');
   const code = await A.evaluate(async () => { await window.__app.hostOnline(); return window.__game.online?.code; });
   ok(/^[A-Z2-9]{5}$/.test(code || ''), `A hosts with a code (${code})`);
@@ -39,10 +46,13 @@ try {
   log('B at the menu');
   await B.evaluate(() => window.__app.setName('Bea'));
   await B.evaluate((c) => window.__app.joinOnline(c), code);
+  log('B:', await B.evaluate(() => `${window.__app.state} ${window.__app.menus.id} ${window.__app.menus.cur?.sub ?? ''}`));
   await wait(B, () => window.__app.game?.online && window.__app.game.ready, null, 240000);
   log('B joined and loaded');
   const seeds = await Promise.all([A.evaluate(() => window.__game.seed), B.evaluate(() => window.__app.game.seed)]);
   ok(seeds[0] === seeds[1], `same world (seed ${seeds[0]} / ${seeds[1]})`);
+  const how = await B.evaluate(() => { const g = window.__app.game; return { mode: g.mode, difficulty: g.difficulty, creative: g.creative, pvp: g.pvp }; });
+  ok(how.mode === 'survival' && how.difficulty === 'normal' && !how.creative && how.pvp === 0, `played the host's way (${JSON.stringify(how)})`);
 
   // B stands next to A, A looks at B
   const ap = await A.evaluate(() => { const p = window.__game.player; return { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw }; });
@@ -215,12 +225,14 @@ try {
   await B.evaluate(async () => { window.__ITEMS = (await import('/src/items/items.js')).ITEMS; window.__ITEMS.pistol.inaccuracy = 0; });
   await bShot('pistol');
   await wait(A, () => window.__game.dragons.client.health < 20, null, 60000).catch(() => {});
+  await wait(B, () => window.__app.game.dragons.client.health < 20, null, 60000).catch(() => {});
   const hp = await Promise.all([A.evaluate(() => window.__game.dragons.client.health), B.evaluate(() => window.__app.game.dragons.client.health)]);
   ok(Math.abs(hp[0] - 19.7) < 1e-6 && Math.abs(hp[1] - 19.7) < 1e-6, `B's bullet hurts it on both machines (${hp.join(' / ')})`);
   await Promise.all([A.evaluate(() => { window.__game.dragons.client.health = 0.2; }), B.evaluate(() => { window.__app.game.dragons.client.health = 0.2; })]);
   await bShot('pistol');
   await wait(A, () => window.__game.dragons.client?.dead ?? true, null, 60000).then(() => ok(true, "B's shot kills it, on A's machine too"), () => ok(false, "B's shot kills it, on A's machine too"));
   await wait(B, () => !window.__app.game.dragons.client, null, 240000).catch(() => {});
+  await wait(A, () => !window.__game.dragons.client, null, 240000).catch(() => {});
   const loot = await Promise.all([A.evaluate(() => window.__game.drops.list.filter((d) => d.id === 'explosive_powder').length), B.evaluate(() => window.__app.game.drops.list.filter((d) => d.id === 'explosive_powder').length)]);
   ok(loot[0] === 0 && loot[1] >= 2, `what it leaves is B's (A ${loot[0]}, B ${loot[1]} explosive powder)`);
 
@@ -265,8 +277,83 @@ try {
 
   // the host saves, and B's things are in the save
   await A.evaluate(() => window.__app.autosave());
-  const saved = await A.evaluate(async () => { const { loadGame } = await import('/src/game/save.js'); const s = await loadGame(); return !!s?.guests?.Bea; });
+  const saved = await A.evaluate(async () => { const { loadWorld } = await import('/src/game/save.js'); const s = await loadWorld(window.__game.worldId); return !!s?.guests?.Bea; });
   ok(saved, "the host's save holds B's things");
+
+  // PVP: off, A's bullet goes by B; on (Host Options), it hurts B, on B's machine
+  const standB = async () => {
+    const ap2 = await A.evaluate(() => { const p = window.__game.player; return { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw }; });
+    await B.evaluate((ap) => {
+      const app = window.__app, g = app.game, p = g.player;
+      app.onLockChange = () => {};
+      if (app.state === 'paused') app.resume();
+      if (p.dead) g.respawn();
+      p.pos.set(ap.x - Math.sin(ap.yaw) * 4, ap.y, ap.z - Math.cos(ap.yaw) * 4);
+      p.vel.set(0, 0, 0);
+      p.health = p.maxHealth;
+      if (!window.__hurtOn) { window.__hurtOn = true; window.__hurt = []; const h = p.hurt.bind(p); p.hurt = (a, f, k) => { window.__hurt.push(k); return h(a, f, k); }; }
+      window.__hurt.length = 0;
+    }, ap2);
+    // (till A sees B standing there)
+    await A.waitForFunction(() => { const r = [...window.__game.online.players.values()][0]; return r && r.pos.distanceTo(r.target) < 0.2; }, null, { timeout: 30000, polling: 300 }).catch(() => {});
+    await A.waitForTimeout(1500);
+  };
+  const aShoots = () => A.evaluate(async () => {
+    const g = window.__game, r = [...g.online.players.values()][0], eye = g.player.eye.clone();
+    const { ITEMS } = await import('/src/items/items.js');
+    ITEMS.pistol.inaccuracy = 0;
+    const d = r.pos.clone(); d.y += 1.1; d.sub(eye).normalize();
+    g.fire(ITEMS.pistol, eye, eye, [d], true, 0);
+    g.online.shot('pistol', eye, eye, [d]);
+  });
+  await standB();
+  await aShoots();
+  await B.waitForTimeout(5000);
+  const off = await B.evaluate(() => ({ h: window.__app.game.player.health, hurt: [...window.__hurt] }));
+  ok(off.h === 100 && !off.hurt.length, `PVP off: A's bullet doesn't hurt B (${off.h})`);
+  await A.evaluate(() => window.__game.setPvp(1));
+  await wait(B, () => window.__app.game.pvp === 1, null, 20000).then(() => ok(true, 'PVP on: B hears of it'), () => ok(false, 'PVP on: B hears of it'));
+  await standB();
+  await aShoots();
+  await wait(B, () => window.__hurt.includes('pvp'), null, 30000).catch(() => {});
+  const on = await B.evaluate(() => ({ h: window.__app.game.player.health, hurt: [...window.__hurt] }));
+  ok(on.hurt.includes('pvp') && Math.abs(on.h - 79) < 0.5, `and A's bullet takes a fifth of B's health (${on.h})`);
+  // a swing at B (ProcessMeleePlayerMessage): the same again
+  await A.evaluate(() => { const g = window.__game, r = [...g.online.players.values()][0]; g.online.meleePlayer(r.id, 'stone_pickaxe', g.player.pos); });
+  await wait(B, () => window.__hurt.filter((k) => k === 'pvp').length >= 2, null, 30000).catch(() => {});
+  const sw = await B.evaluate(() => window.__app.game.player.health);
+  ok(Math.abs(sw - 58) < 1, `and so does A's swing (${sw})`);
+  await A.evaluate(() => window.__game.setPvp(0));
+
+  // Host Options' Restart: everyone back at the start
+  await B.evaluate(() => { const p = window.__app.game.player; p.pos.x += 20; p.pos.y += 2; });
+  await A.evaluate(() => window.__game.restartForAll());
+  await wait(B, () => { const g = window.__app.game, sp = g.spawnSpot(), p = g.player.pos; return Math.hypot(p.x - sp.x, p.z - sp.z) < 1; }, null, 30000)
+    .then(() => ok(true, "the host's Restart puts B back at the start"), () => ok(false, "the host's Restart puts B back at the start"));
+
+  // Kick: B's put out, told why, and can come back
+  const bid = await A.evaluate(() => [...window.__game.online.players.values()][0].id);
+  await A.evaluate((id) => window.__game.online.kick(id, false), bid);
+  await wait(B, () => window.__app.state === 'menu' && window.__app.menus.id === 'notice', null, 240000).catch(() => {});
+  const kick = await B.evaluate(() => window.__app.menus.cur?.title);
+  ok(kick === 'Kicked', `the host kicks B: B is told (${kick})`);
+  await wait(A, () => window.__game.online.players.size === 0, null, 20000).catch(() => {});
+  await B.evaluate((c) => window.__app.joinOnline(c), code);
+  await wait(B, () => window.__app.game?.online && window.__app.game.ready, null, 240000).then(() => ok(true, 'and can join again'), () => ok(false, 'and can join again'));
+  // Ban: put out, and kept out till the host clears the list
+  const bid2 = await A.evaluate(() => [...window.__game.online.players.values()][0].id);
+  await A.evaluate((id) => window.__game.online.kick(id, true), bid2);
+  await wait(B, () => window.__app.state === 'menu' && window.__app.menus.id === 'notice', null, 240000).catch(() => {});
+  const ban = await B.evaluate(() => window.__app.menus.cur?.title);
+  ok(ban === 'Banned', `the host bans B: B is told (${ban})`);
+  await wait(A, () => window.__game.online.players.size === 0, null, 20000).catch(() => {});
+  await B.evaluate((c) => window.__app.joinOnline(c), code);
+  await wait(B, () => window.__app.menus.id === 'notice', null, 60000).catch(() => {});
+  const refused = await B.evaluate(() => window.__app.menus.cur?.sub);
+  ok(/banned/.test(refused || ''), `and can't come back (${refused})`);
+  await A.evaluate(() => window.__app.clearBans());
+  await B.evaluate((c) => window.__app.joinOnline(c), code);
+  await wait(B, () => window.__app.game?.online && window.__app.game.ready, null, 240000).then(() => ok(true, 'till the host clears the ban list'), () => ok(false, 'till the host clears the ban list'));
 
   // the host ends it: B goes back to the menu, told why
   await A.evaluate(() => window.__app.quitToMenu());
@@ -274,6 +361,43 @@ try {
   const note = await B.evaluate(() => window.__app.menus.cur?.sub);
   log('B notice:', note);
   await B.screenshot({ path: `${SHOTS}/mp-b-notice.png` });
+
+  // Endurance online: B joins before it's begun; dying, B waits, then comes back by A; with both
+  // down, the host starts it over for everyone
+  await wait(A, () => window.__app.state === 'menu', null, 240000);
+  await A.evaluate(() => window.__app.startEndurance({ host: true }));
+  await wait(A, () => window.__app.state === 'playing' && window.__app.game?.ready && window.__app.game.online?.code, null, 240000);
+  const code2 = await A.evaluate(() => { window.__game = window.__app.game; window.__app.onLockChange = () => {}; return window.__game.online.code; });
+  await B.evaluate((c) => window.__app.joinOnline(c), code2);
+  await wait(B, () => window.__app.game?.online && window.__app.game.ready, null, 240000).then(() => ok(true, 'B joins an Endurance game before it has begun'), () => ok(false, 'B joins an Endurance game before it has begun'));
+  await B.evaluate(() => { const app = window.__app, g = app.game; app.onLockChange = () => {}; if (app.state === 'paused') app.resume(); g.player.hurt(1000, null, 'test'); });
+  await wait(B, () => window.__app.game.death?.showT <= 0, null, 60000).catch(() => {});
+  const wB = await B.evaluate(() => window.__app.game.deathScreen());
+  ok(wB.count > 10 && /Distance Traveled/.test(wB.lines[0]), `B, dead, waits to come back (${JSON.stringify(wB)})`);
+  const aAt = await A.evaluate(() => window.__game.player.pos.toArray());
+  await B.evaluate(() => { const g = window.__app.game; g.death.waitT = 0; window.__app.input.down('accept'); setTimeout(() => window.__app.input.up('accept'), 300); });
+  await wait(B, () => !window.__app.game.player.dead, null, 30000).catch(() => {});
+  const bAt = await B.evaluate(() => ({ dead: window.__app.game.player.dead, p: window.__app.game.player.pos.toArray() }));
+  ok(!bAt.dead && Math.hypot(bAt.p[0] - aAt[0], bAt.p[2] - aAt[2]) < 3, `then comes back by A (${Math.hypot(bAt.p[0] - aAt[0], bAt.p[2] - aAt[2]).toFixed(1)} m off)`);
+  await A.evaluate(() => { window.__game.player.hurt(1000, null, 'test'); });
+  await B.evaluate(() => { window.__app.game.player.hurt(1000, null, 'test'); });
+  await wait(A, () => window.__game.death?.showT <= 0 && [...window.__game.online.players.values()].every((r) => r.dead), null, 60000).catch(() => {});
+  await wait(B, () => window.__app.game.death?.showT <= 0, null, 60000).catch(() => {});
+  const both = await Promise.all([A.evaluate(() => window.__game.deathScreen().press), B.evaluate(() => window.__app.game.deathScreen().press)]);
+  ok(both[0] === 'Restart' && both[1] === 'wait', `both down: the host can restart, B waits for it (${both.join(' / ')})`);
+  await A.evaluate(() => { window.__app.input.down('accept'); setTimeout(() => window.__app.input.up('accept'), 300); });
+  await wait(B, () => !window.__app.game.player.dead, null, 30000).catch(() => {});
+  const up = await Promise.all([A.evaluate(() => window.__game.player.dead), B.evaluate(() => window.__app.game.player.dead)]);
+  ok(!up[0] && !up[1], 'and everyone starts over');
+  // begun (the host 100 m out): no one else can join
+  await B.evaluate(() => window.__app.leaveOnline());
+  await wait(B, () => window.__app.state === 'menu', null, 240000);
+  await A.evaluate(() => { window.__game.maxDistance = 150; });
+  await wait(A, () => window.__game.begun, null, 20000).catch(() => {});
+  await B.evaluate((c) => window.__app.joinOnline(c), code2);
+  await wait(B, () => window.__app.menus.id === 'notice', null, 60000).catch(() => {});
+  const late = await B.evaluate(() => window.__app.menus.cur?.sub);
+  ok(/already begun/.test(late || ''), `once it has begun, B can't join (${late})`);
 } catch (e) {
   console.log('FAIL', e.message);
   process.exitCode = 1;

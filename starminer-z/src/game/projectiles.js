@@ -15,6 +15,7 @@ import { ITEMS, weaponDamage } from '../items/items.js';
 import { BOUNCES_LASERS, BOUNCE } from '../entities/cmz/types.js';
 import { EXPLOSIVE } from './explosives.js';
 import { itemModel } from '../items/models.js';
+import { rayPlayer } from '../net/online.js';
 
 const BULLET_GRAVITY = 10;
 const BOLT_SPEED = 200, BOLT_LIFE = 3, BOLT_BOUNCES = 3;
@@ -141,15 +142,29 @@ export class Projectiles {
   }
 
   // The first thing along a to b: a block (with its hit), or one of the dead (theirs too); or,
-  // with neither, the dragon (EnemyManager.Trace).
-  probe(a, b, enemies = true) {
-    const w = this.game.world;
+  // with neither, the dragon (EnemyManager.Trace). With PVP on, a shot's (shooter: whose) stops
+  // at a player too: this one (player: 'me'), or another.
+  probe(a, b, enemies = true, shooter = null) {
+    const g = this.game, w = g.world;
     _d.subVectors(b, a);
     const len = _d.length();
     if (len < 1e-6) return null;
     _d.divideScalar(len);
     const blk = w.raycast(a.x, a.y, a.z, _d.x, _d.y, _d.z, len, solid);
-    const bd = blk ? blk.dist : len;
+    let bd = blk ? blk.dist : len;
+    if (shooter != null && g.pvp && g.online) {
+      let pl = null;
+      const me = g.player, my = g.online.myId;
+      if (shooter !== my && !me.dead) { const t = rayPlayer(a, _d, bd, me.pos); if (t != null) pl = { player: 'me', dist: t }; }
+      for (const r of g.online.players.values()) {
+        if (r.id === shooter || r.dead) continue;
+        const t = rayPlayer(a, _d, pl ? pl.dist : bd, r.pos);
+        if (t != null) pl = { player: r.id, dist: t };
+      }
+      const en = enemies ? g.enemies?.raycast(a, _d, pl ? pl.dist : bd, pl ? pl.dist : bd, true) : null;
+      if (pl && !en) return { ...pl, at: a.clone().addScaledVector(_d, pl.dist), dir: _d.clone() };
+      if (pl) bd = pl.dist;
+    }
     const en = enemies ? this.game.enemies?.raycast(a, _d, bd, bd, true) : null;
     if (en) return { enemy: en.enemy, dist: en.dist, y: en.y, at: a.clone().addScaledVector(_d, en.dist), dir: _d.clone() };
     if (blk) return { block: blk, dist: blk.dist, at: a.clone().addScaledVector(_d, blk.dist), dir: _d.clone() };
@@ -169,11 +184,13 @@ export class Projectiles {
       t.head.addScaledVector(t.hv, dt);
       t.hv.y -= BULLET_GRAVITY * dt;
       if (t.left < t.tailAt - 0.2) { t.tail.addScaledVector(t.tv, dt); t.tv.y -= BULLET_GRAVITY * dt; }
-      const hit = this.probe(t.tail, t.head);
+      const hit = this.probe(t.tail, t.head, true, t.shooter);
       if (hit) {
         t.head.copy(hit.at);
         t.done = true;
-        g.shotHit(hit, t.it, t.mine, t.shooter);
+        // PVP: someone else's bullet in this player (the original's 0.21 of their health)
+        if (hit.player === 'me') g.pvpHit(0.21, hit.at);
+        else if (hit.player == null) g.shotHit(hit, t.it, t.mine, t.shooter);
       }
       if (!g.world.isLoaded(t.head.x, t.head.z) || t.head.y < 0) t.done = true;
     }
@@ -200,11 +217,13 @@ export class Projectiles {
       if (!done) {
         b.last.copy(b.pos);
         b.pos.addScaledVector(b.v, dt);
-        const hit = b.skip ? null : this.probe(b.last, b.pos);
+        const hit = b.skip ? null : this.probe(b.last, b.pos, true, b.shooter);
         b.skip = false;
         if (hit) {
           b.pos.copy(hit.at);
-          if (hit.enemy || hit.dragon) { g.shotHit(hit, b.it, b.mine, b.shooter); done = true; }
+          // PVP: someone else's laser bolt in this player (0.4 of their health)
+          if (hit.player != null) { if (hit.player === 'me') g.pvpHit(0.4, hit.at); done = true; }
+          else if (hit.enemy || hit.dragon) { g.shotHit(hit, b.it, b.mine, b.shooter); done = true; }
           else {
             const id = hit.block.id;
             g.boltSplash?.(hit.at, b.it);

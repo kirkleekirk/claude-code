@@ -3,7 +3,8 @@
 // d-pad, A and B), the keyboard (arrows or WASD, Enter and Esc), the mouse and touch.
 
 import { logoSVG } from './logo.js';
-import { AWARDS } from '../game/awards.js';
+import { AWARDS, progressLine } from '../game/awards.js';
+import { MODES, DIFFICULTIES, RULES, modeName } from '../game/modes.js';
 import { PRESETS, SKIN_TONES, HAIR_COLORS, SHIRT_TINTS } from '../entities/avatar/looks.js';
 import { ALPHABET, CODE_LENGTH, cleanCode } from '../net/link.js';
 
@@ -26,6 +27,7 @@ export const MENU_CSS = /* css */ `
 .menu .item .val .ar { opacity: 0; color: var(--menu-hi); padding: 0 0.15em; }
 .menu .item.sel .val .ar { opacity: 1; }
 .menu .item small { font-size: 0.55em; font-weight: 700; color: var(--ink-dim); }
+.menu .desc { position: absolute; left: 46%; top: 2.6em; width: min(26em, 46%); font-size: 1.05em; font-weight: 700; line-height: 1.4; text-shadow: 0 0.08em 0.2em rgba(0,0,0,0.8); }
 .menu .rows .item { font-size: 1.12em; width: 100%; max-width: 26em; justify-content: space-between; }
 .menu .press { position: absolute; left: 0; top: 0.4em; font-size: 1.5em; font-weight: 800; animation: pulse 1.6s ease-in-out infinite; display: flex; gap: 0.35em; align-items: center; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
@@ -63,6 +65,24 @@ export const MENU_CSS = /* css */ `
 .menu .bigcode b { display: inline-grid; place-items: center; width: 1.2em; height: 1.4em; background: rgba(0,0,0,0.45); border: 0.05em solid rgba(255,255,255,0.6); }
 .menu .who { font-size: 0.85em; font-weight: 700; color: var(--ink-dim); margin-bottom: 0.9em; }
 `;
+
+// StarMiner Z's own release notes (the original's Options menu has a Release Notes screen)
+const RELEASE_NOTES = `
+  <h3>The later CastleMiner Z</h3>
+  <ul>
+  <li>Game modes, as the later version has them: Endurance (a new world every run, never kept), Survival and Creative (your own kept worlds, at No Enemies, Easy, Normal or Hardcore), and Dragon Endurance (unlocked by killing the Undead Dragon in Endurance).</li>
+  <li>Several worlds, each kept on its own: create, pick, and delete them.</li>
+  <li>The five dragons, the guided missile that locks on to them, and Explosive Powder from what they leave.</li>
+  <li>Crash sites with their asteroids and Space Goo, the aliens round them, and the Felguard.</li>
+  <li>Its items and 107 recipes: bloodstone, light machine guns, laser guns and swords, rocket launchers, grenades, TNT and C4, crates, doors, the clock, locator and teleporter.</li>
+  <li>Its 31 awards, counted in Endurance.</li>
+  <li>Online: Host Options (kick, ban, restart, PVP), Teleport (to the surface, the start, a friend), and a game of Endurance closed to newcomers once it's begun.</li>
+  <li>Its HUD: the health bar, the red as you're hurt, and arrows to whatever hurt you.</li>
+  </ul>
+  <h3>Before that</h3>
+  <ul>
+  <li>Endurance from the tower, the zones going out to Hell on Earth, the dead by the original's rules, online play with friends by a code, and the ripped models, sounds and screens from your own copy of the game.</li>
+  </ul>`;
 
 // what a name may be made of, and the order a pad steps through it
 const NAME_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 ';
@@ -103,10 +123,14 @@ export class Menus {
     const app = this.app, S = app.settings;
     switch (id) {
       case 'title': return { id, press: true, note: true };
+      // the original's MainMenu (with our Choose Avatar, Help & Controls and Credits; nothing to
+      // buy or redeem, and a page isn't exited)
       case 'main': return {
         id, note: true,
         items: [
-          { label: 'Play Game', on: () => this.playGame() },
+          { label: 'Host Online', on: () => this.open('mode', { host: true }) },
+          { label: 'Join Online', on: () => this.open('join') },
+          { label: 'Play Offline', on: () => this.open('mode', { host: false }) },
           { label: 'Choose Avatar', on: () => this.open('avatar') },
           { label: 'Awards', on: () => this.open('awards') },
           { label: 'Options', on: () => this.open('options') },
@@ -115,32 +139,74 @@ export class Menus {
         ],
         back: () => this.replace('title'),
       };
-      case 'play': {
-        const m = app.saveInfo();
+      // the original's GameModeMenu: Endurance starts straight away; the rest go on to a
+      // difficulty (Survival, Creative) and a world
+      case 'mode': {
+        const host = !!arg?.host, unlocked = app.awards.total('undeadDragonKills') > 0;
         return {
-          id, title: 'Endurance',
-          sub: 'Get as far from the start tower as you can. The dead come out at night, and more of them the further you go.',
+          id, title: 'Choose a Game Mode', descs: true,
           items: [
-            m ? { label: 'Continue Game', small: `Day ${m.days ?? m.day} · ${m.maxDistance ?? 0} m`, on: () => app.continueGame() } : null,
-            { label: 'New World', on: () => (m ? this.open('confirmNew') : app.newWorld()) },
-            { label: 'Host Online Game', on: () => this.open('host') },
-            { label: 'Join Online Game', on: () => this.open('join') },
+            { label: MODES.endurance.name, desc: MODES.endurance.desc, on: () => app.startEndurance({ host }) },
+            { label: MODES.survival.name, desc: MODES.survival.desc, on: () => this.open('difficulty', { host, mode: 'survival', creative: false }) },
+            {
+              label: MODES.dragon.name, desc: MODES.dragon.desc, small: unlocked ? '' : 'Locked',
+              on: () => (unlocked ? this.open('worlds', { host, mode: 'dragon', difficulty: 'easy', creative: false })
+                : this.open('dialog', { title: 'Kill Undead Dragon', sub: 'Unlock this game mode by killing the Undead Dragon in Endurance Mode' })),
+            },
+            { label: MODES.creative.name, desc: MODES.creative.desc, on: () => this.open('difficulty', { host, mode: 'survival', creative: true }) },
+            { label: 'Back', on: () => this.back() },
+          ],
+        };
+      }
+      // DifficultyLevelScreen (Normal to start with)
+      case 'difficulty': return {
+        id, title: 'Choose a Difficulty', descs: true, start: 2,
+        items: [
+          ...['noenemies', 'easy', 'normal', 'hardcore'].map((k) => ({ label: DIFFICULTIES[k].name, desc: DIFFICULTIES[k].desc, on: () => this.open('worlds', { ...arg, difficulty: k }) })),
+          { label: 'Back', on: () => this.back() },
+        ],
+      };
+      // WorldPickerScreen: a new world, or one of yours (in Creative, the Creative ones and any
+      // other, which then stays a Creative world)
+      case 'worlds': {
+        const list = app.worlds.filter((w) => arg.creative || !w.creative);
+        const date = (t) => (t ? new Date(t).toLocaleDateString() : '');
+        return {
+          id, title: 'Choose a World', small: true,
+          items: [
+            { label: 'Create World', on: () => app.startWorld({ ...arg, id: null }) },
+            ...list.map((w) => ({
+              label: esc(w.name), small: `${w.creative ? 'Creative · ' : ''}Day ${w.days || 1} · ${w.maxDistance || 0} m · ${date(w.played)}`,
+              on: () => (arg.creative && !w.creative ? this.open('dialog', {
+                title: 'Creative Mode', sub: 'Are you sure you want to play this world in Creative Mode? You will not be able to load it in normal mode again.',
+                yes: () => app.startWorld({ ...arg, id: w.id }),
+              }) : app.startWorld({ ...arg, id: w.id })),
+            })),
+            list.length ? { label: 'Delete A World', on: () => this.open('deleteWorld', arg) } : null,
             { label: 'Back', on: () => this.back() },
           ].filter(Boolean),
         };
       }
-      case 'host': {
-        const m = app.saveInfo();
+      case 'deleteWorld': {
+        const list = app.worlds.filter((w) => arg.creative || !w.creative);
         return {
-          id, title: 'Host Online Game',
-          sub: "Play your world with friends. Once it's loaded you'll get a code to give them, and they join with it. Online, the game doesn't stop for the pause menu.",
+          id, title: 'Delete A World', small: true,
           items: [
-            m ? { label: 'Continue Game', small: `Day ${m.days ?? m.day} · ${m.maxDistance ?? 0} m`, on: () => app.continueGame({ host: true }) } : null,
-            { label: 'New World', on: () => (m ? this.open('confirmNew', { host: true }) : app.newWorld({ host: true })) },
+            ...list.map((w) => ({
+              label: esc(w.name), on: () => this.open('dialog', {
+                title: 'Delete World', sub: 'Are you sure you want to delete this world?',
+                yes: async () => { await app.deleteWorld(w.id); this.back(); this.back(); this.refresh(); },
+              }),
+            })),
             { label: 'Back', on: () => this.back() },
-          ].filter(Boolean),
+          ],
         };
       }
+      // the original's DialogScreens: a question (yes: what Yes does) or a message
+      case 'dialog': return {
+        id, title: arg?.title || '', sub: arg?.sub || '', small: true, dim: app.state === 'paused',
+        items: arg?.yes ? [{ label: 'No', on: () => this.back() }, { label: 'Yes', on: () => arg.yes() }] : [{ label: 'OK', on: () => this.back() }],
+      };
       case 'join': return {
         id, title: 'Join Online Game', typing: true,
         sub: 'Type the code from your friend\'s screen (it\'s under Invite Friends in their pause menu).',
@@ -151,27 +217,73 @@ export class Menus {
           { label: 'Back', on: () => this.back() },
         ],
       };
-      case 'confirmNew': return {
-        id, title: 'Start A New World?', sub: 'Your current world and everything in it will be lost.',
-        items: [{ label: 'No', on: () => this.back() }, { label: 'Yes', on: () => app.newWorld({ host: !!arg?.host }) }],
-      };
+      // the original's InGameMenu (with our Choose Avatar and Awards)
       case 'pause': {
-        const o = app.game?.online, guest = o && !o.host, others = o ? o.players.size : 0;
+        const g = app.game, o = g?.online, guest = o && !o.host, others = o ? o.players.size : 0;
+        const kept = g && RULES.kept(g);
         return {
           id, dim: true, small: true,
-          sub: o ? (guest ? `Online · ${o.count} players` : `Online · Code ${o.code} · ${o.count} player${o.count === 1 ? '' : 's'}`) : '',
+          sub: [g ? `${modeName(g)}${g.mode === 'endurance' || g.mode === 'dragon' ? '' : ` · ${DIFFICULTIES[g.difficulty]?.name ?? ''}`}` : '',
+            o ? (guest ? `Online · ${o.count} players` : `Online · Code ${o.code} · ${o.count} player${o.count === 1 ? '' : 's'}`) : ''].filter(Boolean).join(' · '),
           items: [
             { label: 'Return To Game', on: () => app.resume() },
+            { label: 'Inventory', on: () => { app.resume(); g?.openCrafting?.(); } },
+            g && RULES.teleport(g) ? { label: 'Teleport', on: () => this.open('teleportMenu') } : null,
             guest ? null : { label: 'Invite Friends', small: o ? `Code ${o.code}` : '', on: () => { app.hostOnline(); this.open('invite'); } },
-            others ? { label: 'Teleport To Player', on: () => this.open('teleport') } : null,
+            { label: 'Help & Controls', on: () => this.open('help') },
             { label: 'Options', on: () => this.open('options') },
             { label: 'Choose Avatar', on: () => this.open('avatar') },
             { label: 'Awards', on: () => this.open('awards') },
-            { label: 'Help & Controls', on: () => this.open('help') },
+            o && !guest ? { label: 'Host Options', on: () => this.open('hostOptions') } : null,
             guest ? { label: 'Leave Game', on: () => app.leaveOnline() }
-              : { label: 'Save And Quit', on: () => (others ? this.open('confirmEnd') : app.quitToMenu()) },
+              : others ? { label: kept ? 'Save And Quit' : 'Main Menu', on: () => this.open('confirmEnd') }
+                : kept ? { label: 'Save And Quit', on: () => app.quitToMenu() }
+                  : { label: 'Main Menu', on: () => this.open('dialog', { title: 'Quit To The Main Menu?', sub: "Endurance worlds aren't kept: this one, and how far you've got in it, will be gone.", yes: () => app.quitToMenu() }) },
           ].filter(Boolean),
           back: () => app.resume(),
+        };
+      }
+      // TeleportMenu
+      case 'teleportMenu': {
+        const g = app.game, o = g?.online;
+        const go = (fn) => { fn(); app.resume(); };
+        return {
+          id, title: 'Teleport', small: true, dim: true,
+          items: [
+            { label: 'Return To Game', on: () => app.resume() },
+            { label: 'Teleport To Surface', on: () => go(() => g.teleportToSurface()) },
+            { label: 'Teleport To Start', on: () => go(() => g.teleportToStart()) },
+            o?.players.size ? { label: 'Teleport To Player', on: () => this.open('teleport') } : null,
+          ].filter(Boolean),
+        };
+      }
+      // HostOptions: who's in, the game's rules (Visibility has no meaning here: a game is open
+      // to whoever has its code)
+      case 'hostOptions': {
+        const g = app.game, o = g?.online, bans = Object.keys(app.bans());
+        return {
+          id, title: 'Host Options', small: true, dim: true, rows: true,
+          items: [
+            { label: 'Return To Game', on: () => app.resume() },
+            { label: 'Kick Player', off: !o?.players.size, on: () => this.open('pickPlayer', { act: 'kick' }) },
+            { label: 'Ban Player', off: !o?.players.size, on: () => this.open('pickPlayer', { act: 'ban' }) },
+            { label: 'Restart', on: () => { g.restartForAll(); app.resume(); } },
+            this.choice('PVP', [0, 1], () => g.pvp, (v) => g.setPvp(v), (v) => (v ? 'Everyone' : 'Off')),
+            bans.length ? { label: 'Clear Ban List', small: `${bans.length}`, on: () => { app.clearBans(); this.refresh(); } } : null,
+            { label: 'Back', on: () => this.back() },
+          ].filter(Boolean),
+        };
+      }
+      case 'pickPlayer': {
+        const o = app.game?.online, list = o ? [...o.players.values()] : [];
+        const ban = arg?.act === 'ban';
+        return {
+          id, title: ban ? 'Ban Player' : 'Kick Player', small: true, dim: true,
+          sub: list.length ? '' : 'No one else is here.',
+          items: [
+            ...list.map((p) => ({ label: esc(p.name), on: () => { o.kick(p.id, ban); this.back(); } })),
+            { label: 'Back', on: () => this.back() },
+          ],
         };
       }
       case 'invite': {
@@ -219,7 +331,8 @@ export class Menus {
       }
       case 'confirmEnd': return {
         id, title: 'End The Game?', small: true, dim: true,
-        sub: 'Your friends will go back to their menus. Your world is saved, with what they have, for next time.',
+        sub: app.game && RULES.kept(app.game) ? 'Your friends will go back to their menus. Your world is saved, with what they have, for next time.'
+          : "Your friends will go back to their menus. Endurance worlds aren't kept.",
         items: [{ label: 'No', on: () => this.back() }, { label: 'Yes', on: () => app.quitToMenu() }],
       };
       case 'notice': return {
@@ -241,8 +354,21 @@ export class Menus {
           this.range('Sound Volume', 0, 1, 0.1, () => S.sound, (v) => app.setSetting('sound', v), (v) => `${Math.round(v * 10)}`),
           this.range('Music Volume', 0, 1, 0.1, () => S.music, (v) => app.setSetting('music', v), (v) => `${Math.round(v * 10)}`),
           this.choice('Show FPS', [false, true], () => S.showFps, (v) => app.setSetting('showFps', v), yes),
+          this.range('Brightness', 0.5, 1.5, 0.1, () => S.brightness ?? 1, (v) => app.setSetting('brightness', v), (v) => `${Math.round(v * 10)}`),
+          { label: 'Release Notes', on: () => this.open('releaseNotes') },
+          app.state === 'paused' ? null : {
+            label: 'Erase Storage', on: () => this.open('dialog', {
+              title: 'Erase Storage', sub: 'Are you sure you want to delete everything? (Every world, and every award.)',
+              yes: async () => { await app.eraseStorage(); this.back(); },
+            }),
+          },
           { label: 'Back', on: () => this.back() },
-        ],
+        ].filter(Boolean),
+      };
+      case 'releaseNotes': return {
+        id, title: 'Release Notes', small: true, dim: app.state === 'paused',
+        html: `<div class="panel">${RELEASE_NOTES}</div>`,
+        items: [{ label: 'Back', on: () => this.back() }],
       };
       case 'avatar': {
         const P = app.profile;
@@ -263,10 +389,10 @@ export class Menus {
         const list = AWARDS.map((a) => {
           const got = A.isUnlocked(a);
           const f = Math.min(1, A.value(a) / a.goal);
-          return `<div class="award${got ? ' got' : ''}"><div class="ic">${got ? '★' : '?'}</div><div style="flex:1;min-width:0"><div class="t">${a.name}</div><div class="d">${a.desc}</div><div class="bar"><b style="width:${(f * 100).toFixed(0)}%"></b></div></div></div>`;
+          return `<div class="award${got ? ' got' : ''}"><div class="ic">${got ? '★' : '?'}</div><div style="flex:1;min-width:0"><div class="t">${a.name}</div><div class="d">${a.desc}</div><div class="d">${progressLine(a, A.value(a))}</div><div class="bar"><b style="width:${(f * 100).toFixed(0)}%"></b></div></div></div>`;
         }).join('');
         return {
-          id, title: `Awards  ${A.count} / ${AWARDS.length}`, small: true, dim: app.state === 'paused',
+          id, title: `Awards  ${A.count} / ${AWARDS.length}`, sub: 'Counted in Endurance.', small: true, dim: app.state === 'paused',
           html: `<div class="panel" style="max-width:56em"><div class="awards">${list}</div></div>`,
           items: [{ label: 'Back', on: () => this.back() }],
         };
@@ -274,8 +400,11 @@ export class Menus {
       case 'help': return {
         id, title: 'Help & Controls', small: true, dim: app.state === 'paused',
         html: `<div class="panel">
-          <h3>Endurance</h3>
-          <p>You start at the tower. Every meter you get from it counts: your best is the Max. Dig for coal, copper, iron and gold, craft tools, guns and walls, and keep moving. At night the dead come for you; underground, in the dark, so do skeletons. The further out you go, the harder it gets.</p>
+          <h3>Game Modes</h3>
+          <p><b>Endurance</b>: you start at the tower, and every meter you get from it counts: your best is the Max. Dig for coal, copper, iron and gold, craft tools, guns and walls, and keep moving. At night the dead come for you; underground, in the dark, so do skeletons. The further out you go, the harder it gets. It's a new world every time, not kept, and the awards count only here. Alone, dying starts it over; online, you come back by a friend, and once everyone's down the host starts it over.</p>
+          <p><b>Survival</b>: your own world, kept, to mine and build in, at a difficulty of your choosing: No Enemies, Easy (the dead come only at night, and more slowly; dragons don't break your blocks), Normal (fresh ground brings them too), or Hardcore (you start with nothing and lose everything when you die). You come back at the start when you die, and the pause menu's Teleport takes you to the surface, the start, or a friend.</p>
+          <p><b>Dragon Endurance</b>: wave after wave of dragons over your world, each tougher than the last. Kill the Undead Dragon in Endurance to unlock it.</p>
+          <p><b>Creative</b>: Survival with nothing used up: blocks, ammo and grenades last for ever, and making something takes nothing out of what you carry (though tools wear twice as fast). A world played in Creative stays a Creative world.</p>
           <p>Out past the first hills, things have come down from the sky: craters with an asteroid of space rock in them, glowing Space Goo in the rock. Aliens live round them, and noise brings more of them, quicker: digging the rock, or shooting inside it. Deep underground and far out lives the Felguard, a demon of the Underworld; once you've met one, it can turn up anywhere.</p>
           <p>Dragons fly over the world: Fire, Forest, Sand, Ice and Undead, each tougher than the last. One comes the first time you get 100, 500, 1000, 2600 and 4000 meters out, and stay too long in one place and they come for you there. Out under the sky they'll see you, and gunfire draws them; under a roof or in a cave they can't. Their fireballs break blocks (the Ice Dragon's freeze them); shoot one down and it leaves explosive powder and ore. The Anti Dragon Guided Missile locks on when you aim at a dragon at the shoulder (the box goes from green to red) and fires only once it has.</p>
           <h3>Keyboard & Mouse</h3>
@@ -297,7 +426,7 @@ export class Menus {
           <p>In a crate, its slots are at the top: things move between it and your backpack as they do on the inventory screen, and Y (shift-click) sends a stack across. Online, the slot a friend is on is theirs until they move off it.</p>
           <p>When you die, what's in your backpack falls where you fell. The hotbar stays with you.</p>
           <h3>Playing Online</h3>
-          <p>To host, choose Play Game, then Host Online Game (or Invite Friends from the pause menu of a game you're in). You get a five-letter code: your friends choose Join Online Game and type it. Up to eight can play. Everyone plays in the host's world, saved on the host's machine, and what each friend carries is kept with it for when they come back. Each player's dead come for that player, and anyone can shoot them. Online, the game goes on while the pause menu is up, and Teleport To Player there takes you to a friend.</p>
+          <p>To host, choose Host Online and a mode (or Invite Friends from the pause menu of a game you're in). You get a five-letter code: your friends choose Join Online and type it. Up to eight can play, in the host's world and mode; a kept world is saved on the host's machine, with what each friend carries for when they come back. An Endurance game can be joined only until it's begun (the host 100 m out, or the second day). Each player's dead come for that player, and anyone can shoot them. Online, the game goes on while the pause menu is up. The host's Host Options kick or ban a player, start the game over, and turn PVP on (bullets and lasers hurt other players, and so does a swing).</p>
           <p>Keep the game in front: a browser stops running a page whose tab is hidden. Online play needs an internet connection, and doesn't work inside the Claude artifact viewer.</p>
           <h3>On an Xbox</h3>
           <p>In Microsoft Edge, hold the Menu button and choose Use game controls, so the controller plays the game instead of moving a pointer. B pauses (unless you're looking at a door, a crate or TNT) and the d-pad's up changes the camera, because Edge keeps the View button for itself (if the controller stops answering, press the Xbox button twice). If it runs slowly, turn off Edge's "Apps can add a border" setting (Settings, System) and lower View Distance in Options.</p>
@@ -367,7 +496,7 @@ export class Menus {
   show(id, arg) {
     const s = this.build(id, arg);
     if (!s) return;
-    s.sel = 0;
+    s.sel = Math.min(s.start ?? 0, Math.max(0, (s.items || []).length - 1));
     s.arg = arg;
     this.cur = s;
     this.edit = null;
@@ -500,6 +629,8 @@ export class Menus {
         h += `<div class="item${i === s.sel ? ' sel' : ''}${it.off ? ' off' : ''}" data-i="${i}"><span>${it.label}</span>${small}${val}</div>`;
       });
       h += '</div>';
+      // the chosen one's description, beside the list (the original's mode and difficulty screens)
+      if (s.descs) h += `<div class="desc">${s.items?.[s.sel]?.desc || ''}</div>`;
     }
     this.screenEl.innerHTML = h;
     this.screenEl.querySelectorAll('.item').forEach((d) => {
@@ -558,6 +689,7 @@ export class Menus {
     if (!s?.items || i === s.sel) return;
     s.sel = i;
     this.screenEl.querySelectorAll('.item').forEach((d, k) => d.classList.toggle('sel', k === i));
+    if (s.descs) { const d = this.screenEl.querySelector('.desc'); if (d) d.textContent = s.items[i]?.desc || ''; }
     this.app.audio?.ui?.('move');
   }
 
@@ -612,8 +744,6 @@ export class Menus {
     this.app.audio?.ui?.('select');
     this.reset('main');
   }
-
-  playGame() { this.open('play'); }
 
   // Pad, keyboard: called every frame while the menus are up.
   update(dt, input) {

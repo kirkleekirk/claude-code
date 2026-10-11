@@ -80,7 +80,7 @@ export class Player {
       this.knock.add(k);
       this.vel.y = Math.max(this.vel.y, 3.2);
     }
-    if (this.onHurt) this.onHurt(amount, kind);
+    if (this.onHurt) this.onHurt(amount, kind, from);
     if (this.health <= 0) this.dead = true;
   }
 

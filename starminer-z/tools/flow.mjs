@@ -17,10 +17,16 @@ await page.goto(`${base}/`);
 await waitFor((s) => s.menu === 'title');
 await key('Enter');
 await waitFor((s) => s.menu === 'main');
+await key('ArrowDown'); await key('ArrowDown'); await key('Enter'); // Play Offline
+await waitFor((s) => s.menu === 'mode');
+await key('ArrowDown'); // Survival
+await shot('f1_mode');
 await key('Enter');
-await waitFor((s) => s.menu === 'play');
-await shot('f1_play');
-await key('Enter'); // New World (or Continue)
+await waitFor((s) => s.menu === 'difficulty');
+await key('Enter'); // Normal
+await waitFor((s) => s.menu === 'worlds');
+await shot('f1_worlds');
+await key('Enter'); // Create World
 await waitFor((s) => s.state === 'playing', 180000);
 await page.waitForTimeout(2500);
 await shot('f2_playing');
@@ -34,13 +40,14 @@ await waitFor((s) => !s.crafting);
 await key('Escape');
 await waitFor((s) => s.state === 'paused');
 await shot('f4_pause');
-await key('ArrowDown'); await key('Enter');
+for (let i = 0; i < 5; i++) await key('ArrowDown');
+await key('Enter'); // Options
 await waitFor((s) => s.menu === 'options');
 await shot('f5_options');
 await key('Escape');
 await waitFor((s) => s.menu === 'pause');
-for (let i = 0; i < 5; i++) await key('ArrowDown');
-await key('Enter'); // Save And Quit
+await key('ArrowUp'); // (round to the last: Save And Quit)
+await key('Enter');
 await waitFor((s) => s.state === 'menu', 180000);
 await shot('f6_back_to_menu');
 console.log(logs.slice(0, 20).join('\n') || 'no errors');

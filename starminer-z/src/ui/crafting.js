@@ -386,6 +386,7 @@ export class Crafting {
       n++;
       g.stats.crafted++;
       if (ITEMS[r.out].kind === 'gun') g.stats.guns = (g.stats.guns || 0) + 1;
+      if (r.out === 'tnt') g.stats.tntCrafted = (g.stats.tntCrafted || 0) + r.n;
     } while (all && inv.canCraft(r) && n < 999);
     if (!n) { this.sound('deny'); return; }
     this.ing = 0;

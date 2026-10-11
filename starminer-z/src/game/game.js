@@ -21,6 +21,7 @@ import { Projectiles } from './projectiles.js';
 import { Crates } from './crates.js';
 import { Enemies } from './enemies.js';
 import { Dragons } from './dragons.js';
+import { RULES } from './modes.js';
 import { HUD } from '../ui/hud.js';
 import { Crafting } from '../ui/crafting.js';
 import { AvatarModel } from '../entities/avatar/model.js';
@@ -57,11 +58,21 @@ const IDLE = { move: { x: 0, y: 0 }, look: { x: 0, y: 0 }, wheel: 0, lastDevice:
 export class Game {
   // attract: the world behind the menus (no player, no HUD, no enemies; a camera drifting by)
   // online: { link, welcome }, joining a friend's world (see ../net/online.js)
-  constructor(app, { seed = 1337, save = null, mode = 'endurance', attract = false, online = null } = {}) {
+  // mode, difficulty: see ./modes.js; creative: a Creative world (nothing's used up); worldId:
+  // the kept world it is (none in Endurance)
+  constructor(app, { seed = 1337, save = null, mode = 'endurance', difficulty = 'easy', creative = false, worldId = null, attract = false, online = null } = {}) {
     this.app = app;
-    this.mode = mode;
-    this.attract = attract;
     const welcome = online?.welcome ?? null;
+    // a friend's game is played their way
+    this.mode = welcome?.mode ?? mode;
+    this.difficulty = welcome?.difficulty ?? difficulty;
+    this.creative = welcome ? !!welcome.creative : save ? !!save.creative || creative : creative;
+    this.worldId = worldId;
+    // online: whether players can shoot each other (the host's Host Options), and (Endurance)
+    // whether the game has begun, after which no one else can join
+    this.pvp = welcome?.pvp ?? 0;
+    this.begun = false;
+    this.attract = attract;
     this.seed = save ? save.seed : welcome ? welcome.seed : seed;
     this.scene = new THREE.Scene();
     this.scene.add(app.sky.mesh);
@@ -70,6 +81,7 @@ export class Game {
     this.player = new Player(this.world);
     this.player.autoClimb = app.settings.autoClimb;
     this.inventory = new Inventory();
+    this.inventory.infinite = this.creative;
     // first person: the original's own arms, clips and items when they've been ripped
     const cmz = app.cmzPlayer;
     this.viewModel = cmz ? new CmzViewModel(app.sky.uniforms, app.terrain.uniforms, cmz.clips, cmz.items) : new ViewModel(app.sky.uniforms, app.terrain.uniforms);
@@ -106,7 +118,12 @@ export class Game {
     if (testParams.has('play')) window.__game = this;
 
     // progress
-    this.stats = { kills: 0, crafted: 0, dug: 0, placed: 0, shots: 0, deaths: 0, maxDistance: 0, days: 1 };
+    this.stats = {
+      kills: 0, crafted: 0, dug: 0, placed: 0, shots: 0, deaths: 0, maxDistance: 0, days: 1,
+      // the original's player stats (counted in Endurance): the deepest you've been (metres
+      // below the old ground), the days you've lived through, what killed what
+      maxDepth: 0, daysSurvived: 0, laserKills: 0, tntKills: 0, grenadeKills: 0, tntCrafted: 0, onlineTime: 0,
+    };
     this.maxDistance = 0;
     this.lastDay = 1;
     this.dig = { key: '', progress: 0 };
@@ -175,7 +192,7 @@ export class Game {
     this.towerAt = { x: 0.5, z: 0.5 };
     this.player.onStep = (block, sprint) => this.audio?.step(block, sprint);
     this.player.onLand = (speed, block) => { if (speed > 6) this.audio?.land(block, speed); };
-    this.player.onHurt = (n, kind) => { this.hud.hurt(); this.audio?.hurt(kind); if (this.app.vibrate) this.app.vibrate(40); };
+    this.player.onHurt = (n, kind, from) => { this.hud.hurt(from); this.audio?.hurt(kind); if (this.app.vibrate) this.app.vibrate(40); };
     this.inventory.onChange = () => {};
     this.viewModel.setItem(this.inventory.held?.id ?? null);
     if (online) this.online = new Online(this, online.link, welcome);
@@ -184,6 +201,30 @@ export class Game {
   // Open this game to friends (link: hosting, with its code).
   startHosting(link) {
     this.online = new Online(this, link);
+  }
+
+  // PVP, someone's bullet or laser bolt in this player (k: of their health)
+  pvpHit(k, from) {
+    const p = this.player;
+    if (p.dead) return;
+    p.hurt(k * p.maxHealth, from, 'pvp');
+    this.audio?.play?.('BulletHitHuman', from);
+  }
+
+  // PVP, someone's swing at this player (ProcessMeleePlayerMessage): a laser sword all but kills
+  meleeHit(w, from) {
+    const it = ITEMS[w], p = this.player;
+    if (p.dead) return;
+    p.hurt((it?.laser && it.kind === 'tool' ? 1.1 : 0.21) * p.maxHealth, from, 'pvp');
+  }
+
+  // Host Options' PVP: whether bullets, lasers and swings hurt other players (everyone told)
+  setPvp(v) {
+    this.pvp = v ? 1 : 0;
+    this.online?.sendPvp(this.pvp);
+    const line = this.pvp ? 'PVP: Everyone' : 'PVP: Off';
+    this.online?.say(line);
+    this.hud.message(line);
   }
 
   // Where a player starts, and starts again after dying: the spawn point, and online a couple of
@@ -346,13 +387,20 @@ export class Game {
     if (this.nightT === 0.25) {
       // how much ground is overhead: the dripping of the caves, and no lightning down there
       this.depth = this.depthUnderGround(p.pos);
+      // (DepthUnderSpaceRock: how much of an asteroid is overhead, for its music)
+      let rock = 0;
+      for (let y = Math.floor(p.pos.y) + 1; y < HEIGHT; y++) if (this.world.getBlock(p.pos.x, y, p.pos.z) === B.SPACE_ROCK) rock++;
+      this.underRock = rock;
       sky.outdoors = this.depth <= 2 && p.pos.y > 32;
     }
     if (this.grace && (sky.day > 1 || sky.time > GRACE_ENDS)) this.endGrace();
     const day = this.dayNumber;
     if (day !== this.lastDay) {
+      const was = this.lastDay;
       this.lastDay = day;
       this.stats.days = Math.max(this.stats.days, day);
+      // (the original's MaxDaysSurvived: a day lived through, each new morning after the first)
+      if (day > 1 && day > was) this.stats.daysSurvived++;
       this.hud.showDay(day);
       this.audio?.dawn();
     }
@@ -383,7 +431,7 @@ export class Game {
     if (p.inLava && !this.wasInLava) this.audio?.douse();
     this.wasInLava = p.inLava;
     if (p.dead && !this.deathShown) this.onDeath();
-    if (p.dead && this.deathShown && (input.consume('jump') || input.consume('accept') || input.consume('primary'))) this.respawn();
+    if (p.dead && this.deathShown && live) this.whileDead(dt, input);
 
     // camera
     const cam = this.camera;
@@ -463,7 +511,14 @@ export class Game {
     const dist = Math.floor(Math.hypot(p.pos.x - this.towerAt.x, p.pos.z - this.towerAt.z));
     this.distance = dist;
     if (dist > this.maxDistance && !p.dead) { this.maxDistance = dist; this.stats.maxDistance = dist; }
-    app.awards?.check(this);
+    // how deep you've been (below the original's ground, our y 64), and time online in Endurance
+    if (!p.dead) this.stats.maxDepth = Math.max(this.stats.maxDepth || 0, Math.floor(64 - p.pos.y));
+    if (this.online && this.mode === 'endurance') this.stats.onlineTime = (this.stats.onlineTime || 0) + dt;
+    // online in Endurance, once the host is 100 m out or into the second day, the game has begun
+    // and no one else can join
+    if (this.online?.host && this.mode === 'endurance' && !this.begun && (this.maxDistance >= 100 || this.dayNumber > 1)) this.begun = true;
+    // (the awards count in Endurance only, as the original's)
+    if (RULES.counts(this)) app.awards?.check(this);
 
     // HUD
     const it = held ? ITEMS[held.id] : null;
@@ -476,6 +531,9 @@ export class Game {
       // the crosshair opens with how far a shot can stray, and the kick
       spread: it && it.kind === 'gun' ? 0.25 + it.inaccuracy * 8 + this.spread * 1.4 : 0,
       scoped: !!(it && it.kind === 'gun' && it.scoped && this.viewModel.ads > 0.95),
+      // (no crosshair at the shoulder, as the original)
+      shoulder: !!(it && it.kind === 'gun' && this.ads && this.viewModel.ads > 0.5),
+      dead: p.dead, pos: p.pos, yaw: p.yaw,
       lock: it?.guided && this.dragons.lock.rect ? { ...this.dragons.lock.rect, locked: this.dragons.lock.locked } : null,
     });
   }
@@ -634,10 +692,22 @@ export class Game {
     const primary = input.isHeld('primary');
     // TNT or C4 swung at with anything but a spade: its fuse is lit
     if (input.pressed('primary') && hit && (hit.id === B.TNT || hit.id === B.C4) && it?.tool !== 'spade') this.explosives.light(hit.x, hit.y, hit.z);
+    // PVP: a swing at another player in reach hurts them (on their machine)
+    const other = this.pvp && this.online && primary && this.cooldown <= 0 ? this.online.playerOnRay(eye, fwd, it?.kind === 'melee' ? 2.6 : 2.3) : null;
+    if (other && (!target || other.dist < target.dist) && (!hit || other.dist < hit.dist)) {
+      vm.startSwing(kind, swing * 0.9);
+      this.cooldown = cooldown;
+      this.online.meleePlayer(other.id, it?.id, eye);
+      this.hud.hitMarker();
+      this.audio?.melee(true);
+      if (it?.laser) this.audio?.saberSwing();
+      wear();
+      return;
+    }
     if (primary && target && this.cooldown <= 0) {
       vm.startSwing(kind, swing * 0.9);
       this.cooldown = cooldown;
-      if (target.enemy.takeDamage(target.y, weaponDamage(it))) this.onKill(target.enemy);
+      if (target.enemy.takeDamage(target.y, weaponDamage(it))) this.onKill(target.enemy, it);
       this.hud.hitMarker();
       this.audio?.melee(true);
       if (it?.laser) this.audio?.saberSwing();
@@ -783,7 +853,8 @@ export class Game {
   }
 
   placed(it, id) {
-    this.inventory.useHeld(1);
+    // (in Creative, nothing's used up)
+    if (!this.inventory.infinite) this.inventory.useHeld(1);
     this.stats.placed++;
     this.viewModel.startSwing('place', 0.22);
     this.audio?.place(BLOCKS[id].sound);
@@ -806,7 +877,8 @@ export class Game {
         this.reloading -= dt;
         if (this.reloading <= 0) {
           const n = Math.min(it.mag - held.mag, inv.count(it.ammo), it.perReload);
-          if (n > 0) held.mag += inv.remove(it.ammo, n);
+          // (in Creative, nothing's used up)
+          if (n > 0) held.mag += inv.infinite ? n : inv.remove(it.ammo, n);
           this.audio?.reloadDone(it);
           // more to load (a shotgun's next shell)
           if (held.mag < it.mag && inv.count(it.ammo) > 0) this.startReload(it, this.reloadReleased);
@@ -920,7 +992,7 @@ export class Game {
     }
     if (hit.enemy) {
       if (mine) {
-        if (hit.enemy.takeDamage(hit.y, weaponDamage(it))) this.onKill(hit.enemy);
+        if (hit.enemy.takeDamage(hit.y, weaponDamage(it))) this.onKill(hit.enemy, it);
         this.hud.hitMarker();
       }
       this.audio?.bulletHit(at);
@@ -1085,8 +1157,9 @@ export class Game {
 
   // One of the dead killed by the player: now and then it leaves something (the original's
   // BaseZombie.CreatePickup: further out, better things; in Hell, better still).
-  onKill(e) {
+  onKill(e, it = null) {
     this.stats.kills++;
+    if (it?.laser) this.stats.laserKills = (this.stats.laserKills || 0) + 1;
     const p = e.pos;
     const r = THREE.MathUtils.lerp(Math.min(1, Math.hypot(p.x, p.y - 64, p.z) / 5000), 1, Math.random());
     if (r < 0.5) return;
@@ -1153,30 +1226,138 @@ export class Game {
 
   // ---- death -------------------------------------------------------------------------------
 
+  // The original's KillPlayer: what's in the backpack falls where you died (on Hardcore,
+  // everything, the hotbar too, and you start again with nothing); online, the others are told.
   onDeath() {
     this.crafting?.close(true);
     this.deathShown = true;
     this.grenade = null;
     if (this.spent) { const i = this.inventory.slots.indexOf(this.spent.slot); if (i >= 0) this.inventory.slots[i] = null; this.spent = null; }
     this.stats.deaths++;
-    // the original's KillPlayer: what's in the backpack falls where you died (on Hardcore,
-    // everything, the hotbar too, and you start again with nothing)
-    const p = this.player.pos, hard = this.difficulty === 'hardcore';
+    const p = this.player.pos, hard = RULES.hardcore(this);
     for (const s of this.inventory.takeAll(hard)) this.drops.spawn(s.id, s.count, p.x, p.y + 1, p.z, null, s);
     if (hard) this.starterKit();
     this.audio?.death();
-    this.app.showDeath(this.maxDistance, this.dayNumber);
+    this.online?.say(`${this.online.myName} Has Fallen`);
+    // three seconds before anything can be done; online in Endurance, twenty before you can
+    // come back (by whoever's still standing)
+    this.death = { showT: 3, waitT: 20 };
+    this.app.showDeath(this.deathScreen());
   }
 
+  // Dead: what the screen says, and what pressing does (InGameHUD's OnDraw and OnPlayerInput)
+  whileDead(dt, input) {
+    const D = this.death || (this.death = { showT: 0, waitT: 0 });
+    if (D.showT > 0) D.showT -= dt;
+    else if (this.waitToRespawn) D.waitT -= dt;
+    this.app.showDeath(this.deathScreen());
+    if (!(input.consume('jump') || input.consume('accept') || input.consume('primary')) || D.showT > 0) return;
+    const o = this.online;
+    // everyone dead in an Endurance game: the host starts it over for all
+    if (o && this.mode === 'endurance' && this.allOthersDead()) {
+      if (o.host) this.restartForAll();
+      return;
+    }
+    if (this.waitToRespawn) return;
+    this.respawn();
+  }
+
+  // online in Endurance, the twenty seconds before you can come back
+  get waitToRespawn() {
+    const D = this.death;
+    return this.mode === 'endurance' && !!this.online && this.player.dead && !!D && D.waitT > 0;
+  }
+
+  allOthersDead() {
+    for (const r of this.online?.players.values() || []) if (!r.dead) return false;
+    return true;
+  }
+
+  // the lines on the death screen, and the prompt
+  deathScreen() {
+    const D = this.death || {}, o = this.online, end = this.mode === 'endurance';
+    const lines = end ? [`Distance Traveled: ${this.maxDistance}`, `In ${this.dayNumber} Day${this.dayNumber === 1 ? '' : 's'}`] : [];
+    let press = null, count = null;
+    if (D.showT > 0) press = null;
+    else if (o && end && this.allOthersDead()) press = o.host ? 'Restart' : 'wait';
+    else if (this.waitToRespawn) count = Math.max(0, Math.ceil(D.waitT));
+    else press = end && !o ? 'Restart' : 'Respawn';
+    return { lines, press, count };
+  }
+
+  // RespawnPlayer: in Endurance, by whichever of the others still standing is nearest the start
+  // (alone, the game starts again); anywhere else, back at the start
   respawn() {
+    const p = this.player;
+    if (this.mode === 'endurance') {
+      let best = null, bd = Infinity;
+      for (const r of this.online?.players.values() || []) {
+        if (r.dead) continue;
+        const d = r.pos.lengthSq();
+        if (d < bd) { bd = d; best = r; }
+      }
+      if (!best) { if (!this.online) this.restartLevel(); return; }
+      this.revive();
+      p.spawn(best.pos.x + 0.7, best.pos.y + 0.3, best.pos.z + 0.7);
+      p.yaw = best.yaw;
+      this.ready = false;
+    } else {
+      this.revive();
+      const sp = this.spawnSpot();
+      p.spawn(sp.x, sp.y, sp.z);
+      p.yaw = Math.PI;
+      this.enemies?.clearNear?.(sp, 40);
+      this.dragons?.resetDistance();
+      if (this.enemies) this.enemies.cleared = 50;
+      this.ready = false;
+    }
+    this.online?.say(`${this.online.myName} Has Respawned`);
+  }
+
+  revive() {
     this.deathShown = false;
+    this.death = null;
     this.app.hideDeath();
+  }
+
+  // RestartLevelMessage: everyone back at the start, alive, on the first morning again, with
+  // nothing travelled
+  restartLevel() {
+    const p = this.player;
+    this.revive();
     const sp = this.spawnSpot();
-    this.player.spawn(sp.x, sp.y, sp.z);
-    this.player.yaw = Math.PI;
-    this.enemies?.clearNear?.(sp, 40);
+    p.spawn(sp.x, sp.y, sp.z);
+    p.yaw = Math.PI;
+    p.health = p.maxHealth;
+    this.app.sky.setTime(START_TIME, 1);
+    this.lastDay = this.dayNumber;
+    this.maxDistance = 0;
+    this.enemies?.clearNear?.(sp, 60);
     this.dragons?.resetDistance();
+    if (this.enemies) this.enemies.cleared = 50;
+    this.audio?.fadeMusic?.();
     this.ready = false;
+  }
+
+  // the host, everyone dead in Endurance (or Restart in Host Options)
+  restartForAll() {
+    this.online?.restart();
+    this.online?.say(`${this.online.myName} Has Restarted The Game`);
+    this.restartLevel();
+  }
+
+  // The Teleport menu: back to the start, or up onto the ground over where you are
+  teleportToStart() {
+    const sp = this.spawnSpot(), p = this.player;
+    this.teleportToPoint(sp.x, sp.y, sp.z);
+    p.yaw = Math.PI;
+  }
+
+  teleportToSurface() {
+    const p = this.player, w = this.world, x = Math.floor(p.pos.x), z = Math.floor(p.pos.z);
+    for (let y = HEIGHT - 1; y > 0; y--) {
+      if (SOLID[w.getBlock(x, y, z)]) { this.teleportToPoint(p.pos.x, y + 1.05, p.pos.z); return; }
+    }
   }
 
   // ---- saving --------------------------------------------------------------------------------
@@ -1187,6 +1368,8 @@ export class Game {
       v: 1,
       seed: this.seed,
       mode: this.mode,
+      difficulty: this.difficulty,
+      creative: this.creative,
       time: this.app.sky.time,
       day: this.app.sky.day,
       days: this.dayNumber,
