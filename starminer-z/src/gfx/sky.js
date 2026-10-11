@@ -428,6 +428,16 @@ export class Sky {
   }
 
   // Time of day in [0, 1): 0 midnight, 0.25 dawn, 0.5 noon, 0.75 dusk.
+  // The graphics were lost and are back: what was baked on the GPU (Ember's surface, the nebula,
+  // the air's transmittance) is blank, so bake it again.
+  rebake() {
+    this.planetMap = bakePlanet(this.renderer, EMBER.palette);
+    this.nebula = bakeNebula(this.renderer);
+    this.uniforms.uPlanetMap.value = this.planetMap;
+    this.uniforms.uNebula.value = this.nebula;
+    this.atmo.renderTransmittance();
+  }
+
   setTime(t, day = this.day) {
     this.time = ((t % 1) + 1) % 1;
     this.day = day;

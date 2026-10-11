@@ -166,8 +166,8 @@ Online tests run against a local PeerJS server: start one on 127.0.0.1:9000 and 
 each other in headless Chromium (`BASE=<dev server url>/ node tools/online.mjs <out dir>`).
 
 `tools/checks/` holds a headless check for each part of the later version: `things.mjs` (the new
-items at work), `crash-sites.mjs`, `dragons.mjs` and `modes.mjs` (the modes, worlds, menus and
-HUD). Each takes the dev server's address and a folder for its screenshots
+items at work), `crash-sites.mjs`, `dragons.mjs`, `modes.mjs` (the modes, worlds, menus and
+HUD), and `graphics.mjs` (what happens when a browser has no WebGL, or loses it mid-game). Each takes the dev server's address and a folder for its screenshots
 (`node tools/checks/modes.mjs http://localhost:5173 out`), and `&nocmz` as a third argument runs
 it without the ripped files.
 

@@ -110,10 +110,34 @@ void main() {
   gl_FragColor = vec4(col, 1.0);
 }`;
 
+// WebGL 2, asked for more plainly each time it's turned down (a browser may refuse the fast GPU,
+// or any at all); if it never comes, an error saying why, in the browser's own words if it gave
+// any (err.webgl, err.detail)
+function makeContext(canvas) {
+  let why = '';
+  const note = (e) => { if (e.statusMessage) why = e.statusMessage; };
+  canvas.addEventListener('webglcontextcreationerror', note);
+  const base = { antialias: false, alpha: false, stencil: false, depth: true, preserveDrawingBuffer: false };
+  let gl = null;
+  for (const extra of [{ powerPreference: 'high-performance' }, {}, { powerPreference: 'low-power' }]) {
+    try { gl = canvas.getContext('webgl2', { ...base, ...extra }); } catch (e) { why = e?.message || why; }
+    if (gl) break;
+  }
+  canvas.removeEventListener('webglcontextcreationerror', note);
+  if (gl) return gl;
+  // (WebGL 1 isn't enough: the game is drawn with WebGL 2)
+  let v1 = false;
+  try { v1 = !!document.createElement('canvas').getContext('webgl'); } catch { /* none */ }
+  const err = new Error(v1 ? 'This browser has WebGL 1 but not WebGL 2, which the game needs.' : "The browser couldn't start 3D graphics (WebGL 2).");
+  err.webgl = true;
+  err.detail = why;
+  throw err;
+}
+
 export class Renderer {
   constructor(canvas, quality = 'high') {
     this.canvas = canvas;
-    this.gl = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false, stencil: false, powerPreference: 'high-performance', preserveDrawingBuffer: false });
+    this.gl = new THREE.WebGLRenderer({ canvas, context: makeContext(canvas), antialias: false, alpha: false, stencil: false, powerPreference: 'high-performance', preserveDrawingBuffer: false });
     this.gl.autoClear = false;
     this.gl.setClearColor(0x000000, 1);
     this.gl.outputColorSpace = THREE.SRGBColorSpace;

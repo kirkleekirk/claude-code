@@ -115,6 +115,10 @@ export class App {
   async start(boot = {}) {
     injectCSS(MENU_CSS + CRAFT_CSS + TOUCH_CSS);
     this.renderer = new Renderer(this.canvas, this.settings.quality);
+    // the browser can take the graphics away (a GPU short of memory, say): the world is kept, and
+    // the game waits, saying so, till they're back or the page is reloaded
+    this.canvas.addEventListener('webglcontextlost', () => this.graphicsLost(true));
+    this.canvas.addEventListener('webglcontextrestored', () => this.graphicsLost(false));
     const gl = this.renderer.gl;
     this.camera = new THREE.PerspectiveCamera(this.settings.fov, 1, 0.06, 1200);
     this.input = new Input(this.canvas);
@@ -499,6 +503,22 @@ export class App {
     this.input.requestLock();
   }
 
+  graphicsLost(lost) {
+    this.lostGfx = lost;
+    if (!lost) { this.sky?.rebake(); this.lostEl?.remove(); this.lostEl = null; return; }
+    const g = this.game, kept = g && !g.attract && RULES.kept(g) && g.worldId;
+    this.autosave();
+    this.input.exitLock();
+    if (this.lostEl) return;
+    const el = document.createElement('div');
+    el.className = 'ui txt';
+    el.style.cssText = 'position:absolute;inset:0;z-index:20;display:grid;place-content:center;gap:0.7em;padding:6%;background:rgba(0,0,0,0.88);text-align:center;font-size:1.5em;font-weight:700';
+    el.innerHTML = `<div>The browser stopped the game's graphics (it may have run short of memory).</div><div>${kept ? 'Your world has been saved. ' : ''}Close any other tabs, then press A, Enter or tap here to reload.</div>`;
+    el.addEventListener('pointerdown', () => location.reload());
+    this.uiRoot.appendChild(el);
+    this.lostEl = el;
+  }
+
   onResize() {
     this.renderer.resize();
     const w = this.canvas.clientWidth || window.innerWidth, h = this.canvas.clientHeight || window.innerHeight;
@@ -534,6 +554,13 @@ export class App {
     const rawDt = (now - this.last) / 1000;
     this.last = now;
     const dt = Math.min(0.066, Math.max(0.0001, rawDt));
+    // (no graphics: nothing goes on, but a press reloads the page)
+    if (this.lostGfx) {
+      this.input.poll(dt);
+      if (this.input.consume('accept') || this.input.consume('jump') || this.input.consume('pause')) location.reload();
+      this.input.endFrame();
+      return;
+    }
     this.frames++;
     this.fpsAcc += rawDt; this.fpsN++;
     if (this.fpsAcc > 0.5) { this.fps = Math.round(this.fpsN / this.fpsAcc); this.fpsAcc = 0; this.fpsN = 0; }
