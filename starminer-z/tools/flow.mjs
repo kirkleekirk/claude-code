@@ -9,17 +9,19 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const logs = [];
 page.on('console', (m) => { if (m.type() === 'error') logs.push(`[error] ${m.text()}`); });
 page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
-const state = () => page.evaluate(() => ({ state: window.__app?.state, menu: window.__app?.menus?.id, crafting: !!window.__app?.game?.crafting?.isOpen }));
+const state = () => page.evaluate(() => ({ state: window.__app?.state, menu: window.__app?.menus?.id, sel: window.__app?.menus?.cur?.sel, crafting: !!window.__app?.game?.crafting?.isOpen }));
 const waitFor = async (pred, ms = 120000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { const s = await state(); if (pred(s)) return s; await page.waitForTimeout(500); } throw new Error(`timed out; last ${JSON.stringify(await state())}`); };
 const key = async (k) => { await page.keyboard.down(k); await page.waitForTimeout(150); await page.keyboard.up(k); await page.waitForTimeout(350); };
+// an arrow in a menu, and on once the choice has moved (a slow frame can take two presses as one)
+const move = async (k, n = 1) => { for (let i = 0; i < n; i++) { const was = (await state()).sel; await key(k); await waitFor((s) => s.sel !== was, 30000); } };
 const shot = async (n) => { await page.screenshot({ path: `${out}/${n}.png`, timeout: 120000 }); console.log('shot', n, JSON.stringify(await state())); };
 await page.goto(`${base}/`);
 await waitFor((s) => s.menu === 'title');
 await key('Enter');
 await waitFor((s) => s.menu === 'main');
-await key('ArrowDown'); await key('ArrowDown'); await key('Enter'); // Play Offline
+await move('ArrowDown', 2); await key('Enter'); // Play Offline
 await waitFor((s) => s.menu === 'mode');
-await key('ArrowDown'); // Survival
+await move('ArrowDown'); // Survival
 await shot('f1_mode');
 await key('Enter');
 await waitFor((s) => s.menu === 'difficulty');
@@ -40,13 +42,12 @@ await waitFor((s) => !s.crafting);
 await key('Escape');
 await waitFor((s) => s.state === 'paused');
 await shot('f4_pause');
-for (let i = 0; i < 5; i++) await key('ArrowDown');
-await key('Enter'); // Options
+await move('ArrowDown', 5); await key('Enter'); // Options
 await waitFor((s) => s.menu === 'options');
 await shot('f5_options');
 await key('Escape');
 await waitFor((s) => s.menu === 'pause');
-await key('ArrowUp'); // (round to the last: Save And Quit)
+await move('ArrowUp'); // (round to the last: Save And Quit)
 await key('Enter');
 await waitFor((s) => s.state === 'menu', 180000);
 await shot('f6_back_to_menu');
