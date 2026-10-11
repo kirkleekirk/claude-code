@@ -294,7 +294,18 @@ try {
 
   // PVP: off, A's bullet goes by B; on (Host Options), it hurts B, on B's machine
   const standB = async () => {
-    const ap2 = await A.evaluate(() => { const p = window.__game.player; return { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw }; });
+    // a flat floor round A, clear above (it reaches B's machine too), A standing on it
+    const ap2 = await A.evaluate(() => {
+      const g = window.__game, p = g.player, w = g.world;
+      const x0 = Math.floor(p.pos.x), z0 = Math.floor(p.pos.z), y0 = Math.floor(p.pos.y) - 1;
+      for (let dx = -7; dx <= 7; dx++) for (let dz = -7; dz <= 7; dz++) {
+        if (w.getBlock(x0 + dx, y0, z0 + dz) !== 15) w.setBlock(x0 + dx, y0, z0 + dz, 15);
+        for (let y = y0 + 1; y < y0 + 6; y++) if (w.getBlock(x0 + dx, y, z0 + dz) !== 0) w.setBlock(x0 + dx, y, z0 + dz, 0);
+      }
+      p.pos.set(x0 + 0.5, y0 + 1, z0 + 0.5); p.vel.set(0, 0, 0);
+      return { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, floor: [x0, y0, z0] };
+    });
+    await wait(B, (f) => window.__app.game.world.getBlock(f[0] + 3, f[1], f[2] + 3) === 15, ap2.floor, 30000).catch(() => {});
     await B.evaluate((ap) => {
       const app = window.__app, g = app.game, p = g.player;
       app.onLockChange = () => {};
