@@ -20,6 +20,7 @@ import { Explosives, EXPLOSIVE } from './explosives.js';
 import { Projectiles } from './projectiles.js';
 import { Crates } from './crates.js';
 import { Enemies } from './enemies.js';
+import { Dragons } from './dragons.js';
 import { HUD } from '../ui/hud.js';
 import { Crafting } from '../ui/crafting.js';
 import { AvatarModel } from '../entities/avatar/model.js';
@@ -35,7 +36,7 @@ const START_TIME = 0.4;
 // when the grace period ends: early on the first afternoon
 const GRACE_ENDS = 0.62;
 
-const _v = new THREE.Vector3(), _f = new THREE.Vector3(), _u = new THREE.Vector3(), _r = new THREE.Vector3();
+const _v = new THREE.Vector3(), _f = new THREE.Vector3(), _u = new THREE.Vector3(), _r = new THREE.Vector3(), _f2 = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _e = new THREE.Euler();
 const X_AXIS = new THREE.Vector3(1, 0, 0), Y_AXIS = new THREE.Vector3(0, 1, 0), NO_TURN = new THREE.Quaternion();
 const D2R = Math.PI / 180;
@@ -85,6 +86,7 @@ export class Game {
     this.hud = new HUD(app.uiRoot, this);
     this.enemies = new Enemies(this);
     this.audio = app.audio;
+    this.dragons = new Dragons(this, welcome);
     this.look = null;
     this.puppet = null;
     this.preview = null;
@@ -209,6 +211,7 @@ export class Game {
     this.world.dispose();
     this.hud.el.remove();
     this.enemies?.dispose?.();
+    this.dragons?.dispose();
     this.projectiles.dispose();
     this.explosives.dispose();
     this.marker?.removeFromParent();
@@ -431,6 +434,7 @@ export class Game {
     this.updateMarker();
     for (const got of this.drops.update(dt, p, this.inventory)) this.audio?.pickup(got.id);
     this.enemies?.update(dt, live);
+    this.dragons?.update(dt, live);
     this.online?.update(dt);
     this.updatePlayerModel(dt);
     this.updatePreview(dt);
@@ -472,6 +476,7 @@ export class Game {
       // the crosshair opens with how far a shot can stray, and the kick
       spread: it && it.kind === 'gun' ? 0.25 + it.inaccuracy * 8 + this.spread * 1.4 : 0,
       scoped: !!(it && it.kind === 'gun' && it.scoped && this.viewModel.ads > 0.95),
+      lock: it?.guided && this.dragons.lock.rect ? { ...this.dragons.lock.rect, locked: this.dragons.lock.locked } : null,
     });
   }
 
@@ -578,6 +583,8 @@ export class Game {
     const it = held ? ITEMS[held.id] : null;
     this.cooldown -= dt;
     this.ads = false;
+    // (put the guided launcher away and its lock goes)
+    if (!it?.guided && (this.dragons.lock.t || this.dragons.lock.tone)) this.dragons.resetLock();
 
     // Q: one of what's in hand onto the ground in front (the original's DropOneSelectedTrayItem)
     if (input.consume('drop') && held && !this.grenade) {
@@ -807,9 +814,12 @@ export class Game {
         return;
       }
     }
+    // the guided launcher locks on to the dragon at the shoulder, and fires only once it has
+    if (it.guided) this.dragons.checkLock(dt, this.ads, eye, this.player.forward(_f2), this.camera);
     // fire
     const trigger = it.auto ? input.isHeld('primary') : input.pressed('primary');
     if (!trigger || this.cooldown > 0) return;
+    if (it.guided && !this.dragons.lock.locked && held.mag > 0) return;
     if (held.mag <= 0) {
       if (canReload) this.startReload(it, false);
       else if (input.pressed('primary')) { this.audio?.dryFire(); this.hud.hint(`Out of ${ITEMS[it.ammo]?.name || 'ammo'}`, 1.5); }
@@ -833,7 +843,8 @@ export class Game {
       if (!it.laser && it.gun !== 'rocket') dir.addScaledVector(up, 0.015);
       dirs.push(dir.addScaledVector(right, rand(-it.inaccuracy, it.inaccuracy)).addScaledVector(up, rand(-it.inaccuracy, it.inaccuracy)).normalize());
     }
-    this.fire(it, eye, muzzle, dirs, true);
+    this.fire(it, eye, muzzle, dirs, true, this.online?.myId ?? 0);
+    if (it.guided) this.dragons.resetLock();
     this.enemies?.noise('shot');
     this.applyRecoil(it.recoil);
     this.spread = Math.min(1.5, this.spread + it.recoil * D2R * 4);
@@ -862,13 +873,13 @@ export class Game {
     return eye.clone().addScaledVector(right, 0.12).addScaledVector(up, -0.1).addScaledVector(fwd, 0.6);
   }
 
-  // A shot (anyone's, mine: this player's): a rocket from the eye, laser bolts from the gun's
-  // tip, bullets from the eye.
-  fire(it, eye, muzzle, dirs, mine) {
+  // A shot (anyone's, mine: this player's; shooter, whose): a rocket from the eye, laser bolts
+  // from the gun's tip, bullets from the eye.
+  fire(it, eye, muzzle, dirs, mine, shooter = 0) {
     for (const d of dirs) {
-      if (it.gun === 'rocket') this.projectiles.rocket(eye, d, it, mine);
-      else if (it.laser) this.projectiles.bolt(muzzle, d, it, mine);
-      else this.projectiles.bullet(eye, d, it, mine);
+      if (it.gun === 'rocket') this.projectiles.rocket(eye, d, it, mine, shooter);
+      else if (it.laser) this.projectiles.bolt(muzzle, d, it, mine, shooter);
+      else this.projectiles.bullet(eye, d, it, mine, shooter);
     }
   }
 
@@ -897,9 +908,16 @@ export class Game {
   }
 
   // What a shot hit (a bullet's or a laser bolt's; mine: this player's, the one that hurts): one
-  // of the dead takes it, a block shows it, glass breaks, and TNT or C4 goes off.
-  shotHit(hit, it, mine) {
+  // of the dead takes it, a block shows it, glass breaks, and TNT or C4 goes off. The dragon
+  // takes anyone's (each machine flies every shot).
+  shotHit(hit, it, mine, shooter = 0) {
     const at = hit.at;
+    if (hit.dragon) {
+      // (a flash where it goes in, and no sound: the original's)
+      this.dragons.shot(at, it, shooter);
+      if (mine) this.hud.hitMarker();
+      return;
+    }
     if (hit.enemy) {
       if (mine) {
         if (hit.enemy.takeDamage(hit.y, weaponDamage(it))) this.onKill(hit.enemy);
@@ -1001,6 +1019,7 @@ export class Game {
     p.vel.set(0, 0, 0);
     p.fallStart = null;
     if (this.enemies) this.enemies.cleared = 50;
+    this.dragons?.resetDistance();
     this.ready = false;
   }
 
@@ -1156,6 +1175,7 @@ export class Game {
     this.player.spawn(sp.x, sp.y, sp.z);
     this.player.yaw = Math.PI;
     this.enemies?.clearNear?.(sp, 40);
+    this.dragons?.resetDistance();
     this.ready = false;
   }
 

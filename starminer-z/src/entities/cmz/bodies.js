@@ -56,12 +56,14 @@ void main() {
   float rim = pow(1.0 - max(dot(n, -v), 0.0), 3.0);
   col += skyLookup(normalize(vec3(n.x, abs(n.y) + 0.1, n.z))) * rim * 0.1 * lightCurve(uObjLight.x) * albedo;
   col = mix(col, vec3(1.0, 0.18, 0.12) * max(light.r, 0.3), uFlash);
+#ifndef NOFOG
   col = applyFog(col, vWorld);
+#endif
   gl_FragColor = vec4(col, 1.0);
 }
 `;
 
-function makeMaterial(sky, terrain, map) {
+function makeMaterial(sky, terrain, map, fog = true) {
   const uniforms = {
     ...sky,
     uFogStart: terrain.uFogStart, uFogEnd: terrain.uFogEnd, uHaze: terrain.uHaze,
@@ -73,7 +75,7 @@ function makeMaterial(sky, terrain, map) {
     uOpacity: { value: 1 },
     uViewPos: { value: new THREE.Vector3() },
   };
-  const m = new THREE.ShaderMaterial({ uniforms, vertexShader: VS, fragmentShader: FS, side: THREE.DoubleSide });
+  const m = new THREE.ShaderMaterial({ uniforms, vertexShader: VS, fragmentShader: FS, side: THREE.DoubleSide, defines: fog ? {} : { NOFOG: 1 } });
   m.onBeforeRender = (r, s, cam) => { uniforms.uViewPos.value.setFromMatrixPosition(cam.matrixWorld); };
   return m;
 }
@@ -118,15 +120,15 @@ async function load() {
 
 // One body: a clone of a model with its own material (each is lit, flashes and fades on its
 // own), playing the original's clips by name. The original faces its models down -z; ours
-// face +z, as the avatars do.
+// face +z, as the avatars do. (fog: false for what the original draws without it, the dragons.)
 export class CmzBody {
-  constructor(L, model, skin, sky, terrain) {
+  constructor(L, model, skin, sky, terrain, { fog = true } = {}) {
     const M = L.models[model];
     this.root = new THREE.Group();
     this.inner = cloneSkinned(M.scene);
     this.inner.rotation.y = Math.PI;
     this.root.add(this.inner);
-    this.material = makeMaterial(sky, terrain, L.skins[skin] || L.skins[0]);
+    this.material = makeMaterial(sky, terrain, L.skins[skin] || L.skins[0], fog);
     this.inner.traverse((o) => { if (o.isMesh) o.material = this.material; });
     this.clips = M.clips;
     this.mixer = new THREE.AnimationMixer(this.inner);

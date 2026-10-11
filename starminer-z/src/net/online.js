@@ -12,7 +12,7 @@ import { BLOCKS } from '../world/blocks.js';
 import { ITEMS } from '../items/items.js';
 import { PRESETS } from '../entities/avatar/looks.js';
 
-export const PROTOCOL = 3;
+export const PROTOCOL = 4;
 // how often (seconds) each thing goes out
 const STATE_EVERY = 1 / 15, ENEMIES_EVERY = 1 / 8, CLOCK_EVERY = 2, KEEP_EVERY = 15;
 
@@ -27,6 +27,27 @@ export function cleanProfile(p) {
   const n = (v) => (Number.isFinite(v) ? v : null);
   const preset = Number.isInteger(p?.preset) && PRESETS[p.preset] ? p.preset : 0;
   return { preset, skin: n(p?.skin), hair: n(p?.hair), shirt: n(p?.shirt) };
+}
+
+// a dragon's waypoint, as sent (see Online.dragonWaypoint), or null
+function waypoint(w) {
+  if (!Array.isArray(w) || w.length !== 15 || !w.every(Number.isFinite)) return null;
+  const action = w[10] === 1 || w[10] === 2 ? w[10] : 0;
+  return {
+    pos: w.slice(0, 3), vel: w.slice(3, 6), t: w[6], roll: w[7], anim: w[8] >= 0 && w[8] <= 3 ? w[8] | 0 : 0, sound: w[9] === 1 ? 1 : 0,
+    action, at: action ? w.slice(11, 14) : null, index: w[14] | 0,
+  };
+}
+
+// a dragon handed over (see Brain.migration), with only numbers where numbers go
+function cleanMigration(m) {
+  const out = { ...m };
+  for (const k of ['time', 'nextUpdate', 'yaw', 'targetYaw', 'roll', 'targetRoll', 'pitch', 'targetPitch', 'velocity', 'targetVelocity', 'defaultHeading', 'fireballs']) {
+    if (!Number.isFinite(out[k])) out[k] = 0;
+  }
+  for (const k of ['pos', 'target']) if (!Array.isArray(out[k]) || out[k].length !== 3 || !out[k].every(Number.isFinite)) return null;
+  if (!Number.isInteger(out.type) || out.type < 0 || out.type > 4) return null;
+  return out;
 }
 
 // a snapshot's floats, however the wire delivered them
@@ -84,6 +105,7 @@ export class Online {
       welcome: {
         v: PROTOCOL, name, seed: g.seed, mode: g.mode, time: sky.time, day: sky.day, grace: g.grace,
         edits: g.world.serializeEdits(), crates: g.crates.serialize(), players, you: g.guests[name] ?? null,
+        dragon: g.dragons?.welcomeInfo() ?? null,
       },
     };
   }
@@ -175,7 +197,7 @@ export class Online {
         const c = v3(m.c), k = m.k;
         if (c && Number.isInteger(k) && k >= 0 && k <= 4) {
           if (k <= 1) g.explosives.detonate(Math.floor(c.x), Math.floor(c.y), Math.floor(c.z), k, !!m.o, false, who);
-          else g.explosives.blast(c, k, typeof m.i === 'string' ? m.i : null, false, who);
+          else g.explosives.blast(c, k, typeof m.i === 'string' ? m.i : null, false, who, k === 2 && m.dr === 1);
         }
         if (H) this.link.send({ ...m, id: from }, from);
         break;
@@ -206,6 +228,39 @@ export class Online {
         if (H) this.link.send(m, from);
         break;
       }
+      // the dragon (see ../game/dragons.js): asked for (to the host), started (from it), where
+      // it is (from whichever machine flies it), killed, gone, a fireball gone off, and handed
+      // to the machine of the one it's after
+      case 'dreq':
+        if (H && Number.isInteger(m.k)) g.dragons?.handleRequest(from, m.k, !!m.b);
+        break;
+      case 'dsp':
+        if (!H && Number.isInteger(m.s) && Number.isInteger(m.k)) g.dragons?.handleSpawn(m.s, m.k, !!m.b, Number.isFinite(m.h) ? m.h : -1);
+        break;
+      case 'dwp': {
+        const wp = waypoint(m.w);
+        if (wp) g.dragons?.receiveWaypoint(wp);
+        if (H) this.link.send(m, from);
+        break;
+      }
+      case 'dkl':
+        if (Number.isInteger(m.k)) g.dragons?.handleKill(m.k);
+        if (H) this.link.send(m, from);
+        break;
+      case 'drm':
+        g.dragons?.removeDragonEntity();
+        if (H) this.link.send(m, from);
+        break;
+      case 'dfb': {
+        const p = v3(m.p);
+        if (p && Number.isInteger(m.k) && m.k >= 0 && m.k <= 4) g.dragons?.handleFireball(p, m.i, m.k);
+        if (H) this.link.send(m, from);
+        break;
+      }
+      case 'dmg':
+        if (H && m.to !== this.myId) { this.link.sendTo(m.to, m); break; }
+        if (m.info && typeof m.info === 'object') g.dragons?.handleMigrate(cleanMigration(m.info));
+        break;
       case 'look':
         this.players.get(who)?.setLook(cleanProfile(m.prof));
         if (H) this.link.send({ ...m, id: from }, from);
@@ -274,7 +329,7 @@ export class Online {
       const d = v3(m.d.slice(i, i + 3));
       if (d && d.lengthSq() > 0.25) dirs.push(d.normalize());
     }
-    g.fire(it, eye, from, dirs, false);
+    g.fire(it, eye, from, dirs, false, who);
     g.audio?.gunshot?.(it, from);
     if (!it.laser) g.sprites.emit('smoke', from.x, from.y, from.z, { color: 0x9a9a9a, size: 0.12, grow: 0.4, life: 0.7, alpha: 0.25, spread: 0.4 });
   }
@@ -294,7 +349,7 @@ export class Online {
   fuse(x, y, z) { if (this.link.count) this.link.send({ t: 'fuse', b: [x, y, z] }); }
 
   // an explosion here (original: the first of a chain; item: what set it off)
-  boom(c, type, original, item) { if (this.link.count) this.link.send({ t: 'boom', c: arr(c), k: type, o: original ? 1 : 0, i: item ?? null }); }
+  boom(c, type, original, item, dragon = false) { if (this.link.count) this.link.send({ t: 'boom', c: arr(c), k: type, o: original ? 1 : 0, i: item ?? null, dr: dragon ? 1 : 0 }); }
 
   // one of this machine's dead killed by someone else's explosion: the kill's theirs
   killedFor(to, pos) {
@@ -308,6 +363,27 @@ export class Online {
 
   // a line for everyone (the original's BroadcastTextMessage)
   say(text) { if (this.link.count) this.link.send({ t: 'say', s: String(text).slice(0, 80) }); }
+
+  // the dragon's messages (the host's to everyone; a guest's to the host, who passes them on)
+  dragonRequest(type, forBiome) { this.link.send({ t: 'dreq', k: type, b: forBiome ? 1 : 0 }); }
+
+  dragonSpawn(spawner, type, forBiome, health) { if (this.link.count) this.link.send({ t: 'dsp', s: spawner, k: type, b: forBiome ? 1 : 0, h: health }); }
+
+  dragonWaypoint(w) {
+    if (!this.link.count) return;
+    this.link.send({ t: 'dwp', w: [...w.pos, ...w.vel, w.t, w.roll, w.anim, w.sound, w.action, ...(w.at || [0, 0, 0]), w.index] });
+  }
+
+  dragonKill(at, killer, weapon) { if (this.link.count) this.link.send({ t: 'dkl', p: arr(at), k: killer, w: weapon ?? null }); }
+
+  dragonRemove() { if (this.link.count) this.link.send({ t: 'drm' }); }
+
+  dragonFireball(at, index, type) { if (this.link.count) this.link.send({ t: 'dfb', p: arr(at), i: index, k: type }); }
+
+  dragonMigrate(to, info) {
+    const m = { t: 'dmg', to, info };
+    if (this.host) this.link.sendTo(to, m); else this.link.send(m);
+  }
 
   arrow(from, to) {
     if (this.link.count) this.link.send({ t: 'arrow', f: arr(from), to: arr(to) });

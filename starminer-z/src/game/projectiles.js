@@ -6,7 +6,8 @@
 // (RocketEntity: a pop out of the tube, then up to speed; the guided one turns after its dragon).
 //
 // Each machine flies everyone's shots, for the look of them; only the one who fired one hurts
-// anything with it.
+// anything with it (but the dragon: every machine takes every hit on it off its own, as the
+// original does). shooter: who fired it, online.
 
 import * as THREE from 'three';
 import { B, SOLID } from '../world/blocks.js';
@@ -79,22 +80,24 @@ export class Projectiles {
 
   // ---- shots -----------------------------------------------------------------------------------
 
-  // A bullet from the eye (TracerManager.AddTracer): its streak starts half a metre out.
-  bullet(from, dir, it, mine) {
+  // A bullet from the eye (TracerManager.AddTracer): its streak starts half a metre out. A
+  // dragon hears it (RegisterGunShot).
+  bullet(from, dir, it, mine, shooter) {
     if (this.bullets.length >= this.max) this.bullets.shift();
     const head = from.clone().addScaledVector(dir, 0.5);
     const v = dir.clone().multiplyScalar(it.velocity || 100);
-    this.bullets.push({ head, tail: head.clone(), hv: v, tv: v.clone(), left: it.flightTime || 2, tailAt: (it.flightTime || 2) - 0.2, it, mine, done: false, color: tracerColor(it) });
+    this.bullets.push({ head, tail: head.clone(), hv: v, tv: v.clone(), left: it.flightTime || 2, tailAt: (it.flightTime || 2) - 0.2, it, mine, shooter, done: false, color: tracerColor(it) });
+    this.game.dragons?.gunshot(from);
   }
 
   // A laser bolt from the gun's tip (BlasterShot.Create).
-  bolt(from, dir, it, mine) {
+  bolt(from, dir, it, mine, shooter) {
     const mesh = new THREE.Mesh(this.boltGeo, this.boltMat(it.color ?? 0xff0000));
     mesh.position.copy(from);
     mesh.lookAt(_v.copy(from).sub(dir));
     mesh.renderOrder = 19;
     this.game.scene.add(mesh);
-    this.bolts.push({ mesh, pos: from.clone(), last: from.clone(), v: dir.clone().multiplyScalar(BOLT_SPEED), life: BOLT_LIFE, bounces: BOLT_BOUNCES, it, mine, skip: false });
+    this.bolts.push({ mesh, pos: from.clone(), last: from.clone(), v: dir.clone().multiplyScalar(BOLT_SPEED), life: BOLT_LIFE, bounces: BOLT_BOUNCES, it, mine, shooter, skip: false });
   }
 
   // A grenade from the hand (GrenadeProjectile.Create): fuse, the seconds it has left.
@@ -109,7 +112,7 @@ export class Projectiles {
   }
 
   // A rocket out of its launcher (RocketEntity): dir, the way the view points.
-  rocket(from, dir, it, mine) {
+  rocket(from, dir, it, mine, shooter) {
     const m = itemModel('rockets');
     const mesh = new THREE.Mesh(m ? m.geo : new THREE.CylinderGeometry(0.03, 0.03, 0.3), this.objMat);
     mesh.scale.setScalar(1.6);
@@ -122,7 +125,7 @@ export class Projectiles {
     const pop = dir.clone().lerp(camUp, 0.75).normalize().multiplyScalar(ROCKET_POP);
     const guided = !!it.guided;
     this.rockets.push({
-      mesh, start, dir: dir.clone(), pop, t: -ROCKET_FUSE, guidedAt: start.clone(), it, mine, guided,
+      mesh, start, dir: dir.clone(), pop, t: -ROCKET_FUSE, guidedAt: start.clone(), it, mine, shooter, guided,
       max: guided ? 50 : 25, fullGuide: guided ? 2.5 : 1, fullSpeed: 1, pos: start.clone(), last: start.clone(), whoosh: this.game.audio?.play?.('RocketWhoosh', start),
     });
     mesh.position.copy(start);
@@ -137,7 +140,8 @@ export class Projectiles {
     this.updateRockets(dt);
   }
 
-  // The first thing along a to b: a block (with its hit), or one of the dead (theirs too).
+  // The first thing along a to b: a block (with its hit), or one of the dead (theirs too); or,
+  // with neither, the dragon (EnemyManager.Trace).
   probe(a, b, enemies = true) {
     const w = this.game.world;
     _d.subVectors(b, a);
@@ -149,6 +153,8 @@ export class Projectiles {
     const en = enemies ? this.game.enemies?.raycast(a, _d, bd, bd, true) : null;
     if (en) return { enemy: en.enemy, dist: en.dist, y: en.y, at: a.clone().addScaledVector(_d, en.dist), dir: _d.clone() };
     if (blk) return { block: blk, dist: blk.dist, at: a.clone().addScaledVector(_d, blk.dist), dir: _d.clone() };
+    const dr = enemies ? this.game.dragons?.raycast(a, _d, len) : null;
+    if (dr) return { dragon: true, head: dr.head, dist: dr.dist, at: a.clone().addScaledVector(_d, dr.dist), dir: _d.clone() };
     return null;
   }
 
@@ -167,7 +173,7 @@ export class Projectiles {
       if (hit) {
         t.head.copy(hit.at);
         t.done = true;
-        g.shotHit(hit, t.it, t.mine);
+        g.shotHit(hit, t.it, t.mine, t.shooter);
       }
       if (!g.world.isLoaded(t.head.x, t.head.z) || t.head.y < 0) t.done = true;
     }
@@ -198,7 +204,7 @@ export class Projectiles {
         b.skip = false;
         if (hit) {
           b.pos.copy(hit.at);
-          if (hit.enemy) { g.shotHit(hit, b.it, b.mine); done = true; }
+          if (hit.enemy || hit.dragon) { g.shotHit(hit, b.it, b.mine, b.shooter); done = true; }
           else {
             const id = hit.block.id;
             g.boltSplash?.(hit.at, b.it);
@@ -287,9 +293,12 @@ export class Projectiles {
         // where it's going: the way it was fired, or (guided) after the dragon, turning to it
         // over its first seconds
         let to = r.dir;
+        r.chasing = false;
         if (r.guided) {
-          const d = g.enemies?.dragonPosition?.();
-          const aim = d ? d.clone().sub(r.pos).normalize() : r.dir;
+          const d = g.dragons?.position(true);
+          r.chasing = !!d;
+          // (no dragon: on the way it's pointing)
+          const aim = d ? d.clone().sub(r.pos).normalize() : (r.face || r.dir).clone();
           const f = Math.min(1, r.t / r.fullGuide);
           to = r.dir.clone().lerp(aim, f).normalize();
           face = r.dir.clone().lerp(aim, Math.sqrt(f)).normalize();
@@ -305,6 +314,7 @@ export class Projectiles {
           at = r.guidedAt.clone();
         }
       } else at = lob;
+      r.face = face;
       r.last.copy(r.pos);
       r.pos.copy(at);
       r.mesh.position.copy(at);
@@ -314,17 +324,18 @@ export class Projectiles {
       if (r.t >= 0) for (let k = 0; k < 2; k++) g.sprites.emit(k ? 'smoke' : 'flame', at.x - face.x * 0.3, at.y - face.y * 0.3, at.z - face.z * 0.3, k
         ? { color: 0x8a8580, size: 0.25, grow: 0.9, life: 1.2, spread: 0.4, alpha: 0.4 }
         : { color: 0xffa040, size: 0.2, life: 0.12, spread: 0.3 });
-      let boom = null, done = false;
-      if (r.t > ROCKET_LIFE) { done = true; boom = at; } else {
+      let boom = null, done = false, dragon = false;
+      // (after a dragon, it can go out past where the world's in)
+      if (!r.chasing && !g.world.isLoaded(at.x, at.z)) done = true;
+      else if (r.t > ROCKET_LIFE) { done = true; boom = at; } else {
         const hit = this.probe(r.last, r.pos);
-        if (hit) { done = true; boom = hit.at; }
+        if (hit) { done = true; boom = hit.at; dragon = !!hit.dragon; }
       }
-      if (!g.world.isLoaded(at.x, at.z)) done = true;
       if (done) {
         r.mesh.removeFromParent();
         if (r.whoosh) g.audio?.stop?.(r.whoosh);
         this.rockets.splice(i, 1);
-        if (boom && r.mine) g.explosives.blast(boom.clone(), EXPLOSIVE.ROCKET, r.it.id, true);
+        if (boom && r.mine) g.explosives.blast(boom.clone(), EXPLOSIVE.ROCKET, r.it.id, true, undefined, dragon);
       }
     }
   }

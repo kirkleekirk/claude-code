@@ -76,6 +76,18 @@ export const CSS = /* css */ `
 .hud .scope::before { content: ''; position: absolute; left: 50%; top: 14vh; bottom: 14vh; width: 1px; background: rgba(0,0,0,0.9); }
 .hud .scope::after { content: ''; position: absolute; top: 50%; left: calc(50% - 36vh); right: calc(50% - 36vh); height: 1px; background: rgba(0,0,0,0.9); }
 .hud .scope.on { display: block; }
+/* the guided launcher's lock box: the original's sprites tinted lime, then red; without them,
+   corner brackets in the same colours */
+.hud .lock { position: absolute; left: 0; top: 0; display: none; pointer-events: none; --lc: #00ff00; }
+.hud .lock.on { display: block; }
+.hud .lock.locked { --lc: #ff0000; }
+.cmz-ui .hud .lock { background-color: var(--lc); background-blend-mode: multiply; }
+html:not(.cmz-ui) .hud .lock { -webkit-mask: none; mask: none; background:
+  linear-gradient(var(--lc), var(--lc)) top left / 26% 3px no-repeat, linear-gradient(var(--lc), var(--lc)) top left / 3px 26% no-repeat,
+  linear-gradient(var(--lc), var(--lc)) top right / 26% 3px no-repeat, linear-gradient(var(--lc), var(--lc)) top right / 3px 26% no-repeat,
+  linear-gradient(var(--lc), var(--lc)) bottom left / 26% 3px no-repeat, linear-gradient(var(--lc), var(--lc)) bottom left / 3px 26% no-repeat,
+  linear-gradient(var(--lc), var(--lc)) bottom right / 26% 3px no-repeat, linear-gradient(var(--lc), var(--lc)) bottom right / 3px 26% no-repeat; }
+html:not(.cmz-ui) .hud .lock.locked::after { content: 'LOCK'; position: absolute; left: 0; right: 0; bottom: 10%; text-align: center; color: var(--lc); font-weight: 800; font-size: 0.8em; }
 .hud .hint { position: absolute; left: 50%; top: 62%; transform: translateX(-50%); font-weight: 700; font-size: 0.8em; opacity: 0; transition: opacity 0.4s; text-align: center; }
 .hud .hint.on { opacity: 1; }
 

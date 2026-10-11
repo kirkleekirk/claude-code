@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { B, BLOCKS, SOLID, HEIGHT, isDoor, DOOR } from '../world/blocks.js';
 import { HARDNESS, DAMAGE_THROUGH, BLAST_PROOF } from '../entities/cmz/types.js';
+import { ROCKET_DRAGON_DAMAGE } from './dragons.js';
 
 export const EXPLOSIVE = { TNT: 0, C4: 1, ROCKET: 2, LASER: 3, GRENADE: 4 };
 const { TNT, C4, ROCKET } = EXPLOSIVE;
@@ -136,13 +137,17 @@ export class Explosives {
 
   // A rocket or a grenade going off, or a laser bolt stopping (each on the machine of whoever
   // fired it, and from there to everyone): the bang and everyone's share of it; and the blocks.
-  blast(c, type, item, mine, shooter = this.game.online?.myId ?? 0) {
-    if (type !== EXPLOSIVE.LASER) {
+  // A rocket into a dragon (dragon: true) hurts only it, and throws no rock.
+  blast(c, type, item, mine, shooter = this.game.online?.myId ?? 0, dragon = false) {
+    if (dragon) {
+      this.effects(c, false);
+      this.game.dragons?.explosiveHit(c, ROCKET_DRAGON_DAMAGE, shooter, item);
+    } else if (type !== EXPLOSIVE.LASER) {
       this.effects(c, true);
       this.splash(c, type, item, shooter);
     }
     if (!mine) return;
-    this.game.online?.boom(c, type, true, item);
+    this.game.online?.boom(c, type, true, item, dragon);
     this.removeBlocks(Math.floor(c.x), Math.floor(c.y), Math.floor(c.z), type, type === EXPLOSIVE.LASER, shooter);
   }
 
@@ -234,8 +239,9 @@ export class Explosives {
   }
 
   // How much of the blast gets from a to b (the original's DamageLOSProbe): each metre through
-  // a block takes off what the block doesn't let through; some blocks stop it outright.
-  through(a, b) {
+  // a block takes off what the block doesn't let through; some blocks stop it outright (proof:
+  // which; a dragon's fireball, what it can't break).
+  through(a, b, proof = BLAST_PROOF) {
     const w = this.game.world;
     let m = 1;
     const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
@@ -253,7 +259,7 @@ export class Explosives {
       const next = Math.min(tx, ty, tz, len);
       const id = w.getBlock(x, y, z);
       if (SOLID[id] && next > t) {
-        if (BLAST_PROOF[id]) return 0;
+        if (proof[id]) return 0;
         const lose = (1 - DAMAGE_THROUGH[id]) * (next - t);
         if (lose > 0) { m *= Math.max(0, Math.min(1, 1 - lose)); if (m <= 0) return 0; }
       }

@@ -50,6 +50,18 @@ near the rock, every 3 to 7 once noise rouses them: digging the rock, shooting i
 asteroid), and the Felguard, a demon met first deep and far out underground, five minutes or more
 apart, and once met, anywhere.
 
+And its dragons, one at a time in the sky: Fire, Forest, Sand, Ice and Undead (20, 100, 300, 600
+and 1000 of health). One comes the first time you're 100, 500, 1000, 2600 and 4000 m out, and
+another for staying half an hour or so in one place, then the next kind in turn. Each flies in
+from 750 m off and over; if it sees you out under the sky, it screams and comes for you, strafing
+or hovering and spitting fireballs (an Ice Dragon's freeze what they hit), then circles round
+again. Gunfire draws one that hasn't seen you; hitting it makes it angry. Its fireballs break
+what that kind of dragon can break (less each time: the Undead's only stop at diamond walls). Shot
+down, it falls, lies a few seconds, and leaves explosive powder, ingots, diamonds or bloodstone.
+The guided missile locks on to it at the shoulder, slower the further off it is, and fires only
+once it has. Online, the machine of the player it came for flies it (and hands it to whoever it's
+chasing, if that's far off), everyone sees it, and every machine takes everyone's hits off it.
+
 Items and crafting are the later CastleMiner Z's, with its own numbers: the bloodstone tier, light
 machine guns, laser guns and swords, rocket launchers, grenades, TNT and C4, crates, doors, the
 clock, locator and teleporter, and its 107 recipes. The inventory and crafting screens are laid
@@ -146,13 +158,13 @@ None of these files are in this repository. They come out of your own copy of th
 
 ```
 python3 tools/cmz/rip_audio.py  <Content> local-assets/audio    # needs ffmpeg
-python3 tools/cmz/rip_models.py <Content> local-assets/models
+python3 tools/cmz/rip_models.py <Content> local-assets/models  # the dead, the aliens, the Felguard, the dragons
 python3 tools/cmz/rip_player.py <Content> local-assets          # avatar clips, held items, the locator's marker
-python3 tools/cmz/rip_ui.py     <Content> local-assets          # the inventory and crafting panel
+python3 tools/cmz/rip_ui.py     <Content> local-assets          # the inventory and crafting panel, the missile lock
 ```
 
-Without them the game is silent, the dead are built on the avatar rig, what you hold is drawn
-from parts, and the inventory has a panel of its own.
+Without them the game is silent, the dead are built on the avatar rig, the dragons are built of
+blocks, what you hold is drawn from parts, and the inventory has a panel of its own.
 
 ## Credits
 

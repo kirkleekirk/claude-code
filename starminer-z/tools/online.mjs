@@ -195,6 +195,57 @@ try {
     await wait(A, (k) => window.__game.stats.kills > k, kA, 30000).then(() => ok(true, 'and the kill is counted for A'), () => ok(false, 'and the kill is counted for A'));
   } else ok(false, "B's skeleton is still there to blow up");
 
+  // A's dragon: B sees it; B's shot hurts it on both machines; B's kill, and B's loot
+  const freeze = (g, at) => {
+    const b = g.dragons.brain;
+    b.change = () => {}; b.state = { update() {} };
+    b.pos.set(at.x, at.y, at.z); b.velocity = b.targetVelocity = 0; b.targetAltitude = at.y; b.orient();
+  };
+  const above = await B.evaluate(() => { const p = window.__app.game.player; if (p.dead) window.__app.game.respawn(); return { x: p.pos.x + 6, y: p.pos.y + 24, z: p.pos.z + 6 }; });
+  await A.evaluate(([fz, at]) => { const g = window.__game; g.dragons.spawnDragon(0, true); new Function('g', 'at', `(${fz})(g, at)`)(g, at); }, [freeze.toString(), above]);
+  await wait(B, () => window.__app.game.dragons.client?.got, null, 60000).then(() => ok(true, "A's dragon flies on B's machine"), () => ok(false, "A's dragon flies on B's machine"));
+  const dpos = await Promise.all([A.evaluate(() => window.__game.dragons.brain.pos.toArray()), B.evaluate(() => window.__app.game.dragons.client.pos.toArray())]);
+  ok(Math.hypot(dpos[0][0] - dpos[1][0], dpos[0][1] - dpos[1][1], dpos[0][2] - dpos[1][2]) < 1, 'where A flies it');
+  const bShot = async (gun) => B.evaluate((gun) => {
+    const g = window.__app.game, c = g.dragons.client, eye = g.player.eye, it = window.__ITEMS[gun];
+    const d = c.pos.clone().sub(eye).normalize();
+    g.fire(it, eye, eye, [d], true, g.online.myId);
+    g.online.shot(it.id, eye, eye, [d]);
+  }, gun);
+  await B.evaluate(async () => { window.__ITEMS = (await import('/src/items/items.js')).ITEMS; window.__ITEMS.pistol.inaccuracy = 0; });
+  await bShot('pistol');
+  await wait(A, () => window.__game.dragons.client.health < 20, null, 60000).catch(() => {});
+  const hp = await Promise.all([A.evaluate(() => window.__game.dragons.client.health), B.evaluate(() => window.__app.game.dragons.client.health)]);
+  ok(Math.abs(hp[0] - 19.7) < 1e-6 && Math.abs(hp[1] - 19.7) < 1e-6, `B's bullet hurts it on both machines (${hp.join(' / ')})`);
+  await Promise.all([A.evaluate(() => { window.__game.dragons.client.health = 0.2; }), B.evaluate(() => { window.__app.game.dragons.client.health = 0.2; })]);
+  await bShot('pistol');
+  await wait(A, () => window.__game.dragons.client?.dead ?? true, null, 60000).then(() => ok(true, "B's shot kills it, on A's machine too"), () => ok(false, "B's shot kills it, on A's machine too"));
+  await wait(B, () => !window.__app.game.dragons.client, null, 240000).catch(() => {});
+  const loot = await Promise.all([A.evaluate(() => window.__game.drops.list.filter((d) => d.id === 'explosive_powder').length), B.evaluate(() => window.__app.game.drops.list.filter((d) => d.id === 'explosive_powder').length)]);
+  ok(loot[0] === 0 && loot[1] >= 2, `what it leaves is B's (A ${loot[0]}, B ${loot[1]} explosive powder)`);
+
+  // A's dragon's fireball, at B: it goes off on B's machine and hurts B there
+  await A.evaluate(() => { const g = window.__game; g.dragons.nextAllowed = 0; g.dragons.pending = false; });
+  await A.evaluate(([fz, at]) => { const g = window.__game; g.dragons.spawnDragon(3, true); new Function('g', 'at', `(${fz})(g, at)`)(g, at); }, [freeze.toString(), above]);
+  await wait(B, () => window.__app.game.dragons.client?.got, null, 60000).catch(() => {});
+  await B.evaluate(() => { const p = window.__app.game.player; window.__hurt = []; const h = p.hurt.bind(p); p.hurt = (a, f, k) => { window.__hurt.push(k); return h(a, f, k); }; });
+  await A.evaluate(() => { window.__fbs = 0; const D = window.__game.dragons, f = D.detonateFireball.bind(D); D.detonateFireball = (...a) => { window.__fbs++; return f(...a); }; });
+  await A.evaluate(() => { const g = window.__game, r = [...g.online.players.values()][0], b = g.dragons.brain; b.shootTarget.set(r.pos.x, r.pos.y + 1, r.pos.z); b.shotPending = true; });
+  await wait(B, () => window.__hurt.includes('fireball'), null, 60000).then(() => ok(true, "A's dragon's iceball hits B on B's machine"), async () => {
+    const s = await Promise.all([A.evaluate(() => ({ fbs: window.__fbs, n: window.__game.dragons.fireballs.length })), B.evaluate(() => ({ n: window.__app.game.dragons.fireballs.length, hurt: window.__hurt }))]);
+    ok(false, `A's dragon's iceball hits B on B's machine (${JSON.stringify(s)})`);
+  });
+
+  // A hands it to B (it's after B, far off): B flies it from then on, A still sees it
+  await A.evaluate(() => { const g = window.__game, D = g.dragons, r = [...g.online.players.values()][0]; D.migrate(D.brain, { id: r.id, obj: r, local: false }); });
+  await wait(B, () => !!window.__app.game.dragons.brain, null, 30000).then(() => ok(true, 'the dragon goes to B to fly'), () => ok(false, 'the dragon goes to B to fly'));
+  await B.evaluate(([fz, at]) => { const g = window.__app.game; new Function('g', 'at', `(${fz})(g, at)`)(g, at); }, [freeze.toString(), { ...above, y: above.y + 6 }]);
+  await wait(A, (y) => Math.abs(window.__game.dragons.client.pos.y - y) < 0.5, above.y + 6, 60000).then(() => ok(true, "A sees it where B flies it"), () => ok(false, 'A sees it where B flies it'));
+  const brains = await A.evaluate(() => !!window.__game.dragons.brain);
+  ok(!brains, "and A doesn't fly it any more");
+  await B.evaluate(() => window.__app.game.dragons.removeDragon());
+  await wait(A, () => !window.__game.dragons.client, null, 30000).then(() => ok(true, 'gone, on both'), () => ok(false, 'gone, on both'));
+
   // B leaves: A keeps B's things; B comes back and has them
   await B.evaluate(() => { const inv = window.__app.game.inventory; inv.slots[7] = inv.make('diamond', 7); });
   await B.evaluate(() => window.__app.leaveOnline());
@@ -202,10 +253,15 @@ try {
   const kept = await A.evaluate(() => window.__game.guests.Bea?.inventory?.slots?.[7]);
   ok(kept && kept.id === 'diamond' && kept.count === 7, `A keeps what B had (${JSON.stringify(kept)})`);
   await wait(B, () => window.__app.state === 'menu', null, 240000);
+  // (a dragon up when B comes back: B sees it from the start)
+  await A.evaluate(() => { const D = window.__game.dragons; D.nextAllowed = 0; D.pending = false; D.spawnDragon(2, false); });
   await B.evaluate((c) => window.__app.joinOnline(c), code);
   await wait(B, () => window.__app.game?.online && window.__app.game.ready, null, 240000);
   const back = await B.evaluate(() => window.__app.game.inventory.slots[7]);
   ok(back && back.id === 'diamond' && back.count === 7, 'B has it back on rejoining');
+  const joined = await B.evaluate(() => window.__app.game.dragons.client?.type ?? null);
+  ok(joined === 2, `joining with a dragon up, B has it too (${joined})`);
+  await A.evaluate(() => window.__game.dragons.removeDragon());
 
   // the host saves, and B's things are in the save
   await A.evaluate(() => window.__app.autosave());

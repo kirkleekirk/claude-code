@@ -24,6 +24,7 @@ export class HUD {
       <div class="dist txt"><div>Distance - Max</div><div class="dv">0 - 0</div></div>
       <div class="cross"><i></i><i></i><i></i><i></i></div>
       <div class="hit"></div>
+      <div class="lock"></div>
       <div class="scope"></div>
       <div class="vignette"></div>
       <div class="feed txt"></div>
@@ -50,6 +51,7 @@ export class HUD {
     this.awardEl = this.$('.award');
     this.vig = this.$('.vignette');
     this.scope = this.$('.scope');
+    this.lockEl = this.$('.lock');
     this.hintEl = this.$('.hint');
     this.netEl = this.$('.net');
     this.tagsEl = this.$('.tags');
@@ -197,6 +199,16 @@ export class HUD {
     this.cross.style.setProperty('--spread', `${(s.spread || 0).toFixed(2)}em`);
     this.cross.style.display = s.scoped ? 'none' : '';
     this.scope.classList.toggle('on', !!s.scoped);
+    // the guided launcher's box round the dragon: green while it locks on, red once it has
+    // (InGameHUD's MissleLocking and MissleLock, on the original's 720-line screen)
+    const lk = s.scoped ? s.lock : null;
+    if (lk) {
+      const W = this.el.clientWidth, H = this.el.clientHeight, px = (lk.size * H) / 720;
+      const sp = lk.locked ? 'MissleLock' : 'MissleLocking';
+      this.set('lockc', this.lockEl, `lock on${lk.locked ? ' locked' : ''} spf-${sp} spm-${sp}`, 'className');
+      this.lockEl.style.width = this.lockEl.style.height = `${px.toFixed(1)}px`;
+      this.lockEl.style.transform = `translate(${(lk.x * W - px / 2).toFixed(1)}px, ${(lk.y * H - px / 2).toFixed(1)}px)`;
+    } else this.set('lockc', this.lockEl, 'lock', 'className');
     // timers
     if (this.hitTimer > 0) { this.hitTimer -= dt; if (this.hitTimer <= 0) this.hitEl.classList.remove('on'); }
     if (this.dayTimer > 0) { this.dayTimer -= dt; if (this.dayTimer <= 0) this.dayEl.classList.remove('on'); }

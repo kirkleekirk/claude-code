@@ -277,6 +277,7 @@ export class Menus {
           <h3>Endurance</h3>
           <p>You start at the tower. Every meter you get from it counts: your best is the Max. Dig for coal, copper, iron and gold, craft tools, guns and walls, and keep moving. At night the dead come for you; underground, in the dark, so do skeletons. The further out you go, the harder it gets.</p>
           <p>Out past the first hills, things have come down from the sky: craters with an asteroid of space rock in them, glowing Space Goo in the rock. Aliens live round them, and noise brings more of them, quicker: digging the rock, or shooting inside it. Deep underground and far out lives the Felguard, a demon of the Underworld; once you've met one, it can turn up anywhere.</p>
+          <p>Dragons fly over the world: Fire, Forest, Sand, Ice and Undead, each tougher than the last. One comes the first time you get 100, 500, 1000, 2600 and 4000 meters out, and stay too long in one place and they come for you there. Out under the sky they'll see you, and gunfire draws them; under a roof or in a cave they can't. Their fireballs break blocks (the Ice Dragon's freeze them); shoot one down and it leaves explosive powder and ore. The Anti Dragon Guided Missile locks on when you aim at a dragon at the shoulder (the box goes from green to red) and fires only once it has.</p>
           <h3>Keyboard & Mouse</h3>
           <div class="grid"><b>Move</b><span>W A S D</span><b>Look</b><span>Mouse</span><b>Jump</b><span>Space</span><b>Sprint</b><span>Shift</span><b>Crouch</b><span>C or Ctrl</span>
           <b>Use (dig, shoot, place)</b><span>Left click</span><b>Aim / Open, light</b><span>Right click</span><b>Reload</b><span>R</span><b>Items</b><span>1-8 or the wheel</span>
@@ -326,7 +327,7 @@ export class Menus {
   ripped() {
     const app = this.app, have = [];
     if (app.audio?.cues) have.push('its sound and music');
-    if (app.cmzBodies) have.push('its zombies, skeletons, the Felguard and the aliens');
+    if (app.cmzBodies) have.push('its zombies, skeletons, the Felguard, the aliens and the dragons');
     if (app.cmzPlayer) have.push('its avatar animations and the models of what you hold');
     if (document.documentElement.classList.contains('cmz-ui')) have.push('its inventory and crafting screens');
     if (!have.length) return 'None found, so the game is silent, the dead are built on the avatar rig and what you hold is drawn from parts.';

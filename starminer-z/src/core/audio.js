@@ -200,8 +200,9 @@ export class Audio {
   // ---- playing cues -------------------------------------------------------------------------
 
   // Plays a cue at a place in the world (pos) or in your head. Returns the instance, which a
-  // moving sound follows with move(), or null if it didn't start.
-  play(name, pos = null, gain = 1) {
+  // moving sound follows with move(), or null if it didn't start. far: { hear, ref } for
+  // something big and loud (a dragon): heard that far off, and as loud as up close out to ref.
+  play(name, pos = null, gain = 1, far = null) {
     if (!this.running) return null;
     const cue = this.cues[name];
     if (!cue || !cue.sounds || !cue.sounds.length) return null;
@@ -209,7 +210,7 @@ export class Audio {
     let dist = 0;
     if (pos) {
       dist = Math.hypot(pos.x - this.L.x, pos.y - this.L.y, pos.z - this.L.z);
-      if (dist > HEAR) return null;
+      if (dist > (far?.hear ?? HEAR)) return null;
     }
     let live = this.live.get(name);
     if (!live) { live = new Set(); this.live.set(name, live); }
@@ -239,7 +240,7 @@ export class Audio {
       const pn = c.createPanner();
       pn.panningModel = 'equalpower';
       pn.distanceModel = 'inverse';
-      pn.refDistance = 3;
+      pn.refDistance = far?.ref ?? 3;
       pn.rolloffFactor = 1.1;
       pn.maxDistance = 10000;
       setPos(pn, pos);
