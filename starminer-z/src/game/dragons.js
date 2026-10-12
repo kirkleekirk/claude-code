@@ -647,11 +647,17 @@ class Client {
     this.inverse.copy(this.matrix).invert();
   }
 
+  // (the brightest of a few points over it: it's big, and one point can be in a tree or a hill
+  // while the rest of it is out in the open)
   light() {
     const w = this.game.world, p = this.pos;
     if (p.y >= HEIGHT || !w.isLoaded(p.x, p.z)) { this.model.setLight(1, 0); return; }
-    const L = w.lightAt(p.x, p.y + 1, p.z);
-    this.model.setLight(L.sky / 15, L.block / 15);
+    let sky = 0, block = 0;
+    for (const up of [1, 4, 8]) {
+      const L = w.lightAt(p.x, p.y + up, p.z);
+      sky = Math.max(sky, L.sky); block = Math.max(block, L.block);
+    }
+    this.model.setLight(sky / 15, block / 15);
   }
 
   update(dt) {

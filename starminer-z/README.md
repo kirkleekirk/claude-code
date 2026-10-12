@@ -31,6 +31,11 @@ removes one). The one world kept before there were several becomes a world of it
 list. Options has Brightness, the Release Notes and Erase Storage (every world and award). The
 31 awards are the original's, with their progress counted across your Endurance games.
 
+You move as in the original: running once the stick is pushed most of the way (a key is all the
+way, at 4 m/s), walking short of it, and a little faster through the air; a jump goes two and a
+half metres up, enough for a ledge two blocks high; with Auto Climb on, you walk up a step a
+block high. There's no sprint or crouch, as there's none in the original.
+
 A day lasts 16 minutes, starting mid-morning. The first day is under a clear alien sky; early that
 afternoon a storm rolls in for good. The HUD is the later version's: the health bar, the screen
 going red as you're hurt, and arrows round the middle pointing to whatever hurt you.
@@ -141,8 +146,14 @@ files).
 - In Edge, hold the Menu button and choose Use game controls, so the controller plays the game
   instead of moving a pointer.
 - B pauses and the d-pad's up changes the camera: Edge keeps the View button for itself.
-- The game starts on Medium graphics there. Turning off Edge's "Apps can add a border" setting
-  helps it run smoothly.
+- The game starts on Low graphics there, and draws itself at a lower resolution while frames are
+  slow. Turning off Edge's "Apps can add a border" setting helps it run smoothly.
+- Your own copy, with everything ripped from the original (its dragons, zombies, sounds), plays on
+  the Xbox from a Windows PC on the same Wi-Fi: keep `Play on Xbox.bat` and `play-on-xbox.ps1`
+  next to `starminer-z.html`, double-click the `.bat`, and type the address it shows into Edge on
+  the Xbox. It's a small web server for the game, using the PowerShell that comes with Windows,
+  and it stops when its window is closed. (A hosted copy, like the Claude artifact, has nothing
+  ripped in it: the dragons there are built of the game's own geometry.)
 
 ## Developing
 
@@ -167,7 +178,9 @@ each other in headless Chromium (`BASE=<dev server url>/ node tools/online.mjs <
 
 `tools/checks/` holds a headless check for each part of the later version: `things.mjs` (the new
 items at work), `crash-sites.mjs`, `dragons.mjs`, `modes.mjs` (the modes, worlds, menus and
-HUD), and `graphics.mjs` (what happens when a browser has no WebGL, or loses it mid-game). Each takes the dev server's address and a folder for its screenshots
+HUD), `movement.mjs` (the player's movement against the original's numbers), `xbox.mjs` (the game
+as an Xbox's Edge has it) and `graphics.mjs` (what happens when a browser has no WebGL, or loses
+it mid-game). Each takes the dev server's address and a folder for its screenshots
 (`node tools/checks/modes.mjs http://localhost:5173 out`), and `&nocmz` as a third argument runs
 it without the ripped files.
 

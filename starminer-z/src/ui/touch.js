@@ -1,5 +1,5 @@
 // Touch controls for phones and tablets: the left thumb moves (a stick that appears where it
-// lands; push it all the way to sprint), the right thumb looks (drag anywhere), and buttons on
+// lands; pushed most of the way, you run), the right thumb looks (drag anywhere), and buttons on
 // the right for everything else. The hotbar takes taps as it is.
 
 export const TOUCH_CSS = /* css */ `
@@ -120,9 +120,8 @@ export class TouchControls {
       if (len > 1) { dx /= len; dy /= len; }
       m.x = dx; m.y = dy;
       this.knob.style.transform = `translate(${dx * R * 0.8}px, ${dy * R * 0.8}px)`;
-      const run = len > 0.95;
-      this.stick.classList.toggle('run', run);
-      if (run) this.input.down('sprint'); else this.input.up('sprint');
+      // (running: past 80% forward or back, as the original's stick)
+      this.stick.classList.toggle('run', Math.abs(dy) >= 0.8);
     } else if (e.pointerId === l.id) {
       e.preventDefault();
       l.dx += e.clientX - l.x; l.dy += e.clientY - l.y;
@@ -134,7 +133,6 @@ export class TouchControls {
     if (e.pointerId === this.move.id) {
       this.move.id = null; this.move.x = 0; this.move.y = 0;
       this.stick.style.display = 'none';
-      this.input.up('sprint');
     }
     if (e.pointerId === this.look.id) this.look.id = null;
   }

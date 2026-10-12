@@ -139,7 +139,7 @@ export class Crafting {
           <div class="list"></div>
           <div class="ings"></div>
         </div>
-        <div class="grid"></div>
+        <div class="grid pack"></div>
         <div class="sel ${SP('Selector')}"></div>
         <div class="help"></div>
       </div>
@@ -150,8 +150,8 @@ export class Crafting {
     this.panel = this.$('.ip');
     this.selEl = this.$('.sel');
     this.carryEl = this.$('.carry');
-    // the backpack and the hotbar's cells (by inventory slot)
-    const grid = this.$('.grid');
+    // the backpack and the hotbar's cells (by inventory slot; the crate page has a grid of its own)
+    const grid = this.$('.grid.pack');
     this.cells = [];
     for (let i = 0; i < HOTBAR + PACK; i++) {
       const c = document.createElement('div');

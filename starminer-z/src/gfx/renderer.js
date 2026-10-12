@@ -169,6 +169,30 @@ export class Renderer {
     this.resize();
   }
 
+  // Dynamic resolution: drawn smaller while frames are slow (longer than 1/50 s on average),
+  // and back up once they've been quick a while, between 55% and all of the setting's own
+  // resolution (a slow console, a big screen)
+  adapt(dt) {
+    if (this.fixed || !(dt > 0)) return;
+    // (a frame of more than a quarter of a second counts as one: a slow frame, or a hiccup)
+    dt = Math.min(dt, 0.25);
+    this.ft = this.ft == null ? dt : this.ft + (dt - this.ft) * 0.05;
+    this.adaptT = (this.adaptT || 0) + dt;
+    this.holdT = Math.max(0, (this.holdT || 0) - dt);
+    if (this.adaptT < 1) return;
+    this.adaptT = 0;
+    let s = this.scale;
+    if (this.ft > 1 / 50 && s > 0.55) {
+      s = Math.max(0.55, s - 0.1);
+      this.holdT = 6;
+      this.quick = 0;
+    } else if (this.ft < 1 / 57 && s < 1 && this.holdT <= 0) {
+      this.quick = (this.quick || 0) + 1;
+      if (this.quick >= 3) { s = Math.min(1, s + 0.05); this.quick = 0; }
+    } else this.quick = 0;
+    if (s !== this.scale) { this.scale = s; this.resize(true); }
+  }
+
   setQuality(name) {
     if (!QUALITY[name]) return;
     this.quality = name;

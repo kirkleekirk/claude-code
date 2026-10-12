@@ -13,7 +13,7 @@
 //   npm run build:download
 
 import { execSync } from 'node:child_process';
-import { readFileSync, writeFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, existsSync, statSync, copyFileSync } from 'node:fs';
 import { join, dirname, relative, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -75,3 +75,6 @@ writeFileSync(join(out, 'starminer-z.html'), mine);
 writeFileSync(join(out, 'starminer-z-friends.html'), friends);
 console.log(`wrote dist-download/starminer-z.html (${(mine.length / 1048576).toFixed(1)} MB; ${Object.keys(packed).length} ripped files packed, ${(bytes / 1048576).toFixed(1)} MB of them)`);
 console.log(`wrote dist-download/starminer-z-friends.html (${(friends.length / 1048576).toFixed(1)} MB; nothing ripped in it)`);
+// and to play it on an Xbox: a little web server for it, run from a Windows PC on the same Wi-Fi
+for (const f of ['play-on-xbox.ps1', 'Play on Xbox.bat']) copyFileSync(join(root, 'tools/xbox-server', f), join(out, f));
+console.log('wrote dist-download/Play on Xbox.bat and play-on-xbox.ps1 (to play from this PC on an Xbox)');

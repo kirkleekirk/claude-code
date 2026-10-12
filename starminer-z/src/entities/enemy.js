@@ -289,9 +289,9 @@ export class Enemy {
     if (this.growl) this.game.audio?.move?.(this.growl, this.pos);
     this.root.position.copy(this.pos);
     this.root.rotation.y = this.yaw;
-    // far off, the body only every few frames
+    // the body: less often far off or out of sight (Enemies.bodyEvery)
     this.animAcc = (this.animAcc || 0) + dt;
-    if (this.dist < 40 || this.animAcc > 0.1) { this.body.update(this.animAcc); this.animAcc = 0; }
+    if (this.animAcc >= this.game.enemies.bodyEvery(this.pos, this.dist)) { this.body.update(this.animAcc); this.animAcc = 0; }
     const L = w.lightAt(this.pos.x, this.pos.y + 1.2, this.pos.z);
     this.body.setLight(L.sky / 15, L.block / 15);
   }

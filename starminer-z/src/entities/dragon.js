@@ -106,66 +106,136 @@ class RippedDragon {
 // Built in the flying point's own space (forward -z, up +y), sized to the original's hit boxes:
 // a long body, a neck and horned head ahead, a tail behind, wings that flap from the shoulders.
 // In each dragon's colours (Fire, Forest, Sand, Ice, Undead).
+// Each kind's colours: its back, its belly, its wings' skin, its eyes
 const LOOKS = [
-  { body: 0x7a2a18, belly: 0xc0703a, wing: 0x5a1a10, eye: 0xffb020 },
-  { body: 0x3d5a22, belly: 0x8a9a4a, wing: 0x2a4018, eye: 0xd0ff40 },
-  { body: 0x9a7020, belly: 0xd8b870, wing: 0x7a5418, eye: 0xffe060 },
-  { body: 0x4a8fb0, belly: 0xc8e4f0, wing: 0x346a8a, eye: 0x80f0ff },
-  { body: 0x5a5448, belly: 0x9a9280, wing: 0x3a3630, eye: 0x60ff60 },
+  { body: 0xa8341c, belly: 0xe0904a, wing: 0x7a2414, eye: 0xffb020 },
+  { body: 0x4a6e2a, belly: 0xa8b860, wing: 0x2e4a1c, eye: 0xd0ff40 },
+  { body: 0xb8862e, belly: 0xe8cc88, wing: 0x8a6420, eye: 0xffe060 },
+  { body: 0x5aa4c8, belly: 0xdaf0fa, wing: 0x3c7ea4, eye: 0x80f0ff },
+  { body: 0x8a8478, belly: 0xc8c0aa, wing: 0x4a4640, eye: 0x60ff60 },
 ];
 const GEOS = new Map();
+const _c0 = new THREE.Color(), _c1 = new THREE.Color();
 
-function box(w, h, d, x, y, z, rx = 0, color = 0xffffff, emi = 0) {
-  const g = new THREE.BoxGeometry(w, h, d);
-  if (rx) g.rotateX(rx);
-  g.translate(x, y, z);
-  return paint(g.toNonIndexed(), color, 0, emi);
+// geometry from a list of triangles' corners, with flat normals, painted one colour (or each
+// corner its own: colors, linear rgb)
+function tris(points, hex, colors = null, emissive = 0) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(points), 3));
+  g.computeVertexNormals();
+  paint(g, hex, 0, emissive);
+  if (colors) g.attributes.color.array.set(colors);
+  return g;
 }
 
-function cone(r, h, x, y, z, rx, color) {
-  const g = new THREE.ConeGeometry(r, h, 6);
-  g.rotateX(rx);
-  g.translate(x, y, z);
-  return paint(g.toNonIndexed(), color);
+// A smooth body through cross-sections ({ z, y, w, h }: an ellipse w across and h high, round
+// (0, y, z)), from the first to the last, shaded from the back (top) down to the belly
+function loft(sections, segs, back, belly) {
+  const ring = (s) => Array.from({ length: segs }, (_, i) => {
+    const a = (i / segs) * Math.PI * 2;
+    return [Math.cos(a) * s.w, s.y + Math.sin(a) * s.h, s.z, Math.sin(a)];
+  });
+  const R = sections.map(ring), pos = [], col = [];
+  const cb = new THREE.Color(back), cl = new THREE.Color(belly);
+  const put = (v) => {
+    pos.push(v[0], v[1], v[2]);
+    const t = THREE.MathUtils.smoothstep(v[3], -0.45, 0.35);
+    _c0.copy(cl).lerp(cb, t);
+    col.push(_c0.r, _c0.g, _c0.b);
+  };
+  for (let k = 0; k < R.length - 1; k++) for (let i = 0; i < segs; i++) {
+    const a = R[k][i], b = R[k][(i + 1) % segs], c = R[k + 1][(i + 1) % segs], d = R[k + 1][i];
+    put(a); put(d); put(c); put(a); put(c); put(b);
+  }
+  // closed at both ends
+  for (const [k, cz] of [[0, sections[0]], [R.length - 1, sections[sections.length - 1]]]) {
+    const mid = [0, cz.y, cz.z, 0];
+    for (let i = 0; i < segs; i++) { put(mid); put(R[k][i]); put(R[k][(i + 1) % segs]); }
+  }
+  return tris(pos, 0xffffff, col);
 }
 
-// one wing's half: a bone along its front edge and the skin behind it (x outward)
-function wingHalf(len, chord, sweep, look) {
-  const skin = new THREE.BufferGeometry();
-  const p = [0, 0, -0.6, len, 0, -0.6 + sweep, len, 0, chord * 0.35 + sweep, 0, 0, chord];
-  skin.setAttribute('position', new THREE.BufferAttribute(new Float32Array([p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[0], p[1], p[2], p[6], p[7], p[8], p[9], p[10], p[11]]), 3));
-  skin.computeVertexNormals();
-  return mergeGeometries([paint(skin, look.wing), box(len, 0.35, 0.45, len / 2, 0, -0.6 + sweep / 2, 0, look.body)]);
+// a tapering bone (or horn, or claw) from a to b, thick at a and thin at b
+function bone(a, b, ta, tb, hex) {
+  const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), d = new THREE.Vector3().subVectors(B, A);
+  const len = d.length(), g = new THREE.CylinderGeometry(tb, ta, len, 5, 1);
+  g.translate(0, len / 2, 0);
+  g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()));
+  g.translate(A.x, A.y, A.z);
+  return paint(g.toNonIndexed(), hex);
+}
+
+// skin stretched over a fan of points from the first (y = 0: the wing's plane)
+function membrane(points, hex) {
+  const pos = [];
+  for (let i = 1; i < points.length - 1; i++) pos.push(...points[0], ...points[i], ...points[i + 1]);
+  return tris(pos, hex);
 }
 
 function geosFor(k) {
   let G = GEOS.get(k);
   if (G) return G;
   const L = LOOKS[k] || LOOKS[0];
-  const parts = [
-    box(3.2, 2.8, 8.6, 0, 0.7, 0.3, 0, L.body),
-    box(2.6, 0.6, 7.4, 0, -0.8, 0.3, 0, L.belly),
-    box(1.7, 1.7, 3.6, 0, 1.4, -5.3, -0.3, L.body),
-    box(2.0, 1.6, 3.0, 0, 1.9, -7.6, 0, L.body),
-    box(1.4, 0.9, 2.2, 0, 1.6, -9.6, 0, L.body),
-    box(1.3, 0.4, 2.6, 0, 0.95, -9.0, 0.12, L.belly),
-    box(0.3, 0.3, 0.3, 0.75, 2.35, -8.6, 0, L.eye, 1),
-    box(0.3, 0.3, 0.3, -0.75, 2.35, -8.6, 0, L.eye, 1),
-    cone(0.28, 1.6, 0.6, 3.0, -6.6, -0.9, L.belly),
-    cone(0.28, 1.6, -0.6, 3.0, -6.6, -0.9, L.belly),
-    // the tail, thinner and thinner
-    box(2.0, 1.8, 3.6, 0, 0.6, 6.3, 0.05, L.body),
-    box(1.4, 1.2, 3.6, 0, 0.35, 9.7, 0.08, L.body),
-    box(0.9, 0.8, 3.6, 0, 0.05, 13.0, 0.1, L.body),
-    box(0.5, 0.5, 3.2, 0, -0.3, 16.1, 0.12, L.body),
-    box(1.6, 0.2, 1.4, 0, -0.45, 18.1, 0, L.wing),
-    // legs, tucked up
-    box(0.8, 1.6, 1.2, 1.3, -1.2, -2.6, 0.6, L.body),
-    box(0.8, 1.6, 1.2, -1.3, -1.2, -2.6, 0.6, L.body),
-    box(0.9, 1.8, 1.4, 1.3, -1.2, 3.0, 0.9, L.body),
-    box(0.9, 1.8, 1.4, -1.3, -1.2, 3.0, 0.9, L.body),
-  ];
-  G = { body: mergeGeometries(parts), inner: wingHalf(7, 6, 0.6, L), outer: wingHalf(7.5, 4.5, 2.2, L) };
+  // snout to tail tip (it faces -z)
+  const body = loft([
+    { z: -11.1, y: 1.45, w: 0.18, h: 0.14 },
+    { z: -10.3, y: 1.55, w: 0.55, h: 0.42 },
+    { z: -9.1, y: 1.75, w: 0.85, h: 0.66 },
+    { z: -8.1, y: 1.95, w: 0.92, h: 0.82 },
+    { z: -7.3, y: 1.9, w: 0.62, h: 0.62 },
+    { z: -5.6, y: 1.6, w: 0.72, h: 0.76 },
+    { z: -3.9, y: 1.2, w: 1.1, h: 1.08 },
+    { z: -2.0, y: 0.9, w: 1.6, h: 1.5 },
+    { z: 0.5, y: 0.7, w: 1.8, h: 1.6 },
+    { z: 3.0, y: 0.6, w: 1.5, h: 1.35 },
+    { z: 5.5, y: 0.5, w: 1.0, h: 0.9 },
+    { z: 9.0, y: 0.3, w: 0.65, h: 0.55 },
+    { z: 13.0, y: 0.0, w: 0.4, h: 0.34 },
+    { z: 16.5, y: -0.25, w: 0.2, h: 0.17 },
+    { z: 18.6, y: -0.4, w: 0.05, h: 0.05 },
+  ], 10, L.body, L.belly);
+  const jaw = loft([
+    { z: -10.9, y: 1.12, w: 0.16, h: 0.08 },
+    { z: -10.0, y: 1.16, w: 0.46, h: 0.18 },
+    { z: -8.6, y: 1.32, w: 0.66, h: 0.24 },
+    { z: -7.9, y: 1.5, w: 0.5, h: 0.2 },
+  ], 8, L.belly, L.belly);
+  const parts = [body, jaw];
+  // horns, swept back; the eyes
+  for (const s of [1, -1]) {
+    parts.push(bone([0.45 * s, 2.45, -8.3], [0.9 * s, 3.4, -6.4], 0.22, 0.03, L.belly));
+    parts.push(bone([0.25 * s, 2.55, -8.9], [0.45 * s, 3.0, -7.9], 0.12, 0.02, L.belly));
+    const e = new THREE.BoxGeometry(0.22, 0.2, 0.32);
+    e.translate(0.78 * s, 2.05, -9.1);
+    parts.push(paint(e.toNonIndexed(), L.eye, 0, 1));
+  }
+  // spikes down the spine, smaller along the tail
+  for (const [z, y, h] of [[-6.6, 2.55, 0.5], [-4.6, 2.5, 0.6], [-2.6, 2.6, 0.8], [-0.6, 2.45, 0.85], [1.6, 2.15, 0.75], [3.8, 1.85, 0.6], [6.4, 1.3, 0.45], [9.4, 0.85, 0.35], [12.4, 0.4, 0.28], [15.2, 0.0, 0.2]]) {
+    parts.push(bone([0, y - 0.15, z], [0, y + h, z + h * 0.8], 0.16 * (h + 0.3), 0.02, L.belly));
+  }
+  // the tail's spade
+  parts.push(membrane([[0, -0.4, 17.4], [0.9, -0.42, 18.4], [0, -0.45, 19.9], [-0.9, -0.42, 18.4]], L.wing));
+  // legs, tucked up under it in flight, with claws
+  for (const s of [1, -1]) {
+    for (const [z, sz] of [[-1.6, 0.8], [3.0, 1]]) {
+      const hip = [1.15 * s, 0.1, z], knee = [1.35 * s, -1.0 * sz, z + 0.8 * sz], foot = [1.3 * s, -1.6 * sz, z + 2.0 * sz];
+      parts.push(bone(hip, knee, 0.42 * sz, 0.3 * sz, L.body), bone(knee, foot, 0.3 * sz, 0.2 * sz, L.body));
+      for (const dx of [-0.18, 0, 0.18]) parts.push(bone(foot, [foot[0] + dx, foot[1] - 0.15, foot[2] + 0.6 * sz], 0.09, 0.01, L.belly));
+    }
+  }
+  // the wings (x outward from the shoulder): the arm out to the wrist, and the skin behind it;
+  // past the wrist, three fingers with skin between them, scalloped at the trailing edge
+  const inner = mergeGeometries([
+    membrane([[0.2, 0, -0.2], [6.5, 0, -0.35], [6.5, 0, 1.2], [4.2, 0, 4.4], [1.0, 0, 5.4], [0, 0, 4.0]], L.wing),
+    bone([0, 0, 0], [6.5, 0, -0.3], 0.34, 0.24, L.body),
+  ]);
+  const F = [[7.6, 0, 0.9], [6.2, 0, 3.7], [3.6, 0, 5.3]];
+  const outer = mergeGeometries([
+    membrane([[0, 0, 0], F[0], [5.5, 0, 2.2], F[1], [4.0, 0, 3.8], F[2], [1.7, 0, 4.0], [0, 0, 1.5]], L.wing),
+    ...F.map((f, i) => bone([0, 0, 0], f, 0.24 - i * 0.04, 0.05, L.body)),
+    bone([0, 0, 0], [0.4, 0.15, -0.55], 0.12, 0.02, L.belly),
+  ]);
+  G = { body: mergeGeometries(parts), inner, outer };
   GEOS.set(k, G);
   return G;
 }
@@ -183,7 +253,7 @@ class StandInDragon {
       root.position.set(1.5 * side, 1.9, -1.6);
       root.scale.x = side;
       root.add(new THREE.Mesh(G.inner, this.mat));
-      tip.position.set(7, 0, 0);
+      tip.position.set(6.5, 0, -0.3);
       tip.add(new THREE.Mesh(G.outer, this.mat));
       root.add(tip);
       this.pose.add(root);

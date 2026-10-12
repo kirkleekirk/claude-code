@@ -6,6 +6,7 @@
 // character can be merged into a single skinned mesh and drawn in one call.
 
 import * as THREE from 'three';
+import { cpuMips } from '../../gfx/arrayMips.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MESH, ANIM, ANIM_ROT, ANIM_POS, TEXTURES, FACE, EXPRESSIONS } from '../../assets/avatarData.js';
 
@@ -214,7 +215,7 @@ async function load() {
   clothes.wrapS = clothes.wrapT = THREE.RepeatWrapping;
   clothes.minFilter = THREE.LinearMipmapLinearFilter;
   clothes.magFilter = THREE.LinearFilter;
-  clothes.generateMipmaps = true;
+  cpuMips(clothes);
   clothes.needsUpdate = true;
   // the faces: every frame its own layer, so nothing bleeds between them in the small mips
   const CW = FACE.m.cw, CH = FACE.m.ch;
@@ -244,7 +245,7 @@ async function load() {
   faceTex.wrapS = faceTex.wrapT = THREE.ClampToEdgeWrapping;
   faceTex.minFilter = THREE.LinearMipmapLinearFilter;
   faceTex.magFilter = THREE.LinearFilter;
-  faceTex.generateMipmaps = true;
+  cpuMips(faceTex, { srgb: false });
   faceTex.anisotropy = 4;
   faceTex.needsUpdate = true;
   const faces = { m: faceTex, f: faceTex };

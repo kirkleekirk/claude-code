@@ -121,10 +121,10 @@ export class Input {
       const rx = dz(pad.axes[2] || 0, 0.12), ry = dz(pad.axes[3] || 0, 0.12);
       if (ax || ay || rx || ry) { this.lastDevice = 'pad'; this.padActive = true; }
       mx += ax; my -= ay;
-      // response curve: fine aim near the centre, fast turns at the edge
-      const curve = (v) => Math.sign(v) * Math.pow(Math.abs(v), 1.8);
-      lx += curve(rx) * 3.2 * dt * this.sens * ps;
-      ly += curve(ry) * 2.4 * dt * this.sens * ps;
+      // the original's turn rates (FPSRig.UpdateRotation): 270 degrees a second across, 180 up
+      // and down, as far as the stick is pushed
+      lx += rx * 4.712389 * dt * this.sens * ps;
+      ly += ry * Math.PI * dt * this.sens * ps;
       pad.buttons.forEach((b, i) => {
         const a = PADMAP[i];
         if (!a) return;
@@ -141,9 +141,9 @@ export class Input {
       mx += t.mx; my += t.my;
       lx += t.lx; ly += t.ly;
     }
-    const len = Math.hypot(mx, my);
-    if (len > 1) { mx /= len; my /= len; }
-    this.move.x = mx; this.move.y = my;
+    // (each way on its own, as the original reads them: a key is all the way, so two at once go
+    // further than one)
+    this.move.x = Math.max(-1, Math.min(1, mx)); this.move.y = Math.max(-1, Math.min(1, my));
     this.look.x = lx; this.look.y = ly * (this.invertY ? -1 : 1);
   }
 

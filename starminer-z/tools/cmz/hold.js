@@ -8,6 +8,7 @@ import { AvatarModel, bindPosition } from '../../src/entities/avatar/model.js';
 import { loadCmzClips } from '../../src/entities/cmz/avatarAnim.js';
 import { CmzPlayerAnimation } from '../../src/entities/cmz/playerAnim.js';
 import { loadCmzItems, HeldItems } from '../../src/entities/cmz/held.js';
+import { setMipRenderer } from '../../src/gfx/arrayMips.js';
 
 const q = new URLSearchParams(location.search);
 const item = q.get('item') || 'pistol';
@@ -18,6 +19,7 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.setScissorTest(true);
 document.body.appendChild(renderer.domElement);
+setMipRenderer(renderer);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x30343a);
 scene.add(new THREE.HemisphereLight(0xffffff, 0x404040, 1.6));

@@ -9,6 +9,7 @@ import { Renderer, QUALITY } from './gfx/renderer.js';
 import { Sky } from './gfx/sky.js';
 import { makeTerrainMaterials } from './gfx/terrainMaterial.js';
 import { blockTextureArray } from './gfx/blockTextures.js';
+import { setMipRenderer } from './gfx/arrayMips.js';
 import { buildIcons, buildCmzIcons } from './items/icons.js';
 import { loadUiSheet } from './ui/sheet.js';
 import { Input } from './core/input.js';
@@ -39,8 +40,12 @@ const SEED = params.has('seed') ? parseInt(params.get('seed'), 10) : null;
 const newSeed = () => (Number.isFinite(SEED) ? SEED : (Math.random() * 2 ** 31) | 0);
 const ATTRACT_SEED = 1337;
 
+// (an Xbox's Edge has a small share of the console: Low there, with the resolution drawn down
+// further while it's slow)
+const SETTINGS_VERSION = 2;
 const DEFAULTS = {
-  quality: isTouch || isXbox ? 'medium' : 'high',
+  v: SETTINGS_VERSION,
+  quality: isXbox ? 'low' : isTouch ? 'medium' : 'high',
   brightness: 1,
   renderDistance: null,
   fov: 72,
@@ -58,6 +63,9 @@ function loadSettings() {
   let s = {};
   try { s = JSON.parse(localStorage.getItem('starminer.settings') || '{}'); } catch { /* storage blocked */ }
   const out = { ...DEFAULTS, ...s };
+  // settings from before the Xbox started on Low: its old start (Medium) goes
+  if ((s.v || 1) < 2 && isXbox && s.quality === 'medium') { out.quality = DEFAULTS.quality; out.renderDistance = null; }
+  out.v = SETTINGS_VERSION;
   if (params.get('q')) out.quality = params.get('q');
   if (!QUALITY[out.quality]) out.quality = DEFAULTS.quality;
   if (!out.renderDistance) out.renderDistance = QUALITY[out.quality].distance;
@@ -115,6 +123,9 @@ export class App {
   async start(boot = {}) {
     injectCSS(MENU_CSS + CRAFT_CSS + TOUCH_CSS);
     this.renderer = new Renderer(this.canvas, this.settings.quality);
+    // (?fixedres: always the setting's own resolution, for screenshots)
+    this.renderer.fixed = params.has('fixedres');
+    setMipRenderer(this.renderer.gl);
     // the browser can take the graphics away (a GPU short of memory, say): the world is kept, and
     // the game waits, saying so, till they're back or the page is reloaded
     this.canvas.addEventListener('webglcontextlost', () => this.graphicsLost(true));
@@ -599,6 +610,7 @@ export class App {
         menu: g.attract || this.state === 'menu' || this.state === 'boot' || this.state === 'loading',
         time: this.sky.time, depth: g.depth || 0, y: p.pos.y, pos: p.pos, rock: g.underRock || 0,
       });
+      this.renderer.adapt(rawDt);
       // (Brightness, the original's setting, on top of the eye's own)
       this.renderer.exposure = parseFloat(params.get('ex') || this.autoExposure(dt)) * (this.settings.brightness ?? 1);
       g.sprites.setScale(this.renderer.size.H, this.camera.fov);

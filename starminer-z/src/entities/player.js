@@ -1,10 +1,24 @@
-// The player's body: walking, sprinting, jumping, auto-climbing one-block steps the way
-// CastleMiner Z's "Auto Climb" option does, falling, lava, and the camera bob that goes with it.
+// The player's body, moving as CastleMiner Z's does (its FPSRig and Player, and their
+// UpdateAnimation and ResolveCollsion):
+//
+//  - on the ground, forward and back at up to 4 m/s once the stick is past 80% (running; a key
+//    is all the way), slower short of it (walking: (stick - 0.1) / 0.4 x 0.947 m/s), and 4 m/s
+//    from side to side, all set outright each frame;
+//  - in the air, 5 m/s wherever the stick points (so a jump goes a little further);
+//  - let go and you stop at once, in the air too;
+//  - a 10 m/s jump on the press, against 20 m/s2 of gravity: two and a half metres up;
+//  - with Auto Climb, walking into a block-high step lifts you up it at 5 m/s;
+//  - landing at more than 15 m/s hurts: a fifteenth of your health for each m/s over.
+//
+// No sprinting and no crouching: the original has neither. (Its slight drift backwards while
+// strafing straight sideways isn't copied.) Lava, which here you sink into, slows you.
 
 import * as THREE from 'three';
 import { B, SOLID, BLOCKS } from '../world/blocks.js';
 
 const EPS = 0.001;
+const RUN = 4, WALK = 0.947, AIR = 5, JUMP = 10, GRAVITY = 20, CLIMB = 5;
+const FALL_SAFE = 15, FALL_HURT = 1 / 15;
 
 export class Player {
   constructor(world) {
@@ -13,18 +27,23 @@ export class Player {
     this.vel = new THREE.Vector3();
     this.yaw = 0;
     this.pitch = 0;
-    this.radius = 0.3;
-    this.height = 1.8;
+    // (the original's PlayerAABB: 0.7 across, 1.7 high)
+    this.radius = 0.35;
+    this.height = 1.7;
     this.eyeHeight = 1.62;
     this.onGround = false;
     this.wasOnGround = false;
     this.health = 100;
     this.maxHealth = 100;
     this.dead = false;
+    // (kept for what reads them: the original has no sprint or crouch)
     this.sprinting = false;
     this.crouching = false;
+    // past 80% on the stick: running (the faster footsteps)
+    this.running = false;
     this.autoClimb = true;
-    this.stepSmooth = 0; // camera lag after an auto-climb, so the view eases up
+    this.stepSmooth = 0;
+    this.stepT = 0; // the footstep timer (the original's _footStepTimer)
     this.bobPhase = 0;
     this.bobAmount = 0;
     this.fallStart = null;
@@ -74,12 +93,7 @@ export class Player {
     this.hurtTimer = 0.45;
     // the original: health starts coming back three seconds after the last hit
     this.regenTimer = 3;
-    if (from) {
-      const k = new THREE.Vector3(this.pos.x - from.x, 0, this.pos.z - from.z);
-      if (k.lengthSq() > 1e-4) k.normalize().multiplyScalar(5.5);
-      this.knock.add(k);
-      this.vel.y = Math.max(this.vel.y, 3.2);
-    }
+    // (no knockback: the original's ApplyDamage doesn't push the player)
     if (this.onHurt) this.onHurt(amount, kind, from);
     if (this.health <= 0) this.dead = true;
   }
@@ -108,46 +122,50 @@ export class Player {
       if (this.lavaTick <= 0) { this.lavaTick = 0.5; this.hurt(BLOCKS[B.LAVA].damage * 0.5, null, 'lava'); }
     }
 
-    // movement intent in the yaw frame
-    this.crouching = input.isHeld('crouch');
-    // keyboard: hold to sprint; pad: click the stick to toggle; touch: push the stick to the edge
-    if (input.pressed('sprint') && input.lastDevice === 'pad') this.sprintToggle = !this.sprintToggle;
-    const wantSprint = input.lastDevice === 'pad' ? this.sprintToggle : input.isHeld('sprint');
+    // movement, in the yaw frame (x: strafe, y: forward), as UpdateAnimation sets it
+    this.crouching = false;
+    this.sprinting = false;
     const mx = input.move.x, my = input.move.y;
-    this.sprinting = wantSprint && my > 0.5 && !this.crouching;
-    if (Math.hypot(mx, my) < 0.1) this.sprintToggle = false;
-    let speed = this.crouching ? 1.9 : this.sprinting ? 6.6 : 4.4;
-    if (this.inLava) speed *= 0.45;
+    const fwd = Math.abs(my), side = Math.abs(mx), moving = Math.max(fwd, side) >= 0.1;
+    this.running = moving && fwd >= 0.8;
+    let vx = 0, vz = 0; // local: x to the right, z forward
+    if (moving) {
+      if (this.onGround) {
+        const f = fwd >= 0.8 ? fwd * RUN : Math.max(0, (fwd - 0.1) / 0.4) * WALK;
+        vz = Math.sign(my) * f;
+        vx = mx * RUN;
+      } else {
+        vz = my * AIR;
+        vx = mx * AIR;
+      }
+    }
+    if (this.inLava) { vx *= 0.45; vz *= 0.45; }
     const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw);
-    const tx = (-sy * my + cy * mx) * speed, tz = (-cy * my - sy * mx) * speed;
-    const accel = this.onGround ? (Math.hypot(mx, my) > 0.05 ? 46 : 34) : 9;
-    const dvx = tx - this.vel.x, dvz = tz - this.vel.z;
-    const dv = Math.hypot(dvx, dvz), maxDv = accel * dt;
-    if (dv > maxDv) { this.vel.x += (dvx / dv) * maxDv; this.vel.z += (dvz / dv) * maxDv; }
-    else { this.vel.x = tx; this.vel.z = tz; }
-    // knockback fades
-    this.vel.x += this.knock.x; this.vel.z += this.knock.z;
-    this.knock.multiplyScalar(0);
+    this.vel.x = -sy * vz + cy * vx;
+    this.vel.z = -cy * vz - sy * vx;
 
     if (this.noclip) {
-      const f = this.forward();
-      const s = input.isHeld('sprint') ? 40 : 14;
-      this.pos.addScaledVector(f, my * s * dt);
-      this.pos.x += cy * mx * s * dt; this.pos.z -= sy * mx * s * dt;
-      if (input.isHeld('jump')) this.pos.y += s * dt;
-      if (input.isHeld('crouch')) this.pos.y -= s * dt;
+      const fw = this.forward();
+      const sp = 14;
+      this.pos.addScaledVector(fw, my * sp * dt);
+      this.pos.x += cy * mx * sp * dt; this.pos.z -= sy * mx * sp * dt;
+      if (input.isHeld('jump')) this.pos.y += sp * dt;
+      if (input.isHeld('crouch')) this.pos.y -= sp * dt;
       this.vel.set(0, 0, 0);
       return;
     }
 
-    // gravity and jumping
-    if (input.isHeld('jump') && (this.onGround || (this.inLava && this.vel.y < 1))) {
-      this.vel.y = this.inLava ? 3.5 : 8.6;
-      this.onGround = false;
-      this.jumped = true;
+    // jumping (on the press, standing on something) and gravity; lava, here, you swim up through
+    if (this.inLava) {
+      if (input.isHeld('jump') && this.vel.y < 1) this.vel.y = 3.5;
+      this.vel.y -= 9 * dt;
+    } else {
+      if (input.pressed('jump') && this.onGround) {
+        this.vel.y += JUMP;
+        this.onGround = false;
+      }
+      this.vel.y -= GRAVITY * dt;
     }
-    this.vel.y -= (this.inLava ? 9 : 27) * dt;
-    if (this.vel.y < -52) this.vel.y = -52;
 
     // move, in small steps so nothing tunnels; the dead you push into hold you back (crowd, set
     // by the enemies: the original's AttentuateVelocity)
@@ -155,26 +173,25 @@ export class Player {
     const crowd = this.crowd ?? 1;
     const h = dt / steps, hy = this.vel.y > 0 ? h * crowd : h;
     this.wasOnGround = this.onGround;
-    let landedSpeed = 0;
+    let landedSpeed = 0, climbed = false;
     for (let i = 0; i < steps; i++) {
-      // horizontal, with an auto-climb up one-block steps
+      // horizontal, walking up block-high steps with Auto Climb (the original's sloped sides:
+      // not while rising fast from a jump)
       for (const axis of ['x', 'z']) {
         const d = this.vel[axis] * h * crowd;
         if (!d) continue;
         const nx = axis === 'x' ? this.pos.x + d : this.pos.x;
         const nz = axis === 'z' ? this.pos.z + d : this.pos.z;
         if (!this.collides(nx, this.pos.y, nz)) { this.pos.x = nx; this.pos.z = nz; continue; }
-        // a step up?
-        const canClimb = (this.autoClimb || this.jumped) && (this.onGround || this.wasOnGround) && !this.crouching;
-        if (canClimb) {
-          let up = 0;
-          for (const s of [0.55, 1.05]) if (!this.collides(nx, this.pos.y + s, nz) && !this.collides(this.pos.x, this.pos.y + s, this.pos.z)) { up = s; break; }
-          if (up && this.autoClimb) {
-            // settle onto the step
-            let y = this.pos.y + up;
-            while (!this.collides(nx, y - 0.05, nz) && y > this.pos.y) y -= 0.05;
-            this.stepSmooth += y - this.pos.y;
-            this.pos.y = y; this.pos.x = nx; this.pos.z = nz;
+        if (this.autoClimb && this.vel.y < JUMP * 0.5) {
+          const top = Math.floor(this.pos.y + EPS) + 1 + EPS;
+          if (top - this.pos.y <= 1 + 2 * EPS && !this.collides(nx, top, nz) && !this.collides(this.pos.x, top, this.pos.z)) {
+            // up it at 5 m/s, standing on it all the while; across once on top
+            this.pos.y = Math.min(top, this.pos.y + CLIMB * h);
+            if (this.vel.y < 0) this.vel.y = 0;
+            this.onGround = true;
+            this.climbing = climbed = true;
+            if (!this.collides(nx, this.pos.y, nz)) { this.pos.x = nx; this.pos.z = nz; }
             continue;
           }
         }
@@ -190,7 +207,7 @@ export class Player {
       if (dy) {
         if (!this.collides(this.pos.x, this.pos.y + dy, this.pos.z)) {
           this.pos.y += dy;
-          this.onGround = false;
+          if (!this.climbing) this.onGround = false;
         } else {
           if (dy < 0) {
             this.pos.y = Math.floor(this.pos.y + dy) + 1 + EPS;
@@ -203,28 +220,32 @@ export class Player {
           this.vel.y = 0;
         }
       }
+      this.climbing = false;
     }
-    if (this.onGround) this.jumped = false;
-    // ground check when standing still
-    if (this.vel.y === 0 && !this.collides(this.pos.x, this.pos.y - 0.05, this.pos.z)) this.onGround = false;
+    // standing on something, or walked off it (part way up a step is standing, as the original
+    // has it)
+    if (this.vel.y <= 0 && !climbed) this.onGround = this.collides(this.pos.x, this.pos.y - 0.05, this.pos.z);
 
     // landing
     if (landedSpeed < 0) {
-      if (landedSpeed < -14 && !this.inLava) this.hurt(Math.round((-landedSpeed - 14) * 3.2), null, 'fall');
+      if (-landedSpeed > FALL_SAFE && !this.inLava) this.hurt((-landedSpeed - FALL_SAFE) * FALL_HURT * this.maxHealth, null, 'fall');
       if (this.onLand) this.onLand(-landedSpeed, this.groundBlock());
     }
 
-    // the camera eases up after a step
-    this.stepSmooth = Math.max(0, this.stepSmooth - dt * 6 * Math.max(0.6, this.stepSmooth * 2));
-
-    // head bob and footsteps
+    // head bob, and footsteps by the original's timer: half a second apart walking, 0.4 running,
+    // the clock running as fast as the stick is pushed
     const hv = Math.hypot(this.vel.x, this.vel.z);
-    const moving = this.onGround && hv > 0.5;
-    this.bobAmount += ((moving ? Math.min(1, hv / 4.4) : 0) - this.bobAmount) * Math.min(1, dt * 8);
+    const walking = this.onGround && moving && hv > 0.3;
+    this.bobAmount += ((walking ? Math.min(1, hv / RUN) : 0) - this.bobAmount) * Math.min(1, dt * 8);
+    if (walking) this.bobPhase += dt * hv * 1.75;
     if (moving) {
-      const prev = this.bobPhase;
-      this.bobPhase += dt * hv * 1.75;
-      if (Math.floor(prev / Math.PI) !== Math.floor(this.bobPhase / Math.PI) && this.onStep) this.onStep(this.groundBlock(), this.sprinting);
+      const pace = this.running ? fwd : Math.max(side, (fwd - 0.1) / 0.4);
+      this.stepT += dt * Math.max(0, pace);
+      if (this.stepT >= (this.stepEvery ?? 0.5)) {
+        this.stepT = 0;
+        if (this.onGround && this.onStep) this.onStep(this.groundBlock(), this.running);
+        this.stepEvery = this.running ? 0.4 : 0.5;
+      }
     }
   }
 

@@ -226,7 +226,7 @@ export class Ghost {
     if (this.growl) g.audio?.move?.(this.growl, P);
     if (!this.root.visible) return;
     this.animAcc += dt;
-    if (dist < 40 || this.animAcc > 0.1) { this.body.update(this.animAcc); this.animAcc = 0; }
+    if (this.animAcc >= this.game.enemies.bodyEvery(this.pos, dist)) { this.body.update(this.animAcc); this.animAcc = 0; }
     const L = g.world.lightAt(P.x, P.y + 1.2, P.z);
     this.body.setLight(L.sky / 15, L.block / 15);
   }

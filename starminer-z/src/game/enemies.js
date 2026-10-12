@@ -36,6 +36,8 @@ import { buildAvatarGeometry } from '../entities/avatar/model.js';
 import { SOLID, B, HEIGHT } from '../world/blocks.js';
 import { RULES } from './modes.js';
 
+const _m = new THREE.Matrix4(), _c = new THREE.Vector3(), _sphere = new THREE.Sphere();
+
 // the original's y = 0 is our y = 64; Hell starts 40 below it
 const GROUND = 64;
 const HELL = GROUND - 40;
@@ -51,6 +53,7 @@ export class Enemies {
   constructor(game) {
     this.game = game;
     this.list = [];
+    this.view = new THREE.Frustum();
     this.geos = new Map();
     this.arrows = [];
     this.tSurface = 0;
@@ -179,7 +182,17 @@ export class Enemies {
 
   // ---- every frame ----------------------------------------------------------------------------
 
+  // How often a body's clip is worked out (its clip runs on all the same): every frame close by
+  // and in sight, 30 times a second further off, ten times a second far off or out of sight.
+  bodyEvery(pos, dist) {
+    if (dist >= 40 || !this.view.intersectsSphere(_sphere.set(_c.set(pos.x, pos.y + 1, pos.z), 1.8))) return 0.1;
+    return dist < 16 ? 0 : 1 / 30;
+  }
+
   update(dt, active) {
+    // (what the camera sees, for bodyEvery)
+    const cam = this.game.camera;
+    this.view.setFromProjectionMatrix(_m.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
     if (this.ghosts.size) { const now = performance.now(); for (const gh of this.ghosts.values()) gh.update(dt, now); }
     if (!active) return;
     const g = this.game, p = g.player;

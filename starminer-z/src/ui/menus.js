@@ -408,13 +408,14 @@ export class Menus {
           <p>Out past the first hills, things have come down from the sky: craters with an asteroid of space rock in them, glowing Space Goo in the rock. Aliens live round them, and noise brings more of them, quicker: digging the rock, or shooting inside it. Deep underground and far out lives the Felguard, a demon of the Underworld; once you've met one, it can turn up anywhere.</p>
           <p>Dragons fly over the world: Fire, Forest, Sand, Ice and Undead, each tougher than the last. One comes the first time you get 100, 500, 1000, 2600 and 4000 meters out, and stay too long in one place and they come for you there. Out under the sky they'll see you, and gunfire draws them; under a roof or in a cave they can't. Their fireballs break blocks (the Ice Dragon's freeze them); shoot one down and it leaves explosive powder and ore. The Anti Dragon Guided Missile locks on when you aim at a dragon at the shoulder (the box goes from green to red) and fires only once it has.</p>
           <h3>Keyboard & Mouse</h3>
-          <div class="grid"><b>Move</b><span>W A S D</span><b>Look</b><span>Mouse</span><b>Jump</b><span>Space</span><b>Sprint</b><span>Shift</span><b>Crouch</b><span>C or Ctrl</span>
+          <div class="grid"><b>Move</b><span>W A S D</span><b>Look</b><span>Mouse</span><b>Jump</b><span>Space</span>
           <b>Use (dig, shoot, place)</b><span>Left click</span><b>Aim / Open, light</b><span>Right click</span><b>Reload</b><span>R</span><b>Items</b><span>1-8 or the wheel</span>
           <b>Inventory</b><span>E or Tab</span><b>Drop</b><span>Q</span><b>Camera</b><span>V</span><b>Pause</b><span>Esc</span></div>
           <h3>Xbox Controller</h3>
           <div class="grid"><b>Move / Look</b><span>Left / right stick</span><b>Jump</b><span>A</span><b>Use (dig, shoot, place)</b><span>Right trigger</span><b>Aim / Place</b><span>Left trigger</span>
           <b>Open, light</b><span>B, looking at a door, a crate or TNT</span><b>Reload</b><span>X</span><b>Inventory</b><span>Y</span><b>Items</b><span>Bumpers, d-pad left and right</span>
-          <b>Sprint</b><span>Left stick click</span><b>Camera</b><span>D-pad up, or Back</span><b>Pause</b><span>Start (or B)</span></div>
+          <b>Camera</b><span>D-pad up, or Back</span><b>Pause</b><span>Start (or B)</span></div>
+          <p>As in the original, you run once the stick is pushed most of the way (a key is all the way), walk short of it, and jump two and a half metres; there's no sprint or crouch. With Auto Climb on (Options), you walk up a step a block high.</p>
           <h3>Touch</h3>
           <p>Left thumb moves, right thumb looks. Hold the use button to dig, fire or build; tap place to build, aim, or open a door or a crate. Tap the hotbar to switch items.</p>
           <h3>Things To Use</h3>

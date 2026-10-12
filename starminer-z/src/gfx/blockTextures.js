@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { TEXTURES } from '../world/blocks.js';
 import { mulberry32 } from '../core/noise.js';
+import { cpuMips } from './arrayMips.js';
 
 export const TEX_SIZE = 64;
 const N = TEX_SIZE;
@@ -476,7 +477,8 @@ export function blockTextureArray(renderer) {
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.magFilter = THREE.NearestFilter;
   tex.minFilter = THREE.LinearMipmapLinearFilter;
-  tex.generateMipmaps = true;
+  // (the smaller copies made on the CPU: see ./arrayMips.js)
+  cpuMips(tex);
   tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   tex.needsUpdate = true;
   arrayTex = tex;
