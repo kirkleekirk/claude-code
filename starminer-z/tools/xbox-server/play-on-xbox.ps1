@@ -34,12 +34,21 @@ if (-not $listener) {
   exit 1
 }
 
-# this PC's addresses on the home network
+# this PC's addresses on the home network: the ones on a connection with a way out (a router)
+# first, as a PC can have others (a VPN's, a virtual machine's) that the Xbox can't reach
 $ips = @()
-foreach ($a in [System.Net.Dns]::GetHostAddresses([System.Net.Dns]::GetHostName())) {
-  $s = $a.ToString()
-  if ($a.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork -and -not $s.StartsWith('127.') -and -not $s.StartsWith('169.254.')) { $ips += $s }
+$others = @()
+foreach ($nic in [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()) {
+  if ($nic.OperationalStatus -ne 'Up' -or $nic.NetworkInterfaceType -eq 'Loopback') { continue }
+  $props = $nic.GetIPProperties()
+  $routed = @($props.GatewayAddresses | Where-Object { $_.Address.AddressFamily -eq 'InterNetwork' -and $_.Address.ToString() -ne '0.0.0.0' }).Count -gt 0
+  foreach ($u in $props.UnicastAddresses) {
+    $s = $u.Address.ToString()
+    if ($u.Address.AddressFamily -ne 'InterNetwork' -or $s.StartsWith('127.') -or $s.StartsWith('169.254.')) { continue }
+    if ($routed) { $ips += $s } else { $others += $s }
+  }
 }
+if ($ips.Count -eq 0) { $ips = $others }
 
 Write-Host ''
 Write-Host '  StarMiner Z is ready to play on your Xbox.' -ForegroundColor Green
@@ -49,7 +58,9 @@ if ($ips.Count -eq 0) { Write-Host "      http://<this PC's address>:$port" -For
 foreach ($ip in $ips) { Write-Host "      http://$($ip):$port" -ForegroundColor Yellow }
 Write-Host ''
 Write-Host '  The Xbox has to be on the same network as this PC. If Windows asks about the firewall,'
-Write-Host '  allow it on private networks. Keep this window open while you play; close it to stop.'
+Write-Host '  allow it. If the Xbox still can''t open the address, make this network Private on the PC'
+Write-Host '  (Settings, Network and internet, your Wi-Fi or Ethernet, Network profile type).'
+Write-Host '  Keep this window open while you play; close it to stop.'
 Write-Host ''
 
 $crlf = "`r`n"

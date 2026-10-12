@@ -353,3 +353,4 @@ const errs = logs.filter((l) => !/favicon|GPU stall|WebGL|Automatic fallback/.te
 ok(errs.length === 0, `no errors${errs.length ? `: ${errs.slice(0, 4).join(' | ')}` : ''}`);
 console.log(fails ? `${fails} FAILED` : 'all ok');
 await browser.close();
+process.exit(fails ? 1 : 0);

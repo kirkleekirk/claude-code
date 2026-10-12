@@ -179,8 +179,9 @@ each other in headless Chromium (`BASE=<dev server url>/ node tools/online.mjs <
 `tools/checks/` holds a headless check for each part of the later version: `things.mjs` (the new
 items at work), `crash-sites.mjs`, `dragons.mjs`, `modes.mjs` (the modes, worlds, menus and
 HUD), `movement.mjs` (the player's movement against the original's numbers), `xbox.mjs` (the game
-as an Xbox's Edge has it) and `graphics.mjs` (what happens when a browser has no WebGL, or loses
-it mid-game). Each takes the dev server's address and a folder for its screenshots
+as an Xbox's Edge has it), `graphics.mjs` (what happens when a browser has no WebGL, or loses
+it mid-game) and `soak.mjs` (each mode played at random, unattended, for a while). Each takes the
+dev server's address and a folder for its screenshots
 (`node tools/checks/modes.mjs http://localhost:5173 out`), and `&nocmz` as a third argument runs
 it without the ripped files.
 
