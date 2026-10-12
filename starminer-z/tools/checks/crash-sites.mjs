@@ -68,11 +68,17 @@ const aliens = await E(([cx, cz, top]) => {
   en.rock.scan = null; en.rock.wait = 0;
   step(2.5);
   const R = { near: en.rock.near, inside: en.rock.inside, closest: en.rock.closest };
-  // a wait till the next: then one comes
-  en.tAlien = 0; en.nextAlien = 0.5;
-  for (let k = 0; k < 20 && !en.list.some((e) => e.type === 51); k++) step(0.25);
-  const a = en.list.find((e) => e.type === 51);
-  const clip0 = a?.clip.name;
+  // a wait till the next: then one comes (one that comes out over 35 m off, as the original's
+  // can, gives up at once: then another)
+  let a = null, clip0 = null;
+  for (let tries = 0; tries < 6 && !a; tries++) {
+    en.tAlien = 0; en.nextAlien = 0.5;
+    for (let k = 0; k < 20 && !en.list.some((e) => e.type === 51 && !e.gone); k++) step(0.25);
+    const c = en.list.find((e) => e.type === 51 && !e.gone);
+    if (!c) continue;
+    if (Math.hypot(c.pos.x - p.pos.x, c.pos.z - p.pos.z) > 35) { c.gone = true; step(0.1); continue; }
+    a = c; clip0 = a.clip.name;
+  }
   step(2.5);
   const under = a ? w.getBlock(Math.floor(a.pos.x), Math.floor(a.pos.y) - 1, Math.floor(a.pos.z)) : -1;
   return { R, n: en.list.filter((e) => e.type === 51).length, local: en.localAliens, clip0, clip1: a?.clip.name, state: a?.state.name, dist: a ? Math.hypot(a.pos.x - p.pos.x, a.pos.z - p.pos.z) : -1, enc: g.stats.alienEncounters, aroused: en.aroused, next: en.nextAlien, under };
@@ -81,7 +87,7 @@ ok(aliens.R.near && aliens.R.closest > 10 && aliens.R.closest < 20, `from the ri
 ok(aliens.n === 1 && aliens.local === 1, `an alien comes (${aliens.n}, counted ${aliens.local})`);
 ok(aliens.clip0 === 'Jump', `it comes out jumping (${aliens.clip0}), on the asteroid's face (on ${aliens.under})`);
 ok(aliens.clip1 === 'MoveLoop' || aliens.state === 'attack', `and scuttles at the player (${aliens.clip1}, ${aliens.state}, ${aliens.dist.toFixed(1)} m)`);
-ok(aliens.enc === 1, `an alien encounter is counted (${aliens.enc})`);
+ok(aliens.enc >= 1, `an alien encounter is counted (${aliens.enc})`);
 ok(!aliens.aroused && aliens.next >= 10 && aliens.next <= 20, `unroused, the next is 10 to 20 s off (${aliens.next.toFixed(1)})`);
 await snap('alien');
 
