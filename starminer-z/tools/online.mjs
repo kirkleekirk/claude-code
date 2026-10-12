@@ -274,8 +274,10 @@ try {
   await B.evaluate(() => { const inv = window.__app.game.inventory; inv.slots[7] = inv.make('diamond', 7); });
   await B.evaluate(() => window.__app.leaveOnline());
   await wait(A, () => window.__game.online.players.size === 0, null, 20000).then(() => ok(true, 'A sees B leave'), () => ok(false, 'A sees B leave'));
-  const kept = await A.evaluate(() => window.__game.guests.Bea?.inventory?.slots?.[7]);
-  ok(kept && kept.id === 'diamond' && kept.count === 7, `A keeps what B had (${JSON.stringify(kept)})`);
+  // (kept by B's browser, not B's name)
+  const bKey = `u:${await B.evaluate(() => window.__app.clientId())}`;
+  const kept = await A.evaluate((k) => ({ it: window.__game.guests[k]?.inventory?.slots?.[7], byName: 'Bea' in window.__game.guests }), bKey);
+  ok(kept.it && kept.it.id === 'diamond' && kept.it.count === 7 && !kept.byName, `A keeps what B had, by B's browser (${JSON.stringify(kept)})`);
   await wait(B, () => window.__app.state === 'menu', null, 240000);
   // (a dragon up when B comes back: B sees it from the start)
   await A.evaluate(() => { const D = window.__game.dragons; D.nextAllowed = 0; D.pending = false; D.spawnDragon(2, false); });
@@ -289,7 +291,7 @@ try {
 
   // the host saves, and B's things are in the save
   await A.evaluate(() => window.__app.autosave());
-  const saved = await A.evaluate(async () => { const { loadWorld } = await import('/src/game/save.js'); const s = await loadWorld(window.__game.worldId); return !!s?.guests?.Bea; });
+  const saved = await A.evaluate(async (k) => { const { loadWorld } = await import('/src/game/save.js'); const s = await loadWorld(window.__game.worldId); return !!s?.guests?.[k]; }, bKey);
   ok(saved, "the host's save holds B's things");
 
   // PVP: off, A's bullet goes by B; on (Host Options), it hurts B, on B's machine
