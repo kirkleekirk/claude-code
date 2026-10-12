@@ -149,7 +149,7 @@ export class Link {
       this.peers.set(id, conn.player);
       conn.send({ t: 'welcome', id, ...r.welcome });
     });
-    conn.on('close', () => { if (conn.player) this.lost(conn.player.id, 'left'); });
+    conn.on('close', () => { if (conn.player) this.lost(conn.player.id, 'left', conn); });
     conn.on('error', (e) => console.warn('online: connection', e.type, e.message));
   }
 
@@ -244,9 +244,10 @@ export class Link {
     }
   }
 
-  lost(id, why) {
+  // (conn: only if it's still that connection, not someone who's come in on the same number since)
+  lost(id, why, conn = null) {
     const p = this.peers.get(id);
-    if (!p) return;
+    if (!p || (conn && p.conn !== conn)) return;
     this.peers.delete(id);
     try { p.conn.close(); } catch { /* already closed */ }
     if (!this.closed) this.onDrop?.(id, why);

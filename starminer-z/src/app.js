@@ -19,7 +19,7 @@ import { CRAFT_CSS } from './ui/crafting.js';
 import { TouchControls, TOUCH_CSS } from './ui/touch.js';
 import { Game } from './game/game.js';
 import { Awards } from './game/awards.js';
-import { listWorlds, loadWorld, saveWorld, deleteWorld, eraseWorlds, newWorldId, worldName, worldInfo, updateWorldInfo, migrateOldSave } from './game/save.js';
+import { listWorlds, loadWorld, saveWorld, deleteWorld, eraseWorlds, newWorldId, worldName, worldInfo, updateWorldInfo, migrateOldSave, openStorage } from './game/save.js';
 import { RULES } from './game/modes.js';
 import { loadAvatarAssets } from './entities/avatar/assets.js';
 import { loadCmzBodies } from './entities/cmz/bodies.js';
@@ -170,6 +170,7 @@ export class App {
     this.fpsAcc = 0; this.fpsN = 0;
     this.loop = this.loop.bind(this);
     // (the one world kept before there were several: into the list)
+    openStorage();
     await migrateOldSave();
     this.worlds = listWorlds();
     const S = this.session;
@@ -189,6 +190,8 @@ export class App {
 
   // A world turning behind the menus: the one you played last, if there is one.
   attract() {
+    // (the last game's death screen, if it was still up)
+    this.hideDeath(false);
     if (this.game) this.game.dispose();
     this.setSession(null);
     this.game = new Game(this, { seed: this.worlds[0]?.seed ?? ATTRACT_SEED, attract: true });
@@ -317,6 +320,8 @@ export class App {
     this.menuOpen = false;
     this.game.paused = false;
     if (this.pendingHost) { this.pendingHost = false; this.hostOnline(); }
+    // a new world: kept (and in the list) from the start, not only a minute in
+    if (this.pendingWorld && this.pendingWorld.id === this.game.worldId && !worldInfo(this.game.worldId)) this.autosave();
     if (params.has('craft')) this.game.openCrafting();
     if (params.has('pause')) { this.pause(); if (params.get('pause')) this.menus.open(params.get('pause')); }
     if (!this.isTouch && this.input.lastDevice !== 'pad' && !this.input.locked) this.input.requestLock();
@@ -347,13 +352,14 @@ export class App {
     this.input.exitLock();
   }
 
-  resume() {
+  // (lock: take the mouse back, unless what comes next wants it free)
+  resume(lock = true) {
     if (this.state !== 'paused') return;
     this.state = 'playing';
     this.menus.hide();
     this.menuOpen = false;
     this.game.paused = false;
-    this.input.requestLock();
+    if (lock) this.input.requestLock();
   }
 
   async quitToMenu() {
@@ -413,7 +419,7 @@ export class App {
     const link = new Link();
     let welcome;
     try {
-      welcome = await link.join(code, { v: PROTOCOL, name: this.netName(), prof: cleanProfile(this.profile) });
+      welcome = await link.join(code, { v: PROTOCOL, name: this.netName(), prof: cleanProfile(this.profile), uid: this.clientId() });
     } catch (e) {
       link.close();
       this.menus.notice("Couldn't Join", e.message, 'join');
@@ -429,7 +435,6 @@ export class App {
     if (!o || o.host || o.closed) return;
     o.close(true);
     this.pendingNotice = { title: 'Disconnected', sub: why };
-    this.hideDeath();
     this.input.exitLock();
     this.menus.reset('loading');
     this.attract();
@@ -441,7 +446,6 @@ export class App {
     if (!o || o.host || o.closed) return;
     o.close(true);
     this.pendingNotice = ban ? { title: 'Banned', sub: 'The host banned you from this game.' } : { title: 'Kicked', sub: 'The host kicked you from the game.' };
-    this.hideDeath();
     this.input.exitLock();
     this.menus.reset('loading');
     this.attract();
@@ -459,15 +463,36 @@ export class App {
     if (this.menus?.visible && ['pause', 'invite', 'teleport', 'teleportMenu', 'hostOptions', 'pickPlayer'].includes(this.menus.id)) this.menus.refresh();
   }
 
-  // The host's ban list (the original keeps it with the player's stats): name -> when
+  // The host's ban list (the original keeps it with the player's stats): by the browser they
+  // played in (u:<its id>; n:<name> for one that didn't say), each with the name and when
   bans() {
     try { return JSON.parse(localStorage.getItem('starminer.bans') || '{}') || {}; } catch { return {}; }
   }
 
-  ban(name) {
+  banned(uid, name) {
+    const b = this.bans(), has = (k) => Object.hasOwn(b, k);
+    // (before there were ids, a ban was a name and when)
+    return (!!uid && has(`u:${uid}`)) || has(`n:${name}`) || (has(name) && typeof b[name] === 'number');
+  }
+
+  ban(uid, name) {
     const b = this.bans();
-    b[name] = Date.now();
+    b[uid ? `u:${uid}` : `n:${name}`] = { name, at: Date.now() };
     try { localStorage.setItem('starminer.bans', JSON.stringify(b)); } catch { /* storage blocked */ }
+  }
+
+  // This browser, as a host knows it again (for its ban list, and what a friend carries): made
+  // once and kept
+  clientId() {
+    if (this.cid) return this.cid;
+    let id = null;
+    try { id = localStorage.getItem('starminer.id'); } catch { /* storage blocked */ }
+    if (!/^[a-z0-9]{12,32}$/.test(id || '')) {
+      const b = crypto.getRandomValues(new Uint8Array(16));
+      id = [...b].map((x) => (x % 36).toString(36)).join('');
+      try { localStorage.setItem('starminer.id', id); } catch { /* storage blocked */ }
+    }
+    return (this.cid = id);
   }
 
   clearBans() {
@@ -476,6 +501,8 @@ export class App {
 
   onLockChange() {
     this.input.locked = document.pointerLockElement === this.canvas;
+    // (the mouse caught as something that wants it free opens: let it go again)
+    if (this.input.locked && this.game?.lockFree) { this.input.exitLock(); return; }
     // losing the mouse (Esc) while playing pauses, unless the game let go of it on purpose
     if (!this.input.locked && this.state === 'playing' && !this.isTouch && this.input.lastDevice !== 'pad' && !this.game?.lockFree) this.pause();
   }
@@ -507,11 +534,11 @@ export class App {
     }
   }
 
-  hideDeath() {
+  hideDeath(lock = true) {
     this.deathKey = '';
     this.deathEl?.classList.remove('on');
     if (this.game) this.game.lockFree = false;
-    this.input.requestLock();
+    if (lock) this.input.requestLock();
   }
 
   graphicsLost(lost) {
@@ -610,7 +637,7 @@ export class App {
         menu: g.attract || this.state === 'menu' || this.state === 'boot' || this.state === 'loading',
         time: this.sky.time, depth: g.depth || 0, y: p.pos.y, pos: p.pos, rock: g.underRock || 0,
       });
-      this.renderer.adapt(rawDt);
+      this.renderer.adapt(rawDt, this.state === 'playing' || this.state === 'paused' || this.state === 'menu');
       // (Brightness, the original's setting, on top of the eye's own)
       this.renderer.exposure = parseFloat(params.get('ex') || this.autoExposure(dt)) * (this.settings.brightness ?? 1);
       g.sprites.setScale(this.renderer.size.H, this.camera.fov);

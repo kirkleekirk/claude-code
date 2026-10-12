@@ -94,10 +94,13 @@ await E(() => M.pick('Create World'));
 ok(await inGame(), 'a new Survival world starts');
 const s1 = await E(async () => {
   const app = window.__app, g = app.game, p = g.player, w = g.world;
+  // (kept from the start, before the first minute's save)
+  for (let k = 0; k < 25 && !app.worlds.some((v) => v.id === g.worldId); k++) await new Promise((r) => setTimeout(r, 200));
+  const early = app.worlds.some((v) => v.id === g.worldId);
   const x = Math.floor(p.pos.x) + 2, z = Math.floor(p.pos.z), y = Math.floor(p.pos.y) + 3;
   w.setBlock(x, y, z, 23);
   await app.autosave();
-  const info = { mode: g.mode, difficulty: g.difficulty, creative: g.creative, id: g.worldId, worlds: app.worlds.length, block: [x, y, z], kept: app.worlds.find((v) => v.id === g.worldId)?.name };
+  const info = { early, mode: g.mode, difficulty: g.difficulty, creative: g.creative, id: g.worldId, worlds: app.worlds.length, block: [x, y, z], kept: app.worlds.find((v) => v.id === g.worldId)?.name };
   info.min = g.enemies.minSpawnTime(0);
   g.difficulty = 'easy';
   info.minEasy = g.enemies.minSpawnTime(0);
@@ -106,6 +109,7 @@ const s1 = await E(async () => {
 });
 ok(s1.mode === 'survival' && s1.difficulty === 'normal' && !s1.creative && s1.id, `Survival, Normal (${JSON.stringify({ mode: s1.mode, d: s1.difficulty })})`);
 ok(s1.worlds === 2 && /'s World |^New World /.test(s1.kept || ''), `kept in the list (${s1.kept})`);
+ok(s1.early, 'on the list as soon as it has been made, not a minute in');
 ok(s1.min === 5 && s1.minEasy === 45, `the dead come quickly on Normal, slowly on Easy (${s1.min} s, ${s1.minEasy} s)`);
 // the pause menu, and Teleport
 const pm = await E(() => {
@@ -138,14 +142,31 @@ const d1 = await E(() => {
 ok(!d1.a.press && d1.a.lines.length === 0, 'dead in Survival: nothing for three seconds, and no distance shown');
 ok(d1.b.press === 'Respawn' && !d1.dead && d1.at < 3, `then press to respawn, at the start (${d1.at.toFixed(1)} m from it)`);
 await inGame();
-// quit, and the world's there to go back to
-await E(() => window.__app.quitToMenu());
+// dead again, 30 m from the start; then Save And Quit from the pause menu, still dead: the world's
+// there to go back to, and you're in it alive, at the start
+await E(() => {
+  const g = window.__app.game, p = g.player, sp = g.spawnSpot();
+  const x = Math.floor(sp.x) + 30, z = Math.floor(sp.z);
+  let y = 120; while (y > 1 && !g.world.getBlock(x, y - 1, z)) y--;
+  p.pos.set(x + 0.5, y + 0.1, z + 0.5); p.vel.set(0, 0, 0); p.fallStart = null;
+  step(0.3);
+  p.hurt(1000, null, 'test');
+  step(3.2);
+  window.__app.pause();
+});
+await E(() => M.pick('Save And Quit'));
 ok(await atMenu(), 'Save And Quit goes back to the menu');
+const left = await E(() => ({ death: !!window.__app.deathEl?.classList.contains('on'), menu: window.__app.menus.id }));
+ok(!left.death, `quitting while dead leaves no death screen over the menus (${left.menu})`);
 await helpers();
 await E((name) => { M.pick('Play Offline'); M.pick('Survival'); M.pick('Normal'); M.pick(name); }, s1.kept);
 ok(await inGame(), 'the world loads again');
-const s2 = await E((b) => { const g = window.__app.game; return { id: g.worldId, block: g.world.getBlock(b[0], b[1], b[2]) }; }, s1.block);
+const s2 = await E((b) => {
+  const g = window.__app.game, p = g.player, sp = g.spawnSpot();
+  return { id: g.worldId, block: g.world.getBlock(b[0], b[1], b[2]), dead: p.dead, hp: p.health, max: p.maxHealth, at: Math.hypot(p.pos.x - sp.x, p.pos.z - sp.z), death: !!window.__app.deathEl?.classList.contains('on') };
+}, s1.block);
 ok(s2.id === s1.id && s2.block === 23, `with the gold wall put there (${s2.block})`);
+ok(!s2.dead && s2.hp === s2.max && s2.at < 3 && !s2.death, `saved while dead, it comes back as a respawn would: alive, well, at the start (${s2.hp}, ${s2.at.toFixed(1)} m)`);
 await E(() => window.__app.quitToMenu());
 await atMenu();
 await helpers();
@@ -313,9 +334,36 @@ const hud = await E(() => {
 });
 ok(Math.abs(hud.red - 0.47 * 0.3) < 0.02, `hurt by 30, the screen goes a little red (${hud.red})`);
 ok(hud.arrows === 1 && /rotate/.test(hud.t || '') && hud.after === 0, `and an arrow points to what did it, for three seconds (${hud.t})`);
+const melee = await E(() => {
+  const g = window.__app.game, p = g.player, h = g.hud;
+  p.health = p.maxHealth;
+  g.enemies.spawn(0, p.pos.x + 1.5, p.pos.y + 0.1, p.pos.z, 0);
+  let t = 0;
+  while (t < 20 && p.health >= p.maxHealth) { step(0.1); t += 0.1; }
+  return { hit: p.health < p.maxHealth, arrows: h.arrows.length, t };
+});
+ok(melee.hit && melee.arrows >= 1, `a zombie's blow gets an arrow too, as the original's do (${melee.arrows}, ${melee.t.toFixed(1)} s in)`);
 await snap('hud-hurt');
 await E(() => window.__app.quitToMenu());
 await atMenu();
+await helpers();
+
+// ---- Delete A World: Yes, pressed twice, goes back to the worlds once -----------------------------
+const del = await E(async () => {
+  const app = window.__app;
+  M.pick('Play Offline'); M.pick('Survival'); M.pick('Normal');
+  const n = app.worlds.length;
+  M.pick('Delete A World');
+  app.menus.activate(0);
+  const dlg = app.menus.cur.title;
+  M.pick('Yes'); M.pick('Yes');
+  for (let k = 0; k < 50 && app.worlds.length === n; k++) await new Promise((r) => setTimeout(r, 100));
+  await new Promise((r) => setTimeout(r, 500));
+  const r = { dlg, n, after: app.worlds.length, id: M.id() };
+  app.menus.back(); app.menus.back(); app.menus.back();
+  return r;
+});
+ok(del.dlg === 'Delete World' && del.after === del.n - 1 && del.id === 'worlds', `Delete A World: Yes twice deletes one, and goes back to the worlds (${del.n} -> ${del.after}, at ${del.id})`);
 await helpers();
 
 // ---- Options: Release Notes, Erase Storage ------------------------------------------------------

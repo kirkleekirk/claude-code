@@ -374,6 +374,18 @@ try {
   await wait(B, () => window.__app.menus.id === 'notice', null, 60000).catch(() => {});
   const refused = await B.evaluate(() => window.__app.menus.cur?.sub);
   ok(/banned/.test(refused || ''), `and can't come back (${refused})`);
+  // the ban is B's browser, not B's name: someone else of that name isn't kept out, and a name
+  // like "constructor" isn't taken for one (bans from before there were ids were names)
+  const bn = await A.evaluate((bName) => {
+    const app = window.__app, kept = localStorage.getItem('starminer.bans'), b = JSON.parse(kept || '{}');
+    const key = Object.keys(b).find((k) => k.startsWith('u:'));
+    const r = { key: !!key, same: !!key && app.banned(key.slice(2), 'Someone Else'), other: app.banned('zzzzzzzzzzzz99', bName), proto: app.banned(null, 'constructor') };
+    localStorage.setItem('starminer.bans', JSON.stringify({ ...b, Old: 5 }));
+    r.legacy = app.banned('qqqqqqqqqqqq11', 'Old');
+    localStorage.setItem('starminer.bans', kept);
+    return r;
+  }, 'Bea');
+  ok(bn.key && bn.same && !bn.other && !bn.proto && bn.legacy, `bans go by the browser, not the name (${JSON.stringify(bn)})`);
   await A.evaluate(() => window.__app.clearBans());
   await B.evaluate((c) => window.__app.joinOnline(c), code);
   await wait(B, () => window.__app.game?.online && window.__app.game.ready, null, 240000).then(() => ok(true, 'till the host clears the ban list'), () => ok(false, 'till the host clears the ban list'));

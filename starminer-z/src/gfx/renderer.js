@@ -169,24 +169,41 @@ export class Renderer {
     this.resize();
   }
 
-  // Dynamic resolution: drawn smaller while frames are slow (longer than 1/50 s on average),
-  // and back up once they've been quick a while, between 55% and all of the setting's own
-  // resolution (a slow console, a big screen)
-  adapt(dt) {
-    if (this.fixed || !(dt > 0)) return;
+  // Dynamic resolution: drawn smaller while frames are slow (longer than 1/48 s on average), a
+  // tenth at a time, and back up once they've been quick a while, between 55% and all of the
+  // setting's own resolution (a slow console, a big screen). If drawing smaller hasn't made the
+  // frames any quicker by the smallest, it isn't the drawing that's slow (the browser holding
+  // frames to 30 or 50 a second, or the game's own work): back to how it was, and not tried
+  // again for a while. live: false while loading (frames slow for other reasons), and it starts
+  // afresh after.
+  adapt(dt, live = true) {
+    if (this.fixed) return;
+    if (!live || !(dt > 0)) { this.ft = null; this.adaptT = 0; this.trial = null; return; }
     // (a frame of more than a quarter of a second counts as one: a slow frame, or a hiccup)
     dt = Math.min(dt, 0.25);
     this.ft = this.ft == null ? dt : this.ft + (dt - this.ft) * 0.05;
     this.adaptT = (this.adaptT || 0) + dt;
     this.holdT = Math.max(0, (this.holdT || 0) - dt);
+    this.restT = Math.max(0, (this.restT || 0) - dt);
     if (this.adaptT < 1) return;
     this.adaptT = 0;
     let s = this.scale;
-    if (this.ft > 1 / 50 && s > 0.55) {
+    const T = this.trial;
+    if (T && this.holdT <= 0) {
+      if (this.ft < T.ft * 0.9) { this.trial = null; this.rest = 0; }
+      else if (s <= 0.55) {
+        s = T.scale;
+        this.trial = null;
+        this.rest = Math.min(600, (this.rest || 30) * 2);
+        this.restT = this.rest;
+      }
+    }
+    if (this.ft > 1 / 48 && s > 0.55 && this.holdT <= 0 && this.restT <= 0) {
+      if (!this.trial) this.trial = { scale: s, ft: this.ft };
       s = Math.max(0.55, s - 0.1);
-      this.holdT = 6;
+      this.holdT = 2;
       this.quick = 0;
-    } else if (this.ft < 1 / 57 && s < 1 && this.holdT <= 0) {
+    } else if (this.ft < 1 / 57 && s < 1 && this.holdT <= 0 && !this.trial) {
       this.quick = (this.quick || 0) + 1;
       if (this.quick >= 3) { s = Math.min(1, s + 0.05); this.quick = 0; }
     } else this.quick = 0;

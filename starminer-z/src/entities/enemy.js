@@ -557,7 +557,7 @@ function attackState() {
           hit = (dx / d) * Math.sin(e.yaw) + (dz / d) * Math.cos(e.yaw) > 0.7;
         }
         // (a blow doesn't knock you back in the original)
-        if (hit) t.hurt(A.damage[e.animIndex] * t.maxHealth, null, e.kind);
+        if (hit) t.hurt(A.damage[e.animIndex] * t.maxHealth, e.pos, e.kind);
       }
       e.hitCount++;
       if (e.hitCount === times.length) { e.animIndex = -1; e.hitCount = 0; }

@@ -12,7 +12,7 @@ import { BLOCKS } from '../world/blocks.js';
 import { ITEMS } from '../items/items.js';
 import { PRESETS } from '../entities/avatar/looks.js';
 
-export const PROTOCOL = 4;
+export const PROTOCOL = 5;
 // how often (seconds) each thing goes out
 const STATE_EVERY = 1 / 15, ENEMIES_EVERY = 1 / 8, CLOCK_EVERY = 2, KEEP_EVERY = 15;
 
@@ -106,7 +106,9 @@ export class Online {
     if (h.v !== PROTOCOL) return { refuse: "Your copy of StarMiner Z isn't the same version as the host's. Play from the same copy." };
     if (!g.ready) return { refuse: 'The host is still loading. Try again in a moment.' };
     const base = cleanName(h.name) || `Player ${id + 1}`;
-    if (this.app.bans()[base]) return { refuse: 'The host has banned you from this game.' };
+    // (the browser they play in, as this one knows it again: names needn't be different)
+    const uid = typeof h.uid === 'string' && /^[a-z0-9]{12,32}$/.test(h.uid) ? h.uid : null;
+    if (this.app.banned(uid, base)) return { refuse: 'The host has banned you from this game.' };
     // (the original: an Endurance game can't be joined once it's begun)
     if (g.begun) return { refuse: "That game of Endurance has already begun: friends can join one only until the host is 100 m out or into the second day." };
     const taken = new Set([this.myName, ...[...this.players.values()].map((p) => p.name)]);
@@ -116,12 +118,13 @@ export class Online {
     const players = [{ id: 0, name: this.myName, prof: cleanProfile(this.app.profile) }, ...[...this.players.values()].map((p) => ({ id: p.id, name: p.name, prof: p.prof }))];
     this.link.send({ t: 'join', id, name, prof });
     this.addPlayer(id, name, prof);
+    Object.assign(this.players.get(id), { uid, base });
     g.hud.message(`${name} joined the game`);
     this.app.audio?.ui?.('open');
     return {
       welcome: {
         v: PROTOCOL, name, seed: g.seed, mode: g.mode, time: sky.time, day: sky.day, grace: g.grace,
-        edits: g.world.serializeEdits(), crates: g.crates.serialize(), players, you: g.guests[name] ?? null,
+        edits: g.world.serializeEdits(), crates: g.crates.serialize(), players, you: (uid && g.guests[`u:${uid}`]) || g.guests[name] || null,
         dragon: g.dragons?.welcomeInfo() ?? null,
         difficulty: g.difficulty, creative: g.creative, pvp: g.pvp,
       },
@@ -312,7 +315,9 @@ export class Online {
       case 'keep': {
         // a guest's things, kept with the world for when they come back
         const p = H && this.players.get(from);
-        if (p && m.keep && typeof m.keep === 'object') g.guests[p.name] = m.keep;
+        if (p && m.keep && typeof m.keep === 'object') {
+          if (p.uid) { g.guests[`u:${p.uid}`] = m.keep; delete g.guests[p.name]; } else g.guests[p.name] = m.keep;
+        }
         break;
       }
       case 'bye':
@@ -411,9 +416,12 @@ export class Online {
     const line = `${p.name} has been ${ban ? 'banned' : 'kicked'} by the host`;
     this.say(line);
     this.game.hud.message(line);
-    if (ban) this.app.ban(p.name);
+    if (ban) this.app.ban(p.uid, p.base ?? p.name);
+    // (a moment for the word to go, then drop them: that connection, if they haven't gone already
+    // and someone else come in their place)
+    const conn = this.link.peers.get(id)?.conn;
     this.link.sendTo(id, { t: 'kick', ban: ban ? 1 : 0 });
-    setTimeout(() => this.link.lost(id, 'kicked'), 400);
+    setTimeout(() => this.link.lost(id, 'kicked', conn), 400);
   }
 
   // PVP: a swing that hit another player (w: what it was), from at

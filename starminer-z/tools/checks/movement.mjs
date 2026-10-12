@@ -111,6 +111,27 @@ const ledge = await E(() => {
 ok(Math.abs(ledge.two - 2) < 0.05, `a jump gets you up onto a ledge two blocks high (${ledge.two.toFixed(2)} m)`);
 ok(ledge.three < 0.1, `but not three (${ledge.three.toFixed(2)} m)`);
 
+// with Auto Climb, from right up against that ledge, pressing jump over and over: it climbs the
+// last of it, and the step part way up isn't ground to jump again from (no second jump, 5 m up)
+const mash = await E(() => {
+  const { x0, y0, z0, w, p } = T;
+  const wall = (id) => { for (let dx = -3; dx <= 3; dx++) for (let k = 0; k < 2; k++) for (let dz = 0; dz < 3; dz++) w.setBlock(x0 + dx, y0 + 1 + k, z0 - 4 - dz, id); };
+  wall(B.ROCK);
+  T.reset(x0 + 0.5, z0 - 2.6, 0);
+  T.move.y = 1;
+  let top = 0, stood = false, climbed = false;
+  T.run(1.5, () => {
+    if (p.onGround && p.vel.y <= 0 && p.pos.y - (y0 + 1) > 1.99) stood = true;
+    if (stood) return;
+    if (p.climbing || (p.onGround && p.pos.y - (y0 + 1) > 1.5)) climbed = true;
+    top = Math.max(top, p.pos.y - (y0 + 1));
+    T.presses.add('jump');
+  });
+  wall(B.AIR);
+  return { top, stood, climbed };
+});
+ok(mash.stood && mash.climbed && mash.top < 3, `pressing jump against a two-block ledge: climbed up onto it (${mash.climbed}), no higher than a jump goes (${mash.top.toFixed(2)} m)`);
+
 // speeds on the ground: a key all the way runs at 4 m/s; half a stick walks; strafing; both keys
 const speeds = await E(() => {
   const { p } = T;

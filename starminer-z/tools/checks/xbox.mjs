@@ -71,6 +71,26 @@ const open = async (pre = null) => {
     return { worst, n, err: gl.getError() };
   });
   ok(mips.worst === 0 && mips.err === 0, `every texture array's smaller copies are the ones made for them (${mips.n} levels and layers checked)`);
+  // drawing smaller only while it helps, with frame times made up: frames the browser holds to
+  // 30 a second don't get quicker drawn smaller, so it goes back (and tries again less and less
+  // often); a 50 Hz screen is left alone; frames slow from the drawing settle smaller
+  const dyn = await page.evaluate(() => {
+    const R = window.__app.renderer, resize = R.resize;
+    const run = (secs, frame) => {
+      Object.assign(R, { scale: 1, ft: null, adaptT: 0, holdT: 0, restT: 0, rest: 0, trial: null, quick: 0, resize: () => {} });
+      let t = 0, below = 0, min = 1;
+      while (t < secs) { const dt = frame(R.scale); R.adapt(dt, true); t += dt; if (R.scale < 1) below += dt; min = Math.min(min, R.scale); }
+      return { end: R.scale, below: below / secs, min };
+    };
+    const r = { capped: run(300, () => 1 / 30), hz50: run(120, () => 1 / 50), drawing: run(120, (s) => 0.008 + 0.022 * s * s) };
+    Object.assign(R, { scale: 1, ft: null, adaptT: 0, holdT: 0, restT: 0, rest: 0, trial: null, quick: 0, resize });
+    R.resize(true);
+    return r;
+  });
+  ok(dyn.capped.end === 1 && dyn.capped.below < 0.25, `frames held to 30 a second: drawn smaller only while trying it (${(dyn.capped.below * 100).toFixed(0)}% of 5 minutes), then back to ${dyn.capped.end}`);
+  ok(dyn.hz50.min === 1, `a 50 Hz screen: left as it is (${dyn.hz50.min})`);
+  const at = 0.008 + 0.022 * dyn.drawing.end ** 2;
+  ok(dyn.drawing.end < 1 && at < 1 / 48, `frames slow from the drawing: smaller till they're quick enough (${dyn.drawing.end.toFixed(2)}, ${(at * 1000).toFixed(1)} ms)`);
   await ctx.close();
 }
 

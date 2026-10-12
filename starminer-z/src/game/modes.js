@@ -18,6 +18,8 @@ export const MODES = {
   creative: { name: 'Creative', desc: 'Build structures with unlimited resources. You can play with or without enemies.' },
 };
 
+// (the original's own words. Easy's "less damage" is what it says, not what it does: its one
+// difficulty check on damage, HandleDetonateFireballMessage's, multiplies by 1.0)
 export const DIFFICULTIES = {
   noenemies: { name: 'No Enemies', desc: 'Build freely without enemy attacks.' },
   easy: { name: 'Easy', desc: 'Enemies do less damage. Zombies only appear at night. Dragons will not damage your structures.' },

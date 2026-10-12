@@ -36,7 +36,9 @@ for (const [name, q] of MODES) {
     const tick = () => {
       const g = app.game, p = g.player, S = window.__soak;
       S.ticks++;
-      if (app.state === 'paused' && Math.random() < 0.5) app.resume();
+      // (paused a moment, then back: nothing pressed on the menu, where it could pick anything)
+      if (app.state === 'paused') { app.resume(); return; }
+      if (app.state === 'playing' && Math.random() < 0.03) { for (const k of [...keys, 'jump', 'primary', 'secondary', 'reload']) I.up(k); app.pause(); return; }
       if (p.dead) { S.deaths += g.deathShown && !S.wasDead ? 1 : 0; S.wasDead = true; I.down('accept'); setTimeout(() => I.up('accept'), 60); return; }
       S.wasDead = false;
       for (const k of keys) I.up(k);
@@ -50,7 +52,6 @@ for (const [name, q] of MODES) {
       if (Math.random() < 0.15) { I.down('secondary'); setTimeout(() => I.up('secondary'), rnd(100, 600)); }
       if (Math.random() < 0.1) { I.down('reload'); setTimeout(() => I.up('reload'), 60); }
       if (Math.random() < 0.05) { g.openCrafting(); setTimeout(() => g.crafting?.close?.(), 500); }
-      if (Math.random() < 0.03 && app.state === 'playing') app.pause();
       // anything gone to NaN
       const bad = (v, what) => { if (![v.x, v.y, v.z].every(Number.isFinite)) S.bad.push(what); };
       bad(p.pos, 'player'); bad(p.vel, 'player velocity');

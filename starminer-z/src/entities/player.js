@@ -160,7 +160,9 @@ export class Player {
       if (input.isHeld('jump') && this.vel.y < 1) this.vel.y = 3.5;
       this.vel.y -= 9 * dt;
     } else {
-      if (input.pressed('jump') && this.onGround) {
+      // (not while still rising from one: a step climbed part way up a jump isn't ground to jump
+      // again from)
+      if (input.pressed('jump') && this.onGround && this.vel.y <= 0) {
         this.vel.y += JUMP;
         this.onGround = false;
       }

@@ -205,7 +205,8 @@ export class Menus {
       // the original's DialogScreens: a question (yes: what Yes does) or a message
       case 'dialog': return {
         id, title: arg?.title || '', sub: arg?.sub || '', small: true, dim: app.state === 'paused',
-        items: arg?.yes ? [{ label: 'No', on: () => this.back() }, { label: 'Yes', on: () => arg.yes() }] : [{ label: 'OK', on: () => this.back() }],
+        // (Yes once: a second press, or No, while it's still being done would go back too far)
+        items: arg?.yes ? [{ label: 'No', on: () => { if (!arg.done) this.back(); } }, { label: 'Yes', on: () => { if (arg.done) return; arg.done = true; arg.yes(); } }] : [{ label: 'OK', on: () => this.back() }],
       };
       case 'join': return {
         id, title: 'Join Online Game', typing: true,
@@ -227,7 +228,7 @@ export class Menus {
             o ? (guest ? `Online · ${o.count} players` : `Online · Code ${o.code} · ${o.count} player${o.count === 1 ? '' : 's'}`) : ''].filter(Boolean).join(' · '),
           items: [
             { label: 'Return To Game', on: () => app.resume() },
-            { label: 'Inventory', on: () => { app.resume(); g?.openCrafting?.(); } },
+            { label: 'Inventory', on: () => { app.resume(false); g?.openCrafting?.(); } },
             g && RULES.teleport(g) ? { label: 'Teleport', on: () => this.open('teleportMenu') } : null,
             guest ? null : { label: 'Invite Friends', small: o ? `Code ${o.code}` : '', on: () => { app.hostOnline(); this.open('invite'); } },
             { label: 'Help & Controls', on: () => this.open('help') },

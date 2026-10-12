@@ -148,10 +148,18 @@ export class Game {
       this.inventory.load(save.inventory);
       this.maxDistance = save.maxDistance || 0;
       Object.assign(this.stats, save.stats || {});
-      const p = save.player;
-      this.player.spawn(p.x, p.y, p.z);
-      this.player.yaw = p.yaw; this.player.pitch = p.pitch;
-      this.player.health = p.health ?? 100;
+      const p = save.player, hp = p.health ?? 100;
+      if (hp > 0) {
+        this.player.spawn(p.x, p.y, p.z);
+        this.player.yaw = p.yaw; this.player.pitch = p.pitch;
+        this.player.health = hp;
+      } else {
+        // (saved while dead: back as the respawn would have had them, at the start)
+        const sp = this.spawnSpot(0);
+        this.player.spawn(sp.x, sp.y, sp.z);
+        this.player.yaw = Math.PI;
+        this.player.health = this.player.maxHealth;
+      }
     } else if (welcome) {
       // a friend's world: its time and sky, and what you had there if you've played in it before
       this.grace = !!welcome.grace;
@@ -399,7 +407,8 @@ export class Game {
       const was = this.lastDay;
       this.lastDay = day;
       this.stats.days = Math.max(this.stats.days, day);
-      // (the original's MaxDaysSurvived: a day lived through, each new morning after the first)
+      // (the original's MaxDaysSurvived: for all its name a count, one more each new morning
+      // after the first, across every game)
       if (day > 1 && day > was) this.stats.daysSurvived++;
       this.hud.showDay(day);
       this.audio?.dawn();
@@ -1292,7 +1301,8 @@ export class Game {
     if (this.mode === 'endurance') {
       let best = null, bd = Infinity;
       for (const r of this.online?.players.values() || []) {
-        if (r.dead) continue;
+        // (not one not heard from yet: where they are isn't known)
+        if (r.dead || !r.heard) continue;
         const d = r.pos.lengthSq();
         if (d < bd) { bd = d; best = r; }
       }
@@ -1314,10 +1324,13 @@ export class Game {
     this.online?.say(`${this.online.myName} Has Respawned`);
   }
 
+  // (the death screen away, and the mouse back: only if it was up, not for a Restart that finds
+  // you alive, maybe in the inventory)
   revive() {
+    const was = this.deathShown || this.player.dead;
     this.deathShown = false;
     this.death = null;
-    this.app.hideDeath();
+    if (was) this.app.hideDeath();
   }
 
   // RestartLevelMessage: everyone back at the start, alive, on the first morning again, with

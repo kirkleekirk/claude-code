@@ -122,8 +122,11 @@ Up to eight players can play together in one world, as in CastleMiner Z:
 - An Endurance game can be joined only until it has begun: the host 100 m out, or into the second
   day. Dying in one, you come back by the nearest friend still standing after 20 seconds; once
   everyone's down, the host starts it over for all.
-- The host's Host Options kick or ban a player (Clear Ban List lets them back), start the game
-  over for everyone, and turn PVP on: then bullets, laser bolts and swings hurt other players.
+- The host's Host Options kick or ban a player (a ban keeps out the browser they played in, not
+  everyone of that name; Clear Ban List lets them back), start the game over for everyone, and
+  turn PVP on: then bullets, laser bolts and swings hurt other players.
+- Everyone needs the same version of the game: a friend on an older copy is told so, and gets the
+  new `starminer-z-friends.html`.
 - Each player's machine runs the dead that come for that player (as the original does), and the
   others see them and can shoot them. A kill counts for whoever made it.
 - What each friend carries is kept with the host's world, for when they come back.

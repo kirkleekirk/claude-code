@@ -593,7 +593,7 @@ export class Enemies {
         const hitP = !p.dead ? rayBox(from, dir, len, p.pos.x - 0.35, p.pos.y, p.pos.z - 0.35, p.pos.x + 0.35, p.pos.y + p.height, p.pos.z + 0.35) : null;
         const hitW = w.raycast(from.x, from.y, from.z, dir.x, dir.y, dir.z, len, (id) => SOLID[id] === 1);
         if (hitP != null && (!hitW || hitP < hitW.dist)) {
-          p.hurt(0.35 * p.maxHealth, null, 'arrow');
+          p.hurt(0.35 * p.maxHealth, a.pos, 'arrow');
           g.audio?.bulletHit?.(a.pos);
           done = true;
         } else if (hitW) {

@@ -26,12 +26,17 @@ function db() {
   return dbPromise;
 }
 
+// Open the database now, so that a save as the page is hidden or closed only has to write
+export function openStorage() { db(); }
+
 function tx(mode, fn) {
   return db().then((d) => new Promise((resolve) => {
     if (!d) return resolve(undefined);
     try {
       const t = d.transaction(STORE, mode);
       const r = fn(t.objectStore(STORE));
+      // (nothing more is coming: it can be written straight away)
+      t.commit?.();
       t.oncomplete = () => resolve(r && 'result' in r ? r.result : true);
       t.onerror = () => resolve(undefined);
       t.onabort = () => resolve(undefined);
