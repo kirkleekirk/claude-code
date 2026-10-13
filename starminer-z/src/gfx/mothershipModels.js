@@ -110,9 +110,10 @@ export function makeShip(app) {
 
 // A cone from the ship's shaft to the ground (scaled to its length: the mesh's y runs 0 at the
 // top to -1 at the bottom), bands of light running up it, brightest at its edges; and a pool of
-// it on the ground, rings rippling out.
+// it on the ground, rings rippling out. (uInside: how far the eye is in it, where it's a faint
+// glow all round instead: from in there it's all round, and would be a haze over everything.)
 export function makeBeam() {
-  const uniforms = { uTime: { value: 0 }, uAlpha: { value: 0 }, uLen: { value: 1 } };
+  const uniforms = { uTime: { value: 0 }, uAlpha: { value: 0 }, uLen: { value: 1 }, uInside: { value: 0 } };
   const cone = new THREE.CylinderGeometry(1.5, 3.1, 1, 40, 1, true).translate(0, -0.5, 0);
   const coneMat = new THREE.ShaderMaterial({
     uniforms,
@@ -126,14 +127,15 @@ export function makeBeam() {
         gl_Position = projectionMatrix * viewMatrix * w;
       }`,
     fragmentShader: /* glsl */ `
-      uniform float uTime; uniform float uAlpha; uniform float uLen;
+      uniform float uTime; uniform float uAlpha; uniform float uLen; uniform float uInside;
       varying float vY; varying vec3 vN; varying vec3 vV;
       void main() {
         float along = -vY * uLen;
         float bands = 0.6 + 0.4 * sin(along * 1.3 + uTime * 7.0);
         float edge = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 1.6);
         float ends = smoothstep(0.0, 0.04, -vY) * (1.0 - smoothstep(0.92, 1.0, -vY) * 0.6);
-        float a = uAlpha * (0.22 + 0.8 * edge) * bands * ends;
+        // (from in it, no brighter at its sides: seen edge-on from near them, they'd be glare)
+        float a = uAlpha * mix(0.22 + 0.8 * edge, 0.5, uInside) * bands * ends;
         gl_FragColor = vec4(vec3(0.3, 1.0, 0.55) * a, a);
       }`,
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,

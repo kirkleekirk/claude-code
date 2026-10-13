@@ -324,6 +324,10 @@ class Visit {
       B0.pool.position.set(this.origin.x, gy + 0.06, this.origin.z);
     }
     B0.uniforms.uTime.value = t;
+    // (from in it, an even glow all round: see makeBeam)
+    const cam = g.camera.position, cx = cam.x - at.x, cz = cam.z - at.z;
+    const inBeam = gy != null && cam.y < at.y && cam.y > gy - 1 && cx * cx + cz * cz < 3.3 * 3.3 ? 1 : 0;
+    B0.uniforms.uInside.value += (inBeam - B0.uniforms.uInside.value) * Math.min(1, dt * 5);
     // motes of it, drifting up
     if (on && alpha > 0.3 && dist < 160 && Math.random() < dt * 30) {
       const a = Math.random() * Math.PI * 2, r = Math.random() * 2.2, y = gy + Math.random() * (at.y - 3 - gy);

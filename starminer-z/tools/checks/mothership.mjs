@@ -166,14 +166,17 @@ const s6 = await E(() => {
     while (v.nodes[k] > 0 && n++ < 40) T.shoot(v.origin.x + x, SHIP.FLOOR + SHIP.NODE_Y, v.origin.z + z);
     nodes.push(n);
   });
-  const bar = g.hud.bossEl.classList.contains('shielded');
+  const after = { shielded: v.shielded, bar: g.hud.bossEl.classList.contains('shielded'), msg: g.hud.feed.map((f) => f.el.textContent) };
+  // (a moment stood still, for the core's shots on their way: one fired as you moved misses)
+  T.step(2.5);
   const bolts = window.hurts.filter((h) => h.kind === 'bolt').length;
   const aliens = v.aliens.length;
-  return { shielded, nodes, after: { shielded: v.shielded, bar, msg: g.hud.feed.map((f) => f.el.textContent) }, bolts, aliens };
+  return { shielded, nodes, after, bolts, aliens };
 });
 console.log(JSON.stringify(s6));
 ok(s6.shielded.core === 600 && s6.shielded.shielded, 'the core, while its nodes stand, is shielded: shots do nothing to it');
-ok(s6.nodes.every((n) => n === 10), `its four power nodes break (10 diamond laser shots each: ${s6.nodes.join(', ')})`);
+// (150 of health, 15 a shot: 10, or a shot or two more where an alien stepped in the way)
+ok(s6.nodes.every((n) => n >= 10 && n <= 12), `its four power nodes break (10 diamond laser shots each: ${s6.nodes.join(', ')})`);
 ok(!s6.after.shielded && !s6.after.bar && s6.after.msg.includes("The core's shield is down!"), 'and its shield drops');
 ok(s6.bolts > 0, `the core shoots at whoever's in the hall (${s6.bolts} hits)`);
 ok(s6.aliens > 0, `and aliens beam in (${s6.aliens})`);
@@ -181,14 +184,16 @@ await E(() => { const g = window.__app.game, v = g.mothership.visit; T.at(v.orig
 await snap('5-bare-core');
 const s7 = await E(() => {
   const g = window.__app.game, v = g.mothership.visit, p = g.player;
-  const before = new Set(g.inventory.slots.filter(Boolean).map((s) => s.id));
+  // (how many of each thing you carry: the loot's gun may be one you have already)
+  const count = () => { const m = {}; for (const s of g.inventory.slots) if (s) m[s.id] = (m[s.id] || 0) + (s.count || 1); return m; };
+  const before = count();
   let n = 0;
   while (v.core > 0 && n++ < 80) T.shoot(v.origin.x, SHIP.FLOOR + SHIP.CORE_Y, v.origin.z);
   const down = { shots: n, end: v.end };
   T.step(1);
   const msg = g.hud.feed.map((f) => f.el.textContent);
   T.step(7);
-  const got = g.inventory.slots.filter(Boolean).map((s) => s.id).filter((id) => !before.has(id) || id === 'diamond' || id === 'bullets_laser');
+  const after = count(), got = Object.keys(after).filter((id) => after[id] > (before[id] || 0));
   // (what's under their feet: the columns they stand over, on the edge of one maybe)
   const r = p.radius, under = [[-r, -r], [r, -r], [-r, r], [r, r]].map(([dx, dz]) => g.world.getBlock(p.pos.x + dx, p.pos.y - 0.5, p.pos.z + dz));
   return { ...down, msg, y: p.pos.y, carried: p.carried, onGround: p.onGround, under, got };
