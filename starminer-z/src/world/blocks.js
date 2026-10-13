@@ -58,6 +58,9 @@ export const B = {
   DOOR_LOWER_OPEN_Z: 43,
   DOOR_UPPER_OPEN_X: 44,
   DOOR_UPPER_OPEN_Z: 45,
+  // the alien ship's hull, and its drones': never in the world's own blocks, only in what the
+  // ship lays over them while it's here (World.overlay); nothing breaks it
+  SHIP_HULL: 46,
 };
 
 // Texture layers, in array order. The mesher refers to layers by index.
@@ -137,6 +140,7 @@ def(B.SLIME, { name: 'Space Goo', tex: 'slime', light: 15, emissive: 0.7, hardne
 def(B.SPACE_ROCK, { name: 'Space Rock', tex: 'space_rock', hardness: 4, tier: 6, sound: 'stone', color: 0x4a4a50 });
 def(B.SPACE_ROCK_BUILT, { name: 'Space Rock', tex: 'space_rock', hardness: 4, tier: 6, sound: 'stone', color: 0x4a4a50 });
 def(B.FIXED_LANTERN, { name: 'Lantern', tex: { top: 'lantern_top', bottom: 'lantern_top', side: 'lantern' }, light: 15, emissive: 0.85, breakable: false, sound: 'glass', color: 0xffd060 });
+def(B.SHIP_HULL, { name: 'Ship Hull', tex: 'space_rock', hardness: 999, breakable: false, sound: 'stone', color: 0x2e3c3a });
 // a door is a panel, not a cube; shut, it stops you (and the dead) like a wall
 for (const [id, upper, open] of [[B.DOOR_LOWER_X, 0, 0], [B.DOOR_LOWER_Z, 0, 0], [B.DOOR_UPPER_X, 1, 0], [B.DOOR_UPPER_Z, 1, 0],
   [B.DOOR_LOWER_OPEN_X, 0, 1], [B.DOOR_LOWER_OPEN_Z, 0, 1], [B.DOOR_UPPER_OPEN_X, 1, 1], [B.DOOR_UPPER_OPEN_Z, 1, 1]]) {

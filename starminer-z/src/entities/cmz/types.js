@@ -183,12 +183,12 @@ for (const [ids, t] of [
 // rest no dragon breaks, and rock, ore, walls and lanterns.
 export const BLAST_PROOF = new Uint8Array(256);
 for (const id of [B.FIXED_LANTERN, B.BEDROCK, B.TOWER_STONE, B.BLOODSTONE, B.SPACE_ROCK, B.SPACE_ROCK_BUILT, B.SLIME, B.ROCK, B.LANTERN,
-  B.GOLD_ORE, B.IRON_ORE, B.COPPER_ORE, B.COAL_ORE, B.DIAMOND_ORE, B.IRON_WALL, B.COPPER_WALL, B.GOLD_WALL, B.DIAMOND_WALL]) BLAST_PROOF[id] = 1;
+  B.GOLD_ORE, B.IRON_ORE, B.COPPER_ORE, B.COAL_ORE, B.DIAMOND_ORE, B.IRON_WALL, B.COPPER_WALL, B.GOLD_WALL, B.DIAMOND_WALL, B.SHIP_HULL]) BLAST_PROOF[id] = 1;
 
 // Which blocks turn a laser bolt back (BouncesLasers), and how much a grenade keeps of its speed
 // off each (BounceRestitution; whatever isn't listed, 0.6).
 export const BOUNCES_LASERS = new Uint8Array(256);
-for (const id of [B.BEDROCK, B.TOWER_STONE, B.BLOODSTONE, B.DIAMOND_WALL]) BOUNCES_LASERS[id] = 1;
+for (const id of [B.BEDROCK, B.TOWER_STONE, B.BLOODSTONE, B.DIAMOND_WALL, B.SHIP_HULL]) BOUNCES_LASERS[id] = 1;
 export const BOUNCE = new Float32Array(256).fill(0.6);
 for (const [ids, r] of [
   [[B.DIRT, B.GRASS, B.SNOW_GRASS, B.SNOW, B.TNT, B.DOOR_LOWER_X, B.DOOR_LOWER_Z, B.DOOR_UPPER_X, B.DOOR_UPPER_Z, B.DOOR_LOWER_OPEN_X,

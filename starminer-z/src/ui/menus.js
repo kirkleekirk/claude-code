@@ -68,6 +68,12 @@ export const MENU_CSS = /* css */ `
 
 // StarMiner Z's own release notes (the original's Options menu has a Release Notes screen)
 const RELEASE_NOTES = `
+  <h3>This version</h3>
+  <ul>
+  <li>An alien ship that comes now and then from the second day on, with a fight inside it: climb onto one of the drones it sends down and shoot its eye, and its light takes you up into the ship, to break its power nodes and bring down its core. Online, everyone fights the same one.</li>
+  <li>The world built as the original builds it, block for block from a seed. Worlds kept from before keep their land.</li>
+  <li>Quicker drawing, on the Xbox above all: the faces hidden in the dark underground are left out.</li>
+  </ul>
   <h3>The later CastleMiner Z</h3>
   <ul>
   <li>Game modes, as the later version has them: Endurance (a new world every run, never kept), Survival and Creative (your own kept worlds, at No Enemies, Easy, Normal or Hardcore), and Dragon Endurance (unlocked by killing the Undead Dragon in Endurance).</li>

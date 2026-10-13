@@ -20,6 +20,7 @@ import { Projectiles } from './projectiles.js';
 import { Crates } from './crates.js';
 import { Enemies } from './enemies.js';
 import { Dragons } from './dragons.js';
+import { Mothership } from './mothership.js';
 import { RULES } from './modes.js';
 import { HUD } from '../ui/hud.js';
 import { Crafting } from '../ui/crafting.js';
@@ -100,6 +101,8 @@ export class Game {
     this.enemies = new Enemies(this);
     this.audio = app.audio;
     this.dragons = new Dragons(this, welcome);
+    // the alien ship that comes now and then (this game's own)
+    this.mothership = new Mothership(this, welcome);
     this.look = null;
     this.puppet = null;
     this.preview = null;
@@ -262,6 +265,7 @@ export class Game {
     this.hud.el.remove();
     this.enemies?.dispose?.();
     this.dragons?.dispose();
+    this.mothership?.dispose();
     this.projectiles.dispose();
     this.explosives.dispose();
     this.marker?.removeFromParent();
@@ -447,7 +451,9 @@ export class Game {
     const bob = p.bobAmount * (app.settings.viewBob ? 1 : 0);
     eye.y += Math.sin(p.bobPhase * 2) * 0.035 * bob;
     cam.position.copy(eye);
-    const shake = p.hurtTimer > 0 ? p.hurtTimer * 0.03 : 0;
+    // (and the ground shaking: something heavy came down near)
+    this.shake = Math.max(0, (this.shake || 0) - dt * 1.2);
+    const shake = Math.max(p.hurtTimer > 0 ? p.hurtTimer * 0.03 : 0, this.shake * 0.06);
     cam.rotation.set(p.pitch + (Math.random() - 0.5) * shake, p.yaw + (Math.random() - 0.5) * shake, Math.cos(p.bobPhase) * 0.004 * bob, 'YXZ');
     // a gun's kick turns the view, and settles back at 30 degrees a second
     const kick = 2 * Math.acos(Math.min(1, Math.abs(this.recoil.w)));
@@ -493,6 +499,7 @@ export class Game {
     for (const got of this.drops.update(dt, p, this.inventory)) this.audio?.pickup(got.id);
     this.enemies?.update(dt, live);
     this.dragons?.update(dt, live);
+    this.mothership?.update(dt, live);
     this.online?.update(dt);
     this.updatePlayerModel(dt);
     this.updatePreview(dt);
@@ -994,6 +1001,11 @@ export class Game {
   // takes anyone's (each machine flies every shot).
   shotHit(hit, it, mine, shooter = 0) {
     const at = hit.at;
+    if (hit.ship) {
+      this.mothership.shot(hit, it, mine);
+      if (mine) this.hud.hitMarker();
+      return;
+    }
     if (hit.dragon) {
       // (a flash where it goes in, and no sound: the original's)
       this.dragons.shot(at, it, shooter);
@@ -1097,6 +1109,7 @@ export class Game {
   // was, on top of it)
   teleportToPoint(x, y, z) {
     const p = this.player;
+    this.mothership?.cancelLift();
     p.pos.set(x, y, z);
     p.vel.set(0, 0, 0);
     p.fallStart = null;
@@ -1339,6 +1352,7 @@ export class Game {
   restartLevel() {
     const p = this.player;
     this.revive();
+    this.mothership?.clear();
     const sp = this.spawnSpot();
     p.spawn(sp.x, sp.y, sp.z);
     p.yaw = Math.PI;
@@ -1388,7 +1402,8 @@ export class Game {
       time: this.app.sky.time,
       day: this.app.sky.day,
       days: this.dayNumber,
-      player: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, pitch: p.pitch, health: p.health },
+      // (up in the alien ship, or on its light: kept on the ground under it, as the ship isn't)
+      player: { ...((({ x, y, z }) => ({ x, y, z }))(this.mothership?.safeSpot() ?? p.pos)), yaw: p.yaw, pitch: p.pitch, health: p.health },
       inventory: this.inventory.serialize(),
       maxDistance: this.maxDistance,
       grace: this.grace,

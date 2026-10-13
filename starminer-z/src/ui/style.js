@@ -96,6 +96,20 @@ html:not(.cmz-ui) .hud .lock { -webkit-mask: none; mask: none; background:
 html:not(.cmz-ui) .hud .lock.locked::after { content: 'LOCK'; position: absolute; left: 0; right: 0; bottom: 10%; text-align: center; color: var(--lc); font-weight: 800; font-size: 0.8em; }
 .hud .hint { position: absolute; left: 50%; top: 62%; transform: translateX(-50%); font-weight: 700; font-size: 0.8em; opacity: 0; transition: opacity 0.4s; text-align: center; }
 .hud .hint.on { opacity: 1; }
+/* the alien ship's core: its health, its four power nodes, and whether it's shielded; and the
+   green of its light round the edges while it carries you */
+.hud .boss { position: absolute; left: 50%; top: 5.2em; transform: translateX(-50%); width: 18em; display: none; text-align: center; }
+.hud .boss.on { display: block; }
+.hud .boss .bn { font-weight: 800; font-size: 0.72em; letter-spacing: 0.08em; text-transform: uppercase; }
+.hud .boss .bb { height: 0.55em; margin-top: 0.25em; background: rgba(0,0,0,0.6); border: 0.06em solid rgba(255,255,255,0.35); }
+.hud .boss .bb b { display: block; height: 100%; width: 100%; background: linear-gradient(#9dffc0, #2fbf6c); transition: width 0.2s; }
+.hud .boss.shielded .bb b { background: linear-gradient(#b8e8ff, #4a8fb0); }
+.hud .boss .bp { display: flex; justify-content: center; gap: 0.4em; margin-top: 0.3em; }
+.hud .boss .bp i { width: 0.55em; height: 0.55em; transform: rotate(45deg); background: #46ff8c; box-shadow: 0 0 0.35em #46ff8c; }
+.hud .boss .bp i.off { background: rgba(255,255,255,0.15); box-shadow: none; }
+.hud .boss .bs { font-size: 0.62em; font-weight: 700; color: var(--ink-dim); margin-top: 0.15em; }
+.hud::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, rgba(70,255,140,0) 45%, rgba(70,255,140,0.38) 100%); opacity: 0; transition: opacity 0.6s; }
+.hud.beamed::after { opacity: 1; }
 
 /* ---- death ---- */
 .death { position: absolute; inset: 0; background: var(--death); display: none; flex-direction: column; align-items: center; justify-content: center; gap: 0.15em; pointer-events: auto; }

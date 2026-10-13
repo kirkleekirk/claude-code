@@ -31,6 +31,7 @@ export class HUD {
       <div class="vignette"></div>
       <div class="feed txt"></div>
       <div class="hint txt"></div>
+      <div class="boss txt"><div class="bn">Mothership Core</div><div class="bb"><b></b></div><div class="bp"><i></i><i></i><i></i><i></i></div><div class="bs"></div></div>
       <div class="award"><div class="ic">★</div><div class="t txt"><span class="at"></span><small class="ad"></small></div></div>
       <div class="day txt"></div>
       <div class="bottom">
@@ -55,6 +56,10 @@ export class HUD {
     this.scope = this.$('.scope');
     this.lockEl = this.$('.lock');
     this.hintEl = this.$('.hint');
+    this.bossEl = this.$('.boss');
+    this.bossFill = this.$('.boss .bb b');
+    this.bossPips = [...this.el.querySelectorAll('.boss .bp i')];
+    this.bossNote = this.$('.boss .bs');
     this.netEl = this.$('.net');
     this.tagsEl = this.$('.tags');
     this.hotbar = this.$('.hotbar');
@@ -112,6 +117,17 @@ export class HUD {
   }
 
   hitMarker() { this.hitTimer = 0.12; this.hitEl.classList.add('on'); }
+
+  // The alien ship's core, while you're in its hall (b: { core: 0-1, nodes: [up, ...], shielded }),
+  // or nothing (null).
+  bossBar(b) {
+    this.bossEl.classList.toggle('on', !!b);
+    if (!b) return;
+    this.set('bossW', this.bossFill.style, `${Math.max(0, Math.min(1, b.core)) * 100}%`, 'width');
+    this.bossEl.classList.toggle('shielded', b.shielded);
+    b.nodes.forEach((up, k) => this.bossPips[k]?.classList.toggle('off', !up));
+    this.set('bossNote', this.bossNote, b.shielded ? 'Shielded: break the power nodes' : 'Its shield is down', 'textContent');
+  }
 
   // ---- names over other players' heads (online) ----------------------------------------------
 

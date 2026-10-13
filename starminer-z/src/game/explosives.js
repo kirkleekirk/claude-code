@@ -27,7 +27,7 @@ const KIND_ITEM = { [TNT]: 'tnt', [C4]: 'c4' };
 // what no explosion breaks; and what TNT, a laser bolt and a grenade leave standing too
 // (the original's BreakLookup). Lava stays, as no one can dig it here.
 const NEVER = new Uint8Array(256), SPARED = new Uint8Array(256);
-for (const id of [B.AIR, B.FIXED_LANTERN, B.BEDROCK, B.TOWER_STONE, B.SLIME, B.SPACE_ROCK, B.SPACE_ROCK_BUILT, B.LAVA]) NEVER[id] = 1;
+for (const id of [B.AIR, B.FIXED_LANTERN, B.BEDROCK, B.TOWER_STONE, B.SLIME, B.SPACE_ROCK, B.SPACE_ROCK_BUILT, B.LAVA, B.SHIP_HULL]) NEVER[id] = 1;
 for (const id of [B.LANTERN, B.GOLD_ORE, B.IRON_ORE, B.COPPER_ORE, B.COAL_ORE, B.DIAMOND_ORE, B.IRON_WALL, B.COPPER_WALL, B.GOLD_WALL,
   B.DIAMOND_WALL, B.BLOODSTONE]) SPARED[id] = 1;
 const spares = (type, id) => NEVER[id] || (type !== C4 && type !== ROCKET && SPARED[id]);
@@ -228,6 +228,8 @@ export class Explosives {
         if (f > 0) p.hurt(f * p.maxHealth, c, 'explosion');
       }
     }
+    // the alien ship's power nodes and core (the share of whoever set it off: they're counted once)
+    g.mothership?.blast(c, type, shooter === (g.online?.myId ?? 0));
     const r = ENEMY_RANGE[type], half = r / 2;
     for (const e of g.enemies?.list || []) {
       if (e.dead || e.gone) continue;

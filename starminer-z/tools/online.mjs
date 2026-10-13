@@ -1,8 +1,8 @@
 // Two players in headless Chromium: A hosts, B joins by code, and what they share is checked
 // (seeing each other, block changes, each other's dead, hits and kills, the clock, the dragons,
-// leaving and coming back, the host's options: PVP, kick, ban, restart; the host ending it; and
-// an Endurance game: dying online, starting over, and closed once it's begun). Needs the dev
-// server and a PeerJS server (peer-server.mjs):
+// the alien ship, leaving and coming back, the host's options: PVP, kick, ban, restart; the host
+// ending it; and an Endurance game: dying online, starting over, and closed once it's begun).
+// Needs the dev server and a PeerJS server (peer-server.mjs):
 //   node tools/peer-server.mjs 9000 &
 //   node tools/online.mjs [out dir]       (BASE=dev server URL, PEER=peer=host:port)
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
@@ -270,16 +270,106 @@ try {
   await B.evaluate(() => window.__app.game.dragons.removeDragon());
   await wait(A, () => !window.__game.dragons.client, null, 30000).then(() => ok(true, 'gone, on both'), () => ok(false, 'gone, on both'));
 
-  // B leaves: A keeps B's things; B comes back and has them
+  // The alien ship, A's (the host's) to send: it comes when A's time for one is up (from the
+  // second day on), and B has it where A does; B breaks a drone (A sees it give way) and goes
+  // up; B's shot at a power node is taken off on A's machine, and A's word of it comes back.
+  // (B then leaves from up there, and joins again: below.)
+  const calm = () => {
+    const app = window.__app, g = app.game;
+    app.onLockChange = () => {};
+    if (app.state === 'paused') app.resume();
+    for (const e of g.enemies.list) e.gone = true;
+    g.enemies.spawning = () => {};
+    if (g.player.dead) g.respawn();
+  };
+  // (B's hurts counted, not taken: the core shoots at whoever's in its hall)
+  const unhurt = () => { const p = window.__app.game.player; window.__shipHurt = []; if (!p.__hurt) { p.__hurt = p.hurt; p.hurt = (a, f, k) => { window.__shipHurt.push(k); }; } };
+  const hurtable = () => { const p = window.__app.game.player; if (p.__hurt) { p.hurt = p.__hurt; delete p.__hurt; } };
+  // (how often B hears the host's word on the boss's health)
+  const countUx = () => { const M = window.__app.game.mothership, f = M.handleState.bind(M); window.__ux = 0; M.handleState = (...a) => { window.__ux++; return f(...a); }; };
+  const bFires = (gun, at) => B.evaluate(([gun, at]) => {
+    const g = window.__app.game, p = g.player, it = window.__ITEMS[gun], eye = p.eye.clone();
+    const d = new eye.constructor(at[0], at[1], at[2]).sub(eye).normalize();
+    p.yaw = Math.atan2(-d.x, -d.z); p.pitch = Math.asin(d.y);
+    g.fire(it, eye, eye, [d], true, g.online.myId);
+    g.online.shot(it.id, eye, eye, [d]);
+  }, [gun, at]);
+  const ship = (P) => P.evaluate(() => { const v = window.__app.game.mothership.visit; return v ? { s: v.seed, h: [v.hx, v.hz], a: v.dir, t: v.t, end: v.end, nodes: v.nodes.slice(), core: v.core, spent: v.drones.filter((d) => d.spent).map((d) => d.i) } : null; });
+  // (back on their feet, if either was dead: a respawn waits for the ground at the start to load)
+  const upAndReady = () => { const g = window.__app.game; return g.ready && !g.player.dead; };
+  await A.evaluate(calm);
+  await B.evaluate(calm);
+  await wait(A, upAndReady, null, 120000).catch(() => {});
+  await wait(B, upAndReady, null, 120000).catch(() => {});
+  await Promise.all([A, B].map((P) => P.evaluate(async () => { window.SHIP = (await import('/src/game/mothership.js')).SHIP; })));
+  const day = await A.evaluate(() => window.__game.dayNumber);
+  await A.evaluate(() => { window.__game.mothership.wait = 0; });
+  const came = await wait(A, () => !!window.__game.mothership.visit, null, 30000).then(() => true, () => false);
+  ok(came && day >= 2, `A's ship comes when A's time for one is up (day ${day})`);
+  await wait(B, () => !!window.__app.game.mothership.visit, null, 30000).catch(() => {});
+  const vis = await Promise.all([ship(A), ship(B)]);
+  ok(vis[0] && vis[1] && vis[0].s === vis[1].s && vis[0].h.join() === vis[1].h.join() && vis[0].a === vis[1].a, `B has it, where A has it, coming in the same way (${JSON.stringify(vis.map((v) => v && [v.s, ...v.h, v.a]))})`);
+  // (on to when all its drones are down, on both)
+  const allDown = () => { window.__app.game.mothership.visit.t = SHIP.DRONE_FIRST + 7 * SHIP.DRONE_EVERY + SHIP.DRONE_FALL + 1; };
+  await A.evaluate(allDown);
+  await B.evaluate(allDown);
+  const landed = () => window.__app.game.mothership.visit?.drones.every((d) => d.state === 'landed');
+  await wait(A, landed, null, 60000).catch(() => {});
+  await wait(B, landed, null, 60000).catch(() => {});
+  const where = () => window.__app.game.mothership.visit.drones.map((d) => `${d.state}:${d.lx},${d.base},${d.lz}`);
+  const dr = await Promise.all([A.evaluate(where), B.evaluate(where)]);
+  ok(dr[0].join() === dr[1].join() && dr[0].every((s) => s.startsWith('landed')), `its drones come down in the same places on both (${dr[1].slice(0, 2).join(' ')} ...)`);
+  // B onto the drone nearest, and its eye shot till it gives way
+  const di = await B.evaluate(() => {
+    const g = window.__app.game, v = g.mothership.visit, p = g.player;
+    const r = (d) => Math.hypot(d.lx + 0.5 - p.pos.x, d.lz + 0.5 - p.pos.z);
+    const d = v.drones.reduce((a, b) => (r(b) < r(a) ? b : a));
+    p.pos.set(d.lx + 1.4, d.base + 2.05, d.lz + 0.5); p.vel.set(0, 0, 0); p.fallStart = null;
+    return d.i;
+  });
+  await B.evaluate(unhurt);
+  await B.evaluate(countUx);
+  const stood = await wait(B, (i) => { const g = window.__app.game, v = g.mothership.visit; return v.standingOn(v.drones[i], g.player); }, di, 30000).then(() => true, () => false);
+  let eyeShots = 0;
+  for (let k = 0; k < 8; k++) {
+    const st = await B.evaluate((i) => { const v = window.__app.game.mothership.visit, d = v.drones[i]; return { at: [d.lx + 0.5, d.base + 2.42, d.lz + 0.5], hits: d.hits, up: !!v.lift || v.inside() }; }, di);
+    if (st.up) break;
+    await bFires('pistol', st.at);
+    eyeShots++;
+    await wait(B, ([i, h]) => { const v = window.__app.game.mothership.visit; return v.drones[i].hits > h || !!v.lift; }, [di, st.hits], 20000).catch(() => {});
+  }
+  const gave = await B.evaluate((i) => { const g = window.__app.game, v = g.mothership.visit, p = g.player; return { spent: v.drones[i].spent, lift: v.lift?.kind ?? (v.inside() ? 'in' : null), at: p.pos.toArray().map((x) => +x.toFixed(1)), dead: p.dead, hint: g.hud.hintEl.textContent }; }, di);
+  ok(stood && gave.spent && (gave.lift === 'up' || gave.lift === 'in') && eyeShots === 5, `B stands on a drone and shoots its eye: it gives way at the fifth, and the light takes B up (${eyeShots} shots, stood ${stood}, ${JSON.stringify(gave)})`);
+  await wait(A, (i) => window.__app.game.mothership.visit.drones[i].spent, di, 20000).then(() => ok(true, 'A sees that drone give way'), () => ok(false, 'A sees that drone give way'));
+  await wait(B, () => { const v = window.__app.game.mothership.visit; return !v.lift && v.inside(); }, null, 60000).catch(() => {});
+  const inB = await B.evaluate(() => { const g = window.__app.game; return { inside: g.mothership.visit.inside(), y: g.player.pos.y }; });
+  ok(inB.inside, `B's in the ship (y ${inB.y.toFixed(1)})`);
+  await wait(A, () => [...window.__game.online.players.values()][0].pos.y > 130, null, 30000).then(() => ok(true, 'and A sees B up there'), () => ok(false, 'and A sees B up there'));
+  // B's shot at a node (from beside it, out from the middle, the core's shield not in the way)
+  const n0 = await B.evaluate(() => {
+    const g = window.__app.game, v = g.mothership.visit, p = g.player, [x, z] = SHIP.NODES[0];
+    p.pos.set(v.origin.x + x + 3.7, SHIP.FLOOR + 0.01, v.origin.z + z + 1.2); p.vel.set(0, 0, 0);
+    return [v.origin.x + x, SHIP.FLOOR + SHIP.NODE_Y, v.origin.z + z];
+  });
+  await B.waitForTimeout(1500);
+  await bFires('pistol', n0);
+  await wait(A, () => window.__app.game.mothership.visit.nodes[0] < SHIP.NODE_HEALTH, null, 20000).catch(() => {});
+  await wait(B, () => window.__ux > 0, null, 20000).catch(() => {});
+  const nh = await Promise.all([A.evaluate(() => window.__app.game.mothership.visit.nodes[0]), B.evaluate(() => ({ h: window.__app.game.mothership.visit.nodes[0], ux: window.__ux }))]);
+  ok(nh[0] < 150 && Math.abs(nh[0] - nh[1].h) < 0.11 && nh[1].ux > 0, `B's shot at a power node is taken off on A's machine, and A's word of it comes back (${nh[0]} / ${nh[1].h}, heard ${nh[1].ux}x)`);
+
+  // B leaves (from up in the ship): A keeps B's things, and B on the ground under it; B comes
+  // back and has them
   await B.evaluate(() => { const inv = window.__app.game.inventory; inv.slots[7] = inv.make('diamond', 7); });
   await B.evaluate(() => window.__app.leaveOnline());
   await wait(A, () => window.__game.online.players.size === 0, null, 20000).then(() => ok(true, 'A sees B leave'), () => ok(false, 'A sees B leave'));
   // (kept by B's browser, not B's name)
   const bKey = `u:${await B.evaluate(() => window.__app.clientId())}`;
-  const kept = await A.evaluate((k) => ({ it: window.__game.guests[k]?.inventory?.slots?.[7], byName: 'Bea' in window.__game.guests }), bKey);
+  const kept = await A.evaluate((k) => ({ it: window.__game.guests[k]?.inventory?.slots?.[7], byName: 'Bea' in window.__game.guests, y: window.__game.guests[k]?.player?.y }), bKey);
   ok(kept.it && kept.it.id === 'diamond' && kept.it.count === 7 && !kept.byName, `A keeps what B had, by B's browser (${JSON.stringify(kept)})`);
+  ok(kept.y < 120, `and, B having left from up in the ship, keeps B on the ground under it (y ${kept.y?.toFixed(1)})`);
   await wait(B, () => window.__app.state === 'menu', null, 240000);
-  // (a dragon up when B comes back: B sees it from the start)
+  // (a dragon up when B comes back: B sees it from the start; and the ship)
   await A.evaluate(() => { const D = window.__game.dragons; D.nextAllowed = 0; D.pending = false; D.spawnDragon(2, false); });
   await B.evaluate((c) => window.__app.joinOnline(c), code);
   await wait(B, () => window.__app.game?.online && window.__app.game.ready, null, 240000);
@@ -288,6 +378,41 @@ try {
   const joined = await B.evaluate(() => window.__app.game.dragons.client?.type ?? null);
   ok(joined === 2, `joining with a dragon up, B has it too (${joined})`);
   await A.evaluate(() => window.__game.dragons.removeDragon());
+  const vs = await Promise.all([ship(A), ship(B)]);
+  ok(vs[1] && vs[1].s === vs[0].s && vs[1].a === vs[0].a && Math.abs(vs[1].nodes[0] - vs[0].nodes[0]) < 0.11 && vs[1].spent.includes(di) && Math.abs(vs[1].t - vs[0].t) < 5,
+    `and the ship, as it is: its time, its damaged node, its spent drone (${JSON.stringify(vs.map((v) => v && [v.t.toFixed(1), v.nodes[0], v.spent]))})`);
+
+  // B brings it down (back up in its hall, the nodes broken, then the core): it comes down on
+  // both, and B, who was in it, has its loot (A, who wasn't, none)
+  await B.evaluate(calm);
+  await wait(B, upAndReady, null, 120000).catch(() => {});
+  await B.evaluate(unhurt);
+  await B.evaluate(() => { const g = window.__app.game, v = g.mothership.visit, p = g.player; p.pos.set(v.origin.x + 6, SHIP.FLOOR + 0.01, v.origin.z + 1); p.vel.set(0, 0, 0); p.fallStart = null; });
+  await wait(B, () => window.__app.game.mothership.visit.inside() && window.__app.game.player.onGround, null, 30000).catch(() => {});
+  await B.evaluate(() => { const v = window.__app.game.mothership.visit; for (let k = 0; k < 4; k++) v.hitPart(k, SHIP.NODE_HEALTH); });
+  const bare = await wait(B, () => !window.__app.game.mothership.visit.shielded, null, 30000).then(() => true, () => false);
+  const aBare = await A.evaluate(() => !window.__app.game.mothership.visit.shielded);
+  ok(bare && aBare, "B's hits break its nodes, on A's machine, and the core's shield drops on both");
+  const before = await A.evaluate(() => window.__app.game.inventory.slots.filter(Boolean).map((s) => s.id));
+  await B.evaluate(() => { const v = window.__app.game.mothership.visit; v.hitPart(4, 300); v.hitPart(4, 300); });
+  await wait(A, () => window.__app.game.mothership.visit?.end === 'down', null, 30000).catch(() => {});
+  await wait(B, () => window.__app.game.mothership.visit?.end === 'down', null, 30000).catch(() => {});
+  const ends = await Promise.all([ship(A), ship(B)]);
+  ok(ends[0]?.end === 'down' && ends[1]?.end === 'down', `B brings the core down: it ends on both (${ends.map((v) => v?.end).join(' / ')})`);
+  await wait(B, () => !window.__app.game.mothership.visit, null, 240000).catch(() => {});
+  await wait(A, () => !window.__app.game.mothership.visit, null, 240000).catch(() => {});
+  const lootB = await B.evaluate(() => {
+    const g = window.__app.game, has = (re) => g.inventory.slots.some((s) => s && re.test(s.id)) || g.drops.list.some((d) => re.test(d.id));
+    return { gun: has(/^laser_.*_diamond$/), slime: has(/^slime$/), y: g.player.pos.y, overlay: !!g.world.overlay };
+  });
+  const lootA = await A.evaluate((before) => {
+    const g = window.__app.game, now = g.inventory.slots.filter(Boolean).map((s) => s.id);
+    return { gun: now.some((id) => /^laser_.*_diamond$/.test(id) && !before.includes(id)) || g.drops.list.some((d) => /^laser_.*_diamond$/.test(d.id)), overlay: !!g.world.overlay };
+  }, before);
+  ok(lootB.gun && lootB.slime && lootB.y < 120, `B is let down, and has its loot (${JSON.stringify(lootB)})`);
+  ok(!lootA.gun, "and A, who wasn't in it, none");
+  ok(!lootA.overlay && !lootB.overlay, 'then it goes, on both');
+  await B.evaluate(hurtable);
 
   // the host saves, and B's things are in the save
   await A.evaluate(() => window.__app.autosave());

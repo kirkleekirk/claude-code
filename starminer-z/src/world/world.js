@@ -340,12 +340,26 @@ export class World {
 
   // ---- blocks ---------------------------------------------------------------------------------
 
+  // Blocks laid over the world's own, while something's here that isn't part of it (the alien
+  // ship and its drones: see game/mothership.js). o: { x0, y0, z0, x1, y1, z1 (the box it's in),
+  // at(x, y, z) -> a block id or 0, light(x, y, z) -> { sky, block } or null }, or null for none.
+  // What it has is there for everything that asks for a block (footing, shots, the dead, an
+  // explosion's reach), but it's never saved, meshed or sent, and it's hull, which nothing can
+  // break; and as it's over the top of the world or where something's standing in it, nothing
+  // can be built into it either.
+  setOverlay(o) { this.overlay = o; }
+
   column(x, z) {
     return this.columns.get(cid(Math.floor(x / CHUNK), Math.floor(z / CHUNK)));
   }
 
   getBlock(x, y, z) {
     x = Math.floor(x); y = Math.floor(y); z = Math.floor(z);
+    const o = this.overlay;
+    if (o && x >= o.x0 && x <= o.x1 && y >= o.y0 && y <= o.y1 && z >= o.z0 && z <= o.z1) {
+      const id = o.at(x, y, z);
+      if (id) return id;
+    }
     if (y < 0) return B.BEDROCK;
     if (y >= HEIGHT) return B.AIR;
     const c = this.columns.get(cid(x >> 4, z >> 4));
@@ -410,6 +424,8 @@ export class World {
 
   // Light at a block: { sky, block } in 0..15 (from the last mesh of its column).
   lightAt(x, y, z) {
+    const L = this.overlay?.light?.(x, y, z);
+    if (L) return L;
     x = Math.floor(x); y = Math.floor(y); z = Math.floor(z);
     if (y >= HEIGHT) return { sky: 15, block: 0 };
     if (y < 0) return { sky: 0, block: 0 };

@@ -13,8 +13,8 @@ import { ITEMS } from '../items/items.js';
 import { PRESETS } from '../entities/avatar/looks.js';
 
 // (every machine builds the world from the seed itself, so a change to how it's built is a new
-// version too: 6 is the original's world builder)
-export const PROTOCOL = 6;
+// version too: 6 is the original's world builder; 7, the alien ship)
+export const PROTOCOL = 7;
 // how often (seconds) each thing goes out
 const STATE_EVERY = 1 / 15, ENEMIES_EVERY = 1 / 8, CLOCK_EVERY = 2, KEEP_EVERY = 15;
 
@@ -128,6 +128,7 @@ export class Online {
         v: PROTOCOL, name, seed: g.seed, builder: g.world.builder, mode: g.mode, time: sky.time, day: sky.day, grace: g.grace,
         edits: g.world.serializeEdits(), crates: g.crates.serialize(), players, you: (uid && g.guests[`u:${uid}`]) || g.guests[name] || null,
         dragon: g.dragons?.welcomeInfo() ?? null,
+        ufo: g.mothership?.welcomeInfo() ?? null,
         difficulty: g.difficulty, creative: g.creative, pvp: g.pvp,
       },
     };
@@ -283,6 +284,28 @@ export class Online {
       case 'dmg':
         if (H && m.to !== this.myId) { this.link.sendTo(m.to, m); break; }
         if (m.info && typeof m.info === 'object') g.dragons?.handleMigrate(cleanMigration(m.info));
+        break;
+      // the alien ship (see game/mothership.js): come (the host's word), how long it's been
+      // here (the host's), a drone given way (anyone's, passed on), a hit on its nodes or core
+      // (to the host), their health (the host's), and how it ended (the host's)
+      case 'us':
+        if (!H && Number.isInteger(m.s) && Array.isArray(m.h) && m.h.length === 2 && m.h.every(Number.isInteger)) g.mothership?.handleStart(m.s, m.h[0], m.h[1], Number.isFinite(m.a) ? m.a : null);
+        break;
+      case 'ut':
+        if (!H && Number.isFinite(m.e) && m.e >= 0) g.mothership?.handleTime(m.e);
+        break;
+      case 'ud':
+        if (Number.isInteger(m.i) && m.i >= 0 && m.i < 8) g.mothership?.handleDrone(m.i);
+        if (H) this.link.send(m, from);
+        break;
+      case 'uh':
+        if (H && Number.isInteger(m.k) && m.k >= 0 && m.k <= 4 && Number.isFinite(m.d) && m.d > 0) g.mothership?.handleHit(m.k, Math.min(m.d, 300));
+        break;
+      case 'ux':
+        if (!H && Array.isArray(m.n) && m.n.length === 4 && m.n.every(Number.isFinite) && Number.isFinite(m.c)) g.mothership?.handleState(m.n, m.c);
+        break;
+      case 'ue':
+        if (!H && (m.w === 'gone' || m.w === 'down')) g.mothership?.handleEnd(m.w);
         break;
       // the host's: everyone starts the game over; PVP on or off; you're out
       case 'restart':
@@ -486,7 +509,8 @@ export class Online {
     const g = this.game, p = g.player;
     return {
       inventory: g.inventory.serialize(),
-      player: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, pitch: p.pitch, health: p.dead ? 0 : p.health },
+      // (up in the alien ship or on its light: kept on the ground under it, as the ship isn't)
+      player: { ...((({ x, y, z }) => ({ x, y, z }))(g.mothership?.safeSpot() ?? p.pos)), yaw: p.yaw, pitch: p.pitch, health: p.dead ? 0 : p.health },
       maxDistance: g.maxDistance, stats: g.stats,
     };
   }

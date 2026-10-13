@@ -58,7 +58,7 @@ export const DRAGON_TYPES = [
 
 // What each one's fireballs can't break (DragonType.BreakLookup), which also takes all of a
 // blast through it. Lava stays, and our start tower, as for every other explosion here.
-const NEVER = [B.AIR, B.FIXED_LANTERN, B.BEDROCK, B.BLOODSTONE, B.SPACE_ROCK, B.SPACE_ROCK_BUILT, B.SLIME, B.TOWER_STONE, B.LAVA];
+const NEVER = [B.AIR, B.FIXED_LANTERN, B.BEDROCK, B.BLOODSTONE, B.SPACE_ROCK, B.SPACE_ROCK_BUILT, B.SLIME, B.TOWER_STONE, B.LAVA, B.SHIP_HULL];
 const WALLS = [B.IRON_WALL, B.COPPER_WALL, B.GOLD_WALL, B.DIAMOND_WALL];
 const STANDS = [
   [B.ROCK, B.LANTERN, B.GOLD_ORE, B.IRON_ORE, B.COPPER_ORE, B.COAL_ORE, B.DIAMOND_ORE, ...WALLS],

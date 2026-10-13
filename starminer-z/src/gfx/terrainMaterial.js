@@ -5,6 +5,7 @@
 //   torches, lanterns and lava, through the voxel block light, flickering;
 //   and the glowing blocks themselves.
 // Distant terrain fades into the colour of the sky just above the horizon in that direction.
+// (And while the alien ship's here, the green of its light where it reaches the ground.)
 
 import * as THREE from 'three';
 import { GLSL_SKY_COMMON } from './sky.js';
@@ -119,6 +120,7 @@ ${GLSL_SKY_COMMON}
 ${GLSL_LIGHTING}
 uniform sampler2DArray uBlocks;
 uniform float uTime;
+uniform vec4 uBeam;
 varying vec3 vWorld;
 varying vec2 vUv;
 varying float vLayer;
@@ -163,6 +165,9 @@ void main() {
   float ao = vAO == 0.0 ? 0.42 : vAO == 1.0 ? 0.62 : vAO == 2.0 ? 0.82 : 1.0;
   vec3 light = lightAt(vWorld, vNormal, vSky, vBlk, ao);
   vec3 col = albedo * light + albedo * emissive;
+  // the alien ship's light on the ground under it (uBeam: where, how wide, how bright)
+  // (only out under the sky: not in the caves below it)
+  if (uBeam.w > 0.0) col += albedo * vec3(0.25, 1.0, 0.45) * uBeam.w * (1.0 - smoothstep(uBeam.z * 0.45, uBeam.z, length(vWorld.xz - uBeam.xy))) * smoothstep(0.3, 0.8, vSky);
   col = applyFog(col, vWorld);
   gl_FragColor = vec4(col, 1.0);
 }
@@ -180,6 +185,7 @@ export function makeTerrainMaterials(skyUniforms, blockArray) {
     uShadowOn: { value: 0 },
     uShadowLightDir: { value: new THREE.Vector3(0, 1, 0) },
     uShadowTexel: { value: 1 / 2048 },
+    uBeam: { value: new THREE.Vector4(0, 0, 0, 0) },
   };
   const base = { uniforms, vertexShader: VS, fragmentShader: FS };
   const opaque = new THREE.ShaderMaterial({ ...base });

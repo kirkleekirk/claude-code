@@ -120,6 +120,30 @@ standing there), and the clock turns with the day.
 
 Controls: keyboard and mouse, an Xbox controller, or touch (see Help & Controls in the game).
 
+### The alien ship
+
+This one isn't the original's; it's this game's own. Now and then, 20 to 60 minutes of play
+apart from the second day on (never with No Enemies, or in Dragon Endurance), an alien mothership
+comes in over the horizon, humming, and flies right over someone who's out under the sky. It
+stops about 20 m past them, high over everything, sounds its alarm and shines a green light down
+from its middle to the ground. Then every 9 seconds one of its eight drones dives out and plunges
+into the ground round the foot of the light: pods two blocks high, with a glowing eye on top.
+
+Climb onto a drone and shoot its eye (from the ground it shrugs it off): five hits and it gives
+way, and the light takes you up through the middle of the ship. Inside is a round hall, the
+ship's core hanging over the hole in its floor, shielded while its four power nodes stand (150 of
+health each; the core has 600). Aliens beam in on its pads, and the core shoots at whoever's
+there. Break the nodes, then the core (explosives work too), and the ship comes down: everyone in
+it is let down the light, it blows apart, and each who was in it gets a diamond laser gun, 200
+laser bullets, 8 Space Goo and 6 diamonds. The light is the way out, too: drop through the hole
+and it lets you down gently. Left alone, the ship leaves seven and a half minutes after it came,
+letting down whoever's still in it. Its hull can't be broken or built on, and a game saved with
+you up there keeps you on the ground under it.
+
+Online, the host's game sends it: everyone sees the same ship and drones, everyone's hits go to
+the host's count, and PVP in the hall goes by the host's setting, as it does anywhere (with PVP on,
+the hall is an arena).
+
 ### Playing online
 
 Up to eight players can play together in one world, as in CastleMiner Z:
@@ -199,27 +223,29 @@ items at work), `crash-sites.mjs`, `dragons.mjs`, `modes.mjs` (the modes, worlds
 HUD), `movement.mjs` (the player's movement against the original's numbers), `xbox.mjs` (the game
 as an Xbox's Edge has it), `graphics.mjs` (what happens when a browser has no WebGL, or loses
 it mid-game), `hidden.mjs` (the faces left undrawn underground: fewer triangles, the same
-picture) and `soak.mjs` (each mode played at random, unattended, for a while). Each takes the
-dev server's address and a folder for its screenshots
+picture), `mothership.mjs` (the alien ship, played through: its drones, the way up, the fight in
+its hall, its end and its loot) and `soak.mjs` (each mode played at random, unattended, for a
+while). Each takes the dev server's address and a folder for its screenshots
 (`node tools/checks/modes.mjs http://localhost:5173 out`), and `&nocmz` as a third argument runs
-it without the ripped files.
+it without the ripped files (`&ufo` brings the alien ship into the soak).
 
 Test helpers: `tools/shoot.mjs` (screenshots in headless Chromium), `tools/flow.mjs` (walks the
 menus with key presses), `tools/sim.mjs` (runs the game and reports what the enemies do),
 `tools/eval.mjs` (runs a module in the page), `tools/cmz/hold.html?item=pistol` (the avatar
 holding something, posed by the original's clips, from four sides). In the game,
 `?play&horde=4&skel=2&archer=1` puts some of the dead in front of you, `&slot=2` picks a hotbar
-slot, `&third` starts in third person, `&ads` aims, `?seed=N` makes every new world from one
-seed, and `?nocmz` leaves out everything ripped from the original.
+slot, `&third` starts in third person, `&ads` aims, `&ufo` brings the alien ship at once,
+`?seed=N` makes every new world from one seed, and `?nocmz` leaves out everything ripped from the
+original.
 
 ### The original's sounds, bodies and hands
 
-All the sound in the game is CastleMiner Z's own: every cue (effects, ambience and music) plays
-by the original's rules. So are the zombie and skeleton models, with their animations and skins.
-So is how you hold things: in first person you see your avatar's own arms from its eyes, as the
-original drew them, posed by its clips (picking, aiming at the shoulder, firing, reloading) with
-its models of the pickaxe, guns, knife, compass and the rest in your hand; in third person the
-avatar walks, runs and leans with the same clips.
+All the sound in the game but the alien ship's is CastleMiner Z's own: every cue (effects,
+ambience and music) plays by the original's rules. So are the zombie and skeleton models, with
+their animations and skins. So is how you hold things: in first person you see your avatar's own
+arms from its eyes, as the original drew them, posed by its clips (picking, aiming at the
+shoulder, firing, reloading) with its models of the pickaxe, guns, knife, compass and the rest in
+your hand; in third person the avatar walks, runs and leans with the same clips.
 
 None of these files are in this repository. They come out of your own copy of the game (its
 `Content` folder) and go in `local-assets/`, which git ignores:
@@ -231,17 +257,21 @@ python3 tools/cmz/rip_player.py <Content> local-assets          # avatar clips, 
 python3 tools/cmz/rip_ui.py     <Content> local-assets          # the inventory and crafting panel, the HUD's sprites
 ```
 
-Without them the game is silent, the dead are built on the avatar rig, the dragons are built of
-blocks, what you hold is drawn from parts, and the inventory has a panel of its own.
+Without them the game is silent (but for the alien ship), the dead are built on the avatar rig,
+the dragons are built of blocks, what you hold is drawn from parts, and the inventory has a panel
+of its own.
 
 ## Credits
 
 - The character rig, avatar part meshes, clothing and face textures and animations come from the
   Avatar Animation Pack for XNA Game Studio 4.0 by Microsoft Corporation, used under the
   Microsoft Permissive License (Ms-PL); see `LICENSE-avatar.txt`.
+- The alien ship's hum and alarm (`src/assets/sounds/`): "Spaceship hum, low frequency" by
+  audiopapkin and "Extraterrestrial alert sound" by fnx_sound, from Pixabay, cut down and made
+  mono for the game.
 - three.js and PeerJS (MIT). Fonts: Archivo Black, Open Sans and Saira Semi Condensed (SIL Open Font
   License), from Google Fonts.
 - CastleMiner Z's sounds, music, models and animations (when you rip them from your own copy;
   see above) belong to DigitalDNA Games and aren't distributed here.
-- Everything else (the world, sky, the stand-in zombies and skeletons, interface) is this
-  project's own work.
+- Everything else (the world, sky, the alien ship, the stand-in zombies and skeletons,
+  interface) is this project's own work.

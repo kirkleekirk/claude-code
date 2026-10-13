@@ -9,12 +9,15 @@
 // underground, the lost souls in Hell), the theme in the menus, and a song the first time you
 // get 200, 900, 1600, 2300, 3000 and 3400 m out.
 //
-// Nothing is synthesized: without the ripped files the game is silent. The context can only
-// start once the player has done something (a key, a click, a tap); unlock() starts it, and
-// every method is safe to call before then.
+// Nothing is synthesized: without the ripped files the game is silent, but for the few sounds of
+// its own that come with it (src/assets/sounds: the alien ship's). The context can only start
+// once the player has done something (a key, a click, a tap); unlock() starts it, and every
+// method is safe to call before then.
 
 import { B } from '../world/blocks.js';
 import { fileFetch } from './files.js';
+import shipHumUrl from '../assets/sounds/ship-hum.mp3';
+import shipAlarmUrl from '../assets/sounds/ship-alarm.mp3';
 
 const BASE = 'local-assets/audio/';
 const dB = (v) => Math.pow(10, (v || 0) / 20);
@@ -50,6 +53,37 @@ const HEAR = 64;
 const MAX_LIVE = 10;
 // the theme fades out over three seconds when a game starts
 const FADE = 3;
+// this game's own sounds (loop: made to loop without a seam, see seamless)
+const OWN = { 'ship-hum': { url: shipHumUrl, loop: true }, 'ship-alarm': { url: shipAlarmUrl } };
+
+// A file's bytes: a data: URL (what the one-file builds have their own sounds as) decoded here,
+// so no fetch is needed (a page's rules may allow none); anything else fetched.
+function bytesOf(url) {
+  if (url.startsWith('data:')) {
+    try {
+      const bin = atob(url.slice(url.indexOf(',') + 1)), out = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return Promise.resolve(out.buffer);
+    } catch { return Promise.resolve(null); }
+  }
+  return fetch(url).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null);
+}
+
+// A loop without a seam: the sound's last part laid over its first, one fading out as the other
+// fades in, so its end runs on into its start.
+function seamless(ctx, buf, fade = 0.75) {
+  const C = Math.min(Math.floor(buf.sampleRate * fade), buf.length >> 2), N = buf.length - C;
+  const out = ctx.createBuffer(buf.numberOfChannels, N, buf.sampleRate);
+  for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+    const a = buf.getChannelData(ch), o = out.getChannelData(ch);
+    o.set(a.subarray(0, N));
+    for (let i = 0; i < C; i++) {
+      const k = (i / C) * Math.PI * 0.5;
+      o[i] = a[i] * Math.sin(k) + a[N + i] * Math.cos(k);
+    }
+  }
+  return out;
+}
 
 function decode(ctx, data) {
   return new Promise((resolve) => {
@@ -90,6 +124,8 @@ export class Audio {
     if (!this.ctx) return;
     this.buses();
     this.loaded = this.load();
+    this.own = new Map();
+    this.ownLoaded = this.loadOwn();
   }
 
   buses() {
@@ -129,6 +165,16 @@ export class Audio {
     }
     await Promise.all(urls.map((u) => this.fetch(u)));
     return true;
+  }
+
+  // this game's own sounds, each decoded once
+  async loadOwn() {
+    await Promise.all(Object.entries(OWN).map(async ([name, o]) => {
+      const data = await bytesOf(o.url);
+      let buf = data ? await decode(this.ctx, data) : null;
+      if (buf && o.loop) buf = seamless(this.ctx, buf);
+      if (buf) this.own.set(name, buf);
+    }));
   }
 
   // the files a cue's tracks are in
@@ -263,6 +309,57 @@ export class Audio {
     }
     live.add(inst);
     return inst;
+  }
+
+  // One of this game's own sounds (OWN), in the world at pos or in your head, like a cue. o: loop;
+  // rate (its speed, and so its pitch); offset and duration (a part of it); fadeIn, fadeOut
+  // (seconds); hear and ref (as play's far: heard that far off, as loud as up close out to ref).
+  playOwn(name, pos = null, gain = 1, o = {}) {
+    const c = this.ctx, buf = this.own?.get(name);
+    if (!c || c.state !== 'running' || !buf) return null;
+    let dist = 0;
+    if (pos) {
+      dist = Math.hypot(pos.x - this.L.x, pos.y - this.L.y, pos.z - this.L.z);
+      if (dist > (o.hear ?? HEAR)) return null;
+    }
+    const out = c.createGain();
+    const inst = { name, srcs: [], out, panner: null, dist, playing: true, loop: !!o.loop, gain };
+    let node = out;
+    if (pos) {
+      const pn = c.createPanner();
+      pn.panningModel = 'equalpower';
+      pn.distanceModel = 'inverse';
+      pn.refDistance = o.ref ?? 3;
+      pn.rolloffFactor = o.rolloff ?? 1.1;
+      pn.maxDistance = 10000;
+      setPos(pn, pos);
+      out.connect(pn);
+      node = inst.panner = pn;
+    }
+    node.connect(this.sfx);
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    src.loop = !!o.loop;
+    src.playbackRate.value = o.rate ?? 1;
+    src.connect(out);
+    src.onended = () => this.ended(inst, src);
+    const t0 = c.currentTime + 0.005, len = o.duration ?? (o.loop ? Infinity : (buf.duration - (o.offset || 0)) / (o.rate ?? 1));
+    out.gain.setValueAtTime(o.fadeIn ? 0 : gain, t0);
+    if (o.fadeIn) out.gain.linearRampToValueAtTime(gain, t0 + o.fadeIn);
+    if (o.fadeOut && Number.isFinite(len)) {
+      out.gain.setValueAtTime(gain, t0 + Math.max(o.fadeIn || 0, len - o.fadeOut));
+      out.gain.linearRampToValueAtTime(0, t0 + len);
+    }
+    if (o.duration != null) src.start(t0, o.offset || 0, o.duration * (o.rate ?? 1)); else src.start(t0, o.offset || 0);
+    inst.srcs.push(src);
+    return inst;
+  }
+
+  // a sound playing, louder or quieter (over about tc seconds)
+  setGain(inst, v, tc = 0.3) {
+    if (!inst || !inst.playing) return;
+    inst.gain = v;
+    inst.out.gain.setTargetAtTime(v, this.ctx.currentTime, tc);
   }
 
   // one of the cue's sounds by their weights, and not the one it played last

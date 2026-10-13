@@ -54,6 +54,8 @@ export class Player {
     this.onLand = null;
     this.onHurt = null;
     this.noclip = false;
+    // carried (up or down the alien ship's light): where you are is set from outside
+    this.carried = false;
     this.knock = new THREE.Vector3();
   }
 
@@ -112,6 +114,8 @@ export class Player {
     if (this.regenTimer <= 0 && this.health < this.maxHealth) {
       this.health = Math.min(this.maxHealth, this.health + dt * 0.75 * this.maxHealth);
     }
+
+    if (this.carried) { this.vel.set(0, 0, 0); this.onGround = false; this.running = false; return; }
 
     const w = this.world;
     const feet = w.getBlock(this.pos.x, this.pos.y + 0.1, this.pos.z);

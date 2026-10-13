@@ -141,9 +141,10 @@ export class Projectiles {
     this.updateRockets(dt);
   }
 
-  // The first thing along a to b: a block (with its hit), or one of the dead (theirs too); or,
-  // with neither, the dragon (EnemyManager.Trace). With PVP on, a shot's (shooter: whose) stops
-  // at a player too: this one (player: 'me'), or another.
+  // The first thing along a to b: a block (with its hit), one of the dead (theirs too), or a
+  // part of the alien ship (ship: its drones' eyes, its nodes and core); or, with none of those,
+  // the dragon (EnemyManager.Trace). With PVP on, a shot's (shooter: whose) stops at a player
+  // too: this one (player: 'me'), or another.
   probe(a, b, enemies = true, shooter = null) {
     const g = this.game, w = g.world;
     _d.subVectors(b, a);
@@ -162,10 +163,13 @@ export class Projectiles {
         if (t != null) pl = { player: r.id, dist: t };
       }
       const en = enemies ? g.enemies?.raycast(a, _d, pl ? pl.dist : bd, pl ? pl.dist : bd, true) : null;
-      if (pl && !en) return { ...pl, at: a.clone().addScaledVector(_d, pl.dist), dir: _d.clone() };
+      // (nor the alien ship's parts: its core's shield, say, between them)
+      if (pl && !en && !(enemies && g.mothership?.raycast(a, _d, pl.dist))) return { ...pl, at: a.clone().addScaledVector(_d, pl.dist), dir: _d.clone() };
       if (pl) bd = pl.dist;
     }
     const en = enemies ? this.game.enemies?.raycast(a, _d, bd, bd, true) : null;
+    const sh = enemies ? this.game.mothership?.raycast(a, _d, en ? en.dist : bd) : null;
+    if (sh) return { ship: sh.part, dist: sh.dist, at: a.clone().addScaledVector(_d, sh.dist), dir: _d.clone() };
     if (en) return { enemy: en.enemy, dist: en.dist, y: en.y, at: a.clone().addScaledVector(_d, en.dist), dir: _d.clone() };
     if (blk) return { block: blk, dist: blk.dist, at: a.clone().addScaledVector(_d, blk.dist), dir: _d.clone() };
     const dr = enemies ? this.game.dragons?.raycast(a, _d, len) : null;
@@ -223,7 +227,7 @@ export class Projectiles {
           b.pos.copy(hit.at);
           // PVP: someone else's laser bolt in this player (0.4 of their health)
           if (hit.player != null) { if (hit.player === 'me') g.pvpHit(0.4, hit.at); done = true; }
-          else if (hit.enemy || hit.dragon) { g.shotHit(hit, b.it, b.mine, b.shooter); done = true; }
+          else if (hit.enemy || hit.dragon || hit.ship) { g.shotHit(hit, b.it, b.mine, b.shooter); done = true; }
           else {
             const id = hit.block.id;
             g.boltSplash?.(hit.at, b.it);
@@ -283,7 +287,8 @@ export class Projectiles {
       const at = hit.at.addScaledVector(hit.dir, -GRENADE_R);
       if (k === 1) { to.copy(at); n.stopped = true; n.v.set(0, 0, 0); n.spin = 0; break; }
       let r = 0.1, normal;
-      if (hit.enemy) normal = hit.dir.clone().negate();
+      // (off something that isn't a block: straight back)
+      if (!hit.block) normal = hit.dir.clone().negate();
       else {
         normal = new THREE.Vector3(hit.block.nx, hit.block.ny, hit.block.nz);
         if (n.v.lengthSq() > 0.01) g.audio?.play?.('BulletHitDirt', at);
