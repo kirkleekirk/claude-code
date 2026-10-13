@@ -56,22 +56,30 @@ The dead follow CastleMiner Z's own rules, read from the original's code:
 - Which of the dead you meet, and how tough it is, goes by distance, from the original's table
   of 18 zombies, 8 archers and 24 skeletons.
 
-The zones run in rings out from the tower, as in the original:
+The world is built as the original builds it: its world builder (`CastleMinerZBuilder`) and
+each of its biomes, ported from its code with its own noise (DNA's Perlin and integer noise,
+seeded by .NET's `System.Random`, in single-precision floats), so a seed gives the world the
+original would give it, block for block. The zones run in rings out from the tower:
 
 | Distance | Zone |
 |---|---|
-| 0 - 200 | The Hills |
-| 200 - 950 | Floating Islands and dry riverbeds |
-| 950 - 1600 | The Desert |
-| 1600 - 2300 | The Mountains |
-| 2300 - 3000 | The Snowfields |
-| 3000 - 3400 | World's Edge (ore everywhere; pits into the Underworld) |
-| 3400 - 5000 | Hell on Earth (endless night) |
+| 0 - 200 | Classic: rolling hills of grass and trees, sand where they're low, snow on the tops |
+| 300 - 900 | Lagoon: lower land, with islands of rock floating over it |
+| 1000 - 1600 | Desert |
+| 1700 - 2300 | Mountains: steep and high, cut by narrow valleys, snow up high |
+| 2400 - 3000 | Arctic: snow over ice, ice where it's low |
+| 3000 - 3600 | the land sinks and breaks up, down to Hell's floor |
+| 3600 - | Hell: its bloodstone floor and lava, open to a black sky |
 
-Then the zones come round again in reverse. Under everything, about forty blocks down, a
-bloodstone roof over the Underworld. Between 300 and 3600 m out, the later version's crash sites:
-craters, each with an asteroid of space rock in it (Space Goo glowing in the rock, more of it
-further out), the ground hollowed out under their rims.
+with 100 m between each, where both are built. At 4400 the world turns back on itself, and the
+zones come round again in reverse. Under everything, 28 or so blocks up from the bottom, a
+bloodstone ceiling over Hell's cavern, and its floor of bloodstone and lava; caves through it
+all; ore in the rock, more and richer further out (the same in every world, as the original's
+ore noise is); and the tower at the origin, 125 high, round and stepping in, lanterns on its
+tip. You start by it, at the original's (8, -8). The sky goes black as you go down (from 24
+under the old ground level to 32 under), as it does over Hell's floor. Between 300 and 3600 m
+out, the later version's crash sites: craters, each with an asteroid of space rock in it (Space
+Goo glowing in the rock, more of it further out), the ground hollowed out under them.
 
 The later version's dead come too: the aliens round the crash sites (one every 10 to 20 seconds
 near the rock, every 3 to 7 once noise rouses them: digging the rock, shooting inside the

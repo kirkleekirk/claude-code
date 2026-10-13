@@ -56,6 +56,8 @@ uniform float uNight;
 uniform vec3 uFogTint;
 uniform float uFogUnder;
 uniform float uGloom;
+// the original's LerpAmount: the sky going to black as you go down (see Sky.deep)
+uniform float uDeep;
 vec2 skyViewUV(vec3 d) {
   float az = atan(d.x, d.z);
   float el = asin(clamp(d.y, -1.0, 1.0));
@@ -316,6 +318,7 @@ void main() {
   // below the horizon: the haze the distant land fades into
   if (d.y < 0.0) col = mix(col, fogColorFor(d), smoothstep(0.0, -0.05, d.y));
   col = mix(col, uFogTint, uFogUnder);
+  col *= 1.0 - uDeep;
   gl_FragColor = vec4(col, 1.0);
 }
 `;
@@ -340,9 +343,9 @@ export class Sky {
     this.storm = null;
     this.outdoors = true;
     this.onThunder = null;
-    // the endless night far out: 0 none, 1 the sun never shows
-    this.endless = 0;
-    this.dark = 0;
+    // how far the sky has gone to black, from the player's height (the original's LerpAmount:
+    // set by the game; only the sky, not the light on the land)
+    this.deep = 0;
 
     const e = EMBER;
     const az = THREE.MathUtils.degToRad(e.azimuth), el = THREE.MathUtils.degToRad(e.elevation);
@@ -392,6 +395,7 @@ export class Sky {
       uCelestial2: { value: 1 },
       uFogTint: { value: new THREE.Vector3(0, 0, 0) },
       uFogUnder: { value: 0 },
+      uDeep: { value: 0 },
       // lighting for the terrain and characters
       uSunColor: { value: this.sunColor },
       uGloom: { value: 0 },
@@ -449,7 +453,7 @@ export class Sky {
     while (this.time >= 1) { this.time -= 1; this.day++; }
   }
 
-  get isNight() { return this.sunDir.y < -0.07 || this.dark > 0.6; }
+  get isNight() { return this.sunDir.y < -0.07; }
 
   // The original's lightning (InGameHUD.OnUpdate): its clock runs only out in the open (outdoors,
   // set by the game). Every 10 to 40 seconds come up to three flashes, a tenth to a third of a
@@ -489,6 +493,7 @@ export class Sky {
     if (Math.abs(gd) > 1e-4) this.gloom += Math.sign(gd) * Math.min(Math.abs(gd), dt / 90);
     const G = this.gloom;
     u.uGloom.value = G;
+    u.uDeep.value = this.deep || 0;
     // lightning, once the storm is in
     this.bolt = Math.max(0, this.bolt - dt * 12);
     if (G > 0.85 && dt > 0) this.lightning(dt);
@@ -516,12 +521,8 @@ export class Sky {
     u.uPlanetSpin.value = dayF * EMBER.spin * Math.PI * 2 * 0.1;
     u.uCloudSpin.value = dayF * EMBER.cloudSpin * Math.PI * 2 * 0.1;
 
-    // the endless night closes in and lifts slowly
-    this.dark += (this.endless - this.dark) * Math.min(1, dt * 0.4);
-    if (dt === 0) this.dark = this.endless;
-    const D = this.dark;
     // sunlight reaching the ground, and the disc's own brightness
-    const sunE = 20 * (1 - 0.97 * D);
+    const sunE = 20;
     const Ts = sunTransmittance(this.sunDir.y);
     // under the storm the sun still breaks through, lower and weaker
     this.sunColor.set(Ts[0], Ts[1], Ts[2]).multiplyScalar(sunE * (1 - 0.45 * G));
@@ -538,9 +539,9 @@ export class Sky {
 
     // night factor: 0 in daylight, 1 once the sun is well down
     const sy = this.sunDir.y;
-    const night = Math.max(D, THREE.MathUtils.smoothstep(-sy, -0.02, 0.22));
+    const night = THREE.MathUtils.smoothstep(-sy, -0.02, 0.22);
     u.uNight.value = night;
-    u.uDay.value = THREE.MathUtils.smoothstep(sy, -0.1, 0.25) * (1 - D);
+    u.uDay.value = THREE.MathUtils.smoothstep(sy, -0.1, 0.25);
     u.uStarBoost.value = u.uDay.value;
     // eyes adapted to the dark would see Ember blinding; keep it bright but readable
     u.uCelestial2.value = THREE.MathUtils.lerp(1, 0.09, night);
@@ -556,14 +557,8 @@ export class Sky {
 
     // ambient light from the sky for surfaces facing up and down
     const zen = skyRadianceApprox(this.sunDir, this.sunColor, night, this.planetLight);
-    this.ambientUp.copy(zen.up).multiplyScalar(1 - 0.85 * D);
-    this.ambientDown.copy(zen.down).multiplyScalar(1 - 0.85 * D);
-    // Hell's lava lights the smoke from below
-    const lv = this.lavaGlow || 0;
-    if (lv > 0) {
-      this.ambientDown.x += 0.3 * lv; this.ambientDown.y += 0.07 * lv; this.ambientDown.z += 0.025 * lv;
-      this.ambientUp.x += 0.09 * lv; this.ambientUp.y += 0.022 * lv; this.ambientUp.z += 0.01 * lv;
-    }
+    this.ambientUp.copy(zen.up);
+    this.ambientDown.copy(zen.down);
     if (G > 0) {
       // a dark grey sky gives a dim, cold, colourless light; the night is black
       for (const v of [this.ambientUp, this.ambientDown]) {

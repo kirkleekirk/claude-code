@@ -17,8 +17,9 @@ const waitFor = async (fn, arg, ms = 240000) => { const t0 = Date.now(); while (
 const E = (fn, arg) => page.evaluate(fn, arg);
 const snap = async (name) => { await E(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))); await page.waitForTimeout(300); await page.screenshot({ path: `${out}/${name}.png` }); };
 
-// the crater found nearest the tower (by the generator: x -150, z 288)
-const CX = -160, CZ = 288;
+// the nearest crater to the tower with an asteroid in it (the original's builder, seed 1337: its
+// deepest at x -136, z -326, 353 out)
+const CX = -136, CZ = -326;
 await page.goto(`${base}/?play&time=0.45&rd=4&q=low&x=${CX + 0.5}&y=120&z=${CZ + 30.5}&yaw=0&pitch=-0.35${extra}`);
 ok(await waitFor(() => window.__app?.state === 'playing' && window.__app.game?.ready), 'game starts by the crater');
 await page.waitForTimeout(1500);
@@ -52,11 +53,21 @@ const aliens = await E(([cx, cz, top]) => {
   const g = window.__app.game, p = g.player, en = g.enemies, I = window.__app.input;
   window.__app.onLockChange = () => {};
   if (window.__app.state === 'paused') window.__app.resume();
-  // on the crater's rim, east of the asteroid, a dozen metres off it
+  // on the crater's rim, east of the asteroid, the first place on the ground there with the
+  // nearest of its rock 11 to 19 away (near enough that the aliens have to come out on it)
   const w = g.world;
-  let rx = cx + 40, ry = 0;
-  for (let x = cx; x < cx + 80; x++) { let r = false; for (let y = 20; y < 110; y++) if (w.getBlock(x, y, cz) === 35) r = true; if (!r) { rx = x + 13; break; } }
-  for (let y = 126; y > 1; y--) if (w.getBlock(rx, y, cz) !== 0) { ry = y + 1; break; }
+  let edge = cx + 40, rx = cx + 40, ry = 0;
+  for (let x = cx; x < cx + 80; x++) { let r = false; for (let y = 20; y < 110; y++) if (w.getBlock(x, y, cz) === 35) r = true; if (!r) { edge = x; break; } }
+  const ground = (x) => { for (let y = 126; y > 1; y--) if (w.getBlock(x, y, cz) !== 0) return y + 1; return 0; };
+  const nearest = (px, py) => {
+    let best = Infinity;
+    for (let x = px - 30; x <= px + 30; x++) for (let z = cz - 30; z <= cz + 30; z++) for (let y = Math.max(0, py - 30); y <= Math.min(127, py + 30); y++) {
+      if (w.getBlock(x, y, z) === 35) best = Math.min(best, Math.hypot(x + 0.5 - (px + 0.5), y + 0.5 - (py + 0.1), z + 0.5 - (cz + 0.5)));
+    }
+    return best;
+  };
+  for (let x = edge + 4; x < edge + 30; x++) { const y = ground(x), d = nearest(x, y); if (d > 11 && d < 19) { rx = x; ry = y; break; } }
+  if (!ry) ry = ground(rx);
   p.pos.set(rx + 0.5, ry + 0.1, cz + 0.5); p.vel.set(0, 0, 0); p.fallStart = null;
   const step = (sec, dt = 1 / 30) => { for (let t = 0; t < sec - 1e-9; t += dt) { g.update(dt, I); I.endFrame(); } };
   window.step = step;

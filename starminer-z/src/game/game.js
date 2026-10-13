@@ -383,15 +383,12 @@ export class Game {
     // online the world doesn't stop for anyone's menu
     const live = this.ready && (playing || !!this.online);
 
-    // the clock, and the endless night of the deep Edge and Hell on Earth
+    // the clock; and the sky going black as you go down (CastleMinerSky.SetParameters: from 8
+    // under the original's y = -24 down to -32, our 40 to 32), as it is over Hell's floor
     if (live) sky.advance(dt);
+    sky.deep = 1 - Math.min(1, Math.max(0, (p.pos.y - 32) / 8));
     this.nightT = (this.nightT || 0) - dt;
-    if (this.nightT <= 0) {
-      this.nightT = 0.25;
-      const gen = this.world.gen;
-      sky.endless = gen.endlessNight(p.pos.x, p.pos.z);
-      sky.lavaGlow = gen.w[6];
-    }
+    if (this.nightT <= 0) this.nightT = 0.25;
     if (this.nightT === 0.25) {
       // how much ground is overhead: the dripping of the caves, and no lightning down there
       this.depth = this.depthUnderGround(p.pos);
