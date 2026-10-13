@@ -12,7 +12,9 @@ import { BLOCKS } from '../world/blocks.js';
 import { ITEMS } from '../items/items.js';
 import { PRESETS } from '../entities/avatar/looks.js';
 
-export const PROTOCOL = 5;
+// (every machine builds the world from the seed itself, so a change to how it's built is a new
+// version too: 6 is the original's world builder)
+export const PROTOCOL = 6;
 // how often (seconds) each thing goes out
 const STATE_EVERY = 1 / 15, ENEMIES_EVERY = 1 / 8, CLOCK_EVERY = 2, KEEP_EVERY = 15;
 
@@ -123,7 +125,7 @@ export class Online {
     this.app.audio?.ui?.('open');
     return {
       welcome: {
-        v: PROTOCOL, name, seed: g.seed, mode: g.mode, time: sky.time, day: sky.day, grace: g.grace,
+        v: PROTOCOL, name, seed: g.seed, builder: g.world.builder, mode: g.mode, time: sky.time, day: sky.day, grace: g.grace,
         edits: g.world.serializeEdits(), crates: g.crates.serialize(), players, you: (uid && g.guests[`u:${uid}`]) || g.guests[name] || null,
         dragon: g.dragons?.welcomeInfo() ?? null,
         difficulty: g.difficulty, creative: g.creative, pvp: g.pvp,

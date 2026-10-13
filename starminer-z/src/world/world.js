@@ -7,7 +7,8 @@
 
 import * as THREE from 'three';
 import WorldWorker from './worker.js?worker&inline';
-import { WorldGen, zoneDistance } from './gen.js';
+import { WorldGen, zoneDistance, BUILDER } from './gen.js';
+import { OldWorldGen } from './genOld.js';
 import { Mesher, UNLIT_BELOW, UNLIT_OUT } from './mesher.js';
 import { B, CHUNK, HEIGHT, COLUMN_SIZE, SOLID, OPAQUE, BLOCKS } from './blocks.js';
 
@@ -18,12 +19,15 @@ const cid = (cx, cz) => (cx & 0xffff) | ((cz & 0xffff) << 16);
 const PASSES = ['opaque', 'cutout'];
 
 export class World {
-  constructor({ seed, scene, materials, renderDistance = 8, edits = null }) {
+  // builder: which world builder makes the land (see gen.js: worlds made before the original's
+  // keep theirs)
+  constructor({ seed, scene, materials, renderDistance = 8, edits = null, builder = BUILDER }) {
     this.seed = seed;
     this.scene = scene;
     this.materials = materials;
     this.radius = renderDistance;
-    this.gen = new WorldGen(seed);
+    this.builder = builder === 1 ? 1 : BUILDER;
+    this.gen = this.builder === 1 ? new OldWorldGen(seed) : new WorldGen(seed);
     this.columns = new Map();
     // the player's changes: column key -> Map(index -> block id)
     this.edits = new Map();
@@ -46,7 +50,7 @@ export class World {
         const w = new WorldWorker();
         w.onmessage = (e) => this.onMessage(e.data);
         w.onerror = (e) => { console.error('world worker error', e.message); this.workerFailed(w); };
-        w.postMessage({ type: 'init', seed });
+        w.postMessage({ type: 'init', seed, builder: this.builder });
         w.busy = 0;
         this.workers.push(w);
       }
@@ -55,8 +59,15 @@ export class World {
       console.warn('world workers unavailable, generating on the main thread', err);
       for (const w of this.workers) w.terminate();
       this.workers.length = 0;
-      this.localMesher = new Mesher();
+      this.localMesher = this.makeMesher();
     }
+  }
+
+  // (the old builder's land isn't the original's: what's unlit there isn't known to be hidden)
+  makeMesher() {
+    const m = new Mesher();
+    m.culls = this.builder !== 1;
+    return m;
   }
 
   // A worker that couldn't start (some browsers refuse one to a page opened from disk): its
@@ -78,7 +89,7 @@ export class World {
     }
     if (!this.workers.length && !this.localMesher) {
       console.warn('world workers unavailable, generating on the main thread');
-      this.localMesher = new Mesher();
+      this.localMesher = this.makeMesher();
     }
   }
 

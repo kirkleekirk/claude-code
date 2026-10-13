@@ -1,6 +1,7 @@
 // A world worker: generates chunk columns and lights/meshes them, off the main thread.
 
 import { WorldGen } from './gen.js';
+import { OldWorldGen } from './genOld.js';
 import { Mesher } from './mesher.js';
 
 let gen = null;
@@ -10,7 +11,8 @@ self.onmessage = (e) => {
   const m = e.data;
   try {
     if (m.type === 'init') {
-      gen = new WorldGen(m.seed);
+      gen = m.builder === 1 ? new OldWorldGen(m.seed) : new WorldGen(m.seed);
+      mesher.culls = m.builder !== 1;
       self.postMessage({ type: 'ready' });
       return;
     }

@@ -26,6 +26,9 @@ import { noiseTable, perlin2, perlin3, intNoise2, intNoise3, idiv } from '../cor
 import { B, CHUNK, HEIGHT, COLUMN_SIZE, SOLID } from './blocks.js';
 
 export const BIOMES = ['Classic', 'Lagoon', 'Desert', 'Mountains', 'Arctic', 'Descent', 'Hell'];
+// which world builder a world is made by: this one is 2 (1 is ./genOld.js, for the worlds made
+// before this one)
+export const BUILDER = 2;
 // where each starts (and the one before it ends), out from the tower
 const BANDS = [0, 300, 1000, 1700, 2400, 3000, 3600];
 // the original's WorldInfo.DefaultStartLocation: by the tower, on the ground
@@ -59,6 +62,8 @@ export class WorldGen {
   }
 
   distance(x, z) { return zoneDistance(x, z); }
+
+  biomeName(x, z) { return BIOMES[this.biomeAt(x, z)]; }
 
   // the biome a place is in (the further one, in the 100 between two)
   biomeAt(x, z) {

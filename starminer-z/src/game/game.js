@@ -4,7 +4,6 @@
 import * as THREE from 'three';
 import { World } from '../world/world.js';
 import { B, BLOCKS, SOLID, HEIGHT, isTorch, isDoor, DOOR, doorBlock } from '../world/blocks.js';
-import { BIOMES } from '../world/gen.js';
 import { Player } from '../entities/player.js';
 import { Inventory } from '../items/inventory.js';
 import { ITEMS, dropFor, digTime, weaponDamage, STARTER_KIT } from '../items/items.js';
@@ -74,10 +73,12 @@ export class Game {
     this.begun = false;
     this.attract = attract;
     this.seed = save ? save.seed : welcome ? welcome.seed : seed;
+    // (a world saved before the original's world builder keeps the land it was made on)
+    const builder = save ? save.builder ?? 1 : welcome ? welcome.builder : undefined;
     this.scene = new THREE.Scene();
     this.scene.add(app.sky.mesh);
     this.camera = app.camera;
-    this.world = new World({ seed: this.seed, scene: this.scene, materials: app.terrain, renderDistance: app.settings.renderDistance, edits: save ? save.edits : welcome ? welcome.edits : null });
+    this.world = new World({ seed: this.seed, builder, scene: this.scene, materials: app.terrain, renderDistance: app.settings.renderDistance, edits: save ? save.edits : welcome ? welcome.edits : null });
     this.player = new Player(this.world);
     this.player.autoClimb = app.settings.autoClimb;
     this.inventory = new Inventory();
@@ -617,7 +618,7 @@ export class Game {
 
   biomeName() {
     const p = this.player.pos;
-    return BIOMES[this.world.gen.biomeAt(p.x, p.z)];
+    return this.world.gen.biomeName(p.x, p.z);
   }
 
   // ---- digging, placing, fighting -------------------------------------------------------------
@@ -1380,6 +1381,7 @@ export class Game {
     return {
       v: 1,
       seed: this.seed,
+      builder: this.world.builder,
       mode: this.mode,
       difficulty: this.difficulty,
       creative: this.creative,

@@ -110,6 +110,7 @@ export class Mesher {
     this.blk = new Uint8Array(RSIZE);
     this.placed = new Uint8Array(RSIZE); // block light from what was put there only
     this.deep = new Uint8Array(RA); // where in the region air can be unlit (short of the descent)
+    this.culls = true; // whether any can be (not on the old builder's land: see World.makeMesher)
     this.seamCor = new Int32Array(12).fill(0);
     for (let k = 0; k < 4; k++) this.seamCor[k * 3] = 3;
     this.queue = new Int32Array(1 << 20);
@@ -132,7 +133,7 @@ export class Mesher {
   build(cols, cx = 0, cz = 0) {
     this.fill(cols);
     const x0 = (cx - 1) * CHUNK, z0 = (cz - 1) * CHUNK;
-    for (let z = 0; z < RW; z++) for (let x = 0; x < RW; x++) this.deep[z * RW + x] = zoneDistance(x0 + x, z0 + z) < UNLIT_OUT ? 1 : 0;
+    for (let z = 0; z < RW; z++) for (let x = 0; x < RW; x++) this.deep[z * RW + x] = this.culls && zoneDistance(x0 + x, z0 + z) < UNLIT_OUT ? 1 : 0;
     this.lightSky();
     this.lightBlocks();
     const res = this.mesh();

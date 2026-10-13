@@ -176,7 +176,7 @@ export class Menus {
           items: [
             { label: 'Create World', on: () => app.startWorld({ ...arg, id: null }) },
             ...list.map((w) => ({
-              label: esc(w.name), small: `${w.creative ? 'Creative · ' : ''}Day ${w.days || 1} · ${w.maxDistance || 0} m · ${date(w.played)}`,
+              label: esc(w.name), small: `${(w.builder ?? 1) === 1 ? 'Old land · ' : ''}${w.creative ? 'Creative · ' : ''}Day ${w.days || 1} · ${w.maxDistance || 0} m · ${date(w.played)}`,
               on: () => (arg.creative && !w.creative ? this.open('dialog', {
                 title: 'Creative Mode', sub: 'Are you sure you want to play this world in Creative Mode? You will not be able to load it in normal mode again.',
                 yes: () => app.startWorld({ ...arg, id: w.id }),

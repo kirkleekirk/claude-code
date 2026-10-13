@@ -48,6 +48,8 @@ ok(await inGame(), 'an Endurance game starts');
 const old = await E(async () => {
   const g = window.__app.game, data = g.serialize();
   data.maxDistance = 77;
+  // (saves from before the original's world builder say nothing of which made their land)
+  delete data.builder;
   await new Promise((resolve) => {
     const req = indexedDB.open('starminer', 1);
     req.onupgradeneeded = () => req.result.createObjectStore('worlds');
@@ -60,8 +62,9 @@ ok(old.worlds === 0, "an Endurance game isn't kept in the list");
 await page.goto(`${base}/?rd=4&q=low${extra}`);
 ok(await atMenu(), 'the menus come up again');
 await helpers();
-const mig = await E(() => ({ worlds: window.__app.worlds.map((w) => ({ name: w.name, seed: w.seed, d: w.maxDistance, creative: w.creative })), old: localStorage.getItem('starminer.save') }));
+const mig = await E(() => ({ worlds: window.__app.worlds.map((w) => ({ name: w.name, seed: w.seed, d: w.maxDistance, creative: w.creative, builder: w.builder })), old: localStorage.getItem('starminer.save') }));
 ok(mig.worlds.length === 1 && mig.worlds[0].seed === old.seed && mig.worlds[0].d === 77 && /^New World /.test(mig.worlds[0].name) && !mig.old, `the old save is a world of its own now (${JSON.stringify(mig.worlds[0])})`);
+ok(mig.worlds[0].builder === 1, 'made before the original\'s world builder, it keeps the old one\'s land');
 
 // ---- the menus: Play Offline, the modes and their descriptions, difficulty, the worlds ----------
 const m1 = await E(() => {
@@ -163,9 +166,10 @@ await E((name) => { M.pick('Play Offline'); M.pick('Survival'); M.pick('Normal')
 ok(await inGame(), 'the world loads again');
 const s2 = await E((b) => {
   const g = window.__app.game, p = g.player, sp = g.spawnSpot();
-  return { id: g.worldId, block: g.world.getBlock(b[0], b[1], b[2]), dead: p.dead, hp: p.health, max: p.maxHealth, at: Math.hypot(p.pos.x - sp.x, p.pos.z - sp.z), death: !!window.__app.deathEl?.classList.contains('on') };
+  return { id: g.worldId, block: g.world.getBlock(b[0], b[1], b[2]), dead: p.dead, hp: p.health, max: p.maxHealth, at: Math.hypot(p.pos.x - sp.x, p.pos.z - sp.z), death: !!window.__app.deathEl?.classList.contains('on'), builder: g.world.builder, listed: window.__app.worlds.find((w) => w.id === g.worldId)?.builder };
 }, s1.block);
 ok(s2.id === s1.id && s2.block === 23, `with the gold wall put there (${s2.block})`);
+ok(s2.builder === 2 && s2.listed === 2, `on the original's land, as it was made (builder ${s2.builder}, listed ${s2.listed})`);
 ok(!s2.dead && s2.hp === s2.max && s2.at < 3 && !s2.death, `saved while dead, it comes back as a respawn would: alive, well, at the start (${s2.hp}, ${s2.at.toFixed(1)} m)`);
 await E(() => window.__app.quitToMenu());
 await atMenu();

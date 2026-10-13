@@ -81,6 +81,9 @@ under the old ground level to 32 under), as it does over Hell's floor. Between 3
 out, the later version's crash sites: craters, each with an asteroid of space rock in it (Space
 Goo glowing in the rock, more of it further out), the ground hollowed out under them.
 
+A world kept from before this builder (marked Old land in the list) keeps the land it was made
+on, so nothing built in it moves; a new world is the original's.
+
 The later version's dead come too: the aliens round the crash sites (one every 10 to 20 seconds
 near the rock, every 3 to 7 once noise rouses them: digging the rock, shooting inside the
 asteroid), and the Felguard, a demon met first deep and far out underground, five minutes or more

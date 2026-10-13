@@ -57,7 +57,8 @@ function writeList(l) {
   try { localStorage.setItem(LIST, JSON.stringify(l)); } catch { /* storage blocked */ }
 }
 
-// The worlds, most lately played first: [{ id, name, created, played, creative, seed, days, maxDistance }]
+// The worlds, most lately played first: [{ id, name, created, played, creative, seed, builder, days, maxDistance }]
+// (builder: which world builder made its land; worlds saved before there were two have none: 1)
 export function listWorlds() {
   return readList().sort((a, b) => (b.played || 0) - (a.played || 0));
 }
@@ -81,7 +82,7 @@ export async function saveWorld(id, data, info) {
   const entry = {
     ...(was || {}), ...info, id,
     created: was?.created ?? info.created ?? Date.now(), played: Date.now(),
-    seed: data.seed, days: data.days, maxDistance: data.maxDistance,
+    seed: data.seed, builder: data.builder ?? 1, days: data.days, maxDistance: data.maxDistance,
   };
   let ok = await tx('readwrite', (s) => s.put(data, keyOf(id)));
   if (ok === undefined) {
