@@ -21,7 +21,7 @@ self.onmessage = (e) => {
     }
     if (m.type === 'mesh') {
       const t0 = performance.now();
-      const r = mesher.build(m.cols);
+      const r = mesher.build(m.cols, m.cx, m.cz);
       const transfer = [r.light.buffer, r.heights.buffer];
       for (const p of ['opaque', 'cutout']) {
         const g = r[p];

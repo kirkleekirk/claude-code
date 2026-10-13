@@ -159,6 +159,10 @@ files).
 - B pauses and the d-pad's up changes the camera: Edge keeps the View button for itself.
 - The game starts on Low graphics there, and draws itself at a lower resolution while frames are
   slow. Turning off Edge's "Apps can add a border" setting helps it run smoothly.
+- What can't be seen isn't drawn: half the world's faces are deep underground in the dark (the
+  caves and Hell's cavern under everything), and from anywhere not down there with them they're
+  left out, the way in closed off by black faces where the light runs out, which is all they'd
+  show. That's about half the triangles of a frame.
 - Your own copy, with everything ripped from the original (its dragons, zombies, sounds), plays on
   the Xbox from a Windows PC on the same Wi-Fi: keep `Play on Xbox.bat` and `play-on-xbox.ps1`
   next to `starminer-z.html`, double-click the `.bat`, and type the address it shows into Edge on
@@ -191,7 +195,8 @@ each other in headless Chromium (`BASE=<dev server url>/ node tools/online.mjs <
 items at work), `crash-sites.mjs`, `dragons.mjs`, `modes.mjs` (the modes, worlds, menus and
 HUD), `movement.mjs` (the player's movement against the original's numbers), `xbox.mjs` (the game
 as an Xbox's Edge has it), `graphics.mjs` (what happens when a browser has no WebGL, or loses
-it mid-game) and `soak.mjs` (each mode played at random, unattended, for a while). Each takes the
+it mid-game), `hidden.mjs` (the faces left undrawn underground: fewer triangles, the same
+picture) and `soak.mjs` (each mode played at random, unattended, for a while). Each takes the
 dev server's address and a folder for its screenshots
 (`node tools/checks/modes.mjs http://localhost:5173 out`), and `&nocmz` as a third argument runs
 it without the ripped files.

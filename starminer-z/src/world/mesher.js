@@ -5,12 +5,23 @@
 // column is turned into quads: faces between solid blocks are dropped, uniformly lit faces
 // are merged into larger quads, and every corner carries smooth light and ambient occlusion.
 //
+// Faces that look into unlit air come last in their mesh, after the rest; and first come seams:
+// black faces on the boundary of that air, looking out of it. Unlit air is air no light reaches
+// (none from the sky, none from a torch or lantern; lava's and the goo's don't count) deep in
+// the ground: below 54 (the Arctic's ice, the lowest the land lies) and short of the descent
+// (from where the land sinks to Hell, none is). Down there it's the caves and Hell's cavern,
+// which nothing is seen through: higher up, a view can go into unlit air and out the other side
+// (under the Lagoon's floating islands, say). From anywhere not in or by unlit air, the world
+// draws the seams and not the faces behind them, which can only be seen through a seam and would
+// show black there anyway; from anywhere else, all but the seams (World.setDarkView).
+//
 // Vertex format (one entry per quad corner):
 //   pos  Uint16 x3   position in the column, in 1/16 block
 //   uv   Uint16 x2   texture coordinates, in 1/16 repeat
 //   data Uint8  x4   [texture layer, normal << 5 | ao << 3, sky light, block light]
 
 import { B, CHUNK, HEIGHT, OPAQUE, LIGHT, RENDER, FACES, TEX, isDoor, DOOR } from './blocks.js';
+import { zoneDistance } from './gen.js';
 
 const RW = 48; // region width
 const RA = RW * RW; // one horizontal layer of the region
@@ -21,6 +32,17 @@ const DIRS = [
   [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1],
 ];
 const DSTEP = [1, -1, RA, -RA, RW, -RW];
+
+// the lights that come with the world; any other was put there
+const NATURAL = new Uint8Array(256);
+NATURAL[B.LAVA] = 1; NATURAL[B.SLIME] = 1;
+// what a seam is drawn with (black: it has no light)
+const SEAM_TEX = TEX.rock;
+// air is only unlit below this, and short of this far out (see above)
+export const UNLIT_BELOW = 54, UNLIT_OUT = 3000;
+const UNLIT_TOP = UNLIT_BELOW * RA;
+// a quad's kind, in Out.finish's flips (after the bit that turns its diagonal)
+const LIT = 0, DARK = 1, SEAM = 2;
 
 class Out {
   constructor() {
@@ -45,20 +67,29 @@ class Out {
     this.data[i * 4] = tex; this.data[i * 4 + 1] = (nrm << 5) | (ao << 3);
     this.data[i * 4 + 2] = sky; this.data[i * 4 + 3] = blk;
   }
-  // Pack into transferable arrays with an index buffer (two triangles per quad).
+  // Pack into transferable arrays with an index buffer (two triangles per quad): the seams, then
+  // the faces that can be seen from the light, then the rest (seam, lit: where the second and
+  // third parts start). flips: per quad, bit 1 turns its diagonal; above it, its kind.
   finish(flips) {
     const n = this.n;
     const quads = n / 4;
     const index = n > 65535 ? new Uint32Array(quads * 6) : new Uint16Array(quads * 6);
-    for (let q = 0; q < quads; q++) {
-      const b = q * 4, o = q * 6;
-      if (flips[q]) {
-        index[o] = b + 1; index[o + 1] = b + 2; index[o + 2] = b + 3;
-        index[o + 3] = b + 3; index[o + 4] = b; index[o + 5] = b + 1;
-      } else {
-        index[o] = b; index[o + 1] = b + 1; index[o + 2] = b + 2;
-        index[o + 3] = b + 2; index[o + 4] = b + 3; index[o + 5] = b;
+    let o = 0, seam = 0, lit = 0;
+    for (const kind of [SEAM, LIT, DARK]) {
+      for (let q = 0; q < quads; q++) {
+        const fl = flips[q] | 0;
+        if ((fl >> 1) !== kind) continue;
+        const b = q * 4;
+        if (fl & 1) {
+          index[o] = b + 1; index[o + 1] = b + 2; index[o + 2] = b + 3;
+          index[o + 3] = b + 3; index[o + 4] = b; index[o + 5] = b + 1;
+        } else {
+          index[o] = b; index[o + 1] = b + 1; index[o + 2] = b + 2;
+          index[o + 3] = b + 2; index[o + 4] = b + 3; index[o + 5] = b;
+        }
+        o += 6;
       }
+      if (kind === SEAM) seam = o; else if (kind === LIT) lit = o;
     }
     return {
       pos: this.pos.slice(0, n * 3),
@@ -66,6 +97,8 @@ class Out {
       data: this.data.slice(0, n * 4),
       index,
       count: n,
+      seam,
+      lit,
     };
   }
 }
@@ -75,6 +108,10 @@ export class Mesher {
     this.blocks = new Uint8Array(RSIZE);
     this.sky = new Uint8Array(RSIZE);
     this.blk = new Uint8Array(RSIZE);
+    this.placed = new Uint8Array(RSIZE); // block light from what was put there only
+    this.deep = new Uint8Array(RA); // where in the region air can be unlit (short of the descent)
+    this.seamCor = new Int32Array(12).fill(0);
+    for (let k = 0; k < 4; k++) this.seamCor[k * 3] = 3;
     this.queue = new Int32Array(1 << 20);
     this.skyTop = new Int16Array(RA);
     this.outs = { opaque: new Out(), cutout: new Out() };
@@ -90,9 +127,12 @@ export class Mesher {
     for (let i = 0; i < 256; i++) this.occ[i] = OPAQUE[i] || i === B.LEAVES ? 1 : 0;
   }
 
-  // cols: 9 column arrays, index (dz + 1) * 3 + (dx + 1); the middle one is meshed.
-  build(cols) {
+  // cols: 9 column arrays, index (dz + 1) * 3 + (dx + 1); the middle one, column (cx, cz), is
+  // meshed.
+  build(cols, cx = 0, cz = 0) {
     this.fill(cols);
+    const x0 = (cx - 1) * CHUNK, z0 = (cz - 1) * CHUNK;
+    for (let z = 0; z < RW; z++) for (let x = 0; x < RW; x++) this.deep[z * RW + x] = zoneDistance(x0 + x, z0 + z) < UNLIT_OUT ? 1 : 0;
     this.lightSky();
     this.lightBlocks();
     const res = this.mesh();
@@ -156,14 +196,23 @@ export class Mesher {
   }
 
   lightBlocks() {
-    const R = this.blocks, L = this.blk, Q = this.queue, QM = Q.length - 1;
+    const R = this.blocks, L = this.blk, P = this.placed, Q = this.queue, QM = Q.length - 1;
     L.fill(0);
-    let tail = 0;
+    P.fill(0);
+    let tail = 0, placed = 0;
     for (let i = 0; i < RSIZE; i++) {
       const e = LIGHT[R[i]];
-      if (e) { L[i] = e; Q[tail] = i; tail = (tail + 1) & QM; }
+      if (e) { L[i] = e; Q[tail] = i; tail = (tail + 1) & QM; if (!NATURAL[R[i]]) placed++; }
     }
     this.spread(L, 0, tail);
+    // and again from the torches and lanterns alone
+    if (!placed) return;
+    tail = 0;
+    for (let i = 0; i < RSIZE; i++) {
+      const e = LIGHT[R[i]];
+      if (e && !NATURAL[R[i]]) { P[i] = e; Q[tail] = i; tail = (tail + 1) & QM; }
+    }
+    this.spread(P, 0, tail);
   }
 
   // Breadth-first flood: every step costs at least one level.
@@ -231,6 +280,7 @@ export class Mesher {
     }
     if (ymax >= 0) {
       for (let d = 0; d < 6; d++) this.meshDir(d, ymin, ymax);
+      this.seams(ymin, ymax);
       this.torches(ymin, ymax);
       this.doors(ymin, ymax);
     }
@@ -263,6 +313,10 @@ export class Mesher {
     }
   }
 
+  // Whether cell i is unlit air (see the top): no light but lava's or the goo's reaches it, and
+  // it's deep in the ground.
+  unlit(i) { return i < UNLIT_TOP && this.deep[i % RA] === 1 && RENDER[this.blocks[i]] === 0 && this.sky[i] === 0 && this.placed[i] === 0; }
+
   meshDir(d, ymin, ymax) {
     const R = this.blocks;
     const axis = d >> 1; // 0 x, 1 y, 2 z
@@ -294,15 +348,17 @@ export class Mesher {
         if (rm === 2 && nb === id) continue; // leaves next to leaves, glass next to glass
         if (rm === 1 && RENDER[nb] === 1) continue;
         const tex = FACES[id * 6 + d];
+        // only seen through the air in front of it: if that's unlit, from behind a seam
+        const kind = d === 2 && y === HEIGHT - 1 ? LIT : this.unlit(i + step) ? DARK : LIT;
         this.corners(i, d, cor);
         const uniform = cor[0] === cor[3] && cor[0] === cor[6] && cor[0] === cor[9]
           && cor[1] === cor[4] && cor[1] === cor[7] && cor[1] === cor[10]
           && cor[2] === cor[5] && cor[2] === cor[8] && cor[2] === cor[11];
         if (!uniform) {
-          this.quad(rm === 2 ? 'cutout' : 'opaque', d, x, y, z, 1, 1, tex, cor);
+          this.quad(rm === 2 ? 'cutout' : 'opaque', d, x, y, z, 1, 1, tex, cor, kind);
           continue;
         }
-        mA[m] = tex | (cor[0] << 8) | (rm << 10);
+        mA[m] = tex | (cor[0] << 8) | (rm << 10) | (kind << 12);
         mB[m] = (cor[1] << 8) | cor[2];
         any = true;
       }
@@ -323,7 +379,7 @@ export class Mesher {
             h++;
           }
           for (let hh = 0; hh < h; hh++) for (let k = 0; k < w; k++) mA[(v + hh) * W + u + k] = -1;
-          const tex = a & 255, ao = (a >> 8) & 3, rm = (a >> 10) & 3;
+          const tex = a & 255, ao = (a >> 8) & 3, rm = (a >> 10) & 3, kind = (a >> 12) & 3;
           cor[0] = cor[3] = cor[6] = cor[9] = ao;
           cor[1] = cor[4] = cor[7] = cor[10] = (b >> 8) & 255;
           cor[2] = cor[5] = cor[8] = cor[11] = b & 255;
@@ -331,7 +387,7 @@ export class Mesher {
           if (axis === 0) { x = s; z = u; y = ymin + v; du = w; dv = h; }
           else if (axis === 2) { z = s; x = u; y = ymin + v; du = w; dv = h; }
           else { y = ymin + s; x = u; z = v; du = w; dv = h; }
-          this.quad(rm === 2 ? 'cutout' : 'opaque', d, x, y, z, du, dv, tex, cor);
+          this.quad(rm === 2 ? 'cutout' : 'opaque', d, x, y, z, du, dv, tex, cor, kind);
           u += w;
         }
       }
@@ -340,7 +396,7 @@ export class Mesher {
 
   // One quad on face d of the box starting at block (x, y, z), du x dv blocks across.
   // du runs along the slice's u axis (z for x faces, x otherwise), dv along v (y for side faces, z for top/bottom).
-  quad(pass, d, x, y, z, du, dv, tex, cor) {
+  quad(pass, d, x, y, z, du, dv, tex, cor, kind = LIT) {
     const o = this.outs[pass];
     const S = 16;
     let X0 = x * S, Y0 = y * S, Z0 = z * S;
@@ -381,7 +437,58 @@ export class Mesher {
     }
     // turn the quad's diagonal so occlusion interpolates without a crease
     const b0 = (cor[0] + 1) * (cor[1] + 8), b1 = (cor[3] + 1) * (cor[4] + 8), b2 = (cor[6] + 1) * (cor[7] + 8), b3 = (cor[9] + 1) * (cor[10] + 8);
-    this.flips[pass].push(b0 + b2 < b1 + b3 ? 1 : 0);
+    this.flips[pass].push((b0 + b2 < b1 + b3 ? 1 : 0) | (kind << 1));
+  }
+
+  // The seams: on every side of unlit air (unlit()) that meets open air that isn't, a face
+  // looking out of it (merged as the faces are). A view from the light into the unlit air meets
+  // one of these or a face that's lit before anything in there.
+  seams(ymin, ymax) {
+    const R = this.blocks, mA = this.maskA, cor = this.seamCor;
+    const y0 = Math.max(0, ymin - 1), y1 = Math.min(HEIGHT - 1, ymax + 1);
+    for (let d = 0; d < 6; d++) {
+      const axis = d >> 1, step = DSTEP[d];
+      const nSlices = axis === 1 ? y1 - y0 + 1 : 16;
+      const W = 16, H = axis === 1 ? 16 : y1 - y0 + 1;
+      for (let s = 0; s < nSlices; s++) {
+        let any = false;
+        for (let v = 0; v < H; v++) for (let u = 0; u < W; u++) {
+          let x, y, z;
+          if (axis === 0) { x = s; z = u; y = y0 + v; }
+          else if (axis === 2) { z = s; x = u; y = y0 + v; }
+          else { y = y0 + s; x = u; z = v; }
+          const m = v * W + u;
+          mA[m] = 0;
+          if ((d === 2 && y === HEIGHT - 1) || (d === 3 && y === 0)) continue;
+          const i = y * RA + (z + 16) * RW + x + 16, j = i + step;
+          if (!this.unlit(i) || OPAQUE[R[j]] || this.unlit(j)) continue;
+          mA[m] = 1;
+          any = true;
+        }
+        if (!any) continue;
+        for (let v = 0; v < H; v++) {
+          for (let u = 0; u < W;) {
+            const m = v * W + u;
+            if (!mA[m]) { u++; continue; }
+            let w = 1;
+            while (u + w < W && mA[m + w]) w++;
+            let h = 1;
+            outer: while (v + h < H) {
+              const row = (v + h) * W + u;
+              for (let k = 0; k < w; k++) if (!mA[row + k]) break outer;
+              h++;
+            }
+            for (let hh = 0; hh < h; hh++) for (let k = 0; k < w; k++) mA[(v + hh) * W + u + k] = 0;
+            let x, y, z;
+            if (axis === 0) { x = s; z = u; y = y0 + v; }
+            else if (axis === 2) { z = s; x = u; y = y0 + v; }
+            else { y = y0 + s; x = u; z = v; }
+            this.quad('opaque', d, x, y, z, w, h, SEAM_TEX, cor, SEAM);
+            u += w;
+          }
+        }
+      }
+    }
   }
 
   // Torches: a slim stick with a flame, standing or leaning against a wall.

@@ -40,6 +40,15 @@ const F06 = f(0.6), F055 = f(0.55);
 // what's left of it air at the end): caves leave it alone, and trees grow into it
 const UNSET = 255;
 
+// CastleMinerZBuilder's distance: straight out from the origin, turning back every 4400
+export function zoneDistance(x, z) {
+  let d = f(Math.sqrt(x * x + z * z));
+  let n = 0;
+  while (d > 4400) { d = f(d - 4400); n++; }
+  if (n & 1) d = f(4400 - d);
+  return d;
+}
+
 export class WorldGen {
   constructor(seed = 1337) {
     this.seed = seed | 0;
@@ -49,14 +58,7 @@ export class WorldGen {
     this.spawn = null;
   }
 
-  // CastleMinerZBuilder's distance: straight out from the origin, turning back every 4400
-  distance(x, z) {
-    let d = f(Math.sqrt(x * x + z * z));
-    let n = 0;
-    while (d > 4400) { d = f(d - 4400); n++; }
-    if (n & 1) d = f(4400 - d);
-    return d;
-  }
+  distance(x, z) { return zoneDistance(x, z); }
 
   // the biome a place is in (the further one, in the 100 between two)
   biomeAt(x, z) {

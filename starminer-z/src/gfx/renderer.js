@@ -232,9 +232,10 @@ export class Renderer {
     if (this.targets) for (const t of this.targets.all) t.dispose();
     const hf = THREE.HalfFloatType;
     const scene = new THREE.WebGLRenderTarget(W, H, { type: hf, samples: this.q.msaa, depthBuffer: true, stencilBuffer: false });
+    // (the bloom's, only where there's bloom)
     const mips = [];
     let mw = W >> 1, mh = H >> 1;
-    for (let i = 0; i < 6 && mw >= 8 && mh >= 8; i++) {
+    for (let i = 0; i < 6 && mw >= 8 && mh >= 8 && this.q.bloom; i++) {
       mips.push(new THREE.WebGLRenderTarget(mw, mh, { type: hf, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter }));
       mw >>= 1; mh >>= 1;
     }

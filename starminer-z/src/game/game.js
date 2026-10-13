@@ -361,6 +361,7 @@ export class Game {
     cam.updateMatrixWorld();
     this.world.update(cx, cz);
     this.world.flushUrgent();
+    this.world.setDarkView(this.world.seeTheDark(cx, cam.position.y, cz));
     // the tower too, as far round it as the view reaches from here (at the shortest view
     // distance the far side of a wider patch is never drawn, so it would never be ready)
     if (!this.ready && this.world.readiness(cx, cz, 2) >= 1 && this.world.readiness(0, 0, Math.min(2, this.world.radius - 3)) >= 1) this.ready = true;
@@ -475,6 +476,8 @@ export class Game {
     this.world.flushUrgent();
     if (!this.ready && this.world.readiness(p.pos.x, p.pos.z, 2) >= 1) this.onReady();
 
+    // what of the world is drawn from where the camera is (see World.setDarkView)
+    this.world.setDarkView(this.world.seeTheDark(cam.position.x, cam.position.y, cam.position.z));
     // light where the player is (for the held item, drops, exposure)
     const L = this.world.lightAt(eye.x, eye.y, eye.z);
     this.light = new THREE.Vector2(L.sky / 15, L.block / 15);

@@ -93,6 +93,22 @@ await E(async () => {
       }
       return this.ahead(dist, up);
     },
+    // the same, and high enough over the ground there that one killed in the air falls clear of
+    // it (its body drops 9 m through anything before its clip pauses and it can land)
+    over(dist, up) {
+      const V = p.pos.constructor;
+      const top = (x0, z0) => {
+        let t = 0;
+        for (let x = x0 - 10; x <= x0 + 10; x++) for (let z = z0 - 10; z <= z0 + 10; z++) for (let y = 127; y > t; y--) if (w.getBlock(x, y, z) !== B.AIR) { t = y; break; }
+        return t;
+      };
+      for (let k = 0; k < 16; k++) {
+        const a = p.yaw + (k * Math.PI) / 8, at = new V(p.pos.x - Math.sin(a) * dist, 0, p.pos.z - Math.cos(a) * dist);
+        at.y = Math.max(p.pos.y + up, top(Math.floor(at.x), Math.floor(at.z)) + 16);
+        if (!D.blocked(p.eye, at)) { p.yaw = a; return at; }
+      }
+      return this.clear(dist, up);
+    },
   };
   T.step(0.3);
 });
@@ -190,7 +206,7 @@ const s4 = await E(() => {
   window.hurts.length = 0;
   g.drops.clear();
   const k0 = g.stats.kills;
-  const at = T.clear(50, 18);
+  const at = T.over(50, 18);
   T.spawn(0);
   const c = T.freeze(at.x, at.y, at.z, p.yaw);
   T.aim(c.pos.x, c.pos.y + 1.5, c.pos.z);

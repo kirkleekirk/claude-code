@@ -85,19 +85,31 @@ varying float vAO;
 varying float vSky;
 varying float vBlk;
 const vec3 NORMALS[6] = vec3[6](vec3(1, 0, 0), vec3(-1, 0, 0), vec3(0, 1, 0), vec3(0, -1, 0), vec3(0, 0, 1), vec3(0, 0, -1));
+// which way a corner's texture coordinates run across each face, as the mesher lays them out
+// (from 0 at one edge): so every quad can be pushed out a hair past its edges. Where a big
+// merged face meets smaller ones (a T-junction) the raster can leave pinholes along the join;
+// what's behind would glint through (the sky, with the faces underground left out).
+const vec3 ALONG_U[6] = vec3[6](vec3(0, 0, -1), vec3(0, 0, 1), vec3(1, 0, 0), vec3(1, 0, 0), vec3(1, 0, 0), vec3(-1, 0, 0));
+const vec3 ALONG_V[6] = vec3[6](vec3(0, -1, 0), vec3(0, -1, 0), vec3(0, 0, 1), vec3(0, 0, 1), vec3(0, -1, 0), vec3(0, -1, 0));
 void main() {
+  int n = int(aData.y) / 32;
   vec3 p = aPos / 16.0;
   vec4 w = modelMatrix * vec4(p, 1.0);
+  // 2 mm close up, a centimetre at the far edge of the view: always well under a pixel
+  float grow = 0.002 + 0.00006 * distance(w.xyz, cameraPosition);
+  p += (ALONG_U[n] * (aUv.x > 0.5 ? 1.0 : -1.0) + ALONG_V[n] * (aUv.y > 0.5 ? 1.0 : -1.0)) * grow;
+  w = modelMatrix * vec4(p, 1.0);
   vWorld = w.xyz;
   vUv = aUv / 16.0;
   vLayer = aData.x;
-  int n = int(aData.y) / 32;
   vNormal = NORMALS[n];
   float ao = mod(floor(aData.y / 8.0), 4.0);
   vAO = ao;
   vSky = aData.z / 255.0;
   vBlk = aData.w / 255.0;
-  gl_Position = projectionMatrix * viewMatrix * w;
+  // (by the mesh's model-view matrix, which is worked out on the CPU in double precision: the
+  // positions it gives are small numbers round the camera, so the joins between faces land true)
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
 }
 `;
 

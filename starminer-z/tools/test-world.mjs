@@ -7,7 +7,7 @@
 import { WorldGen, BIOMES } from '../src/world/gen.js';
 import { NetRandom } from '../src/core/dnanoise.js';
 import { Mesher } from '../src/world/mesher.js';
-import { B, HEIGHT, OPAQUE, SOLID } from '../src/world/blocks.js';
+import { B, HEIGHT, OPAQUE, SOLID, RENDER } from '../src/world/blocks.js';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
 import { dirname, join } from 'node:path';
@@ -121,13 +121,27 @@ check(SOLID[at(8, sp.y - 1, -8)] === 1 && at(8, sp.y, -8) !== undefined && !SOLI
 // ---- meshing ----
 const mesher = new Mesher();
 let quads = 0, ms = 0, n = 0;
+// which air each column found unlit (no daylight, no torch or lantern light): its own and the
+// cells just round it (x and z -1 to 16), to see that neighbours agree where they meet
+const unlitSeen = new Map();
+let ranges = true, seams = 0, dark = 0, lit = 0;
 for (let cz = -2; cz <= 2; cz++) for (let cx = -2; cx <= 2; cx++) {
   const nine = [];
   for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) nine.push(column(cx + dx, cz + dz));
   const t = performance.now();
-  const r = mesher.build(nine);
+  const r = mesher.build(nine, cx, cz);
   ms += performance.now() - t; n++;
   quads += (r.opaque.count + r.cutout.count) / 4;
+  for (const g of [r.opaque, r.cutout]) {
+    if (!(g.seam <= g.lit && g.lit <= g.index.length && g.seam % 6 === 0 && g.lit % 6 === 0)) ranges = false;
+    seams += g.seam / 6; lit += (g.lit - g.seam) / 6; dark += (g.index.length - g.lit) / 6;
+  }
+  const seen = new Uint8Array(18 * 18 * HEIGHT);
+  for (let y = 0; y < HEIGHT; y++) for (let z = -1; z <= 16; z++) for (let x = -1; x <= 16; x++) {
+    const i = y * 48 * 48 + (z + 16) * 48 + x + 16;
+    seen[(x + 1) + (z + 1) * 18 + y * 324] = mesher.unlit(i) ? 1 : 0;
+  }
+  unlitSeen.set(`${cx},${cz}`, seen);
   if (cx === 1 && cz === 1) {
     // light: open sky is fully lit, deep rock is dark
     const h = r.heights[0];
@@ -138,6 +152,46 @@ for (let cz = -2; cz <= 2; cz++) for (let cx = -2; cx <= 2; cx++) {
 }
 console.log(`mesh: ${(ms / n).toFixed(1)} ms per column, ${(quads / n).toFixed(0)} quads per column`);
 check(ms / n < 80, 'meshing under 80 ms per column');
+
+// ---- what's drawn from the light: seams, then lit faces, then the faces that look into unlit air
+check(ranges, 'each mesh in three parts: seams, lit, unlit');
+check(seams > 0 && dark > lit, `most faces look into unlit air, closed off by a few seams (${Math.round(seams / n)} seams, ${Math.round(lit / n)} lit, ${Math.round(dark / n)} unlit a column)`);
+{
+  // neighbours must agree on the air between them, or a view could pass where neither drew a seam
+  let differ = 0, cells = 0;
+  const at = (seen, x, y, z) => seen[(x + 1) + (z + 1) * 18 + y * 324];
+  for (const [k, seen] of unlitSeen) {
+    const [cx, cz] = k.split(',').map(Number);
+    const E = unlitSeen.get(`${cx + 1},${cz}`), S = unlitSeen.get(`${cx},${cz + 1}`);
+    for (let y = 0; y < HEIGHT; y++) for (let t = 0; t < 16; t++) {
+      if (E) { cells += 2; differ += (at(seen, 16, y, t) !== at(E, 0, y, t)) + (at(E, -1, y, t) !== at(seen, 15, y, t)); }
+      if (S) { cells += 2; differ += (at(seen, t, y, 16) !== at(S, t, y, 0)) + (at(S, t, y, -1) !== at(seen, t, y, 15)); }
+    }
+  }
+  check(differ === 0, `neighbouring columns agree on which air is unlit (${differ} of ${cells} cells differ)`);
+}
+{
+  // a sealed room (in rock up to the top of the world, whose roof is the one lit face): unlit,
+  // so its faces come last, and it needs no seams; with a torch in it, lit; opened to the sky,
+  // seams where the daylight stops
+  const solid = new Uint8Array(16 * 16 * HEIGHT).fill(B.ROCK);
+  const room = (torch, open) => {
+    const c = solid.slice();
+    if (!open) for (let y = 40; y < 44; y++) for (let z = 5; z < 12; z++) for (let x = 5; x < 12; x++) c[x | (z << 4) | (y << 8)] = B.AIR;
+    if (torch) c[8 | (8 << 4) | (40 << 8)] = B.TORCH;
+    // a shaft down from the sky, then a long way along a passage
+    if (open) {
+      for (let y = 41; y < HEIGHT; y++) c[2 | (2 << 4) | (y << 8)] = B.AIR;
+      for (let x = 2; x < 14; x++) for (let z = 2; z < 14; z++) if (x === 2 || z === 13) c[x | (z << 4) | (41 << 8)] = B.AIR;
+    }
+    const g = mesher.build([solid, solid, solid, solid, c, solid, solid, solid, solid]).opaque;
+    return { seams: g.seam / 6, lit: (g.lit - g.seam) / 6, dark: (g.index.length - g.lit) / 6 };
+  };
+  const a = room(false, false), b = room(true, false), c = room(false, true);
+  check(a.seams === 0 && a.lit === 1 && a.dark > 0, `a sealed room is unlit, with no seams (${JSON.stringify(a)})`);
+  check(b.seams === 0 && b.dark === 0 && b.lit > 1, `with a torch in it, lit (${JSON.stringify(b)})`);
+  check(c.seams > 0 && c.lit > 0 && c.dark > 0, `opened to the sky by a shaft and a passage: lit near it, seams where it stops (${JSON.stringify(c)})`);
+}
 
 // ---- lighting near a lantern in a sealed box ----
 {

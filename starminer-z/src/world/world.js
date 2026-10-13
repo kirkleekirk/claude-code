@@ -7,11 +7,15 @@
 
 import * as THREE from 'three';
 import WorldWorker from './worker.js?worker&inline';
-import { WorldGen } from './gen.js';
-import { Mesher } from './mesher.js';
+import { WorldGen, zoneDistance } from './gen.js';
+import { Mesher, UNLIT_BELOW, UNLIT_OUT } from './mesher.js';
 import { B, CHUNK, HEIGHT, COLUMN_SIZE, SOLID, OPAQUE, BLOCKS } from './blocks.js';
 
+// the player's edits are kept (and saved) by a string key; the columns, looked up all the time
+// (every block anything asks for), by a number, which costs no garbage to make
 const key = (cx, cz) => `${cx},${cz}`;
+const cid = (cx, cz) => (cx & 0xffff) | ((cz & 0xffff) << 16);
+const PASSES = ['opaque', 'cutout'];
 
 export class World {
   constructor({ seed, scene, materials, renderDistance = 8, edits = null }) {
@@ -66,7 +70,7 @@ export class World {
       this.jobs.delete(id);
       if (job.c.state === 'gen') {
         this.genInFlight--;
-        if (this.columns.get(job.c.key) === job.c) this.columns.delete(job.c.key);
+        if (this.columns.get(job.c.id) === job.c) this.columns.delete(job.c.id);
       } else {
         this.meshInFlight--;
         job.c.meshing = false;
@@ -112,13 +116,13 @@ export class World {
     const t0 = performance.now();
     for (const [dx, dz, d] of this._order) {
       const x = cx + dx, z = cz + dz;
-      const k = key(x, z);
-      let c = this.columns.get(k);
+      const id = cid(x, z);
+      let c = this.columns.get(id);
       if (!c) {
         if (this.genInFlight >= maxGen) continue;
         if (!this.workers.length && performance.now() - t0 > budgetMs) continue;
-        c = { cx: x, cz: z, key: k, blocks: null, light: null, heights: null, state: 'gen', meshes: null, dirty: false, version: 0, meshedVersion: -1 };
-        this.columns.set(k, c);
+        c = { cx: x, cz: z, key: key(x, z), id, blocks: null, light: null, heights: null, state: 'gen', meshes: null, dirty: false, version: 0, meshedVersion: -1 };
+        this.columns.set(id, c);
         this.requestGen(c);
         continue;
       }
@@ -136,14 +140,14 @@ export class World {
       const dx = c.cx - cx, dz = c.cz - cz;
       if (dx * dx + dz * dz > (R + 3) * (R + 3)) {
         this.dropMeshes(c);
-        if (!c.meshing && c.state === 'ready') this.columns.delete(c.key);
+        if (!c.meshing && c.state === 'ready') this.columns.delete(c.id);
       }
     }
   }
 
   neighboursReady(x, z) {
     for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
-      const n = this.columns.get(key(x + dx, z + dz));
+      const n = this.columns.get(cid(x + dx, z + dz));
       if (!n || n.state !== 'ready') return false;
     }
     return true;
@@ -183,13 +187,13 @@ export class World {
 
   requestMesh(c) {
     const cols = [];
-    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) cols.push(this.columns.get(key(c.cx + dx, c.cz + dz)).blocks);
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) cols.push(this.columns.get(cid(c.cx + dx, c.cz + dz)).blocks);
     c.meshing = true;
     const version = c.version;
     this.meshInFlight++;
     if (!this.workers.length) {
       const t = performance.now();
-      const r = this.localMesher.build(cols);
+      const r = this.localMesher.build(cols, c.cx, c.cz);
       this.meshInFlight--;
       this.finishMesh(c, r, version, performance.now() - t);
       return;
@@ -215,7 +219,7 @@ export class World {
     }
     if (m.type === 'gen') {
       this.genInFlight--;
-      if (this.columns.get(job.c.key) !== job.c) return;
+      if (this.columns.get(job.c.id) !== job.c) return;
       this.finishGen(job.c, m.blocks);
     } else if (m.type === 'mesh') {
       this.meshInFlight--;
@@ -229,13 +233,13 @@ export class World {
     c.meshing = false;
     this.stats.meshMs = this.stats.meshMs * 0.9 + ms * 0.1;
     this.stats.meshes++;
-    if (this.columns.get(c.key) !== c) return;
+    if (this.columns.get(c.id) !== c) return;
     c.light = r.light;
     c.heights = r.heights;
     c.meshedVersion = version;
     this.dropMeshes(c);
     c.meshes = {};
-    for (const pass of ['opaque', 'cutout']) {
+    for (const pass of PASSES) {
       const g = r[pass];
       if (!g.count) continue;
       const geo = new THREE.BufferGeometry();
@@ -251,10 +255,55 @@ export class World {
       mesh.matrixAutoUpdate = false;
       mesh.updateMatrix();
       mesh.userData.column = c;
+      mesh.userData.seam = g.seam;
+      mesh.userData.lit = g.lit;
       this.group.add(mesh);
       c.meshes[pass] = mesh;
     }
+    this.applyDark(c);
     if (this.onColumnMeshed) this.onColumnMeshed(c);
+  }
+
+  // Each mesh is in three parts (see the mesher): seams, the faces that can be seen from the
+  // light, and the faces that look into unlit air (half of what's underground: the deep caves,
+  // and Hell's cavern under everything). From anywhere not in or by unlit air, the first two are
+  // drawn; the seams close off the unlit air, black, as the faces in there would look. From
+  // anywhere else (seeTheDark), the last two.
+  setDarkView(all) {
+    if (this.darkAll === all) return;
+    this.darkAll = all;
+    for (const c of this.columns.values()) this.applyDark(c);
+  }
+
+  applyDark(c) {
+    const ms = c.meshes, all = this.darkAll !== false;
+    if (!ms) return;
+    for (const pass of PASSES) {
+      const m = ms[pass];
+      if (m) m.geometry.setDrawRange(all ? m.userData.seam : 0, all ? Infinity : m.userData.lit);
+    }
+  }
+
+  // Whether a camera at (x, y, z) could be in unlit air, or near enough that its near plane
+  // could reach into some: if any open cell within a block of it could be (it's deep, and no
+  // daylight reaches it; torchlight isn't known here, so that doesn't count).
+  seeTheDark(x, y, z) {
+    const X = Math.floor(x), Y = Math.floor(y), Z = Math.floor(z);
+    if (Y - 1 >= UNLIT_BELOW) return false;
+    for (let dy = -1; dy <= 1; dy++) {
+      const yy = Y + dy;
+      if (yy >= UNLIT_BELOW) continue;
+      if (yy < 0) return true;
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+        const xx = X + dx, zz = Z + dz;
+        if (zoneDistance(xx, zz) >= UNLIT_OUT) continue;
+        const c = this.columns.get(cid(xx >> 4, zz >> 4));
+        if (!c || !c.light || !c.blocks) return true;
+        const i = (xx & 15) | ((zz & 15) << 4) | (yy << 8);
+        if (!OPAQUE[c.blocks[i]] && c.light[i] < 16) return true;
+      }
+    }
+    return false;
   }
 
   dropMeshes(c) {
@@ -272,7 +321,7 @@ export class World {
     let n = 0, ok = 0;
     for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
       n++;
-      const c = this.columns.get(key(cx + dx, cz + dz));
+      const c = this.columns.get(cid(cx + dx, cz + dz));
       if (c && c.meshedVersion >= 0) ok++;
     }
     return ok / n;
@@ -281,20 +330,20 @@ export class World {
   // ---- blocks ---------------------------------------------------------------------------------
 
   column(x, z) {
-    return this.columns.get(key(Math.floor(x / CHUNK), Math.floor(z / CHUNK)));
+    return this.columns.get(cid(Math.floor(x / CHUNK), Math.floor(z / CHUNK)));
   }
 
   getBlock(x, y, z) {
     x = Math.floor(x); y = Math.floor(y); z = Math.floor(z);
     if (y < 0) return B.BEDROCK;
     if (y >= HEIGHT) return B.AIR;
-    const c = this.columns.get(key(x >> 4, z >> 4));
+    const c = this.columns.get(cid(x >> 4, z >> 4));
     if (!c || !c.blocks) return B.ROCK; // unloaded: solid, so nothing falls out of the world
     return c.blocks[(x & 15) | ((z & 15) << 4) | (y << 8)];
   }
 
   isLoaded(x, z) {
-    const c = this.columns.get(key(Math.floor(x) >> 4, Math.floor(z) >> 4));
+    const c = this.columns.get(cid(Math.floor(x) >> 4, Math.floor(z) >> 4));
     return !!(c && c.blocks);
   }
 
@@ -304,7 +353,7 @@ export class World {
     x = Math.floor(x); y = Math.floor(y); z = Math.floor(z);
     if (y < 1 || y >= HEIGHT - 2) return false;
     const cx = x >> 4, cz = z >> 4;
-    const c = this.columns.get(key(cx, cz));
+    const c = this.columns.get(cid(cx, cz));
     const i = (x & 15) | ((z & 15) << 4) | (y << 8);
     if (!c || !c.blocks) {
       if (remote) this.record(key(cx, cz), i, id);
@@ -336,7 +385,7 @@ export class World {
   }
 
   touch(cx, cz) {
-    const c = this.columns.get(key(cx, cz));
+    const c = this.columns.get(cid(cx, cz));
     if (c && c.state === 'ready') c.version++;
   }
 
@@ -353,7 +402,7 @@ export class World {
     x = Math.floor(x); y = Math.floor(y); z = Math.floor(z);
     if (y >= HEIGHT) return { sky: 15, block: 0 };
     if (y < 0) return { sky: 0, block: 0 };
-    const c = this.columns.get(key(x >> 4, z >> 4));
+    const c = this.columns.get(cid(x >> 4, z >> 4));
     if (!c || !c.light) return { sky: 15, block: 0 };
     const v = c.light[(x & 15) | ((z & 15) << 4) | (y << 8)];
     return { sky: v >> 4, block: v & 15 };
