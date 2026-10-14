@@ -6,6 +6,7 @@
 import { AvatarModel, bindPosition } from './avatar/model.js';
 import { CmzPlayerAnimation } from './cmz/playerAnim.js';
 import { HeldItems } from './cmz/held.js';
+import { ExoFrame } from '../gfx/exoModels.js';
 
 export class Puppet {
   constructor(app, look) {
@@ -18,6 +19,15 @@ export class Puppet {
       this.held = new HeldItems(cmz.items, app.sky.uniforms, app.terrain.uniforms);
     }
     this.item = null;
+    this.app = app;
+    // the exo suit's frame, while one's worn
+    this.exo = null;
+  }
+
+  setExo(on) {
+    if (!!on === !!this.exo) return;
+    if (on) this.exo = new ExoFrame(this.model, this.app.sky.uniforms, this.app.terrain.uniforms);
+    else { this.exo.dispose(); this.exo = null; }
   }
 
   // The gun's barrel tip, if there's a gun in hand (for the flash of a shot).
@@ -25,9 +35,12 @@ export class Puppet {
 
   // s: { pos, yaw, pitch, vel, onGround, held: item id or null, use: a swing or a shot starts
   //      now, shoulder: a gun up to aim, reload, reloadTime, dead, light: { sky, block } 0..1,
-  //      grenade: a grenade clip starting now, holdUse: a grenade in progress, time: of day }
+  //      grenade: a grenade clip starting now, holdUse: a grenade in progress, time: of day,
+  //      exo: an exo suit worn }
   update(dt, s) {
     const m = this.model;
+    this.setExo(!!s.exo);
+    if (this.exo) { this.exo.setLight(m.material.uniforms.uObjLight.value); this.exo.update(dt); }
     m.root.position.copy(s.pos);
     m.root.rotation.y = s.yaw + Math.PI;
     const sp = Math.hypot(s.vel.x, s.vel.z);
@@ -60,6 +73,7 @@ export class Puppet {
   }
 
   dispose() {
+    this.exo?.dispose();
     this.item?.obj.removeFromParent();
     this.model.dispose();
     this.model.material.dispose();

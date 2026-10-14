@@ -78,11 +78,34 @@ export class ViewModel {
     return g;
   }
 
+  // An exo suit worn: its gauntlet on your forearm's wrist end, in bands, its light along the
+  // top.
+  setExo(on) {
+    if (!!on === !!this.bracer) return;
+    if (!on) {
+      this.bracer.removeFromParent();
+      for (const m of this.bracer.children) m.geometry.dispose();
+      this.bracer = null;
+      return;
+    }
+    const parts = [
+      paint(new RoundedBoxGeometry(0.092, 0.092, 0.13, 3, 0.02).translate(0, 0, 0.125), 0x3e454d, 0.95),
+      ...[0.085, 0.165].map((z) => paint(new RoundedBoxGeometry(0.098, 0.098, 0.01, 2, 0.004).translate(0, 0, z), 0x202428, 0.95)),
+      paint(new RoundedBoxGeometry(0.07, 0.012, 0.1, 2, 0.004).translate(0, 0.048, 0.125), 0x5a636d, 0.95),
+      paint(new THREE.BoxGeometry(0.012, 0.004, 0.09).translate(0, 0.0555, 0.125), 0x46e0ff, 0, 1.2),
+    ];
+    this.bracer = new THREE.Group();
+    for (const p of parts) this.bracer.add(new THREE.Mesh(p, this.armMat));
+    this.arm.add(this.bracer);
+  }
+
   // Swap in the avatar's own arm: a mesh whose origin is the right hand, forearm along +z.
   setArm(obj) {
     this.holder.remove(this.arm);
     this.arm = obj;
     this.holder.add(obj);
+    // (a bracer on, onto the new arm)
+    if (this.bracer) obj.add(this.bracer);
   }
 
   makeFlash() {

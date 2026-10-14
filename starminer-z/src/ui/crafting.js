@@ -22,6 +22,10 @@
 // inventory; Y (shift-click) sends a stack across, crate to backpack or back. Online, the slot
 // someone else is on in the same crate can't be touched.
 //
+// The armor slot (this game's own) is on all three, to the right of the backpack: what's put in it
+// is worn. Only armor goes in. Shift-click puts armor on, or takes it off into the backpack; on a
+// pad, the selector goes to it off either end of the backpack's rows.
+//
 // The world doesn't stop while any of them is up.
 
 import { Vector3 } from 'three';
@@ -41,6 +45,12 @@ const LIST = { x: 39, y: 184, step: 77 }, INGS = { x: 131, y: 184, step: 77 }, P
 const TILE = 76, SELECTOR = 68;
 // a crate's slots, and the grid drawn under them (InventoryGrid)
 const BOX = { x: 169, y: 24 }, BOX_GRID = { x: 165, y: 20 };
+// the armor slot: its frame (the original's SingleGrid), beside the backpack's top rows, named
+// over it; and the selector's column for it
+const ARMOR = { x: 684, y: 296 }, ARMOR_X = 8;
+const ARMOR_CELL = { x: ARMOR.x + (TILE - CELL) / 2, y: ARMOR.y + (TILE - CELL) / 2 };
+// what the slot shows while it's empty: the outline of a suit of armor
+const ARMOR_GHOST = '<svg class="ghost" viewBox="0 0 24 24"><path d="M8 3 5 5 3 9l3 2v9h12v-9l3-2-2-4-3-2h-2c0 1.5-1.4 2.5-3 2.5S9 4.5 9 3z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>';
 
 export const CRAFT_CSS = /* css */ `
 .craft { position: absolute; inset: 0; display: none; pointer-events: auto; z-index: 4; font-family: 'Saira Semi Condensed', 'Saira Condensed', 'Arial Narrow', var(--ui-font); }
@@ -59,7 +69,10 @@ html:not(.cmz-ui) .craft .frame { display: block; }
 .craft .ic .wear b { position: absolute; left: ${P(1)}; top: ${P(1)}; bottom: ${P(1)}; background: rgb(67, 188, 0); }
 html:not(.cmz-ui) .craft .grid .cell { background: rgba(14, 16, 15, 0.55); box-shadow: inset 0 0 0 ${P(1.5)} rgba(150, 156, 150, 0.6); }
 .craft .tile { position: absolute; width: ${P(TILE)}; height: ${P(TILE)}; cursor: pointer; }
-html:not(.cmz-ui) .craft .tile { background: rgba(20, 24, 22, 0.75); box-shadow: inset 0 0 0 ${P(3)} #9aa09a, inset 0 0 0 ${P(5)} rgba(0,0,0,0.6); }
+html:not(.cmz-ui) .craft .tile, html:not(.cmz-ui) .craft .atile { background: rgba(20, 24, 22, 0.75); box-shadow: inset 0 0 0 ${P(3)} #9aa09a, inset 0 0 0 ${P(5)} rgba(0,0,0,0.6); }
+.craft .atile { position: absolute; width: ${P(TILE)}; height: ${P(TILE)}; pointer-events: none; }
+.craft .alab { text-align: center; width: ${P(TILE + 40)}; margin-left: -${P(20)}; }
+.craft .cell.armor .ghost { position: absolute; inset: ${P(12)}; width: calc(100% - ${P(24)}); height: calc(100% - ${P(24)}); color: rgba(220, 228, 222, 0.32); pointer-events: none; }
 .craft .tile.dim { opacity: 0.5; filter: brightness(0.25); }
 .craft .tile .ic { left: ${P(4)}; top: ${P(4)}; width: ${P(CELL)}; height: ${P(CELL)}; right: auto; bottom: auto; }
 .craft .sel { position: absolute; width: ${P(SELECTOR)}; height: ${P(SELECTOR)}; pointer-events: none; }
@@ -140,6 +153,9 @@ export class Crafting {
           <div class="ings"></div>
         </div>
         <div class="grid pack"></div>
+        <div class="atile ${SP('SingleGrid')}" style="left:${P(ARMOR.x)};top:${P(ARMOR.y)}"></div>
+        <div class="t small alab" style="left:${P(ARMOR.x)};top:${P(ARMOR.y - 24)}">Armor</div>
+        <div class="cell armor" data-armor="0" style="left:${P(ARMOR_CELL.x)};top:${P(ARMOR_CELL.y)}"></div>
         <div class="sel ${SP('Selector')}"></div>
         <div class="help"></div>
       </div>
@@ -162,6 +178,20 @@ export class Crafting {
       grid.appendChild(c);
       this.cells[i] = c;
     }
+    // the armor slot's cell (data-armor)
+    this.armorCell = this.$('.cell.armor');
+    this.armorCell.addEventListener('pointerdown', (e) => {
+      if (!this.isOpen) return;
+      e.stopPropagation();
+      e.preventDefault();
+      this.slotDown(this.cellOf(this.armorCell), e);
+    });
+    this.armorCell.addEventListener('pointerover', () => {
+      if (!this.isOpen || this.page === 'cr') return;
+      this.pointer = true;
+      this.selectCell(this.cellOf(this.armorCell));
+      this.render();
+    });
     // a crate's cells (data-box)
     const cgrid = this.$('.cgrid');
     this.boxCells = [];
@@ -236,21 +266,27 @@ export class Crafting {
 
   get slot() { return this.at.y >= 4 ? this.at.x : HOTBAR + this.at.y * 8 + this.at.x; }
 
+  // is the selector on the armor slot?
+  get onArmor() { return this.at.x === ARMOR_X && !this.inBox; }
+
   // A cell, as { box, i }: box the slots it's in (the player's, or the crate's), i its index;
   // and the one the selector's on (in a crate, the selector's rows go down through the crate's
   // four, the backpack's four and the hotbar, as the original's _selectorInCrateGrid has it)
   cellOf(el) {
     if (el.dataset.box != null) return { box: this.crate?.slots, i: +el.dataset.box, crate: true };
+    if (el.dataset.armor != null) return { box: this.game.inventory.armorBox, i: 0, crate: false, armor: true };
     return { box: this.game.inventory.slots, i: +el.dataset.slot, crate: false };
   }
 
   get cell() {
     if (this.page === 'box' && this.inBox) return { box: this.crate.slots, i: this.at.y * 8 + this.at.x, crate: true };
+    if (this.onArmor) return { box: this.game.inventory.armorBox, i: 0, crate: false, armor: true };
     return { box: this.game.inventory.slots, i: this.slot, crate: false };
   }
 
   selectCell(c) {
-    if (c.crate) { this.inBox = true; this.at = { x: c.i % 8, y: Math.floor(c.i / 8) }; }
+    if (c.armor) { this.inBox = false; this.at = { x: ARMOR_X, y: this.at.y < 4 ? this.at.y : 0 }; }
+    else if (c.crate) { this.inBox = true; this.at = { x: c.i % 8, y: Math.floor(c.i / 8) }; }
     else { this.inBox = false; const i = c.i; this.at = i < HOTBAR ? { x: i, y: 4 } : { x: (i - HOTBAR) % 8, y: Math.floor((i - HOTBAR) / 8) }; }
     this.sendFocus();
   }
@@ -408,8 +444,12 @@ export class Crafting {
     this.mx = e.clientX; this.my = e.clientY;
     if (this.locked(c)) { this.sound('deny'); return; }
     const box = this.page === 'box';
+    // (only armor goes in the armor slot)
+    if (c.armor && inv.hand && !inv.fits(c.box, inv.hand.s)) { this.sound('deny'); return; }
     let did;
     if (e.button === 2) did = inv.hand ? inv.put(c.i, true, c.box) : inv.lift(c.i, true, c.box);
+    else if (e.shiftKey && !inv.hand && c.armor) did = box ? inv.moveAcross(0, c.box, this.crate.slots) : inv.unequip();
+    else if (e.shiftKey && !inv.hand && !c.crate && ITEMS[c.box[c.i]?.id]?.kind === 'armor' && !box) did = inv.equip(c.i);
     else if (e.shiftKey && !inv.hand) did = box ? inv.moveAcross(c.i, c.box, c.crate ? inv.slots : this.crate.slots) : inv.quickMove(c.i);
     else if (inv.hand) did = inv.put(c.i, false, c.box);
     else if ((did = inv.lift(c.i, false, c.box))) this.drag = { from: c, x: e.clientX, y: e.clientY };
@@ -426,7 +466,7 @@ export class Crafting {
     if (!d || !this.isOpen || !inv.hand) return;
     if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < 10) return;
     const hit = document.elementFromPoint(e.clientX, e.clientY);
-    const t = hit?.closest?.('[data-slot],[data-box]');
+    const t = hit?.closest?.('[data-slot],[data-box],[data-armor]');
     const to = t ? this.cellOf(t) : null;
     if (to && to.box && !(to.box === d.from.box && to.i === d.from.i) && !this.locked(to)) {
       inv.put(to.i, false, to.box);
@@ -478,7 +518,7 @@ export class Crafting {
   padUse() {
     const inv = this.game.inventory, c = this.cell;
     this.pointer = false;
-    if (this.locked(c)) { this.sound('deny'); return; }
+    if (this.locked(c) || (c.armor && inv.hand && !inv.fits(c.box, inv.hand.s))) { this.sound('deny'); return; }
     if (!(inv.hand ? inv.put(c.i, false, c.box) : inv.lift(c.i, false, c.box))) return;
     this.moved();
   }
@@ -496,7 +536,7 @@ export class Crafting {
       const left = inv.stow(h.s, 0, other.length, other);
       if (left) inv.hand = { ...h, s: left };
       did = !left || left.count < h.s.count;
-    } else did = inv.moveAcross(c.i, c.box, other);
+    } else did = inv.moveAcross(c.i, c.box, c.armor ? this.crate.slots : other);
     if (did) this.moved();
   }
 
@@ -551,13 +591,15 @@ export class Crafting {
       const key = s ? `${s.id}|${s.count}|${s.dur ?? ''}` : '';
       if (this.cells[i].dataset.key !== key) { this.cells[i].dataset.key = key; this.cells[i].innerHTML = iconHtml(s); }
     }
+    const a = inv.armor, akey = a ? `${a.id}|${a.dur ?? ''}` : '';
+    if (this.armorCell.dataset.key !== akey) { this.armorCell.dataset.key = akey; this.armorCell.innerHTML = a ? iconHtml(a) : ARMOR_GHOST; }
     // what's named at the top: on the inventory, what's held or chosen; crafting, the chosen
     // recipe's thing or component
     let named = null;
     if (cr) {
       const r = this.recipe;
       named = r ? (this.ing > 0 ? r.in[this.ing - 1]?.[0] : r.out) : null;
-    } else named = h ? h.s.id : inv.slots[this.slot]?.id ?? null;
+    } else named = h ? h.s.id : (this.onArmor ? inv.armor?.id : inv.slots[this.slot]?.id) ?? null;
     const it = named ? ITEMS[named] : null;
     this.$('.nm').textContent = it ? it.name : '';
     this.$('.d1').textContent = it?.desc || '';
@@ -572,7 +614,7 @@ export class Crafting {
       sel.style.display = this.recipe ? '' : 'none';
       this.renderRecipes();
     } else {
-      const { x, y } = box && this.inBox ? { x: BOX.x + this.at.x * CELL, y: BOX.y + this.at.y * CELL } : this.cellAt(this.slot);
+      const { x, y } = box && this.inBox ? { x: BOX.x + this.at.x * CELL, y: BOX.y + this.at.y * CELL } : this.onArmor ? ARMOR_CELL : this.cellAt(this.slot);
       sel.style.left = P(x - 4); sel.style.top = P(y - 4);
       sel.style.display = '';
       sel.classList.toggle('hold', !!h);
@@ -656,14 +698,21 @@ export class Crafting {
       if (input.consume('accept') || input.consume('jump')) { if (this.ing > 0) this.toComponentRecipe(); else this.craft(); }
     } else {
       if (dx || dy) {
-        const x = (this.at.x + dx + 8) % 8;
-        if (box) {
-          // down through the crate's rows, the backpack's and the hotbar, and round again
-          const row = ((this.inBox ? this.at.y : 4 + this.at.y) + dy + 9) % 9;
-          this.inBox = row < 4;
-          this.at = { x, y: this.inBox ? row : row - 4 };
-          this.sendFocus();
-        } else this.at = { x, y: (this.at.y + dy + 5) % 5 };
+        // the armor slot: off either end of the backpack's rows, and back again
+        const pack = !this.inBox && this.at.y < 4;
+        if (this.onArmor && dx) this.at = { x: dx < 0 ? 7 : 0, y: this.at.y };
+        else if (pack && !dy && ((dx > 0 && this.at.x === 7) || (dx < 0 && this.at.x === 0))) this.at = { x: ARMOR_X, y: this.at.y };
+        else {
+          // (up or down off the armor slot: from the backpack's right-hand end)
+          const x = this.onArmor ? 7 : (this.at.x + dx + 8) % 8;
+          if (box) {
+            // down through the crate's rows, the backpack's and the hotbar, and round again
+            const row = ((this.inBox ? this.at.y : 4 + this.at.y) + dy + 9) % 9;
+            this.inBox = row < 4;
+            this.at = { x, y: this.inBox ? row : row - 4 };
+            this.sendFocus();
+          } else this.at = { x, y: (this.at.y + dy + 5) % 5 };
+        }
         this.sound('move');
         this.render();
       }
@@ -674,6 +723,7 @@ export class Crafting {
       for (let k = 0; k < HOTBAR && !box; k++) {
         if (!input.consume(`slot${k + 1}`)) continue;
         const under = this.pointer ? document.elementFromPoint(this.mx, this.my)?.closest?.('[data-slot]') : null;
+        if (!under && this.onArmor) continue;
         const at = under ? +under.dataset.slot : this.slot;
         if (inv.hand) inv.put(k);
         else if (at !== k && (inv.slots[at] || inv.slots[k])) inv.swap(at, k);

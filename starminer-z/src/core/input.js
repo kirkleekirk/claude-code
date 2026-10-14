@@ -8,6 +8,9 @@ const KEYMAP = {
   Escape: 'pause', KeyP: 'pause', KeyQ: 'drop', KeyV: 'view', F5: 'view', KeyC: 'crouch', ControlLeft: 'crouch', Enter: 'accept',
   Digit1: 'slot1', Digit2: 'slot2', Digit3: 'slot3', Digit4: 'slot4', Digit5: 'slot5', Digit6: 'slot6', Digit7: 'slot7', Digit8: 'slot8',
   KeyF: 'secondary', KeyG: 'debug', Backquote: 'debug',
+  // (the exo suit's Overclock; its dodge is Shift and its slam C or Ctrl, the original's unused
+  // sprint and crouch)
+  KeyX: 'ability',
 };
 
 // standard gamepad mapping, the way CastleMiner Z laid out the Xbox 360 pad

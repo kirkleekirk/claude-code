@@ -28,8 +28,8 @@ function turn(a, b, k) {
 
 // ---- other players ------------------------------------------------------------------------------
 
-// flags in a player's state
-export const SHOULDER = 1, RELOAD = 2, DEAD = 4, CROUCH = 8, GROUND = 16;
+// flags in a player's state (EXO: an exo suit worn; OVERCLOCK: its Overclock on)
+export const SHOULDER = 1, RELOAD = 2, DEAD = 4, CROUCH = 8, GROUND = 16, EXO = 32, OVERCLOCK = 64;
 
 export class RemotePlayer {
   constructor(game, id, name, prof) {
@@ -99,11 +99,20 @@ export class RemotePlayer {
       this.puppet.update(dt, {
         pos: P, yaw: this.yaw, pitch: this.pitch, vel: this.vel, onGround: !!(this.flags & GROUND), held: this.held,
         use: this.useNow, shoulder: this.flags & SHOULDER, reload: this.flags & RELOAD, reloadTime: this.reloadTime,
-        dead: this.dead, light: { sky: L.sky / 15, block: L.block / 15 },
+        dead: this.dead, light: { sky: L.sky / 15, block: L.block / 15 }, exo: !!(this.flags & EXO),
       });
     }
     this.useNow = false;
     g.hud.placeTag(this.tag, this.dead ? null : _p.set(P.x, P.y + 2.05, P.z), g.camera);
+  }
+
+  // A boost of their exo suit's (k: BOOST in game/exo.js), at at (their feet), dir: a dodge's
+  // way, h: how high a slam came from. How it looks and sounds; and a slam's landing hurts this
+  // machine's dead (the kill theirs), and with PVP on, this player.
+  exoBoost(k, at, dir, h) {
+    const x = this.game.exo;
+    x.effects(k, at, this.yaw, dir, h, false, this.puppet.root.visible ? this.puppet.exo : null);
+    if (k === 3) x.slamHit(at, h, this.id);
   }
 
   // where a shot of theirs comes from: the gun's barrel tip, or about where it would be

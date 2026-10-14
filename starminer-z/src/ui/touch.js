@@ -19,6 +19,10 @@ export const TOUCH_CSS = /* css */ `
 .touch .tb.place { right: 0.4em; bottom: 5.6em; width: 4.2em; height: 4.2em; }
 .touch .tb.reload { right: 5.4em; bottom: 5.6em; width: 3.2em; height: 3.2em; }
 .touch .top { position: absolute; left: 1em; top: 1em; display: flex; gap: 0.6em; }
+/* the exo suit's, while it's worn: its dodge, its slam and its Overclock */
+.touch .exob { position: absolute; right: 14.6em; bottom: 6.6em; display: none; flex-direction: column; gap: 0.5em; pointer-events: none; }
+.touch.exo .exob { display: flex; }
+.touch .exob .tb { position: relative; width: 3.4em; height: 3.4em; border-color: rgba(120, 220, 255, 0.75); font-size: 0.72em; }
 .touch .top .tb { position: relative; width: 3em; height: 3em; }
 `;
 
@@ -46,6 +50,11 @@ export class TouchControls {
         <div class="tb jump" data-a="jump">${ICON.jump}</div>
         <div class="tb place" data-a="secondary">${ICON.place}</div>
         <div class="tb reload" data-a="reload">${ICON.reload}</div>
+      </div>
+      <div class="exob">
+        <div class="tb" data-a="ability">OC</div>
+        <div class="tb" data-a="sprint">DASH</div>
+        <div class="tb" data-a="crouch">SLAM</div>
       </div>
       <div class="top">
         <div class="tb" data-a="view">${ICON.view}</div>
@@ -85,11 +94,14 @@ export class TouchControls {
     this.input.touch = this;
   }
 
+  // an exo suit worn: its buttons
+  setExo(on) { this.el.classList.toggle('exo', !!on); }
+
   setVisible(v) {
     if (v === this.visible) return;
     this.visible = v;
     this.el.classList.toggle('on', v);
-    if (!v) { this.move.id = null; this.look.id = null; this.stick.style.display = 'none'; for (const a of ['primary', 'secondary', 'activate', 'jump', 'reload']) this.input.up(a); }
+    if (!v) { this.move.id = null; this.look.id = null; this.stick.style.display = 'none'; for (const a of ['primary', 'secondary', 'activate', 'jump', 'reload', 'sprint', 'crouch', 'ability']) this.input.up(a); }
   }
 
   padDown(e) {

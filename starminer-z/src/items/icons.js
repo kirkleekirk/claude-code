@@ -49,6 +49,8 @@ function poseFor(it) {
   if (it.kind === 'tool' && ['compass', 'clock', 'locator', 'teleporter'].includes(it.tool)) return { rot: [0.9, 0, 0], tilt: 0 };
   if (it.kind === 'tool' || it.kind === 'melee' || it.id === 'torch' || it.id === 'stick') return { rot: [0, Math.PI / 2, -Math.PI / 4], tilt: 0 };
   if (it.door) return { rot: [0.15, 0.5, 0], tilt: 0 };
+  // (the exo suit standing, turned a little to show its back's power unit)
+  if (it.kind === 'armor') return { rot: [0.1, 2.5, 0], tilt: 0 };
   return { rot: [0.5, 0.6, 0], tilt: 0 };
 }
 

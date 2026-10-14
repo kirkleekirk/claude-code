@@ -1,7 +1,8 @@
 // Two players in headless Chromium: A hosts, B joins by code, and what they share is checked
 // (seeing each other, block changes, each other's dead, hits and kills, the clock, the dragons,
-// the alien ship, leaving and coming back, the host's options: PVP, kick, ban, restart; the host
-// ending it; and an Endurance game: dying online, starting over, and closed once it's begun).
+// the alien ship, leaving and coming back, the host's options: PVP (an exo suit's slam with it
+// too), kick, ban, restart; the host ending it; and an Endurance game: dying online, starting
+// over, and closed once it's begun).
 // Needs the dev server and a PeerJS server (peer-server.mjs):
 //   node tools/peer-server.mjs 9000 &
 //   node tools/online.mjs [out dir]       (BASE=dev server URL, PEER=peer=host:port)
@@ -403,14 +404,14 @@ try {
   await wait(A, () => !window.__app.game.mothership.visit, null, 240000).catch(() => {});
   const lootB = await B.evaluate(() => {
     const g = window.__app.game, has = (re) => g.inventory.slots.some((s) => s && re.test(s.id)) || g.drops.list.some((d) => re.test(d.id));
-    return { gun: has(/^laser_.*_diamond$/), slime: has(/^slime$/), y: g.player.pos.y, overlay: !!g.world.overlay };
+    return { chip: has(/^advanced_chip$/), slime: has(/^slime$/), rock: has(/^space_rock$/), y: g.player.pos.y, overlay: !!g.world.overlay };
   });
   const lootA = await A.evaluate((before) => {
     const g = window.__app.game, now = g.inventory.slots.filter(Boolean).map((s) => s.id);
-    return { gun: now.some((id) => /^laser_.*_diamond$/.test(id) && !before.includes(id)) || g.drops.list.some((d) => /^laser_.*_diamond$/.test(d.id)), overlay: !!g.world.overlay };
+    return { chip: now.some((id) => id === 'advanced_chip' && !before.includes(id)) || g.drops.list.some((d) => d.id === 'advanced_chip'), overlay: !!g.world.overlay };
   }, before);
-  ok(lootB.gun && lootB.slime && lootB.y < 120, `B is let down, and has its loot (${JSON.stringify(lootB)})`);
-  ok(!lootA.gun, "and A, who wasn't in it, none");
+  ok(lootB.chip && lootB.slime && lootB.rock && lootB.y < 120, `B is let down, and has its loot (${JSON.stringify(lootB)})`);
+  ok(!lootA.chip, "and A, who wasn't in it, none");
   ok(!lootA.overlay && !lootB.overlay, 'then it goes, on both');
   await B.evaluate(hurtable);
 
@@ -473,6 +474,56 @@ try {
   await wait(B, () => window.__hurt.filter((k) => k === 'pvp').length >= 2, null, 30000).catch(() => {});
   const sw = await B.evaluate(() => window.__app.game.player.health);
   ok(Math.abs(sw - 58) < 1, `and so does A's swing (${sw})`);
+
+  // B's exo suit: A sees it on B, and the flames of B's boosts; where B's slam comes down, A's
+  // dead are hurt, on A's machine (the kill B's), and with PVP on, so is A
+  await B.evaluate(() => { const inv = window.__app.game.inventory; inv.armorBox[0] = inv.make('exo_suit', 1); inv.changed(); });
+  const suit = await wait(A, () => { const r = [...window.__game.online.players.values()][0]; return !!(r.flags & 32) && !!r.puppet.exo; }, null, 30000).then(() => true, () => false);
+  ok(suit, 'B puts on an exo suit: A sees it on B');
+  await A.evaluate(() => {
+    const g = window.__game, r = [...g.online.players.values()][0], f = r.exoBoost.bind(r), p = g.player, h = p.hurt.bind(p);
+    window.__xb = [];
+    r.exoBoost = (...a) => { f(...a); window.__xb.push([a[0], +(r.puppet.exo?.power ?? -1).toFixed(2)]); };
+    window.__aHurt = [];
+    p.hurt = (a, fr, k) => { window.__aHurt.push([k, +a.toFixed(1)]); return h(a, fr, k); };
+    p.health = p.maxHealth;
+  });
+  await B.evaluate(() => { const g = window.__app.game, p = g.player; p.vel.y = 3; p.onGround = false; g.exo.boostJump(p); });
+  await wait(A, () => window.__xb.some((x) => x[0] === 0), null, 20000).catch(() => {});
+  const xb = await A.evaluate(() => window.__xb.slice());
+  ok(xb.some((x) => x[0] === 0 && x[1] > 0.9), `B's boost jump: the suit's thrusters fire on A's machine (${JSON.stringify(xb)})`);
+  await standB();
+  const sl = await A.evaluate(() => {
+    const g = window.__game, p = g.player;
+    // (one of A's dead, near its end, frozen by where B will come down: two and a half metres off)
+    const x = p.pos.x - Math.sin(p.yaw) * 2.5, z = p.pos.z - Math.cos(p.yaw) * 2.5;
+    const e = g.enemies.spawn(0, x + 1, p.pos.y + 0.1, z, 0.5);
+    e.update = () => {}; e.health = 2;
+    p.health = p.maxHealth;
+    window.__aHurt.length = 0;
+    return { nid: e.nid, x, y: p.pos.y, z };
+  });
+  const kB = await B.evaluate(() => window.__app.game.stats.kills);
+  await B.evaluate((s) => {
+    const g = window.__app.game, p = g.player, w = g.world, fy = Math.floor(s.y) - 1;
+    // (open above where it comes down)
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) for (let y = fy + 1; y < fy + 12; y++) {
+      const bx = Math.floor(s.x) + dx, bz = Math.floor(s.z) + dz;
+      if (w.getBlock(bx, y, bz) !== 0) w.setBlock(bx, y, bz, 0);
+    }
+    p.pos.set(s.x, s.y + 6, s.z); p.vel.set(0, 0, 0); p.fallStart = null; p.onGround = false;
+    window.__hurt.length = 0;
+    g.exo.startSlam();
+  }, sl);
+  await wait(A, () => window.__xb.some((x) => x[0] === 3), null, 20000).catch(() => {});
+  await wait(A, (n) => window.__game.enemies.list.find((e) => e.nid === n)?.dead ?? true, sl.nid, 20000).catch(() => {});
+  const slA = await A.evaluate((n) => ({ xb: window.__xb.map((x) => x[0]), dead: window.__game.enemies.list.find((e) => e.nid === n)?.dead ?? true, hurt: window.__aHurt.slice(), h: window.__game.player.health }), sl.nid);
+  await wait(B, (k) => window.__app.game.stats.kills > k, kB, 20000).catch(() => {});
+  const slB = await B.evaluate(() => ({ kills: window.__app.game.stats.kills, hurt: [...window.__hurt], slam: window.__app.game.exo.slam }));
+  ok(slA.xb.includes(2) && slA.xb.includes(3) && slA.dead && slB.kills > kB, `B's slam comes down on A's machine: A's zombie by it dies there, and the kill is B's (${JSON.stringify(slA.xb)})`);
+  ok(slA.hurt.some(([k, a]) => k === 'pvp' && a === 25) && slA.h === 75 && !slB.hurt.includes('fall'), `with PVP on, it takes a quarter of A's health (${slA.h}); B is unhurt by the fall`);
+  await B.evaluate(() => { const inv = window.__app.game.inventory; inv.armorBox[0] = null; inv.changed(); });
+  await A.evaluate(() => { const p = window.__game.player; p.health = p.maxHealth; });
   await A.evaluate(() => window.__game.setPvp(0));
 
   // Host Options' Restart: everyone back at the start

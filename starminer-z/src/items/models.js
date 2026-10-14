@@ -8,6 +8,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { ITEMS } from './items.js';
 import { paint } from '../gfx/propMaterial.js';
+import { exoStanding } from '../gfx/exoModels.js';
 
 const D = THREE.MathUtils.degToRad;
 const M = new THREE.Matrix4();
@@ -472,6 +473,22 @@ function rocketShell() {
   return { geo: merge(parts), info: {} };
 }
 
+// the Advanced Chip: a square of alien circuit board, gold pins down its sides, its core lit
+// green, and traces lit from the core out to them
+function chip() {
+  const PIN = 0xe8c050, LIT = 0x46ff8c;
+  const parts = [box(0.07, 0.008, 0.07, 0x123a2a, 0.3), place(box(0.036, 0.006, 0.036, 0x1a1d22, 0.6), 0, 0.007, 0), place(box(0.02, 0.003, 0.02, LIT, 0, 1.2), 0, 0.0105, 0)];
+  for (let i = 0; i < 5; i++) for (const sd of [-1, 1]) {
+    const o = (i - 2) * 0.012;
+    parts.push(place(box(0.006, 0.003, 0.012, PIN, 0.95), o, 0.002, sd * 0.037));
+    parts.push(place(box(0.012, 0.003, 0.006, PIN, 0.95), sd * 0.037, 0.002, o));
+  }
+  for (const [x, z, w, d] of [[0.019, 0, 0.016, 0.002], [-0.019, 0, 0.016, 0.002], [0, 0.019, 0.002, 0.016], [0, -0.019, 0.002, 0.016]]) {
+    parts.push(place(box(w, 0.002, d, LIT, 0, 0.6), x, 0.0055, z));
+  }
+  return { geo: merge(parts), info: {} };
+}
+
 function stick() {
   return { geo: merge([place(cyl(0.012, 0.012, 0.3, 6, 0x7a5430), 0, 0.1, 0, 0, 0, D(10))]), info: {} };
 }
@@ -516,6 +533,8 @@ export function itemModel(id) {
   else if (id === 'rockets') r = rocketShell();
   else if (id === 'gunpowder') r = powder(0x4a4a4e);
   else if (id === 'explosive_powder') r = powder(0xc02818);
+  else if (id === 'advanced_chip') r = chip();
+  else if (it.kind === 'armor') r = { geo: exoStanding(), info: {} };
   cache.set(id, r);
   return r;
 }

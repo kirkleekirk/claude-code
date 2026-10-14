@@ -34,7 +34,8 @@ list. Options has Brightness, the Release Notes and Erase Storage (every world a
 You move as in the original: running once the stick is pushed most of the way (a key is all the
 way, at 4 m/s), walking short of it, and a little faster through the air; a jump goes two and a
 half metres up, enough for a ledge two blocks high; with Auto Climb on, you walk up a step a
-block high. There's no sprint or crouch, as there's none in the original.
+block high. There's no sprint or crouch, as there's none in the original (an exo suit's dodge
+and slam are on their keys: see below).
 
 A day lasts 16 minutes, starting mid-morning. The first day is under a clear alien sky; early that
 afternoon a storm rolls in for good. The HUD is the later version's: the health bar, the screen
@@ -134,8 +135,9 @@ way, and the light takes you up through the middle of the ship. Inside is a roun
 ship's core hanging over the hole in its floor, shielded while its four power nodes stand (150 of
 health each; the core has 600). Aliens beam in on its pads, and the core shoots at whoever's
 there. Break the nodes, then the core (explosives work too), and the ship comes down: everyone in
-it is let down the light, it blows apart, and each who was in it gets a diamond laser gun, 200
-laser bullets, 8 Space Goo and 6 diamonds. The light is the way out, too: drop through the hole
+it is let down the light, it blows apart, and each who was in it gets 2 Advanced Chips (what the
+exo suit is made with, and the gadgets still to come), 16 Space Rock, 8 Space Goo and 6
+diamonds. The light is the way out, too: drop through the hole
 and it lets you down gently. Left alone, the ship leaves seven and a half minutes after it came,
 letting down whoever's still in it. Its hull can't be broken or built on, and a game saved with
 you up there keeps you on the ground under it.
@@ -143,6 +145,40 @@ you up there keeps you on the ground under it.
 Online, the host's game sends it: everyone sees the same ship and drones, everyone's hits go to
 the host's count, and PVP in the hall goes by the host's setting, as it does anywhere (with PVP on,
 the hall is an arena).
+
+### The exo suit
+
+This isn't the original's either: it's this game's own, after the exos of Call of Duty: Advanced
+Warfare (Sledgehammer Games and Activision, 2014; StarMiner Z isn't affiliated with either). A
+dark alloy frame over your body, cyan where its power runs: struts down your legs, hinged at the
+hips, knees and ankles, a spine up your back to a power unit with two thrusters under it, a yoke
+over the shoulders, and gauntlets on your forearms.
+
+It's made on the crafting screen, under Gadgets, from 2 Advanced Chips, 12 iron, 4 diamonds and
+4 Space Goo (you know the recipe once you carry an Advanced Chip). It's worn in the armor slot, a
+slot of the inventory screen's own to the right of the backpack, which takes armor and nothing
+else: put the suit there as you'd put anything in a slot, or shift-click it on or off (with a
+controller, the armor slot is off either end of the backpack's rows). Worn, it moves you as an
+exo moves its wearer:
+
+| | Keyboard | Controller | |
+|---|---|---|---|
+| Boost Jump | Space, in the air | A, in the air | Up another three metres, once a jump; it takes a fall's speed off too |
+| Boost Dodge | Shift | Left stick in | A burst of thrust the way you're going (forward when you aren't), about three metres, on the ground or in the air. Two charges, each back in a second and a half |
+| Boost Slam | C | Right stick in | In the air, two metres or more up: straight down at 30 m/s. The dead within 4 m of where you land are hurt, the more the higher you came from and the nearer they are; the fall does you no harm |
+| Exo Overclock | X | D-pad down | Half as fast again, the view a little wider, for as long as its battery lasts (five seconds from full; it charges again a second and a half after, an eighth of it a second) |
+
+On a touch screen it has buttons of its own by the others while it's worn (OC, Dash, Slam). As
+armor, it takes 35% of a hit (not of a fall or lava) and wears by what it takes: it's worn out
+once it has taken 2500, from hits of about 7000 in all (seventy times your health). Its legs
+take a landing of up to 20 m/s unhurt (about ten metres of fall; without it, 15 m/s, five and a
+half). The HUD shows its battery and dodge charges under your health, and the screen's edge
+glows blue while Overclock's on. When you die it stays on you, as the hotbar does; on Hardcore
+it falls with everything else.
+
+Online, everyone sees it on you and the flames of your boosts. A slam's landing goes to every
+machine: each hurts its own dead with it (the kill is yours), and with PVP on, it takes a quarter
+of the health of anyone else that near.
 
 ### Playing online
 
@@ -159,7 +195,7 @@ Up to eight players can play together in one world, as in CastleMiner Z:
   everyone's down, the host starts it over for all.
 - The host's Host Options kick or ban a player (a ban keeps out the browser they played in, not
   everyone of that name; Clear Ban List lets them back), start the game over for everyone, and
-  turn PVP on: then bullets, laser bolts and swings hurt other players.
+  turn PVP on: then bullets, laser bolts, swings and an exo suit's slam hurt other players.
 - Everyone needs the same version of the game: a friend on an older copy is told so, and gets the
   new `starminer-z-friends.html`.
 - Each player's machine runs the dead that come for that player (as the original does), and the
@@ -224,8 +260,9 @@ HUD), `movement.mjs` (the player's movement against the original's numbers), `xb
 as an Xbox's Edge has it), `graphics.mjs` (what happens when a browser has no WebGL, or loses
 it mid-game), `hidden.mjs` (the faces left undrawn underground: fewer triangles, the same
 picture), `mothership.mjs` (the alien ship, played through: its drones, the way up, the fight in
-its hall, its end and its loot) and `soak.mjs` (each mode played at random, unattended, for a
-while). Each takes the dev server's address and a folder for its screenshots
+its hall, its end and its loot), `exo.mjs` (the exo suit and the armor slot: making it, putting
+it on by mouse, pad and touch, each of its boosts measured, what it takes of a hit, kept in a
+save and on dying) and `soak.mjs` (each mode played at random, unattended, for a while). Each takes the dev server's address and a folder for its screenshots
 (`node tools/checks/modes.mjs http://localhost:5173 out`), and `&nocmz` as a third argument runs
 it without the ripped files (`&ufo` brings the alien ship into the soak).
 
@@ -273,5 +310,5 @@ of its own.
   License), from Google Fonts.
 - CastleMiner Z's sounds, music, models and animations (when you rip them from your own copy;
   see above) belong to DigitalDNA Games and aren't distributed here.
-- Everything else (the world, sky, the alien ship, the stand-in zombies and skeletons,
-  interface) is this project's own work.
+- Everything else (the world, sky, the alien ship, the exo suit, the stand-in zombies and
+  skeletons, interface) is this project's own work.

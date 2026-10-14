@@ -110,6 +110,19 @@ html:not(.cmz-ui) .hud .lock.locked::after { content: 'LOCK'; position: absolute
 .hud .boss .bs { font-size: 0.62em; font-weight: 700; color: var(--ink-dim); margin-top: 0.15em; }
 .hud::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, rgba(70,255,140,0) 45%, rgba(70,255,140,0.38) 100%); opacity: 0; transition: opacity 0.6s; }
 .hud.beamed::after { opacity: 1; }
+/* the exo suit, worn: its battery (for Overclock) and its dodge's charges, under the health; and
+   the blue round the edges while it's overclocked */
+.hud .exo { display: none; align-items: center; gap: 0.4em; padding-left: 0.1em; font-size: 0.68em; font-weight: 800; letter-spacing: 0.08em; }
+.hud .exo.on { display: flex; }
+.hud .exo .el { color: #9fe8ff; }
+.hud .exo .eb { position: relative; width: 8em; height: 0.55em; background: rgba(0,0,0,0.55); border: 0.09em solid rgba(160, 230, 255, 0.55); }
+.hud .exo .eb b { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(#9fe8ff, #2aa8d8); transition: width 0.1s; }
+.hud .exo.oc .eb b { background: linear-gradient(#f0fcff, #5fd8ff); box-shadow: 0 0 0.6em #5fd8ff; }
+.hud .exo .ec { display: flex; gap: 0.45em; padding-left: 0.2em; }
+.hud .exo .ec i { width: 0.6em; height: 0.6em; transform: rotate(45deg); background: #5fd8ff; box-shadow: 0 0 0.35em #5fd8ff; }
+.hud .exo .ec i.off { background: rgba(255,255,255,0.16); box-shadow: none; }
+.hud::before { content: ''; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, rgba(80,200,255,0) 50%, rgba(80,200,255,0.26) 100%); opacity: 0; transition: opacity 0.3s; }
+.hud.overclock::before { opacity: 1; }
 
 /* ---- death ---- */
 .death { position: absolute; inset: 0; background: var(--death); display: none; flex-direction: column; align-items: center; justify-content: center; gap: 0.15em; pointer-events: auto; }

@@ -184,7 +184,7 @@ await E(() => { const g = window.__app.game, v = g.mothership.visit; T.at(v.orig
 await snap('5-bare-core');
 const s7 = await E(() => {
   const g = window.__app.game, v = g.mothership.visit, p = g.player;
-  // (how many of each thing you carry: the loot's gun may be one you have already)
+  // (how many of each thing you carry: the loot may be things you have already)
   const count = () => { const m = {}; for (const s of g.inventory.slots) if (s) m[s.id] = (m[s.id] || 0) + (s.count || 1); return m; };
   const before = count();
   let n = 0;
@@ -193,7 +193,7 @@ const s7 = await E(() => {
   T.step(1);
   const msg = g.hud.feed.map((f) => f.el.textContent);
   T.step(7);
-  const after = count(), got = Object.keys(after).filter((id) => after[id] > (before[id] || 0));
+  const after = count(), got = Object.fromEntries(Object.keys(after).filter((id) => after[id] > (before[id] || 0)).map((id) => [id, after[id] - (before[id] || 0)]));
   // (what's under their feet: the columns they stand over, on the edge of one maybe)
   const r = p.radius, under = [[-r, -r], [r, -r], [-r, r], [r, r]].map(([dx, dz]) => g.world.getBlock(p.pos.x + dx, p.pos.y - 0.5, p.pos.z + dz));
   return { ...down, msg, y: p.pos.y, carried: p.carried, onGround: p.onGround, under, got };
@@ -202,7 +202,8 @@ console.log(JSON.stringify(s7));
 ok(s7.end === 'down' && s7.shots === 40, `the core taken down (${s7.shots} shots): the ship's going down`);
 ok(s7.msg.includes('The ship is going down!'), 'and its alarm');
 ok(!s7.carried && s7.onGround && s7.y < SHIP_FLOOR() - 20 && s7.under.some((id) => id) && !s7.under.includes(46), `you're let down the light to the ground (y ${s7.y.toFixed(1)}, on ${s7.under.join(' ')})`);
-ok(s7.got.some((id) => /^laser_.*_diamond$/.test(id)) && s7.got.includes('slime') && s7.got.includes('diamond') && s7.got.includes('bullets_laser'), `its loot: ${s7.got.join(', ')}`);
+ok(s7.got.advanced_chip === 2 && s7.got.slime === 8 && s7.got.space_rock === 16 && s7.got.diamond === 6 && Object.keys(s7.got).length === 4,
+  `its loot: Advanced Chips, Space Goo, Space Rock and diamonds (${Object.entries(s7.got).map(([id, n]) => `${n} ${id}`).join(', ')})`);
 await E(() => { const g = window.__app.game, p = g.player; p.pitch = 0.9; });
 await snap('6-gone');
 const s8 = await E(() => { const g = window.__app.game; T.step(5); return { visit: !!g.mothership.visit, overlay: !!g.world.overlay, light: g.app.terrain.uniforms.uBeam.value.w }; });

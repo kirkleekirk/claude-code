@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { AvatarModel, bindPosition } from '../entities/avatar/model.js';
 import { CmzPlayerAnimation } from '../entities/cmz/playerAnim.js';
 import { HeldItems } from '../entities/cmz/held.js';
+import { ExoFrame } from './exoModels.js';
 import { itemModel } from '../items/models.js';
 import { ITEMS } from '../items/items.js';
 
@@ -58,6 +59,8 @@ export class CmzViewModel {
 
   // The avatar to see the arms of: the player's own look.
   setLook(look) {
+    this.exo?.dispose();
+    this.exo = null;
     if (this.model) { this.model.dispose(); this.model.material.dispose(); this.model.root.removeFromParent(); }
     const m = new AvatarModel(look || {}, this.sky, this.terrain);
     m.root.scale.setScalar(1);
@@ -71,11 +74,22 @@ export class CmzViewModel {
     const id = this.itemId;
     this.itemId = undefined;
     this.setItem(id ?? null);
+    // (an exo suit on a new look too)
+    if (this.exoOn) { this.exoOn = false; this.setExo(true); }
+  }
+
+  // An exo suit worn: its bracers and the struts on your arms, as you see them.
+  setExo(on) {
+    if (!!on === !!this.exoOn) return;
+    this.exoOn = !!on;
+    if (on) this.exo = new ExoFrame(this.model, this.sky, this.terrain, { armsOnly: true, opts: { noFog: true, noShadow: true } });
+    else { this.exo?.dispose(); this.exo = null; }
   }
 
   setArmColors() {}
 
   dispose() {
+    this.exo?.dispose();
     this.model.dispose();
     this.model.material.dispose();
     for (const m of this.held.mats.values()) m.dispose();
@@ -196,6 +210,7 @@ export class CmzViewModel {
     this.camera.updateMatrixWorld();
     // light where the player stands
     this.model.setLight(ctx.light.x, ctx.light.y);
+    this.exo?.setLight(ctx.light);
     this.held.setLight(ctx.light);
     this.holder.visible = !this.hidden && !(this.info.scope && this.ads > 0.9);
     // the muzzle flash, at the barrel's tip

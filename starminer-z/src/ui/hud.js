@@ -37,6 +37,7 @@ export class HUD {
       <div class="bottom">
         <div class="iname txt"></div>
         <div class="hearts"></div>
+        <div class="exo txt"><span class="el">EXO</span><span class="eb"><b></b></span><span class="ec"></span></div>
         <div class="hotbar"></div>
       </div>`;
     parent.appendChild(el);
@@ -56,6 +57,9 @@ export class HUD {
     this.scope = this.$('.scope');
     this.lockEl = this.$('.lock');
     this.hintEl = this.$('.hint');
+    this.exoEl = this.$('.exo');
+    this.exoFill = this.$('.exo .eb b');
+    this.exoPips = this.$('.exo .ec');
     this.bossEl = this.$('.boss');
     this.bossFill = this.$('.boss .bb b');
     this.bossPips = [...this.el.querySelectorAll('.boss .bp i')];
@@ -117,6 +121,18 @@ export class HUD {
   }
 
   hitMarker() { this.hitTimer = 0.12; this.hitEl.classList.add('on'); }
+
+  // The exo suit, while it's worn (e: { battery: 0-1, charges, of, overclock }), or nothing:
+  // its battery (for Overclock) and its dodge's charges.
+  exoBar(e) {
+    this.exoEl.classList.toggle('on', !!e);
+    this.el.classList.toggle('overclock', !!e?.overclock);
+    if (!e) return;
+    this.exoEl.classList.toggle('oc', e.overclock);
+    this.set('exoW', this.exoFill.style, `${(Math.max(0, Math.min(1, e.battery)) * 100).toFixed(1)}%`, 'width');
+    const pips = Array.from({ length: e.of }, (_, k) => `<i${k < e.charges ? '' : ' class="off"'}></i>`).join('');
+    this.set('exoPips', this.exoPips, pips, 'innerHTML');
+  }
 
   // The alien ship's core, while you're in its hall (b: { core: 0-1, nodes: [up, ...], shielded }),
   // or nothing (null).
@@ -217,6 +233,8 @@ export class HUD {
         this.hearts.innerHTML = h;
       }
     }
+    // the exo suit's battery and charges, while it's worn
+    this.exoBar(s.exo ?? null);
     // the screen goes red the more you're hurt
     const red = s.dead ? 0 : (1 - f) * 0.47;
     const rk = red.toFixed(3);

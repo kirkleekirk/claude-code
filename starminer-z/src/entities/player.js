@@ -12,6 +12,10 @@
 //
 // No sprinting and no crouching: the original has neither. (Its slight drift backwards while
 // strafing straight sideways isn't copied.) Lava, which here you sink into, slows you.
+//
+// An exo suit (this game's own: see game/exo.js), worn, moves you more: its Overclock faster,
+// its dodge's push on top of your own way of going, a jump again in the air, its slam straight
+// down, and its legs taking harder landings.
 
 import * as THREE from 'three';
 import { B, SOLID, BLOCKS } from '../world/blocks.js';
@@ -56,6 +60,10 @@ export class Player {
     this.noclip = false;
     // carried (up or down the alien ship's light): where you are is set from outside
     this.carried = false;
+    // the exo suit's part in moving, while one's worn (game/exo.js); and what's worn takes its
+    // share of a hit first (guard(amount, kind) -> what's left of it)
+    this.exo = null;
+    this.guard = null;
     this.knock = new THREE.Vector3();
   }
 
@@ -91,6 +99,8 @@ export class Player {
 
   hurt(amount, from = null, kind = 'hit') {
     if (this.dead || amount <= 0) return;
+    if (this.guard) amount = this.guard(amount, kind);
+    if (!(amount > 0)) return;
     this.health = Math.max(0, this.health - amount);
     this.hurtTimer = 0.45;
     // the original: health starts coming back three seconds after the last hit
@@ -129,7 +139,7 @@ export class Player {
     // movement, in the yaw frame (x: strafe, y: forward), as UpdateAnimation sets it
     this.crouching = false;
     this.sprinting = false;
-    const mx = input.move.x, my = input.move.y;
+    const mx = input.move.x, my = input.move.y, ex = this.exo;
     const fwd = Math.abs(my), side = Math.abs(mx), moving = Math.max(fwd, side) >= 0.1;
     this.running = moving && fwd >= 0.8;
     let vx = 0, vz = 0; // local: x to the right, z forward
@@ -144,9 +154,11 @@ export class Player {
       }
     }
     if (this.inLava) { vx *= 0.45; vz *= 0.45; }
+    if (ex) { vx *= ex.speed; vz *= ex.speed; }
     const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw);
     this.vel.x = -sy * vz + cy * vx;
     this.vel.z = -cy * vz - sy * vx;
+    if (ex) { this.vel.x += ex.push.x; this.vel.z += ex.push.z; }
 
     if (this.noclip) {
       const fw = this.forward();
@@ -169,8 +181,9 @@ export class Player {
       if (input.pressed('jump') && this.onGround && this.vel.y <= 0) {
         this.vel.y += JUMP;
         this.onGround = false;
-      }
-      this.vel.y -= GRAVITY * dt;
+      } else if (ex && input.pressed('jump') && !this.onGround) ex.boostJump(this);
+      // (a slam: straight down, as fast as it goes)
+      if (ex?.slam) { this.vel.set(0, -ex.slamSpeed, 0); } else this.vel.y -= GRAVITY * dt;
     }
 
     // move, in small steps so nothing tunnels; the dead you push into hold you back (crowd, set
@@ -234,7 +247,8 @@ export class Player {
 
     // landing
     if (landedSpeed < 0) {
-      if (-landedSpeed > FALL_SAFE && !this.inLava) this.hurt((-landedSpeed - FALL_SAFE) * FALL_HURT * this.maxHealth, null, 'fall');
+      const slam = ex?.landed(this), safe = ex ? ex.fallSafe : FALL_SAFE;
+      if (!slam && -landedSpeed > safe && !this.inLava) this.hurt((-landedSpeed - safe) * FALL_HURT * this.maxHealth, null, 'fall');
       if (this.onLand) this.onLand(-landedSpeed, this.groundBlock());
     }
 

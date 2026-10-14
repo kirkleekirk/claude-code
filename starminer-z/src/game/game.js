@@ -21,6 +21,7 @@ import { Crates } from './crates.js';
 import { Enemies } from './enemies.js';
 import { Dragons } from './dragons.js';
 import { Mothership } from './mothership.js';
+import { Exo } from './exo.js';
 import { RULES } from './modes.js';
 import { HUD } from '../ui/hud.js';
 import { Crafting } from '../ui/crafting.js';
@@ -84,6 +85,9 @@ export class Game {
     this.player.autoClimb = app.settings.autoClimb;
     this.inventory = new Inventory();
     this.inventory.infinite = this.creative;
+    // the exo suit, when it's worn (this game's own), and what armor takes of a hit
+    this.exo = new Exo(this);
+    this.player.guard = (n, kind) => this.armorGuard(n, kind);
     // first person: the original's own arms, clips and items when they've been ripped
     const cmz = app.cmzPlayer;
     this.viewModel = cmz ? new CmzViewModel(app.sky.uniforms, app.terrain.uniforms, cmz.clips, cmz.items) : new ViewModel(app.sky.uniforms, app.terrain.uniforms);
@@ -215,6 +219,19 @@ export class Game {
     this.online = new Online(this, link);
   }
 
+  // What the armor worn takes of a hit (its protect of it, not of a fall or lava), wearing it by
+  // as much: what's left of the hit.
+  armorGuard(n, kind) {
+    const inv = this.inventory, it = inv.armorItem;
+    if (!it?.protect || kind === 'fall' || kind === 'lava' || kind === 'test') return n;
+    const taken = n * it.protect;
+    if (inv.wearArmor(taken)) this.hud.message(`Your ${it.name} has worn out`);
+    return n - taken;
+  }
+
+  // the view widening a moment, as a boost of the exo suit throws you (k: how much)
+  kickView(k) { this.fovKick = Math.max(this.fovKick || 0, k); }
+
   // PVP, someone's bullet or laser bolt in this player (k: of their health)
   pvpHit(k, from) {
     const p = this.player;
@@ -249,10 +266,11 @@ export class Game {
   }
 
   // The original's SetDefaultInventory: a stone pickaxe, the compass, a pistol and a knife, 200
-  // bullets and 16 torches (on Hardcore, nothing at all).
+  // bullets and 16 torches (on Hardcore, nothing at all); and no armor.
   starterKit() {
     const inv = this.inventory;
     inv.slots.fill(null);
+    inv.armorBox[0] = null;
     inv.hand = null;
     if (this.difficulty !== 'hardcore') for (const [id, n] of STARTER_KIT) inv.add(id, n);
     inv.selected = 0;
@@ -329,7 +347,7 @@ export class Game {
       pos: p.pos, yaw: p.yaw, pitch: p.pitch, vel: p.vel, onGround: p.onGround, held: id,
       use: !!this.viewModel.useNow, shoulder: gun && this.ads, reload: gun && this.reloading > 0, reloadTime: it?.reload,
       dead: false, light: { sky: L.sky / 15, block: L.block / 15 },
-      grenade: stage, holdUse: !!this.grenade, time: this.app.sky.time,
+      grenade: stage, holdUse: !!this.grenade, time: this.app.sky.time, exo: this.exo.worn, overclock: this.exo.overclock,
     });
   }
 
@@ -420,6 +438,8 @@ export class Game {
     // the player (standing still while the crafting screen is up, or a menu online; the world
     // goes on)
     const crafting = this.crafting?.isOpen;
+    // (the exo suit's own controls only while the player's at them)
+    this.exo.update(live ? dt : 0, live && playing && !crafting && !p.dead ? input : null);
     if (live && !p.dead) {
       if (!playing) {
         p.update(dt, IDLE, false);
@@ -471,7 +491,9 @@ export class Game {
     // ShoulderMagnification), as far as it's raised, and the aim slows (a quarter as fast on a
     // stick, as in the original; with a mouse, as far as the view narrows)
     const gunIn = ITEMS[this.inventory.held?.id], zoom = gunIn?.kind === 'gun' ? gunIn.zoom || 1 : 1;
-    const base = app.settings.fov * (p.sprinting ? 1.06 : 1), up = this.viewModel.ads;
+    // (wider while an exo suit's Overclock is on, and a moment as one of its boosts throws you)
+    this.fovKick = Math.max(0, (this.fovKick || 0) - dt * 5);
+    const base = app.settings.fov * (p.sprinting || this.exo.overclock ? 1.06 : 1) * (1 + 0.07 * this.fovKick), up = this.viewModel.ads;
     const fov = THREE.MathUtils.lerp(base, base / zoom, up);
     if (up > 0) cam.fov = fov; else cam.fov += (fov - cam.fov) * Math.min(1, dt * 10);
     cam.updateProjectionMatrix();
@@ -552,6 +574,7 @@ export class Game {
       shoulder: !!(it && it.kind === 'gun' && this.ads && this.viewModel.ads > 0.5),
       dead: p.dead, pos: p.pos, yaw: p.yaw,
       lock: it?.guided && this.dragons.lock.rect ? { ...this.dragons.lock.rect, locked: this.dragons.lock.locked } : null,
+      exo: p.dead ? null : this.exo.hud(),
     });
   }
 
@@ -1110,6 +1133,7 @@ export class Game {
   teleportToPoint(x, y, z) {
     const p = this.player;
     this.mothership?.cancelLift();
+    this.exo.reset();
     p.pos.set(x, y, z);
     p.vel.set(0, 0, 0);
     p.fallStart = null;
@@ -1312,6 +1336,7 @@ export class Game {
   // (alone, the game starts again); anywhere else, back at the start
   respawn() {
     const p = this.player;
+    this.exo.reset();
     if (this.mode === 'endurance') {
       let best = null, bd = Infinity;
       for (const r of this.online?.players.values() || []) {
@@ -1353,6 +1378,7 @@ export class Game {
     const p = this.player;
     this.revive();
     this.mothership?.clear();
+    this.exo.reset();
     const sp = this.spawnSpot();
     p.spawn(sp.x, sp.y, sp.z);
     p.yaw = Math.PI;

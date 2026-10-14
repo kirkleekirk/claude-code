@@ -93,6 +93,8 @@ material(21, 'copper', 'Copper', 'Used to craft items', 'Made from Copper ore');
 material(22, 'gold', 'Gold', 'Used to craft items', 'Made from Gold ore');
 material(106, 'gunpowder', 'Gun Powder', 'Used to craft ammunition', RAW);
 material(108, 'explosive_powder', 'Explosive Powder', 'Used to craft explosives', 'Dropped by dragons and demons');
+// (this game's own: alien circuitry, from the mothership, for the things the original never had)
+material(null, 'advanced_chip', 'Advanced Chip', 'Alien circuitry from the mothership', 'Used to make advanced weapons and gadgets');
 const casing = (orig, id, name) => material(orig, id, name, 'Used for making ammunition', '', { stack: 5000 });
 casing(41, 'casing_brass', 'Brass Casing');
 casing(42, 'casing_iron', 'Iron Casing');
@@ -208,6 +210,12 @@ add(103, 'rocket_launcher', gunDef(RPG, { gun: 'rocket', mat: 'bloodstone', name
 add(104, 'rocket_launcher_guided', gunDef({ ...RPG, zoom: 2.0 }, { gun: 'rocket', guided: true, mat: 'bloodstone', name: 'Anti Dragon Guided Missile', desc: 'Guided missile used for killing dragons', desc2: 'Uses Rockets', ammo: 'rockets', uses: 1, enemyDamage: 100, damageType: DMG.SHOTGUN, scoped: true }));
 // grenades: ten to a stack, a second between throws
 add(110, 'grenade', { kind: 'grenade', grenade: 'he', name: 'Grenade', desc: 'Blow up Zombies', stack: 10, cooldown: 1.0 });
+
+// ---- armor (this game's own, worn in the armor slot) -------------------------------------------
+// protect: what it takes off a hit (not falls, nor lava); uses: the damage it can take that way
+// before it's worn through (see game/exo.js for what an exo suit does)
+add(null, 'exo_suit', { kind: 'armor', armor: 'exo', name: 'Exo Suit', stack: 1, protect: 0.35, uses: 2500,
+  desc: 'Powered armor: boost jump, dodge, slam and overclock', desc2: 'Wear it in the armor slot' });
 
 // the original's InventoryItemIDs that are other things, or nothing: 0 bare hands, 81 a space
 // knife never made, 112 and 113 spent launchers (unnamed)
@@ -384,6 +392,8 @@ r('explosives', 'grenade', 1, ['explosive_powder', 1], ['iron', 1]);
 r('explosives', 'rocket_launcher', 1, ['explosive_powder', 2], ['iron', 3], ['wood', 2]);
 r('explosives', 'rocket_launcher_guided', 1, ['explosive_powder', 2], ['iron', 3], ['copper', 2], ['space_rock', 1]);
 r('structures', 'door', 1, ['wood', 5], ['iron', 1]);
+// this game's own
+r('gadgets', 'exo_suit', 1, ['advanced_chip', 2], ['iron', 12], ['diamond', 4], ['slime', 4]);
 
 export const TABS = [
   { id: 'materials', name: 'Materials' },
@@ -392,6 +402,7 @@ export const TABS = [
   { id: 'ammo', name: 'Ammo' },
   { id: 'explosives', name: 'Explosives' },
   { id: 'structures', name: 'Structures' },
+  { id: 'gadgets', name: 'Gadgets' },
 ];
 
 // The things a player starts with (the original's SetDefaultInventory; on Hardcore, nothing).

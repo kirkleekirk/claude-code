@@ -1,4 +1,6 @@
-// The player's items: 8 hotbar slots and 32 in the backpack, as in the original.
+// The player's items: 8 hotbar slots and 32 in the backpack, as in the original, and (this
+// game's own) a slot for armor (armorBox: a box of one, so the screen moves things in and out of
+// it as it does any other; nothing but armor goes in it).
 // A slot is null or { id, count, dur, mag } (dur: uses left in something that wears out, out of
 // its item's `uses`; mag: rounds loaded in a gun).
 // On the inventory screen a stack can be lifted out of its slot into the hand, as the original's
@@ -12,9 +14,27 @@ export const PACK = 32;
 export class Inventory {
   constructor() {
     this.slots = new Array(HOTBAR + PACK).fill(null);
+    this.armorBox = [null];
     this.selected = 0;
     this.hand = null;
     this.onChange = null;
+  }
+
+  // what's worn in the armor slot, and its item
+  get armor() { return this.armorBox[0]; }
+  get armorItem() { const s = this.armorBox[0]; return s ? ITEMS[s.id] : null; }
+
+  // may this stack go in that box? (only armor in the armor slot)
+  fits(box, s) { return box !== this.armorBox || ITEMS[s?.id]?.kind === 'armor'; }
+
+  // The armor worn takes n of wear (twice that when nothing's used up, as tools do in Creative);
+  // it's gone once it's worn through. Returns true when it is.
+  wearArmor(n) {
+    const s = this.armorBox[0];
+    if (!s || s.dur == null || !(n > 0)) return false;
+    s.dur -= this.infinite ? n * 2 : n;
+    if (s.dur <= 0) { this.armorBox[0] = null; this.changed(); return true; }
+    return false;
   }
 
   changed() { if (this.onChange) this.onChange(); }
@@ -125,7 +145,7 @@ export class Inventory {
   // The original's Discovered: a recipe is known once you carry what it makes, one of its
   // components, or a gun it makes the bullets for.
   discovered(recipe) {
-    for (const s of this.slots) {
+    for (const s of [...this.slots, this.armorBox[0]]) {
       if (!s) continue;
       if (s.id === recipe.out) return true;
       const it = ITEMS[s.id];
@@ -152,9 +172,11 @@ export class Inventory {
 
   // Everything in the backpack (and, all: the hotbar too) out of it, as stacks to drop (the
   // original's DropAll, on dying).
+  // (the armor worn stays on, as the hotbar does; with all, it goes too)
   takeAll(all = false) {
     const out = [];
     for (let i = all ? 0 : HOTBAR; i < this.slots.length; i++) if (this.slots[i]) { out.push(this.slots[i]); this.slots[i] = null; }
+    if (all && this.armorBox[0]) { out.push(this.armorBox[0]); this.armorBox[0] = null; }
     if (all && this.hand) { out.push(this.hand.s); this.hand = null; }
     this.changed();
     return out;
@@ -195,7 +217,7 @@ export class Inventory {
   // as that goes; on anything else it swaps, and the hand takes what was there.
   put(i, one = false, box = this.slots) {
     const h = this.hand;
-    if (!h) return false;
+    if (!h || !this.fits(box, h.s)) return false;
     const t = box[i], max = ITEMS[h.s.id].stack;
     if (t && t.id === h.s.id && max > 1) {
       const n = Math.min(max - t.count, one ? 1 : h.s.count);
@@ -220,6 +242,7 @@ export class Inventory {
     if (!h) return null;
     this.hand = null;
     if ((!h.box || h.box === this.slots) && !this.slots[h.from]) { this.slots[h.from] = h.s; this.changed(); return null; }
+    if (h.box === this.armorBox && !this.armorBox[0]) { this.armorBox[0] = h.s; this.changed(); return null; }
     return this.stow(h.s);
   }
 
@@ -237,6 +260,27 @@ export class Inventory {
     if (left) for (let k = from; k < to; k++) if (!box[k]) { box[k] = left; left = null; break; }
     this.changed();
     return left;
+  }
+
+  // Armor on, from slot i (what was on goes where it was), or off, into the backpack (or the
+  // hotbar, with the backpack full)
+  equip(i) {
+    const s = this.slots[i];
+    if (!s || ITEMS[s.id]?.kind !== 'armor') return false;
+    this.slots[i] = this.armorBox[0];
+    this.armorBox[0] = s;
+    this.changed();
+    return true;
+  }
+
+  unequip() {
+    const s = this.armorBox[0];
+    if (!s) return false;
+    this.armorBox[0] = null;
+    let left = this.stow(s, HOTBAR);
+    if (left) left = this.stow(left, 0, HOTBAR);
+    if (left) { this.armorBox[0] = left; this.changed(); return false; }
+    return true;
   }
 
   // Shift-click: slot i over to the other side, backpack to hotbar or back, as far as it goes
@@ -269,14 +313,16 @@ export class Inventory {
     const slots = this.slots.map((s) => (s ? { ...s } : null));
     // something lifted on the inventory screen goes in the save where it came from
     const h = this.hand;
-    if (h) {
+    let armor = this.armorBox[0] ? { ...this.armorBox[0] } : null;
+    if (h && h.box === this.armorBox && !armor) armor = { ...h.s };
+    else if (h) {
       const t = h.box && h.box !== this.slots ? undefined : slots[h.from];
       if (t === null) slots[h.from] = { ...h.s };
       else if (!t) { const k = slots.indexOf(null); if (k >= 0) slots[k] = { ...h.s }; }
       else if (t.id === h.s.id && ITEMS[t.id].stack > 1) t.count += h.s.count;
       else { const k = slots.indexOf(null); if (k >= 0) slots[k] = { ...h.s }; }
     }
-    return { slots, selected: this.selected };
+    return { slots, selected: this.selected, armor };
   }
 
   load(d) {
@@ -284,6 +330,8 @@ export class Inventory {
     this.hand = null;
     this.slots = new Array(HOTBAR + PACK).fill(null);
     d.slots.forEach((s, i) => { if (s && ITEMS[s.id] && i < this.slots.length) this.slots[i] = { ...s }; });
+    const a = d.armor;
+    this.armorBox[0] = a && ITEMS[a.id]?.kind === 'armor' ? { ...a } : null;
     this.selected = d.selected || 0;
     this.changed();
   }

@@ -7,14 +7,14 @@
 // player carries is their own: the host keeps it with the world, for when they come back.
 
 import * as THREE from 'three';
-import { RemotePlayer, enemySnapshot, SHOULDER, RELOAD, DEAD, CROUCH, GROUND } from './remote.js';
+import { RemotePlayer, enemySnapshot, SHOULDER, RELOAD, DEAD, CROUCH, GROUND, EXO, OVERCLOCK } from './remote.js';
 import { BLOCKS } from '../world/blocks.js';
 import { ITEMS } from '../items/items.js';
 import { PRESETS } from '../entities/avatar/looks.js';
 
 // (every machine builds the world from the seed itself, so a change to how it's built is a new
-// version too: 6 is the original's world builder; 7, the alien ship)
-export const PROTOCOL = 7;
+// version too: 6 is the original's world builder; 7, the alien ship; 8, the exo suit)
+export const PROTOCOL = 8;
 // how often (seconds) each thing goes out
 const STATE_EVERY = 1 / 15, ENEMIES_EVERY = 1 / 8, CLOCK_EVERY = 2, KEEP_EVERY = 15;
 
@@ -307,6 +307,14 @@ export class Online {
       case 'ue':
         if (!H && (m.w === 'gone' || m.w === 'down')) g.mothership?.handleEnd(m.w);
         break;
+      // an exo suit's boost (anyone's, passed on): a jump, a dodge (its way), a slam, or a slam's
+      // landing (how high it came from)
+      case 'xb': {
+        const at = v3(m.p), d = Array.isArray(m.d) && m.d.length === 2 && m.d.every(Number.isFinite) ? new THREE.Vector3(m.d[0], 0, m.d[1]) : null;
+        if (at && Number.isInteger(m.k) && m.k >= 0 && m.k <= 3) this.players.get(who)?.exoBoost(m.k, at, d, Number.isFinite(m.h) ? Math.max(0, Math.min(40, m.h)) : 0);
+        if (H) this.link.send({ ...m, id: from }, from);
+        break;
+      }
       // the host's: everyone starts the game over; PVP on or off; you're out
       case 'restart':
         if (!H) g.restartLevel();
@@ -411,6 +419,9 @@ export class Online {
 
   grenade(at, dir, fuse) { if (this.link.count) this.link.send({ t: 'gren', p: arr(at), d: arr(dir), f: fuse }); }
 
+  // a boost of this player's exo suit (see game/exo.js)
+  exoBoost(k, at, dir, h) { if (this.link.count) this.link.send({ t: 'xb', k, p: arr(at), d: dir ? [dir.x, dir.z] : null, h: Math.round(h * 10) / 10 }); }
+
   fuse(x, y, z) { if (this.link.count) this.link.send({ t: 'fuse', b: [x, y, z] }); }
 
   // an explosion here (original: the first of a chain; item: what set it off)
@@ -500,7 +511,8 @@ export class Online {
 
   sendState() {
     const g = this.game, p = g.player, it = g.inventory.held, def = it ? ITEMS[it.id] : null, gun = def?.kind === 'gun';
-    const f = (gun && g.ads ? SHOULDER : 0) | (gun && g.reloading > 0 ? RELOAD : 0) | (p.dead ? DEAD : 0) | (p.crouching ? CROUCH : 0) | (p.onGround ? GROUND : 0);
+    const f = (gun && g.ads ? SHOULDER : 0) | (gun && g.reloading > 0 ? RELOAD : 0) | (p.dead ? DEAD : 0) | (p.crouching ? CROUCH : 0) | (p.onGround ? GROUND : 0)
+      | (g.exo?.worn ? EXO : 0) | (g.exo?.overclock ? OVERCLOCK : 0);
     this.link.send({ t: 'st', p: arr(p.pos), v: arr(p.vel), a: [p.yaw, p.pitch], h: it?.id ?? null, u: g.uses, f, rt: gun ? def.reload : 0 });
   }
 

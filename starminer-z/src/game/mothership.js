@@ -14,7 +14,7 @@
 //               four power nodes stand. Aliens beam in on the pads, and the core shoots at
 //               whoever's there. Break the nodes, then the core, and the ship comes down:
 //               everyone in it is let down the light, it blows apart, and each who was in it
-//               gets its loot (a diamond laser gun, laser bullets, Space Goo, diamonds)
+//               gets its loot (Advanced Chips, Space Goo, Space Rock, diamonds)
 //   going       seven and a half minutes after it came, it leaves, letting down whoever's in it
 //
 // Online, the host runs it: it says when one comes and where, and keeps the core's and the
@@ -60,9 +60,9 @@ const ALIEN_EVERY = 7, ALIEN_MAX = 5;
 const MIN_WAIT = 20 * 60, MAX_WAIT = 60 * 60, RETRY = 30;
 // heard from this far off
 const HEAR = 900;
-// what each who was in it gets when it comes down: one of these, and all of those
-const LOOT_GUNS = ['laser_assault_diamond', 'laser_smg_diamond', 'laser_pistol_diamond', 'laser_rifle_diamond', 'laser_shotgun_diamond'];
-const LOOT = [['bullets_laser', 200], ['slime', 8], ['diamond', 6]];
+// what each who was in it gets when it comes down: its Advanced Chips (what the exo suit and the
+// gadgets to come are made with), Space Goo, Space Rock and diamonds
+const LOOT = [['advanced_chip', 2], ['slime', 8], ['space_rock', 16], ['diamond', 6]];
 // the lift, up and down: its stages' lengths
 const UP = [0.9, 3.0, 0.7], DOWN = [0.8, 3.6, 0.7];
 // leaving: how long it waits (for whoever's in it to be let down) before it goes
@@ -784,8 +784,6 @@ class Visit {
   loot() {
     const g = this.game, p = g.player, o = this.origin;
     const at = p.pos.distanceTo(o) < 80 && p.pos.y < FLOOR - 2 ? p.pos : new THREE.Vector3(o.x + 3, this.groundY() ?? p.pos.y, o.z);
-    const gun = LOOT_GUNS[Math.floor(Math.random() * LOOT_GUNS.length)];
-    g.drops.spawn(gun, 1, at.x, at.y + 0.6, at.z);
     for (const [id, n] of LOOT) g.drops.spawn(id, n, at.x + (Math.random() - 0.5), at.y + 0.6, at.z + (Math.random() - 0.5));
     g.hud.message('The ship left something behind');
   }

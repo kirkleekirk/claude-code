@@ -247,7 +247,8 @@ export class Audio {
 
   // Plays a cue at a place in the world (pos) or in your head. Returns the instance, which a
   // moving sound follows with move(), or null if it didn't start. far: { hear, ref } for
-  // something big and loud (a dragon): heard that far off, and as loud as up close out to ref.
+  // something big and loud (a dragon): heard that far off, and as loud as up close out to ref;
+  // and far.rate, played that much faster (and so higher).
   play(name, pos = null, gain = 1, far = null) {
     if (!this.running) return null;
     const cue = this.cues[name];
@@ -299,6 +300,7 @@ export class Audio {
       const src = c.createBufferSource();
       src.buffer = buf;
       src.loop = !!e.loop;
+      if (far?.rate) src.playbackRate.value = far.rate;
       let to = out;
       if (e.vol) { to = c.createGain(); to.gain.value = dB(e.vol); to.connect(out); }
       src.connect(to);
