@@ -1,0 +1,55 @@
+// Walk the front end with key presses, the way a player would, and screenshot each step.
+//   node tools/flow.mjs <base url> <out dir>
+import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { mkdirSync } from 'node:fs';
+const [base, out] = process.argv.slice(2);
+mkdirSync(out, { recursive: true });
+const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+const logs = [];
+page.on('console', (m) => { if (m.type() === 'error') logs.push(`[error] ${m.text()}`); });
+page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
+const state = () => page.evaluate(() => ({ state: window.__app?.state, menu: window.__app?.menus?.id, sel: window.__app?.menus?.cur?.sel, crafting: !!window.__app?.game?.crafting?.isOpen }));
+const waitFor = async (pred, ms = 120000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { const s = await state(); if (pred(s)) return s; await page.waitForTimeout(500); } throw new Error(`timed out; last ${JSON.stringify(await state())}`); };
+const key = async (k) => { await page.keyboard.down(k); await page.waitForTimeout(150); await page.keyboard.up(k); await page.waitForTimeout(350); };
+// an arrow in a menu, and on once the choice has moved (a slow frame can take two presses as one)
+const move = async (k, n = 1) => { for (let i = 0; i < n; i++) { const was = (await state()).sel; await key(k); await waitFor((s) => s.sel !== was, 30000); } };
+const shot = async (n) => { await page.screenshot({ path: `${out}/${n}.png`, timeout: 120000 }); console.log('shot', n, JSON.stringify(await state())); };
+await page.goto(`${base}/`);
+await waitFor((s) => s.menu === 'title');
+await key('Enter');
+await waitFor((s) => s.menu === 'main');
+await move('ArrowDown', 2); await key('Enter'); // Play Offline
+await waitFor((s) => s.menu === 'mode');
+await move('ArrowDown'); // Survival
+await shot('f1_mode');
+await key('Enter');
+await waitFor((s) => s.menu === 'difficulty');
+await key('Enter'); // Normal
+await waitFor((s) => s.menu === 'worlds');
+await shot('f1_worlds');
+await key('Enter'); // Create World
+await waitFor((s) => s.state === 'playing', 180000);
+await page.waitForTimeout(2500);
+await shot('f2_playing');
+await key('KeyE');
+await waitFor((s) => s.crafting);
+await key('ArrowUp');
+await key('ArrowRight');
+await shot('f3_craft');
+await key('Escape');
+await waitFor((s) => !s.crafting);
+await key('Escape');
+await waitFor((s) => s.state === 'paused');
+await shot('f4_pause');
+await move('ArrowDown', 5); await key('Enter'); // Options
+await waitFor((s) => s.menu === 'options');
+await shot('f5_options');
+await key('Escape');
+await waitFor((s) => s.menu === 'pause');
+await move('ArrowUp'); // (round to the last: Save And Quit)
+await key('Enter');
+await waitFor((s) => s.state === 'menu', 180000);
+await shot('f6_back_to_menu');
+console.log(logs.slice(0, 20).join('\n') || 'no errors');
+await browser.close();
