@@ -179,7 +179,7 @@ export class Builder {
   lamp(x, y, z, o = {}) {
     const color = o.color ?? 0xffd2a0;
     const mat = basic({ color });
-    mat.color.multiplyScalar(o.bright ?? 6);
+    mat.color.multiplyScalar(o.bright ?? 4.5);
     const g = o.shape === 'tube' ? new THREE.BoxGeometry(o.len || 1.2, 0.08, 0.12) : new THREE.CylinderGeometry(0.22, 0.28, 0.12, 10);
     const m = new THREE.Matrix4().makeRotationY(o.rot || 0);
     m.setPosition(x, y, z);

@@ -117,9 +117,9 @@ export function buildTextures() {
     const c = paint(S, S, (x, y, i) => {
       const moss = clamp((n1[i] - 0.45) * 3, 0, 1);
       const grit = n3[i];
-      const r = mix(52, 46, moss) * (0.75 + grit * 0.5) * (0.85 + n2[i] * 0.3);
-      const g = mix(40, 58, moss) * (0.75 + grit * 0.5) * (0.85 + n2[i] * 0.3);
-      const b = mix(30, 30, moss) * (0.75 + grit * 0.5);
+      const r = mix(82, 70, moss) * (0.75 + grit * 0.5) * (0.85 + n2[i] * 0.3);
+      const g = mix(64, 86, moss) * (0.75 + grit * 0.5) * (0.85 + n2[i] * 0.3);
+      const b = mix(48, 46, moss) * (0.75 + grit * 0.5);
       height[i] = n2[i] * 0.6 + grit * 0.4;
       return [r, g, b];
     });
@@ -190,11 +190,11 @@ export function buildTextures() {
       const shade = 0.78 + rib * 0.16;
       const rr = clamp((rust[i] - 0.58) * 4, 0, 1) * clamp(y / S + 0.3, 0, 1);
       height[i] = rib * 0.5 + 0.5;
-      const base = [62, 72, 70];
+      const base = [128, 138, 134];
       return [
-        mix(base[0], 110, rr) * shade * (0.85 + n1[i] * 0.3),
-        mix(base[1], 58, rr) * shade * (0.85 + n1[i] * 0.3),
-        mix(base[2], 36, rr) * shade * (0.85 + n1[i] * 0.3),
+        mix(base[0], 150, rr) * shade * (0.85 + n1[i] * 0.3),
+        mix(base[1], 88, rr) * shade * (0.85 + n1[i] * 0.3),
+        mix(base[2], 56, rr) * shade * (0.85 + n1[i] * 0.3),
       ];
     });
     T.corrugated = toTexture(c);
@@ -209,10 +209,10 @@ export function buildTextures() {
     const c = paint(S, S, (x, y, i) => {
       const seam = (x % 128 < 2 || y % 256 < 2) ? 0.5 : 1;
       const rivet = ((x % 128) - 8) ** 2 + ((y % 32) - 16) ** 2 < 5 || ((x % 128) - 120) ** 2 + ((y % 32) - 16) ** 2 < 5;
-      const scratched = wear[i] > 0.66 ? 1.35 : 1;
+      const scratched = wear[i] > 0.66 ? 1.12 : 1;
       height[i] = (seam < 1 ? -0.5 : 0) + (rivet ? 0.8 : 0) + n1[i] * 0.2;
       const v = (0.8 + n1[i] * 0.3) * seam * scratched * (rivet ? 1.3 : 1);
-      return [52 * v, 58 * v, 64 * v];
+      return [118 * v, 126 * v, 134 * v];
     });
     T.steel = toTexture(c);
     T.steelNormal = normalFromHeight(height, S, S, 2);

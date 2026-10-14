@@ -86,6 +86,9 @@ const FLATTEN = [
   [-56, -42, -46, -33, null, 3],
 ];
 
+// research wing and hangar floors (x0, z0, x1, z1, height)
+const PADS = [[5, -27, 43, 7, 0.6], [-16, -80, 32, -44, 1.0]];
+
 function rectMask(x, z, x0, z0, x1, z1, margin) {
   const dx = Math.max(x0 - x, 0, x - x1);
   const dz = Math.max(z0 - z, 0, z - z1);
@@ -132,6 +135,8 @@ export function heightFn(x, z) {
     const t = target == null ? rawHeight((x0 + x1) / 2, (z0 + z1) / 2) : target;
     h = lerp(h, t, m);
   }
+  // building pads stay level under their floors, whatever the neighbouring blends did
+  for (const [x0, z0, x1, z1, target] of PADS) if (x >= x0 && x <= x1 && z >= z0 && z <= z1) h = target;
   // logging road: shallow bed
   const rd = roadDistance(x, z);
   if (rd < 4) h = lerp(h, h - 0.12, 1 - rd / 4);
@@ -174,6 +179,17 @@ export function zoneAt(x, z) {
   return found;
 }
 
+// Roofed spaces (the research wing and the hangar itself, not its yard), with a soft edge.
+const INDOOR_RECTS = [[6, -26, 42, 6], [-14, -78, 30, -46]];
+export function indoorAt(x, z) {
+  let k = 0;
+  for (const [x0, z0, x1, z1] of INDOOR_RECTS) {
+    const d = Math.min(x - x0, x1 - x, z - z0, z1 - z);
+    k = Math.max(k, Math.min(1, Math.max(0, (d + 1) / 3)));
+  }
+  return k;
+}
+
 export function inPlayable(x, z, margin = 0) {
   return outsideDist(x, z) <= margin;
 }
@@ -188,6 +204,10 @@ export function meadowMask(x, z) {
 export function treeClearance(x, z) {
   const od = outsideDist(x, z);
   if (od < 2.0) return 0;
+  // keep crowns clear of the big buildings: branch cards would poke through walls and roofs
+  for (const [x0, z0, x1, z1] of INDOOR_RECTS) {
+    if (Math.hypot(Math.max(x0 - x, 0, x - x1), Math.max(z0 - z, 0, z - z1)) < 7) return 0;
+  }
   if (roadDistance(x, z) < 5) return 0;
   if (x < cliffEdge(z) + 1.5 && x > cliffEdge(z) - 30) return 0;
   return 1;
@@ -407,8 +427,23 @@ function buildWreck(B, M, H, x, z, rot, fx) {
   const c = Math.cos(rot);
   const s = Math.sin(rot);
   const at = (lx, lz) => [x + lx * c + lz * s, z - lx * s + lz * c];
-  // fuselage (nose buried in the dirt), cockpit, wing, tail
-  B.box(x, y, z, 10, 3.0, 3.4, { mat: 'steelDark', rot, rz: 0.06, uv: 3 });
+  // fuselage (nose buried in the dirt): rounded painted hull on a cargo belly, cockpit, wing, tail
+  B.box(x, y, z, 10, 3.0, 3.2, { rot, visible: false, phys: 'metal' });
+  B.cylinder(x, y, z, 1.55, 10, { mat: 'olive', horizontal: true, rot, seg: 14, collide: false });
+  B.box(x, y - 0.05, z, 9.4, 0.75, 2.8, { mat: 'steelDark', rot, collide: false, uv: 3 });
+  for (const side of [-1, 1]) {
+    // torn-open side door, a strip of cabin windows, soot from the fire
+    const [sdx, sdz] = at(1.4, side * 1.47);
+    B.box(sdx, y + 0.55, sdz, 1.5, 1.75, 0.18, { mat: 'black', rot, collide: false });
+    for (let k = 0; k < 4; k++) {
+      const [wx0, wz0] = at(-3.4 + k * 1.05, side * 1.43);
+      B.box(wx0, y + 1.95, wz0, 0.48, 0.3, 0.16, { mat: 'glass', rot, collide: false });
+    }
+    const [scx, scz] = at(-2.2, side * 1.4);
+    B.box(scx, y + 1.6, scz, 2.6, 1.5, 0.22, { mat: 'black', rot, collide: false });
+    const [stx, stz] = at(3.4, side * 1.5);
+    B.box(stx, y + 1.0, stz, 0.5, 1.9, 0.08, { mat: 'hazard', rot, collide: false });
+  }
   const [nx, nz] = at(6.4, 0);
   B.box(nx, y - 0.2, nz, 3.2, 2.4, 2.9, { mat: 'steelDark', rot: rot + 0.18, rz: -0.25, uv: 3 });
   B.box(nx, y + 1.0, nz, 2.2, 0.9, 2.5, { mat: 'glass', rot: rot + 0.18, rz: -0.25, collide: false });
@@ -424,8 +459,8 @@ function buildWreck(B, M, H, x, z, rot, fx) {
   B.physics.addCylinder({ x: ex, z: ez, r: 1.2, y0: H(ex, ez) - 0.5, y1: H(ex, ez) + 1.4, walkable: true, material: 'metal' });
   // markings
   const decal = makeEmblemTexture('#d8d2c2');
-  const [dx, dz] = at(0, 1.72);
-  B.sign(dx, y + 1.8, dz, rot, decal, 1.6, 1.6, { transparent: true });
+  const [dx, dz] = at(0.2, 1.585);
+  B.sign(dx, y + 1.5, dz, rot, decal, 1.5, 1.5, { transparent: true });
   // fires
   fx.fires.push({ x: ex + 0.6, y: H(ex, ez) + 0.6, z: ez, size: 1.3 });
   const [fx1, fz1] = at(-2, 2);
@@ -529,7 +564,7 @@ function floodTower(B, M, x, z, y, dir) {
   for (let k = 1; k < 4; k++) B.box(x, y + k * 2.4, z, 1.35, 0.08, 1.35, { mat: 'steelDark', collide: false });
   B.box(x, y + h, z, 1.8, 0.25, 1.8, { mat: 'steelDark', collide: false });
   for (const off of [-0.45, 0.45]) {
-    B.lamp(x + off, y + h + 0.6, z, { color: 0xfff2dc, intensity: off < 0 ? 22 : 0, distance: 24, needsPower: true, glowSize: 2.6, bright: 9 });
+    B.lamp(x + off, y + h + 0.6, z, { color: 0xfff2dc, intensity: off < 0 ? 22 : 0, distance: 24, needsPower: true, glowSize: 2.6, bright: 6 });
   }
   B.beam(x, y + h + 0.5, z, dir, { length: 26, radius: 6.5, needsPower: true });
 }
@@ -771,9 +806,11 @@ function buildHangar(B, M, textures, fx, signs) {
   B.box(-8.2, y + 1.6, -51.6, 1.6, 1.2, 1.6, { mat: 'olive', walkable: true, uv: 2 });
   // lights
   for (const [lx, lz] of [[-4, -55], [20, -55], [-4, -70], [20, -70], [8, -51], [8, -74]]) {
-    B.lamp(lx, y + H - 1.4, lz, { color: 0xfff0dc, intensity: 16, distance: 18, needsPower: true, zone: 4, bright: 7 });
+    B.lamp(lx, y + H - 1.4, lz, { color: 0xfff0dc, intensity: 16, distance: 18, needsPower: true, zone: 4, bright: 5 });
   }
   B.lamp(8, y + 4.6, -76.8, { color: 0xff6040, intensity: 8, distance: 8, flicker: 0.4, zone: 4 });
+  // amber emergency lights keep the dark hangar readable until the power is back
+  for (const [lx, lz] of [[-13.2, -60], [29.2, -64]]) B.lamp(lx, y + 5.2, lz, { color: 0xffb060, intensity: 14, distance: 16, zone: 4, glowSize: 1.2, bright: 3 });
   fx.beacons.push({ x: x0 + 1.5, y: y + 9, z: z1 + 0.5, color: 0xff2a1a }, { x: x1 - 1.5, y: y + 9, z: z1 + 0.5, color: 0xff2a1a });
   const hs = makeSign([{ text: 'HANGAR 2', size: 120 }, { text: 'AVION FLIGHT TEST', size: 40, weight: 600 }]);
   B.sign((x0 + x1) / 2, y + 11.8, z1 + 0.45, 0, hs, 8, 3.6);

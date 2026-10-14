@@ -1,6 +1,6 @@
 import * as THREE from '../../vendor/three.module.min.js';
 import { WEAPONS, BOX_POOL, PERKS, UPGRADE_COSTS, weaponStats } from './weapons_data.js';
-import { buildHologram, hologramMaterial } from './gunmodels.js';
+import { buildHologram, hologramMaterial, rbox } from './gunmodels.js';
 import { std, basic } from '../world/materials.js';
 import { boxGeometry } from '../world/builder.js';
 import { makeSign } from '../world/textures.js';
@@ -80,8 +80,8 @@ class WallBuy extends Interactable {
     this.holoMat = hologramMaterial(0xffa050);
     const holo = buildHologram(this.def.model, this.holoMat);
     holo.group.rotation.y = Math.PI / 2;
-    holo.group.position.set(holo.len * 0.35, 0.02, 0.12);
     holo.group.scale.setScalar(Math.min(1.25, 1.0 / Math.max(0.3, holo.len)));
+    holo.group.position.set(-holo.center * holo.group.scale.x, 0.02, 0.12);
     group.add(holo.group);
     const label = document.createElement('canvas');
     label.width = 256;
@@ -237,22 +237,31 @@ class ExoStation extends Interactable {
     const rack = new THREE.Mesh(boxGeometry(1.4, 2.3, 0.2, 1), M.steelDark);
     rack.position.set(0, 1.15, -0.25);
     g.add(rack);
-    // hanging exo frame: spine, hip ring, leg struts, arm struts
-    const parts = [
-      [0.08, 0.7, 0.08, 0, 1.55, 0], [0.5, 0.08, 0.2, 0, 1.15, 0], [0.5, 0.1, 0.1, 0, 1.85, 0],
-      [0.06, 0.8, 0.06, 0.16, 0.7, 0], [0.06, 0.8, 0.06, -0.16, 0.7, 0], [0.05, 0.55, 0.05, 0.33, 1.5, 0.05], [0.05, 0.55, 0.05, -0.33, 1.5, 0.05],
-    ];
+    // hanging exo suit: power pack, spine, yoke, hip belt, jointed leg and arm struts
+    const dark = new THREE.MeshStandardMaterial({ color: 0x24272b, metalness: 0.2, roughness: 0.7 });
     this.suit = new THREE.Group();
-    for (const [w, h, d, x, yy, z] of parts) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), metal);
+    const part = (geo, mat, x, yy, z, rx = 0, rz = 0) => {
+      const m = new THREE.Mesh(geo, mat);
       m.position.set(x, yy, z);
+      m.rotation.set(rx, 0, rz);
       m.castShadow = true;
       this.suit.add(m);
-    }
-    for (const [x, yy] of [[0, 1.55], [0.16, 0.7], [-0.16, 0.7]]) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.4, 0.02), this.glow);
-      m.position.set(x, yy, 0.06);
-      this.suit.add(m);
+      return m;
+    };
+    part(rbox(0.34, 0.42, 0.12, 0.03), metal, 0, 1.42, -0.07);
+    part(rbox(0.07, 0.5, 0.06, 0.02), metal, 0, 1.25, 0.0);
+    part(rbox(0.52, 0.07, 0.16, 0.025), metal, 0, 1.68, 0.0);
+    part(rbox(0.44, 0.09, 0.2, 0.03), dark, 0, 1.0, 0.0);
+    for (const sx of [-1, 1]) {
+      part(rbox(0.07, 0.42, 0.07, 0.02), metal, sx * 0.13, 0.76, 0.02);
+      part(new THREE.CylinderGeometry(0.045, 0.045, 0.09, 14), dark, sx * 0.13, 0.54, 0.03, 0, Math.PI / 2);
+      part(rbox(0.055, 0.42, 0.055, 0.018), metal, sx * 0.13, 0.3, 0.03);
+      part(rbox(0.11, 0.035, 0.22, 0.012), dark, sx * 0.13, 0.05, 0.07);
+      part(rbox(0.055, 0.3, 0.055, 0.018), metal, sx * 0.31, 1.5, 0.02, 0, sx * 0.08);
+      part(new THREE.CylinderGeometry(0.035, 0.035, 0.07, 12), dark, sx * 0.33, 1.33, 0.03, 0, Math.PI / 2);
+      part(rbox(0.06, 0.26, 0.07, 0.02), metal, sx * 0.34, 1.18, 0.07, -0.25);
+      part(new THREE.BoxGeometry(0.012, 0.3, 0.012), this.glow, sx * 0.13, 0.76, 0.06);
+      part(new THREE.BoxGeometry(0.014, 0.28, 0.014), this.glow, sx * 0.09, 1.42, -0.0);
     }
     g.add(this.suit);
     game.scene.add(g);
@@ -401,8 +410,8 @@ class Printer extends Interactable {
     if (!h) {
       h = buildHologram(model, this.holoMat);
       h.group.rotation.y = Math.PI / 2;
-      h.group.position.x = h.len * 0.35;
       h.group.scale.setScalar(Math.min(1.4, 1.0 / Math.max(0.3, h.len)));
+      h.group.position.x = -h.center * h.group.scale.x;
       this.holos.set(model, h);
       this.holoSlot.add(h.group);
     }
@@ -607,7 +616,7 @@ class Forge extends Interactable {
     this.clearSlot();
     const h = buildHologram(WEAPONS[c.id].model, this.holoMat);
     h.group.rotation.y = Math.PI / 2;
-    h.group.position.x = h.len * 0.35;
+    h.group.position.x = -h.center;
     this.slot.add(h.group);
     this.holo = h;
   }

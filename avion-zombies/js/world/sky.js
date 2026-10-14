@@ -7,15 +7,17 @@ import { clamp, lerp, DEG } from '../util.js';
 const KEYS = [0, 0.25, 0.5, 0.75, 1.0];
 const TOD = {
   sunElev: [6.5, 1.8, -4, -9, -14],
-  sunColor: ['#ffbd8a', '#ff9862', '#ff7a6a', '#8f97d6', '#7f93d8'],
-  sunInt: [2.7, 2.1, 0.7, 0.28, 0.34],
-  hemiSky: ['#a28fcc', '#8f78bc', '#6c5ca6', '#3f437e', '#2d376a'],
-  hemiGround: ['#4a4232', '#40352a', '#352c3c', '#22263a', '#191d2e'],
-  hemiInt: [1.25, 1.12, 0.98, 0.82, 0.76],
+  sunColor: ['#ffbd8a', '#ff9862', '#ff7a6a', '#a8b2e0', '#b4bfe6'],
+  sunInt: [2.7, 2.1, 0.85, 0.85, 1.0],
+  hemiSky: ['#a28fcc', '#8f78bc', '#8474b8', '#7a86c0', '#8a96c8'],
+  hemiGround: ['#4a4232', '#40352a', '#40384c', '#454a62', '#4a4e64'],
+  hemiInt: [2.5, 2.4, 2.8, 3.4, 4.0],
+  // image-based ambient from the sky itself (the night sky is dark, so it gets more)
+  envInt: [1.2, 1.25, 1.4, 2.2, 2.6],
   zenith: ['#3b4b8e', '#2f3c80', '#232867', '#141a46', '#0a0e2b'],
   horizon: ['#ffad6e', '#ff8a62', '#d4688e', '#6b4d8b', '#2f2d58'],
   glow: ['#ffcf94', '#ffa070', '#ff8078', '#8c609c', '#3b3b6c'],
-  fog: ['#8e7ea8', '#7a6a9b', '#5c4e84', '#302d57', '#1d1f3d'],
+  fog: ['#8e7ea8', '#7a6a9b', '#5c4e84', '#35325e', '#272a4e'],
   fogSun: ['#ffb588', '#f49377', '#c96a8c', '#5c4778', '#27274b'],
   fogDensity: [0.0125, 0.014, 0.016, 0.018, 0.02],
   cloudLit: ['#ffc4a2', '#ff9c8c', '#e07ca2', '#6e5d9c', '#3c3c6c'],
@@ -23,10 +25,12 @@ const TOD = {
   mtn: ['#2c2942', '#28203c', '#1d1b35', '#12132b', '#0b0c1f'],
   stars: [0, 0, 0.25, 0.75, 1],
   moonElev: [-12, -6, 5, 15, 24],
-  exposure: [1.06, 1.1, 1.18, 1.32, 1.45],
+  exposure: [1.12, 1.15, 1.3, 1.5, 1.62],
 };
 
 const tmpA = new THREE.Color();
+// indoor ambient drifts from the sky's tint toward neutral lamp-lit grey
+const INDOOR_TINT = new THREE.Color(0.62, 0.6, 0.58);
 const tmpB = new THREE.Color();
 
 function sampleKey(name, t) {
@@ -217,6 +221,11 @@ export class Sky {
     this.lightDir = new THREE.Vector3();
     this.fogBoost = 0; // swarm rounds roll the fog in
     this.fogBoostTarget = 0;
+    this.indoor = 0;
+    this.envInt = 1;
+    this.hemiBoost = 1;
+    this.hemiBase = 1;
+    this.hemiSkyBase = new THREE.Color();
     this.apply(0);
   }
 
@@ -261,10 +270,11 @@ export class Sky {
     // fog: swarm rounds tint it darker and thicker
     const boost = this.fogBoost;
     this.fog.color.copy(fogCol).multiplyScalar(1 - boost * 0.35);
-    this.fog.density = sampleKey('fogDensity', t) * (1 + boost * 1.8);
+    this.baseFogDensity = sampleKey('fogDensity', t) * (1 + boost * 1.8);
+    this.baseFogDist = 0.0042 * (1 + boost * 1.2);
+    this.applyFogScale();
     fogUniforms.uFogSunColor.value.copy(fogSun).multiplyScalar(1 - boost * 0.4);
     fogUniforms.uFogSunDir.value.copy(this.sunDir);
-    fogUniforms.uFogDistDensity.value = 0.0042 * (1 + boost * 1.2);
 
     // lights: sun until it sets, then the moon takes over the shadow-casting light
     const sunInt = sampleKey('sunInt', t);
@@ -278,10 +288,27 @@ export class Sky {
     this.sun.intensity = sunInt;
     foliageUniforms.uSunDirW.value.copy(night > 0.5 ? this.moonDir : this.sunDir);
     foliageUniforms.uSunCol.value.copy(this.sun.color).multiplyScalar(Math.min(1.2, sunInt * 0.45) * (1 - boost * 0.5));
-    this.hemi.color.copy(sampleKey('hemiSky', t));
+    this.hemiSkyBase.copy(sampleKey('hemiSky', t));
+    this.hemi.color.copy(this.hemiSkyBase).lerp(INDOOR_TINT, 0.5 * this.indoor);
     this.hemi.groundColor.copy(sampleKey('hemiGround', t));
-    this.hemi.intensity = sampleKey('hemiInt', t) * (1 - boost * 0.25);
+    this.hemiBase = sampleKey('hemiInt', t) * (1 - boost * 0.25);
+    this.hemi.intensity = this.hemiBase * this.hemiBoost;
     this.exposure = sampleKey('exposure', t);
+    this.envInt = sampleKey('envInt', t) * (1 - boost * 0.3);
+  }
+
+  // Indoors the haze thins out so walls read as walls (0 = outside, 1 = fully inside).
+  setIndoor(k) {
+    if (Math.abs(k - this.indoor) < 1e-3) return;
+    this.indoor = k;
+    this.applyFogScale();
+  }
+
+  applyFogScale() {
+    const s = 1 - 0.55 * this.indoor;
+    this.fog.density = this.baseFogDensity * s;
+    fogUniforms.uFogDistDensity.value = this.baseFogDist * s;
+    this.hemi.color.copy(this.hemiSkyBase).lerp(INDOOR_TINT, 0.5 * this.indoor);
   }
 
   update(dt, center, time) {
@@ -290,6 +317,7 @@ export class Sky {
       this.apply(this.t + (this.target - this.t) * Math.min(1, dt * 0.25));
     }
     this.uniforms.uTime.value = time;
+    this.hemi.intensity = this.hemiBase * this.hemiBoost;
     this.mesh.position.copy(center);
     // shadow frustum follows the player, snapped to texels to stop shimmering
     const d = 120;

@@ -36,10 +36,12 @@ varying vec3 vViewPos;
 ${fogGLSL.pars}
 ${fogGLSL.func}
 void main() {
-  float a = texture2D(uTex, vUv).a;
+  // halos read as atmosphere at a distance; up close they fade so lamps don't white out the view
+  float near = smoothstep(2.0, 14.0, length(vViewPos));
+  float a = texture2D(uTex, vUv).a * (0.15 + 0.85 * near);
   vec3 fc;
   float f = worldFog(vViewPos, fc);
-  gl_FragColor = vec4(vColor.rgb * a * (1.0 - f * 0.85), a);
+  gl_FragColor = vec4(vColor.rgb * a * 0.55 * (1.0 - f * 0.85), a);
 }
 `;
 
@@ -455,8 +457,9 @@ export class World {
         k = f > 1.2 - a.flicker ? 0.25 : 1 - a.flicker * 0.25 * Math.random();
         a.mat.color.copy(a.baseColor).multiplyScalar(k);
       }
-      const dim = a.zone === 2 && !this.power ? 0.45 : 1;
-      slot.light.intensity = a.intensity * k * dim;
+      // lamps sit high under ceilings: give them enough punch to light the floor
+      const dim = a.zone === 2 && !this.power ? 0.6 : 1;
+      slot.light.intensity = a.intensity * k * dim * 2.6;
     }
     if (this.flashT > 0) {
       this.flashT -= dt;

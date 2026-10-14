@@ -169,8 +169,9 @@ export class HUD {
     this.cache.wname = null;
   }
 
-  setScope(on) {
+  setScope(on, style = 'sniper') {
     this.el.scope.hidden = !on;
+    this.el.scope.dataset.style = style;
     this.el.cross.classList.toggle('hidden-scope', on);
   }
 

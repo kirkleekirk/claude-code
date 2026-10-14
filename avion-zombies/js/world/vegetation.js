@@ -293,25 +293,36 @@ function makeFern(seed) {
 function makeGrassTuft(seed, palette) {
   const rng = makeRng(seed);
   const pos = [];
-  const blades = 10;
+  const blades = 12;
   for (let b = 0; b < blades; b++) {
     const a = rng() * Math.PI * 2;
-    const r = rng() * 0.18;
+    const r = rng() * 0.2;
     const x = Math.cos(a) * r;
     const z = Math.sin(a) * r;
-    const h = 0.35 + rng() * 0.45;
-    const w = 0.035;
-    const lean = (rng() - 0.5) * 0.3;
+    const h = 0.22 + rng() * 0.4;
+    const w = 0.012 + rng() * 0.01;
+    // bent two-segment blade leaning outward
+    const lean = 0.05 + rng() * 0.16;
+    const ox = Math.cos(a) * lean;
+    const oz = Math.sin(a) * lean;
     const sx = Math.cos(a + 1.57) * w;
     const sz = Math.sin(a + 1.57) * w;
-    pos.push(x - sx, 0, z - sz, x + sx, 0, z + sz, x + Math.cos(a) * lean, h, z + Math.sin(a) * lean);
+    const mx = x + ox * 0.35;
+    const mz = z + oz * 0.35;
+    const my = h * 0.55;
+    pos.push(x - sx, 0, z - sz, x + sx, 0, z + sz, mx + sx * 0.7, my, mz + sz * 0.7);
+    pos.push(x - sx, 0, z - sz, mx + sx * 0.7, my, mz + sz * 0.7, mx - sx * 0.7, my, mz - sz * 0.7);
+    pos.push(mx - sx * 0.7, my, mz - sz * 0.7, mx + sx * 0.7, my, mz + sz * 0.7, x + ox, h, z + oz);
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.computeVertexNormals();
+  // up-facing normals: blades light like the meadow floor instead of flashing black edge-on
+  const n = new Float32Array(pos.length);
+  for (let i = 1; i < n.length; i += 3) n[i] = 1;
+  g.setAttribute('normal', new THREE.BufferAttribute(n, 3));
   colorize(g, (x, y, z, c) => {
-    const t = clamp(y / 0.7, 0, 1);
-    c.copy(palette[0]).lerp(palette[1], t);
+    const t = clamp(y / 0.55, 0, 1);
+    c.copy(palette[0]).lerp(palette[1], t * t * (3 - 2 * t));
   });
   return g;
 }
@@ -520,12 +531,12 @@ export function buildVegetation({ scene, terrain, physics, materials, map, densi
 
   // ---- meadow grass (ridge) ------------------------------------------------------------
   const meadowPal = [
-    [new THREE.Color(0.22, 0.14, 0.05), new THREE.Color(0.78, 0.42, 0.14)],
-    [new THREE.Color(0.2, 0.1, 0.06), new THREE.Color(0.7, 0.28, 0.12)],
-    [new THREE.Color(0.12, 0.14, 0.06), new THREE.Color(0.55, 0.5, 0.2)],
+    [new THREE.Color(0.3, 0.22, 0.09), new THREE.Color(0.86, 0.56, 0.22)],
+    [new THREE.Color(0.28, 0.17, 0.08), new THREE.Color(0.78, 0.4, 0.17)],
+    [new THREE.Color(0.2, 0.22, 0.1), new THREE.Color(0.64, 0.6, 0.28)],
   ];
   const grassSets = meadowPal.map((p, i) => new ChunkedInstances(makeGrassTuft(300 + i, p), materials.grass, 25, { castShadow: false }));
-  const grassCount = Math.floor(9000 * density.ferns);
+  const grassCount = Math.floor(7000 * density.ferns);
   for (let i = 0; i < grassCount; i++) {
     const x = rng.range(-95, -20);
     const z = rng.range(-70, 20);

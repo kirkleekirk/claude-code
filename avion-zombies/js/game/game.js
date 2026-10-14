@@ -18,7 +18,7 @@ import { PERKS } from './weapons_data.js';
 import { HUD } from '../ui/hud.js';
 import { Menus } from '../ui/menus.js';
 import { TouchControls } from '../ui/touch.js';
-import { clamp, lerp, rand, isTouchDevice } from '../util.js';
+import { clamp, lerp, damp, rand, isTouchDevice } from '../util.js';
 
 const BASE = './';
 
@@ -90,7 +90,7 @@ export class Game {
     this.applyQuality();
     this.world.setPower(false);
     this.world.sky.setRound(1, true);
-    this.viewmodel.updateEnvironment(this.world.sky);
+    this.refreshEnvironment();
     this._buildMenuScene();
     // warm up shaders so the first fight doesn't hitch
     this.menus.setBoot(0.96, 'Compiling shaders');
@@ -135,6 +135,7 @@ export class Game {
     this.renderer.shadowMap.needsUpdate = true;
     this.post.configure({ bloom: q.bloom, godrays: q.godrays, msaa: q.msaa });
     this.resize();
+    if (this.viewmodel && this.viewmodel.envTarget) this.refreshEnvironment();
   }
 
   // ---- menu background: slow dolly through the trees with silhouettes in the fog ------------
@@ -242,7 +243,7 @@ export class Game {
     this.world.setPower(false);
     this.world.sky.setRound(1, true);
     this.world.sky.fogBoost = this.world.sky.fogBoostTarget = 0;
-    this.viewmodel.updateEnvironment(this.world.sky);
+    this.refreshEnvironment();
     this.zoneOpen = this.map.ZONES.map((z) => z.id === 0);
     this.player.reset(this.map.PLAYER_START);
     this.weapons.reset();
@@ -382,9 +383,31 @@ export class Game {
     this.hud.objective(text);
   }
 
+  // Sky-coloured image-based light for the world and the weapon, rebuilt as the time of day moves.
+  refreshEnvironment() {
+    const sky = this.world.sky;
+    this.viewmodel.updateEnvironment(sky);
+    // the low preset skips image-based light for the world (a stronger sky light stands in)
+    this.scene.environment = settings.preset.envLight === false ? null : this.viewmodel.envTarget.texture;
+    this._envT = sky.t;
+    this._envBoost = sky.fogBoost;
+    this._envAt = this.time;
+  }
+
+  // Keep the ambient light in step with the sky; thin the haze and sky light indoors.
+  updateAmbience(dt, x, z) {
+    const sky = this.world.sky;
+    if ((Math.abs(sky.t - this._envT) > 0.02 || Math.abs(sky.fogBoost - this._envBoost) > 0.08) && this.time - this._envAt > 1) this.refreshEnvironment();
+    const target = x === undefined ? 0 : this.map.indoorAt(x, z);
+    this.indoorK = damp(this.indoorK || 0, target, 2.5, dt);
+    sky.setIndoor(this.indoorK);
+    this.scene.environmentIntensity = sky.envInt * (1 - 0.45 * this.indoorK);
+    sky.hemiBoost = this.scene.environment ? 1 : 1.45;
+  }
+
   onRoundStart(n) {
     if (n === 1) audio.announce('Containment breach. All personnel to evacuation points.');
-    this.viewmodel.updateEnvironment(this.world.sky);
+    this.refreshEnvironment();
   }
 
   onZombieKilled(z, info) {
@@ -594,6 +617,7 @@ export class Game {
 
   updateMenu(dt) {
     this._updateMenuCamera(dt);
+    this.updateAmbience(dt);
     this.world.update(dt, this.camera.position, this.camera.position);
     this.world.sky.update(dt, this.camera.position, this.time);
     this.particles.update(dt);
@@ -620,6 +644,7 @@ export class Game {
     // which zone are we in?
     const zid = this.world.zoneAt(p.ch.x, p.ch.z);
     if (zid >= 0) p.zone = zid;
+    this.updateAmbience(dt, p.ch.x, p.ch.z);
     if (!this.over) {
       const assist = this.weapons.aimAssist(input);
       p.update(dt, input, { aimAssist: assist });
@@ -680,7 +705,8 @@ export class Game {
   render(dt) {
     const cam = this.camera;
     const q = settings.preset;
-    this.post.u.uExposure.value = this.world.sky.exposure;
+    // eyes adjust indoors: lamp-lit rooms are far dimmer than the open sky
+    this.post.u.uExposure.value = this.world.sky.exposure * (1 + 0.8 * (this.indoorK || 0));
     this.post.u.uGrain.value = settings.get('filmGrain') ? 0.022 : 0;
     this.post.updateSun(cam, this.world.sky.sunDir);
     // viewmodel lighting tracks the world
@@ -689,7 +715,7 @@ export class Game {
       vm.hemi.color.copy(this.world.sky.hemi.color);
       vm.hemi.groundColor.copy(this.world.sky.hemi.groundColor);
       vm.hemi.intensity = this.world.sky.hemi.intensity * 1.3;
-      const indoor = this.map.ZONES[Math.max(0, this.player.zone)].indoor;
+      const indoor = this.indoorK || 0;
       vm.dir.color.copy(this.world.sky.sun.color);
       vm.dir.intensity = this.world.sky.sun.intensity * (1 - indoor * 0.8) * 0.8;
       const ld = this.world.sky.lightDir.clone().applyQuaternion(cam.quaternion.clone().invert());

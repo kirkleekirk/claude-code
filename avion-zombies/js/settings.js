@@ -3,10 +3,10 @@ import { storageGet, storageSet, isTouchDevice } from './util.js';
 const KEY = 'avion-zombies.settings.v1';
 
 export const QUALITY_PRESETS = {
-  low: { pixelRatio: 0.75, shadows: false, shadowSize: 1024, post: false, trees: 0.45, ferns: 0.35, lights: 2, msaa: 0, godrays: false, bloom: false },
-  medium: { pixelRatio: 1.0, shadows: true, shadowSize: 1024, post: true, trees: 0.7, ferns: 0.6, lights: 4, msaa: 0, godrays: true, bloom: true },
-  high: { pixelRatio: 1.0, shadows: true, shadowSize: 2048, post: true, trees: 1.0, ferns: 1.0, lights: 6, msaa: 4, godrays: true, bloom: true },
-  ultra: { pixelRatio: 1.5, shadows: true, shadowSize: 4096, post: true, trees: 1.25, ferns: 1.3, lights: 6, msaa: 4, godrays: true, bloom: true },
+  low: { pixelRatio: 0.75, shadows: false, shadowSize: 1024, post: false, trees: 0.45, ferns: 0.35, lights: 2, msaa: 0, godrays: false, bloom: false, envLight: false },
+  medium: { pixelRatio: 1.0, shadows: true, shadowSize: 1024, post: true, trees: 0.7, ferns: 0.6, lights: 4, msaa: 0, godrays: true, bloom: true, envLight: true },
+  high: { pixelRatio: 1.0, shadows: true, shadowSize: 2048, post: true, trees: 1.0, ferns: 1.0, lights: 6, msaa: 4, godrays: true, bloom: true, envLight: true },
+  ultra: { pixelRatio: 1.5, shadows: true, shadowSize: 4096, post: true, trees: 1.25, ferns: 1.3, lights: 6, msaa: 4, godrays: true, bloom: true, envLight: true },
 };
 
 const DEFAULTS = {

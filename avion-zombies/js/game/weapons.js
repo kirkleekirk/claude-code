@@ -272,7 +272,7 @@ export class WeaponSystem {
       const scoped = this.ads > 0.92;
       if (scoped !== this._scoped) {
         this._scoped = scoped;
-        game.hud.setScope(scoped);
+        game.hud.setScope(scoped, s.scope);
       }
     }
 
