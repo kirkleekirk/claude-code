@@ -607,6 +607,14 @@ export class Game {
       this.pause();
       return;
     }
+    // embedded views can refuse pointer lock: explain free look once
+    if (input.lockBlocked && !this.lockHintShown) {
+      this.lockHintT = (this.lockHintT || 0) + dt;
+      if (this.lockHintT > 0.75) {
+        this.lockHintShown = true;
+        this.hud.message('FREE MOUSE LOOK', 'This view blocks mouse capture. Rest the cursor at an edge to keep turning.', 6);
+      }
+    }
     const p = this.player;
     this.stats.time += dt;
     // which zone are we in?

@@ -240,7 +240,7 @@ body.touch-ui #hud-right #hud-weapon .ammo { order: -1; }
 .credits p { margin: 0; font-size: 18px; line-height: 1.4; color: var(--ink-dim); font-weight: 400; }
 .credits b { color: var(--ink); font-weight: 600; letter-spacing: 0.04em; }
 
-.intro { flex-direction: column; justify-content: center; align-items: flex-start; background: #07080a; padding-left: max(8vw, 16px); }
+.intro { flex-direction: column; justify-content: center; align-items: flex-start; background: #07080a; padding-left: max(8vw, 16px, env(safe-area-inset-left, 0px)); }
 .intro-lines { display: flex; flex-direction: column; gap: 10px; font-family: var(--font-mono); font-size: clamp(13px, 2vw, 18px); letter-spacing: 0.16em; color: var(--ink); max-width: 90vw; }
 .intro-lines .line { min-height: 1.2em; }
 .intro-lines .big { font-family: var(--font-display); font-weight: 700; font-size: clamp(40px, 8vw, 84px); letter-spacing: 0.3em; margin-bottom: 8px; }

@@ -52,6 +52,14 @@ export class Input {
     this.virtualMove = { x: 0, y: 0 };
     this.wheel = 0;
     this.locked = false;
+    // Embedded views can refuse pointer lock. Play then falls back to free mouse look.
+    this.lockBlocked = false;
+    this._lockReqActive = false;
+    this.cursorX = 0.5;
+    this.cursorY = 0.5;
+    this.cursorIn = false;
+    this._cursorHidden = false;
+    this.padBlocked = false;
     this.enabled = false;
     this.lastDevice = 'kbm';
     this.padIndex = -1;
@@ -82,7 +90,7 @@ export class Input {
       if (!this.enabled) return;
       if (!this.locked && !this.isTouch) {
         this.requestLock();
-        return;
+        if (!this.lockBlocked) return;
       }
       this.mouse.add(e.button);
       const a = MOUSEMAP[e.button];
@@ -92,7 +100,10 @@ export class Input {
     window.addEventListener('mouseup', (e) => this.mouse.delete(e.button));
     c.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('mousemove', (e) => {
-      if (!this.locked || !this.enabled) return;
+      this.cursorX = e.clientX / Math.max(1, window.innerWidth);
+      this.cursorY = e.clientY / Math.max(1, window.innerHeight);
+      this.cursorIn = true;
+      if (!this.captured || !this.enabled) return;
       let dx = e.movementX || 0;
       let dy = e.movementY || 0;
       // Chrome occasionally reports a huge spike when the lock engages; drop it.
@@ -102,12 +113,24 @@ export class Input {
       this.lookY -= dy * s * (settings.get('invertY') ? -1 : 1);
     });
     window.addEventListener('wheel', (e) => {
-      if (!this.locked) return;
+      if (!this.captured) return;
       this.wheel += Math.sign(e.deltaY);
     }, { passive: true });
+    // the cursor left the page: drop held buttons so nothing sticks firing
+    window.addEventListener('mouseout', (e) => {
+      if (e.relatedTarget) return;
+      this.cursorIn = false;
+      if (!this.locked) this.mouse.clear();
+    });
+    document.addEventListener('pointerlockerror', () => {
+      // only a refusal during a click means the view blocks the lock; a request
+      // without a user gesture fails everywhere and just waits for the next click
+      if (this._lockReqActive && !this.isTouch) this.lockBlocked = true;
+    });
     document.addEventListener('pointerlockchange', () => {
       const was = this.locked;
       this.locked = document.pointerLockElement === this.canvas;
+      if (this.locked) this.lockBlocked = false;
       if (was && !this.locked) {
         this.keys.clear();
         this.mouse.clear();
@@ -126,17 +149,33 @@ export class Input {
     return this.touchActive === true;
   }
 
+  // Mouse look is live: either pointer-locked, or free look in a view that refuses the lock.
+  get captured() {
+    return this.locked || (this.lockBlocked && this.enabled && !this.isTouch);
+  }
+
   requestLock() {
     if (this.isTouch) return;
+    const ua = navigator.userActivation;
+    this._lockReqActive = ua ? ua.isActive : true;
+    if (!this.canvas.requestPointerLock) {
+      this.lockBlocked = true;
+      return;
+    }
+    // Refusals also arrive as 'pointerlockerror', so the rejections here are only swallowed.
+    const plain = () => {
+      try {
+        const p = this.canvas.requestPointerLock();
+        if (p && p.catch) p.catch(() => {});
+      } catch (e) {
+        if (this._lockReqActive) this.lockBlocked = true;
+      }
+    };
     try {
       const p = this.canvas.requestPointerLock({ unadjustedMovement: true });
-      if (p && p.catch) p.catch(() => this.canvas.requestPointerLock());
+      if (p && p.catch) p.catch(plain);
     } catch (e) {
-      try {
-        this.canvas.requestPointerLock();
-      } catch (e2) {
-        /* not supported (some app views) */
-      }
+      plain();
     }
   }
 
@@ -170,8 +209,16 @@ export class Input {
   _pollPad(dt) {
     this.pad.clear();
     this.padMove = null;
-    if (!navigator.getGamepads) return;
-    const pads = navigator.getGamepads();
+    if (!navigator.getGamepads || this.padBlocked) return;
+    let pads;
+    try {
+      pads = navigator.getGamepads();
+    } catch (e) {
+      // a permissions policy can forbid gamepads inside embedded frames
+      this.padBlocked = true;
+      return;
+    }
+    if (!pads) return;
     let gp = this.padIndex >= 0 ? pads[this.padIndex] : null;
     if (!gp) gp = Array.from(pads).find((p) => p && p.connected) || null;
     if (!gp) return;
@@ -199,6 +246,18 @@ export class Input {
 
   update(dt) {
     this._pollPad(dt);
+    const free = this.lockBlocked && !this.locked && this.enabled && !this.isTouch;
+    if (free !== this._cursorHidden) {
+      this._cursorHidden = free;
+      this.canvas.style.cursor = free ? 'none' : '';
+    }
+    // Free look can't spin past the edge of the view, so keep turning while the cursor rests there.
+    if (free && this.cursorIn) {
+      const edge = (v) => (v < 0.08 ? -(1 - v / 0.08) : v > 0.92 ? (v - 0.92) / 0.08 : 0);
+      const s = 2.4 * settings.get('sensitivity') * dt;
+      this.lookX -= edge(this.cursorX) * s;
+      this.lookY -= edge(this.cursorY) * s * 0.6 * (settings.get('invertY') ? -1 : 1);
+    }
     for (const a of ACTIONS) this.prev[a] = this.held[a];
     for (const a of ACTIONS) this.held[a] = false;
     for (const k of this.keys) {

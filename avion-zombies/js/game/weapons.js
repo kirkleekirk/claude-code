@@ -314,7 +314,8 @@ export class WeaponSystem {
     }
 
     // fire
-    const wantFire = input.held.fire && !player.dead;
+    // a click that starts and ends between two frames still counts as one pull
+    const wantFire = (input.held.fire || input.pressed.fire) && !player.dead;
     const edge = input.pressed.fire;
     if (wantFire && this.reloading && this.reloading.style === 'shell' && c.mag > 0 && !this.reloading.ending) this._endShellReload();
     const canFire = !this.switchPhase && !this.reloading && this.meleeT <= 0 && this.throwT <= 0 && this.sprintOut <= 0 && game.viewmodel.lower < 0.1;
