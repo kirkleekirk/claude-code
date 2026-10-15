@@ -201,14 +201,16 @@ export class Game {
   }
 
   // ------------------------------------------------------------------------------------------
-  async startMatch() {
+  // freeRoam: no zombies, every door open, power on, exo suit on, points to spend
+  async startMatch(freeRoam = false) {
+    this.freeRoam = freeRoam;
     this.menus.closeAll();
     audio.fadeOutMusic(1.2);
     audio.stopAll();
     this.state = 'intro';
     this.hud.show(false);
     this.resetMatch();
-    await this.menus.intro([
+    if (!freeRoam) await this.menus.intro([
       { text: 'RAINSHADOW', cls: 'big', speed: 70, pause: 500 },
       { text: 'AVION EXO RESEARCH SITE 9 — OLYMPIC PENINSULA, WA', speed: 24 },
       { text: 'OCT 13 — 18:47 PDT', speed: 30, pause: 600 },
@@ -223,7 +225,8 @@ export class Game {
     this.setMenuZombiesVisible(false);
     this.hud.show(true);
     this.hud.reset();
-    this.director.start();
+    if (freeRoam) this.setupFreeRoam();
+    else this.director.start();
     audio.loop('wind', 'wind_loop', { bus: 'ambience', volume: 0.4 });
     audio.loop('bed', 'ambient_bed', { bus: 'music', volume: 0.32 });
     this.ambientT = 8;
@@ -231,7 +234,18 @@ export class Game {
     else this.input.requestLock();
     this.input.enabled = true;
     this.objective();
-    this.hud.message('RAINSHADOW', 'Avion Exo Research Site 9', 3);
+    this.hud.message(freeRoam ? 'FREE ROAM' : 'RAINSHADOW', 'Avion Exo Research Site 9', 3);
+  }
+
+  setupFreeRoam() {
+    for (const d of this.world.doors) {
+      this.world.openDoor(d, true);
+      for (const z of d.data.zones) this.zoneOpen[z] = true;
+    }
+    this.zombies.markFlowDirty();
+    if (!this.world.power) this.turnOnPower();
+    if (!this.player.exo.has) this.equipExo();
+    this.player.points = 50000;
   }
 
   resetMatch() {
@@ -376,7 +390,8 @@ export class Game {
   objective() {
     const p = this.player;
     let text = '';
-    if (!p.exo.has) text = this.zoneOpen[1] ? 'Equip the Exo Suit in the Checkpoint armory' : 'Reach the facility checkpoint and find an Exo Suit';
+    if (this.freeRoam) text = 'Free roam: explore Rainshadow';
+    else if (!p.exo.has) text = this.zoneOpen[1] ? 'Equip the Exo Suit in the Checkpoint armory' : 'Reach the facility checkpoint and find an Exo Suit';
     else if (!this.world.power) text = 'Restore power in Hangar 2';
     else if (!this.weapons.inv.some((w) => w.level > 0)) text = 'Upgrade a weapon at the Weapon Forge';
     else text = 'Survive';
@@ -657,7 +672,7 @@ export class Game {
       p.roll = lerp(p.roll, 0.6, dt * 1.5);
       p.updateCamera(dt, {});
     }
-    this.director.update(dt);
+    if (!this.freeRoam) this.director.update(dt);
     this.zombies.update(dt);
     this.grenades.update(dt);
     this.powerups.update(dt);

@@ -197,6 +197,9 @@ export class Menus {
       case 'start':
         game.startMatch();
         break;
+      case 'freeroam':
+        game.startMatch(true);
+        break;
       case 'options':
         this.open('options');
         break;
