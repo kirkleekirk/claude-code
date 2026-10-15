@@ -63,7 +63,7 @@ class PrismPickup extends Interactable {
     this.shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.22, 9, 12, 1, true), db.mats.shaft.clone());
     this.shaft.position.y = 4.8;
     g.add(this.shaft);
-    game.scene.add(g);
+    game.mapRoot.add(g);
     this.group = g;
   }
 
@@ -279,7 +279,7 @@ export class Daybreak {
     sm.position.set(Math.sin(dir) * 2.86, 0.3, Math.cos(dir) * 2.86);
     sm.rotation.y = dir;
     g.add(sm);
-    game.scene.add(g);
+    game.mapRoot.add(g);
     game.world.physics.addCylinder({ x, z, r: 2.95, y0: gy - 0.2, y1: gy + 0.6, walkable: true, material: 'metal' });
     game.world.physics.addCylinder({ x, z, r: 0.75, y0: gy + 0.6, y1: gy + 6.8, walkable: false, material: 'metal' });
 
@@ -315,7 +315,7 @@ export class Daybreak {
     const button = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.085, 0.07, 16), this.buttonMat);
     button.position.set(0.36, 0.06, 0.18);
     top.add(button);
-    game.scene.add(cg);
+    game.mapRoot.add(cg);
     game.world.physics.addBox({ x: c.x, y: cy, z: c.z, w: 0.9, h: 1.15, d: 0.65, rot: cg.rotation.y, walkable: false, material: 'metal' });
   }
 
@@ -361,7 +361,7 @@ export class Daybreak {
         rib.position.set(0, sy * 0.7, -0.02);
         pivot.add(rib);
       }
-      game.scene.add(g);
+      game.mapRoot.add(g);
       // aimed at the array's core, or knocked off line
       const corePos = new THREE.Vector3(mx, this.gy + this.headY, mz);
       const pw = new THREE.Vector3(d.x, y + 3.05, d.z);
@@ -375,7 +375,7 @@ export class Daybreak {
       beam.position.copy(pw).add(corePos).multiplyScalar(0.5);
       beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), corePos.clone().sub(pw).normalize());
       beam.visible = false;
-      game.scene.add(beam);
+      game.mapRoot.add(beam);
       const mirror = { i, g, pivot, lampMat, onQ, offQ, beam, aligned: false, anim: 0, pos: pw };
       const col = game.world.physics.addBox({ x: d.x, y: y + 2.3, z: d.z, w: 1.6, h: 1.6, d: 1.6, walkable: false, material: 'metal', nav: false, climbable: false });
       col.onShot = (hit) => this.mirrorShot(mirror, hit);

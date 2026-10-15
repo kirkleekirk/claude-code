@@ -1,10 +1,11 @@
 import * as THREE from '../../vendor/three.module.min.js';
-import { settings, loadRecords, saveRecords } from '../settings.js';
+import { settings, loadRecords, saveRecords, mapRecord } from '../settings.js';
 import { audio } from '../engine/audio.js';
 import { Input } from '../engine/input.js';
 import { PostFX } from '../engine/post.js';
 import { Particles } from '../engine/particles.js';
 import { World } from '../world/world.js';
+import { getMap } from '../world/maps.js';
 import { loadAvatars, buildBody, makeZombieMaterial } from './avatar.js';
 import { ZombieManager } from './zombies.js';
 import { Player } from './player.js';
@@ -61,10 +62,9 @@ export class Game {
     window.addEventListener('resize', () => this.resize());
 
     audio.init();
-    this.menus.setBoot(0.06, 'Shaping the Olympic Peninsula');
-    this.world = new World(this.scene, q);
-    this.map = this.world.map;
-    const worldP = this.world.build((p) => this.menus.setBoot(0.06 + p * 0.5, p < 0.4 ? 'Raising the ridge' : p < 0.7 ? 'Growing Douglas firs' : 'Mapping zombie paths'));
+    const first = getMap(settings.get('lastMap'));
+    this.menus.setBoot(0.06, first.INFO.loading[0]);
+    const worldP = this._buildWorld(first.INFO.id, (p, label) => this.menus.setBoot(0.06 + p * 0.5, label));
     const audioP = audio.load(BASE + 'assets/audio/', (p) => (this._audioP = p));
     const avatarP = loadAvatars(BASE + 'assets/models/avatars.json', {
       diffuse: BASE + 'assets/textures/zombie_diffuse.png',
@@ -87,17 +87,11 @@ export class Game {
     this.grenades = new Grenades(this);
     this.boss = new Nightwarden(this);
     this.zombies.extra.push(this.boss, ...this.boss.orbs);
-    this.daybreak = new Daybreak(this);
-    this.interact = new Interactables(this);
     this.hud = new HUD(this);
     this.touch = new TouchControls(this);
     this.viewmodel.resize(this.camera.aspect);
+    this._setupMap();
     this.applyQuality();
-    this.world.setPower(false);
-    this.world.sky.setRound(1, true);
-    this.refreshEnvironment();
-    this._buildMenuScene();
-    this._buildCryoSubjects();
     // warm up shaders so the first fight doesn't hitch
     this.menus.setBoot(0.96, 'Compiling shaders');
     try {
@@ -120,6 +114,110 @@ export class Game {
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && this.inMatch && !this.paused && !this.over) this.pause();
     });
+  }
+
+  // ---- maps ---------------------------------------------------------------------------------
+  async _buildWorld(id, onProgress) {
+    const map = getMap(id);
+    const steps = map.INFO.loading;
+    const world = new World(this.scene, settings.preset, map);
+    await world.build((p) => onProgress(p, steps[Math.min(steps.length - 1, 1 + Math.floor(p * (steps.length - 1)))]));
+    this.world = world;
+    this.map = map;
+    this.mapId = map.INFO.id;
+    return world;
+  }
+
+  // Everything that belongs to one map but is made by the game: buyables, the Daybreak quest,
+  // props built from the avatar rigs, the menu backdrop.
+  _setupMap() {
+    this.mapRoot = new THREE.Group();
+    this.mapRoot.name = 'map-objects';
+    this.scene.add(this.mapRoot);
+    this.world.particles = this.particles;
+    this.zombies.world = this.world;
+    this.daybreak = this.map.DAYBREAK ? new Daybreak(this) : null;
+    this.interact = new Interactables(this);
+    this.world.resetPower();
+    this.world.sky.setRound(1, true);
+    this.player.reset(this.map.PLAYER_START);
+    this.refreshEnvironment();
+    this._buildMenuScene();
+    this._buildCryoSubjects();
+    // caves: an exo helmet light that comes on in the dark
+    this.headLight = null;
+    this.caveK = 0;
+    this.headK = 0;
+    if (this.world.lightVol) {
+      this.headLight = new THREE.SpotLight(0xe8efff, 0, 30, 0.52, 0.65, 1.5);
+      this.mapRoot.add(this.headLight, this.headLight.target);
+    }
+  }
+
+  // Underground: eyes adapt, the helmet light switches itself on, the open air is skipped.
+  _updateCaveView(dt) {
+    const W = this.world;
+    if (!W.lightVol) return;
+    const cam = this.camera.position;
+    const L = this.map.LIGHTING;
+    const [amb] = L.skyAt(cam.x, cam.z);
+    this.caveK = damp(this.caveK, 1 - amb, 1.4, dt);
+    const s = W.lightAt(cam.x, cam.y, cam.z, this._camLight || (this._camLight = {}));
+    const lum = s.r * 0.3 + s.g * 0.59 + s.b * 0.11;
+    this.camLum = lum;
+    const want = this.state === 'play' && amb < 0.35 && lum < (L.headLightBelow ?? 0.35) ? 1 : 0;
+    this.headK = damp(this.headK, want, want ? 2.5 : 1.2, dt);
+    const hl = this.headLight;
+    if (hl) {
+      hl.intensity = this.headK * (L.headLight ?? 26);
+      const fwd = this._hlF || (this._hlF = new THREE.Vector3());
+      this.camera.getWorldDirection(fwd);
+      hl.position.set(cam.x + fwd.z * 0.15, cam.y + 0.12, cam.z - fwd.x * 0.15);
+      hl.target.position.copy(cam).addScaledVector(fwd, 12);
+      hl.target.updateMatrixWorld();
+    }
+    // deep enough that no opening is in sight: skip the sky, the mountain and sun shadows
+    const deep = W.depthAt(cam.x, cam.z) > (L.deepAt ?? 60);
+    if (deep !== this._deep) {
+      this._deep = deep;
+      W.sky.mesh.visible = !deep;
+      W.terrainMesh.visible = !deep;
+      if (W.vegetation) W.vegetation.group.visible = !deep;
+      if (W.surfaceGroup) W.surfaceGroup.visible = !deep;
+    }
+    this.renderer.shadowMap.autoUpdate = !deep;
+  }
+
+  // Swap the world for another map (no-op if it is already loaded).
+  async loadMap(id) {
+    const map = getMap(id);
+    if (this.world && this.mapId === map.INFO.id) return;
+    const prevState = this.state;
+    this.state = 'loading';
+    this.menus.open('boot', false);
+    this.menus.setBoot(0.02, map.INFO.loading[0]);
+    await new Promise((r) => setTimeout(r, 30));
+    this.zombies.reset();
+    if (this.daybreak) this.daybreak.reset();
+    this.particles.clear();
+    this.grenades.reset();
+    this.powerups.reset();
+    this.scene.remove(this.mapRoot);
+    disposeTree(this.mapRoot);
+    this.world.dispose();
+    await this._buildWorld(map.INFO.id, (p, label) => this.menus.setBoot(0.04 + p * 0.9, label));
+    this._setupMap();
+    this.applyQuality();
+    settings.set('lastMap', this.mapId);
+    this.menus.setBoot(0.97, 'Compiling shaders');
+    await new Promise((r) => setTimeout(r, 0));
+    try {
+      this.renderer.compile(this.scene, this.camera);
+    } catch (e) {
+      /* compile is best-effort */
+    }
+    this.menus.setBoot(1, 'Ready');
+    this.state = prevState === 'loading' ? 'menu' : prevState;
   }
 
   resize() {
@@ -147,24 +245,21 @@ export class Game {
 
   // ---- menu background: slow dolly through the trees with silhouettes in the fog ------------
   _buildMenuScene() {
-    this.menuShots = [
-      { from: [-33, 2.2, 36], to: [-40, 2.0, 22], look: [-80, 6, 8], dur: 22 },
-      { from: [-50, 9.5, -12], to: [-62, 9.8, -20], look: [-140, 4, -30], dur: 22 },
-      { from: [-4, 3, 40], to: [10, 3.4, 30], look: [24, 2, 10], dur: 20 },
-    ];
+    const info = this.map.INFO;
+    this.menuShots = info.menuShots;
     this.menuShot = 0;
     this.menuT = 0;
     this.menuZombies = [];
-    const spots = [[-48, 14], [-44, 9], [-52, 22], [-58, -14], [-64, -26], [-70, -18]];
-    spots.forEach(([x, z], i) => {
+    const [fx, fz] = info.menuZombieFace || [0, 0];
+    info.menuZombies.forEach(([x, z], i) => {
       const fig = this.avatars.figures[i % this.avatars.figures.length];
       const mat = makeZombieMaterial(this.avatars);
       const body = buildBody(fig, mat);
       const y = this.world.terrain.heightAt(x, z);
       body.mesh.position.set(x, y, z);
-      body.mesh.rotation.y = Math.atan2(-30 - x, 30 - z) + rand(-0.4, 0.4);
+      body.mesh.rotation.y = Math.atan2(fx - x, fz - z) + rand(-0.4, 0.4);
       body.bones.head.scale.setScalar(0.86);
-      this.scene.add(body.mesh);
+      this.mapRoot.add(body.mesh);
       this.menuZombies.push({ body, phase: Math.random() * 10 });
     });
   }
@@ -196,7 +291,7 @@ export class Game {
       body.mesh.rotation.y = c.x < 13.5 ? Math.PI / 2 : -Math.PI / 2;
       body.mesh.scale.setScalar(0.94);
       body.mesh.castShadow = false;
-      this.scene.add(body.mesh);
+      this.mapRoot.add(body.mesh);
     });
   }
 
@@ -206,8 +301,8 @@ export class Game {
     const k = clamp(this.menuT / shot.dur, 0, 1);
     const e = k * k * (3 - 2 * k);
     const cam = this.camera;
-    const y0 = this.world.terrain.heightAt(shot.from[0], shot.from[2]);
-    const y1 = this.world.terrain.heightAt(shot.to[0], shot.to[2]);
+    const y0 = shot.abs ? 0 : this.world.terrain.heightAt(shot.from[0], shot.from[2]);
+    const y1 = shot.abs ? 0 : this.world.terrain.heightAt(shot.to[0], shot.to[2]);
     cam.position.set(lerp(shot.from[0], shot.to[0], e), lerp(y0 + shot.from[1], y1 + shot.to[1], e), lerp(shot.from[2], shot.to[2], e));
     cam.lookAt(shot.look[0], shot.look[1], shot.look[2]);
     cam.fov = 52;
@@ -240,21 +335,17 @@ export class Game {
 
   // ------------------------------------------------------------------------------------------
   // freeRoam: no zombies, every door open, power on, exo suit on, points to spend
-  async startMatch(freeRoam = false) {
+  async startMatch(freeRoam = false, mapId = this.mapId) {
     this.freeRoam = freeRoam;
     this.menus.closeAll();
     audio.fadeOutMusic(1.2);
     audio.stopAll();
+    if (getMap(mapId).INFO.id !== this.mapId) await this.loadMap(mapId);
+    this.menus.closeAll();
     this.state = 'intro';
     this.hud.show(false);
     this.resetMatch();
-    if (!freeRoam) await this.menus.intro([
-      { text: 'RAINSHADOW', cls: 'big', speed: 70, pause: 500 },
-      { text: 'AVION EXO RESEARCH SITE 9 — OLYMPIC PENINSULA, WA', speed: 24 },
-      { text: 'OCT 13 — 18:47 PDT', speed: 30, pause: 600 },
-      { text: 'Containment failure in the exo test program. Site has gone dark.', cls: 'dim', speed: 22 },
-      { text: 'Survive.', cls: 'accent', speed: 60 },
-    ]);
+    if (!freeRoam) await this.menus.intro(this.map.INFO.intro);
     this.menus.closeAll();
     this.state = 'play';
     this.inMatch = true;
@@ -272,7 +363,7 @@ export class Game {
     else this.input.requestLock();
     this.input.enabled = true;
     this.objective();
-    this.hud.message(freeRoam ? 'FREE ROAM' : 'RAINSHADOW', 'Avion Exo Research Site 9', 3);
+    this.hud.message(freeRoam ? 'FREE ROAM' : this.map.INFO.name, this.map.INFO.subtitle, 3);
   }
 
   setupFreeRoam() {
@@ -281,7 +372,7 @@ export class Game {
       for (const z of d.data.zones) this.zoneOpen[z] = true;
     }
     this.zombies.markFlowDirty();
-    if (!this.world.power) this.turnOnPower();
+    for (const id of Object.keys(this.world.circuits)) if (!this.world.powered(id)) this.turnOnCircuit(id, true);
     // already suited up: no injection animation or announcement
     if (!this.player.exo.has) {
       this.player.equipExo();
@@ -293,12 +384,12 @@ export class Game {
 
   resetMatch() {
     this.zombies.reset();
-    this.daybreak.reset();
+    if (this.daybreak) this.daybreak.reset();
     this.particles.clear();
     this.grenades.reset();
     this.powerups.reset();
     this.world.resetDoors();
-    this.world.setPower(false);
+    this.world.resetPower();
     this.world.sky.setRound(1, true);
     this.world.sky.fogBoost = this.world.sky.fogBoostTarget = 0;
     this.refreshEnvironment();
@@ -420,14 +511,31 @@ export class Game {
   }
 
   turnOnPower() {
-    this.world.setPower(true);
-    audio.play('power_on', { volume: 1 });
-    audio.loop('alarm', 'alarm', { bus: 'ambience', volume: 0.18 });
-    setTimeout(() => audio.stopLoop('alarm', 2), 4500);
-    setTimeout(() => audio.announce('Power restored. Containment protocols offline.'), 1200);
-    this.hud.message('POWER ON', 'Exo upgrades and the Weapon Forge are online', 4.5);
-    this.player.addShake(0.3, 0.6);
-    this.flash(0.2, 0xffe2b0);
+    this.turnOnCircuit(this.world.mainCircuit);
+  }
+
+  // Throw one circuit's switch. quiet: no fanfare (free roam powers everything at once).
+  turnOnCircuit(id, quiet = false) {
+    const w = this.world;
+    if (w.powered(id)) return;
+    w.setCircuit(id, true);
+    const c = w.circuits[id] || {};
+    if (!quiet) {
+      const main = id === w.mainCircuit && !c.label;
+      const info = this.map.INFO;
+      audio.play(c.sound || 'power_on', { volume: 1 });
+      if (main) {
+        audio.loop('alarm', 'alarm', { bus: 'ambience', volume: 0.18 });
+        setTimeout(() => audio.stopLoop('alarm', 2), 4500);
+      }
+      const say = c.announce || (main ? info.powerAnnounce : null);
+      if (say) setTimeout(() => audio.announce(say), 1200);
+      const [title, sub] = c.message || info.powerMessage;
+      this.hud.message(title, sub, 4.5);
+      this.player.addShake(main ? 0.3 : 0.15, 0.6);
+      this.flash(main ? 0.2 : 0.1, 0xffe2b0);
+    }
+    if (this.map.onPower) this.map.onPower(this, id, quiet);
     this.objective();
   }
 
@@ -435,11 +543,9 @@ export class Game {
     const p = this.player;
     let text = '';
     if (this.daybreak && this.daybreak.fighting) text = 'Defeat the Nightwarden';
-    else if (this.freeRoam) text = 'Free roam: explore Rainshadow';
-    else if (!p.exo.has) text = this.zoneOpen[1] ? 'Equip the Exo Suit in the Checkpoint armory' : 'Reach the facility checkpoint and find an Exo Suit';
-    else if (!this.world.power) text = 'Restore power in Hangar 2';
-    else if (!this.weapons.inv.some((w) => w.level > 0)) text = 'Upgrade a weapon at the Weapon Forge';
-    else text = 'Survive';
+    else if (this.freeRoam) text = this.map.INFO.freeObjective;
+    else text = this.map.objective(this);
+    void p;
     this.hud.objective(text);
   }
 
@@ -470,7 +576,7 @@ export class Game {
   }
 
   onRoundStart(n) {
-    if (n === 1) audio.announce('Containment breach. All personnel to evacuation points.');
+    if (n === 1 && this.map.INFO.roundOneAnnounce) audio.announce(this.map.INFO.roundOneAnnounce);
     this.refreshEnvironment();
   }
 
@@ -483,7 +589,9 @@ export class Game {
     else if (info.part === 'head' && info.source === 'bullet') pts = 100;
     else if (info.source === 'explosive' || info.source === 'microwave') pts = 50;
     if (info.source !== 'nuke') this.addPoints(pts);
-    if (z.minion) this.daybreak.onMinionKilled();
+    if (z.minion) {
+      if (this.daybreak) this.daybreak.onMinionKilled();
+    }
     else this.director.onKilled(z);
     if (info.source !== 'nuke') this.powerups.maybeDrop(z.root.position);
   }
@@ -643,12 +751,13 @@ export class Game {
     audio.play('game_over', { bus: 'music', volume: 1 });
     setTimeout(() => audio.zombie('laugh', p.eye, { volume: 1, force: true }), 1800);
     const round = Math.max(1, this.director.round);
-    const rec = loadRecords();
+    const all = loadRecords();
+    const rec = mapRecord(all, this.mapId);
     const record = round > rec.bestRound;
     rec.bestRound = Math.max(rec.bestRound, round);
     rec.bestKills = Math.max(rec.bestKills, this.stats.kills);
     rec.games++;
-    saveRecords(rec);
+    saveRecords(all);
     this.hud.setDown(false);
     setTimeout(() => {
       this.hud.show(false);
@@ -685,6 +794,7 @@ export class Game {
   updateMenu(dt) {
     this._updateMenuCamera(dt);
     this.updateAmbience(dt);
+    this._updateCaveView(dt);
     this.world.update(dt, this.camera.position, this.camera.position);
     this.world.sky.update(dt, this.camera.position, this.time);
     this.particles.update(dt);
@@ -727,12 +837,13 @@ export class Game {
     if (!this.freeRoam) this.director.update(dt);
     this.zombies.update(dt);
     this.boss.update(dt);
-    this.daybreak.update(dt);
+    if (this.daybreak) this.daybreak.update(dt);
     this.grenades.update(dt);
     this.powerups.update(dt);
     this.particles.update(dt);
     this.world.update(dt, this.camera.position, p.pos);
     this.world.sky.update(dt, p.pos, this.time);
+    this._updateCaveView(dt);
     this.viewmodel.update({
       dt, ads: this.weapons.ads, sprinting: p.sprinting, speed: p.speed, grounded: p.ch.grounded,
       lookX: p.lookX, lookY: p.lookY, sliding: p.slideT > 0,
@@ -756,9 +867,10 @@ export class Game {
       this._hbT = 0.9;
       audio.play('heartbeat', { bus: 'ui', volume: 0.7 });
     }
-    // forest ambience
+    // forest ambience (maps can bring their own)
     this.ambientT -= dt;
-    if (this.ambientT <= 0) {
+    if (this.map.ambience) this.map.ambience(this, dt);
+    else if (this.ambientT <= 0) {
       this.ambientT = rand(14, 30);
       const a = Math.random() * Math.PI * 2;
       const pos = new THREE.Vector3(p.ch.x + Math.cos(a) * 30, p.ch.y + 10, p.ch.z + Math.sin(a) * 30);
@@ -774,8 +886,10 @@ export class Game {
   render(dt) {
     const cam = this.camera;
     const q = settings.preset;
-    // eyes adjust indoors: lamp-lit rooms are far dimmer than the open sky
-    this.post.u.uExposure.value = this.world.sky.exposure * (1 + 0.8 * (this.indoorK || 0));
+    // eyes adjust indoors: lamp-lit rooms are far dimmer than the open sky; caves even more so
+    const caveK = this.caveK || 0;
+    const caveExp = this.world.lightVol ? this.map.LIGHTING.exposure ?? 1.9 : 1;
+    this.post.u.uExposure.value = lerp(this.world.sky.exposure * (1 + 0.8 * (this.indoorK || 0)), caveExp, caveK);
     this.post.u.uGrain.value = settings.get('filmGrain') ? 0.022 : 0;
     this.post.updateSun(cam, this.world.sky.sunDir);
     // viewmodel lighting tracks the world
@@ -783,11 +897,31 @@ export class Game {
       const vm = this.viewmodel;
       vm.hemi.color.copy(this.world.sky.hemi.color);
       vm.hemi.groundColor.copy(this.world.sky.hemi.groundColor);
-      vm.hemi.intensity = this.world.sky.hemi.intensity * 1.3;
+      vm.hemi.intensity = this.world.sky.hemi.intensity * 1.3 * (1 - caveK);
       const indoor = this.indoorK || 0;
       vm.dir.color.copy(this.world.sky.sun.color);
-      vm.dir.intensity = this.world.sky.sun.intensity * (1 - indoor * 0.8) * 0.8;
-      const ld = this.world.sky.lightDir.clone().applyQuaternion(cam.quaternion.clone().invert());
+      vm.dir.intensity = this.world.sky.sun.intensity * (1 - indoor * 0.8) * 0.8 * (1 - caveK);
+      let ld = this.world.sky.lightDir;
+      vm.fill.intensity = 1.4;
+      vm.scene.environmentIntensity = 0.45;
+      if (caveK > 0.01 && this._camLight) {
+        // underground the weapon is lit by the lamps around you (and your helmet light)
+        const s = this._camLight;
+        const lum = Math.max(1e-4, s.r * 0.3 + s.g * 0.59 + s.b * 0.11);
+        const k = Math.min(1, lum * 2.2);
+        vm.hemi.color.setRGB(s.r / lum, s.g / lum, s.b / lum).multiplyScalar(0.5);
+        vm.hemi.groundColor.copy(vm.hemi.color).multiplyScalar(0.4);
+        vm.hemi.intensity += caveK * (0.08 + 1.1 * k);
+        if (s.strength > 0.15 && k > 0.05) {
+          vm.dir.color.setRGB(s.r / lum, s.g / lum, s.b / lum);
+          vm.dir.intensity = lerp(vm.dir.intensity, 1.6 * k * s.strength, caveK);
+          ld = this._ldTmp || (this._ldTmp = new THREE.Vector3());
+          ld.set(s.dx, s.dy, s.dz);
+        }
+        vm.fill.intensity = 1.4 * (1 - caveK) + caveK * (0.12 + 0.9 * k + 0.75 * this.headK);
+        vm.scene.environmentIntensity = 0.45 * (1 - caveK) + caveK * 0.06;
+      }
+      ld = ld.clone().applyQuaternion(cam.quaternion.clone().invert());
       vm.dir.position.copy(ld).multiplyScalar(5);
       vm.dir.target.position.set(0, 0, 0);
       vm.dir.target.updateMatrixWorld();
@@ -798,4 +932,25 @@ export class Game {
     void q;
     void dt;
   }
+}
+
+// Free the GPU buffers of a group made per map (meshes, their own materials and textures).
+function disposeTree(root) {
+  const seen = new Set();
+  root.traverse((o) => {
+    if (o.geometry && !seen.has(o.geometry)) {
+      seen.add(o.geometry);
+      o.geometry.dispose();
+    }
+    const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+    for (const m of mats) {
+      if (seen.has(m) || m.userData.shared) continue;
+      seen.add(m);
+      for (const k of ['map', 'emissiveMap', 'normalMap']) if (m[k] && !m[k].userData.shared && !seen.has(m[k])) {
+        seen.add(m[k]);
+        m[k].dispose();
+      }
+      m.dispose();
+    }
+  });
 }

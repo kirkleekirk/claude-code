@@ -1,5 +1,6 @@
 import * as THREE from '../../vendor/three.module.min.js';
 import { mergeGeometries, basic, std } from './materials.js';
+import { fixtureMaterial } from './cavelight.js';
 
 // Box geometry whose UVs are in world metres / uvScale, so textures keep their size.
 export function boxGeometry(w, h, d, uvScale = 4) {
@@ -26,16 +27,52 @@ export class Builder {
     this.group = new THREE.Group();
     this.group.name = 'structures';
     scene.add(this.group);
+    // big maps tag what they build by region ('surface' / 'cave') so whole regions can be hidden
+    this.region = 'surface';
+    this.regionGroups = {};
     this.lightAnchors = [];
     this.glows = [];
     this.beams = [];
+    // lamps whose light is baked into the light volume (maps with a LIGHTING block)
+    this.bakedLights = [];
+    // their glowing fittings, batched per circuit and switched by the shader
+    this.fixtureBatches = new Map();
+  }
+
+  // A lamp baked into the light volume: light + a glowing fitting (+ an optional halo).
+  // o: { color, intensity, range, circuit, spot:{dir,angle,penumbra}, fitting: geometry|null,
+  //      rot, glow (size) , occlude (test walls in the bake), bright }
+  bakedLamp(x, y, z, o = {}) {
+    const color = o.color ?? 0xffe2b8;
+    const circuit = o.circuit ?? null;
+    this.bakedLights.push({ x, y, z, color, intensity: o.intensity ?? 12, range: o.range ?? 14, spot: o.spot || null, circuit, occlude: !!o.occlude });
+    if (o.fitting !== null) {
+      const g = o.fitting || new THREE.SphereGeometry(o.size ?? 0.12, 10, 8);
+      const m = new THREE.Matrix4().makeRotationY(o.rot || 0);
+      if (o.tilt) m.multiply(new THREE.Matrix4().makeRotationX(o.tilt));
+      m.setPosition(x, y, z);
+      this.fixture(g, m, color, o.bright ?? 5, circuit);
+    }
+    if (o.glow) this.glows.push({ x, y, z, size: o.glow, color, circuit, baked: true });
+  }
+
+  // Emissive geometry that lights up with its circuit.
+  fixture(geometry, matrix, color, bright, circuit) {
+    const key = new THREE.Color(color).getHexString() + ':' + bright + ':' + circuit + ':' + this.region;
+    let b = this.fixtureBatches.get(key);
+    if (!b) {
+      b = { color, bright, circuit, items: [], region: this.region };
+      this.fixtureBatches.set(key, b);
+    }
+    b.items.push({ geometry, matrix });
   }
 
   _batch(mat, geometry, matrix, opts = {}) {
-    const key = mat.uuid + (opts.cast === false ? ':nc' : '');
+    const region = opts.region || this.region;
+    const key = mat.uuid + (opts.cast === false ? ':nc' : '') + ':' + region;
     let b = this.batches.get(key);
     if (!b) {
-      b = { mat, items: [], cast: opts.cast !== false, receive: opts.receive !== false };
+      b = { mat, items: [], cast: opts.cast !== false, receive: opts.receive !== false, region };
       this.batches.set(key, b);
     }
     b.items.push({ geometry, matrix });
@@ -60,6 +97,8 @@ export class Builder {
         bullets: o.bullets !== false,
         climbable: o.climbable !== false,
       });
+      // blocks baked lamp light (walls, roofs); see-through things don't
+      col.opaque = o.opaque ?? (o.visible !== false && !/glass|chainlink|cryo/.test(typeof o.mat === 'string' ? o.mat : ''));
     }
     return col;
   }
@@ -185,10 +224,13 @@ export class Builder {
     m.setPosition(x, y, z);
     const mesh = new THREE.Mesh(g, mat);
     mesh.applyMatrix4(m);
-    this.group.add(mesh);
+    // mesh: false for a light with no visible fitting (a glow from somewhere off-screen)
+    if (o.mesh !== false) this.regionGroup(this.region).add(mesh);
+    // circuit: lit only once that circuit has power (emergency lamps: only until it has)
     const anchor = {
       x, y: y - 0.3, z, color: new THREE.Color(color), intensity: o.intensity ?? 18, distance: o.distance ?? 14,
-      flicker: o.flicker || 0, needsPower: !!o.needsPower, zone: o.zone ?? -1, mesh, mat, baseColor: mat.color.clone(),
+      flicker: o.flicker || 0, circuit: o.circuit ?? (o.needsPower ? 'main' : null), emergency: !!o.emergency,
+      dimUnpowered: !!o.dimUnpowered, zone: o.zone ?? -1, mesh, mat, baseColor: mat.color.clone(),
     };
     this.lightAnchors.push(anchor);
     if (o.glow !== false) this.glows.push({ x, y: y - 0.05, z, size: o.glowSize ?? 2.2, color, anchor });
@@ -197,7 +239,7 @@ export class Builder {
 
   // Fake volumetric floodlight beam (rendered by the FX layer).
   beam(x, y, z, dir, o = {}) {
-    this.beams.push({ x, y, z, dir: dir.clone().normalize(), length: o.length ?? 22, radius: o.radius ?? 5, color: o.color ?? 0xfff0d8, needsPower: !!o.needsPower, intensity: o.intensity ?? 0.22 });
+    this.beams.push({ x, y, z, dir: dir.clone().normalize(), length: o.length ?? 22, radius: o.radius ?? 5, color: o.color ?? 0xfff0d8, circuit: o.circuit ?? (o.needsPower ? 'main' : null), intensity: o.intensity ?? 0.22 });
   }
 
   sign(x, y, z, rot, texture, w, h, o = {}) {
@@ -209,8 +251,19 @@ export class Builder {
     mesh.position.set(x, y, z);
     mesh.rotation.y = rot;
     mesh.receiveShadow = true;
-    this.group.add(mesh);
+    this.regionGroup(this.region).add(mesh);
     return mesh;
+  }
+
+  regionGroup(region) {
+    let g = this.regionGroups[region];
+    if (!g) {
+      g = new THREE.Group();
+      g.name = 'region:' + region;
+      this.group.add(g);
+      this.regionGroups[region] = g;
+    }
+    return g;
   }
 
   finalize() {
@@ -219,9 +272,15 @@ export class Builder {
       const mesh = new THREE.Mesh(geo, b.mat);
       mesh.castShadow = b.cast;
       mesh.receiveShadow = b.receive;
-      this.group.add(mesh);
+      this.regionGroup(b.region).add(mesh);
     }
     this.batches.clear();
+    for (const b of this.fixtureBatches.values()) {
+      const mesh = new THREE.Mesh(mergeGeometries(b.items), fixtureMaterial(b.color, b.bright));
+      mesh.name = 'fixtures:' + b.circuit;
+      this.regionGroup(b.region || 'surface').add(mesh);
+    }
+    this.fixtureBatches.clear();
   }
 }
 

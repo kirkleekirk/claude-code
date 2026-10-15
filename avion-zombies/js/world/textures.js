@@ -3,7 +3,7 @@ import { makeRng, clamp } from '../util.js';
 
 // Procedural, seamlessly tiling canvas textures for the facility and the forest floor.
 
-function canvas(w, h = w) {
+export function canvas(w, h = w) {
   const c = document.createElement('canvas');
   c.width = w;
   c.height = h;
@@ -47,7 +47,7 @@ export function tileNoise(w, h, period, octaves, seed, gain = 0.5) {
   return out;
 }
 
-function toTexture(c, { srgb = true, repeat = true, aniso = 8 } = {}) {
+export function toTexture(c, { srgb = true, repeat = true, aniso = 8 } = {}) {
   const t = new THREE.CanvasTexture(c);
   if (srgb) t.colorSpace = THREE.SRGBColorSpace;
   if (repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping;
@@ -56,7 +56,7 @@ function toTexture(c, { srgb = true, repeat = true, aniso = 8 } = {}) {
   return t;
 }
 
-function normalFromHeight(height, w, h, strength = 2) {
+export function normalFromHeight(height, w, h, strength = 2) {
   const c = canvas(w, h);
   const ctx = c.getContext('2d');
   const img = ctx.createImageData(w, h);
@@ -84,7 +84,7 @@ function normalFromHeight(height, w, h, strength = 2) {
   return toTexture(c, { srgb: false });
 }
 
-function paint(w, h, fn) {
+export function paint(w, h, fn) {
   const c = canvas(w, h);
   const ctx = c.getContext('2d');
   const img = ctx.createImageData(w, h);

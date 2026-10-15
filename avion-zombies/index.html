@@ -95,29 +95,45 @@
       <div><div class="logo">AVION</div><div class="logo-sub">EXO ZOMBIES</div></div>
     </header>
     <nav class="items">
-      <button class="mi" data-action="solo" data-desc="Hold out alone at Avion Research Site 9.">Solo</button>
+      <button class="mi" data-action="solo" data-desc="Pick a map and hold out alone.">Solo</button>
       <button class="mi" data-action="options" data-desc="Audio, controls and graphics.">Options</button>
       <button class="mi" data-action="controls" data-desc="Keyboard, controller and touch layouts.">Controls</button>
       <button class="mi" data-action="credits" data-desc="Who made the sounds, models and music.">Credits</button>
       <button class="mi" data-action="fullscreen" data-desc="Toggle fullscreen.">Fullscreen</button>
     </nav>
     <p class="desc"></p>
-    <footer class="menu-foot"><span>RAINSHADOW • OLYMPIC PENINSULA</span><span id="menu-best"></span></footer>
+    <footer class="menu-foot"><span id="menu-map">RAINSHADOW • OLYMPIC PENINSULA</span><span id="menu-best"></span></footer>
   </div>
 </section>
 
 <section class="screen menu" data-screen="mapselect" hidden>
-  <div class="menu-col">
+  <div class="menu-col wide">
     <header class="screen-head"><span class="kicker">Solo</span><h2>Select map</h2></header>
-    <article class="map-card">
-      <div class="coords">47.97°N &nbsp;123.49°W &nbsp;•&nbsp; ELEV 5,242 FT</div>
-      <h3>RAINSHADOW</h3>
-      <p>Avion's exo-suit test site, deep in the Olympic forest. The program went dark at sunset. Find an exo suit, get the power back, and hold out as dusk turns to night.</p>
-      <ul><li>Exo Armory</li><li>6 Exo upgrades</li><li>3D printer</li><li>Weapon Forge</li></ul>
-    </article>
+    <div class="map-cards">
+      <article class="map-card" data-map="rainshadow">
+        <div class="coords">47.97°N &nbsp;123.49°W &nbsp;•&nbsp; ELEV 5,242 FT</div>
+        <h3>RAINSHADOW</h3>
+        <p>Avion's exo-suit test site, deep in the Olympic forest. The program went dark at sunset. Find an exo suit, get the power back, and hold out as dusk turns to night.</p>
+        <ul><li>Exo Armory</li><li>6 Exo upgrades</li><li>3D printer</li><li>Weapon Forge</li></ul>
+        <div class="best" data-best="rainshadow"></div>
+        <nav class="items row">
+          <button class="mi primary" data-action="start" data-map="rainshadow">Start match</button>
+          <button class="mi" data-action="freeroam" data-map="rainshadow">Free roam</button>
+        </nav>
+      </article>
+      <article class="map-card" data-map="emberhollow">
+        <div class="coords">46.18°N &nbsp;121.62°W &nbsp;•&nbsp; DEPTH 310 FT</div>
+        <h3>EMBER HOLLOW</h3>
+        <p>Daybreak traced the Nightwarden's power to a 1930s tourist cave in the Cascades, Avion's front for the CALDERA thermal reactor far below. Throw the surface breakers, take the tour, and keep going down.</p>
+        <ul><li>Area power switches</li><li>Show cave</li><li>Deep caverns</li><li>Thermal reactor</li></ul>
+        <div class="best" data-best="emberhollow"></div>
+        <nav class="items row">
+          <button class="mi primary" data-action="start" data-map="emberhollow">Start match</button>
+          <button class="mi" data-action="freeroam" data-map="emberhollow">Free roam</button>
+        </nav>
+      </article>
+    </div>
     <nav class="items">
-      <button class="mi primary" data-action="start">Start match</button>
-      <button class="mi" data-action="freeroam">Free roam</button>
       <button class="mi" data-action="back">Back</button>
     </nav>
   </div>

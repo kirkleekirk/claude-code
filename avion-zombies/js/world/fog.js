@@ -1,4 +1,5 @@
 import * as THREE from '../../vendor/three.module.min.js';
+import { caveParsGLSL, caveFogGLSL, caveUniforms, patchCaveShader, setFixturePatcher } from './cavelight.js';
 
 // Height fog with a sun-tinted colour. Patches every material we create so the forest
 // melts into lavender haze away from the sun and glows peach toward it.
@@ -53,12 +54,15 @@ export const fogFragChunk = /* glsl */ `
     fogAmt = max(fogAmt, 1.0 - exp(-uFogDistDensity * fogDist));
     float sunAmt = pow(max(dot(fogDirW, uFogSunDir), 0.0), 5.0);
     vec3 fogCol = mix(fogColor, uFogSunColor, sunAmt);
+    ${caveFogGLSL}
     gl_FragColor.rgb = mix(gl_FragColor.rgb, fogCol, clamp(fogAmt, 0.0, uFogMax));
   }
 #endif
 `;
 
 function onBeforeCompile(shader) {
+  // `this` is the material when three calls the hook
+  const open = !!(this && this.userData && this.userData.caveOpen);
   Object.assign(shader.uniforms, fogUniforms);
   shader.vertexShader = shader.vertexShader
     .replace('#include <fog_pars_vertex>', parsVert)
@@ -66,15 +70,17 @@ function onBeforeCompile(shader) {
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <fog_pars_fragment>', parsFrag)
     .replace('#include <fog_fragment>', fogFragChunk);
+  // baked cave/building light and the open-sky mask (inactive on maps without them)
+  patchCaveShader(shader, open);
 }
 
 export function patchFog(material) {
   if (material.fog === false) return material;
   const prev = material.onBeforeCompile;
   if (prev && prev !== onBeforeCompile && prev.toString() !== THREE.Material.prototype.onBeforeCompile.toString()) {
-    material.onBeforeCompile = (shader, renderer) => {
-      prev(shader, renderer);
-      onBeforeCompile(shader);
+    material.onBeforeCompile = function (shader, renderer) {
+      prev.call(this, shader, renderer);
+      onBeforeCompile.call(this, shader);
     };
     const key = material.customProgramCacheKey ? material.customProgramCacheKey() : '';
     material.customProgramCacheKey = () => key + '|fog';
@@ -84,10 +90,20 @@ export function patchFog(material) {
   return material;
 }
 
+// Outside surfaces of buildings (roofs, outer walls): always under the open sky, whatever the
+// indoor/cave mask says about the spot they stand on.
+export function markOpenAir(material) {
+  material.userData.caveOpen = true;
+  const key = material.customProgramCacheKey ? material.customProgramCacheKey() : '';
+  material.customProgramCacheKey = () => key + '|open';
+  material.needsUpdate = true;
+  return material;
+}
+
 // GLSL snippet for custom ShaderMaterials (particles, beams) to match the world fog.
 export const fogGLSL = {
-  pars: parsFrag.replace('#ifdef USE_FOG', '').replace('#endif', '').replace('varying vec3 vFogViewPos;', ''),
-  uniforms: () => ({ fogColor: { value: new THREE.Color() }, fogDensity: { value: 0.0 }, ...fogUniforms }),
+  pars: parsFrag.replace('#ifdef USE_FOG', '').replace('#endif', '').replace('varying vec3 vFogViewPos;', '') + caveParsGLSL,
+  uniforms: () => ({ fogColor: { value: new THREE.Color() }, fogDensity: { value: 0.0 }, ...fogUniforms, ...caveUniforms }),
   // returns fog amount for a view-space position
   func: /* glsl */ `
 float worldFog(vec3 viewPos, out vec3 fogCol) {
@@ -101,7 +117,10 @@ float worldFog(vec3 viewPos, out vec3 fogCol) {
   fogAmt = max(fogAmt, 1.0 - exp(-uFogDistDensity * fogDist));
   float sunAmt = pow(max(dot(fogDirW, uFogSunDir), 0.0), 5.0);
   fogCol = mix(fogColor, uFogSunColor, sunAmt);
+  ${caveFogGLSL}
   return clamp(fogAmt, 0.0, uFogMax);
 }
 `,
 };
+
+setFixturePatcher(patchFog);

@@ -27,6 +27,7 @@ const DEFAULTS = {
   filmGrain: true,
   screenShake: 1.0,
   aimAssist: true,
+  lastMap: 'rainshadow',
 };
 
 class Settings {
@@ -65,4 +66,11 @@ export function loadRecords() {
 }
 export function saveRecords(r) {
   storageSet(RECORD_KEY, r);
+}
+// Per-map view of the records. Rainshadow keeps the original top-level fields so old saves still count.
+export function mapRecord(rec, id) {
+  if (id === 'rainshadow') return rec;
+  rec.maps = rec.maps || {};
+  if (!rec.maps[id]) rec.maps[id] = { bestRound: 0, bestKills: 0, games: 0 };
+  return rec.maps[id];
 }

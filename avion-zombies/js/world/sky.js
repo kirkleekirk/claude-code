@@ -60,8 +60,8 @@ const tmpA = new THREE.Color();
 const INDOOR_TINT = new THREE.Color(0.62, 0.6, 0.58);
 const tmpB = new THREE.Color();
 
-function sampleKey(name, t) {
-  const arr = TOD[name];
+function sampleKey(tod, name, t) {
+  const arr = tod[name];
   let i = 0;
   while (i < KEYS.length - 2 && t > KEYS[i + 1]) i++;
   const f = clamp((t - KEYS[i]) / (KEYS[i + 1] - KEYS[i]), 0, 1);
@@ -271,8 +271,11 @@ void main() {
 `;
 
 export class Sky {
-  constructor(scene) {
+  // parent: where the dome and lights live (the map's root group); fog always goes on the scene.
+  // config (per map): tod = keyframe table like TOD, moonAz in degrees.
+  constructor(scene, parent = scene, config = {}) {
     this.scene = scene;
+    this.tod = config.tod || TOD;
     this.uniforms = {
       uSunDir: { value: new THREE.Vector3() },
       uMoonDir: { value: new THREE.Vector3() },
@@ -304,7 +307,7 @@ export class Sky {
     this.mesh = new THREE.Mesh(new THREE.SphereGeometry(1000, 48, 24), mat);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = -10;
-    scene.add(this.mesh);
+    parent.add(this.mesh);
 
     this.sun = new THREE.DirectionalLight(0xffffff, 2);
     this.sun.castShadow = true;
@@ -317,14 +320,14 @@ export class Sky {
     sc.bottom = -42;
     sc.near = 1;
     sc.far = 260;
-    scene.add(this.sun);
-    scene.add(this.sun.target);
+    parent.add(this.sun);
+    parent.add(this.sun.target);
     this.hemi = new THREE.HemisphereLight(0xa08ccc, 0x3a3424, 0.9);
-    scene.add(this.hemi);
+    parent.add(this.hemi);
     this.fog = new THREE.FogExp2(0x8e7ea8, 0.017);
     scene.fog = this.fog;
 
-    this.moonAzimuth = 152 * DEG; // young crescent in the afterglow, west-south-west
+    this.moonAzimuth = (config.moonAz ?? 152) * DEG; // Rainshadow: young crescent in the afterglow, west-south-west
     this.t = 0;
     this.target = 0;
     this.exposure = 1;
@@ -399,7 +402,7 @@ export class Sky {
 
   // Round time of day, then any forced looks blended over it in ORDER.
   _value(name, t) {
-    let v = sampleKey(name, t);
+    let v = sampleKey(this.tod, name, t);
     for (const p of ORDER) {
       const k = this.ovr[p].k;
       if (k <= 0) continue;

@@ -938,6 +938,145 @@ R.boss_loop = async () => makeLoop(await render(10.9, (ctx, out) => {
   }
 }, 2), 0.5);
 
+// ---- Ember Hollow -------------------------------------------------------------------------
+// a big knife switch thrown home, then the circuit's lights buzzing up
+R.breaker = () => render(2.4, (ctx, out) => {
+  noiseBurst(ctx, out, 0, 0.12, { type: 'bandpass', freq: 1800, q: 1.5, vol: 0.5 });
+  tone(ctx, out, 0.1, 85, 0.25, { vol: 0.9 });
+  noiseBurst(ctx, out, 0.1, 0.18, { type: 'lowpass', freq: 700, vol: 0.9 });
+  bell(ctx, out, 0.11, 320, 0.3, 0.08, [1, 2.3]);
+  const hum = osc(ctx, 'sawtooth', 60, 0.25, 2.4);
+  const g = gainNode(ctx, 0);
+  env(g.gain, 0.25, [[0, 0], [0.5, 0.12], [1.6, 0.1], [2.1, 0]]);
+  chain(hum, filter(ctx, 'lowpass', 420, 1.2), g, out);
+  for (let i = 0; i < 18; i++) {
+    const t = 0.3 + Math.random() * 1.0;
+    noiseBurst(ctx, out, t, 0.01 + Math.random() * 0.03, { type: 'highpass', freq: 3000, vol: 0.25 });
+  }
+});
+
+// a wooden door on old hinges
+R.door_swing = () => render(1.6, (ctx, out) => {
+  noiseBurst(ctx, out, 0, 0.06, { type: 'bandpass', freq: 2200, q: 2, vol: 0.4 });
+  const o = osc(ctx, 'sawtooth', 240, 0.05, 1.1);
+  o.frequency.linearRampToValueAtTime(410, 0.5);
+  o.frequency.linearRampToValueAtTime(300, 1.05);
+  const g = gainNode(ctx, 0);
+  env(g.gain, 0.05, [[0, 0], [0.12, 0.07], [0.8, 0.05], [1.05, 0]]);
+  chain(o, filter(ctx, 'bandpass', 1300, 5), g, out);
+  noiseBurst(ctx, out, 1.1, 0.3, { type: 'lowpass', freq: 400, vol: 0.55 });
+  tone(ctx, out, 1.1, 90, 0.25, { vol: 0.4 });
+});
+
+// heavy plank doors: a long groan and a thud
+R.door_heavy = () => render(2.4, (ctx, out) => {
+  const o = osc(ctx, 'sawtooth', 75, 0, 1.9);
+  o.frequency.linearRampToValueAtTime(120, 0.8);
+  o.frequency.linearRampToValueAtTime(88, 1.8);
+  const g = gainNode(ctx, 0);
+  env(g.gain, 0, [[0, 0], [0.25, 0.16], [1.5, 0.12], [1.9, 0]]);
+  chain(o, filter(ctx, 'bandpass', 480, 5), g, out);
+  noiseBurst(ctx, out, 0, 1.8, { type: 'lowpass', freq: 260, vol: 0.25, attack: 0.3 });
+  noiseBurst(ctx, out, 1.85, 0.5, { type: 'lowpass', freq: 300, vol: 0.9 });
+  tone(ctx, out, 1.85, 52, 0.45, { vol: 0.8 });
+});
+
+// inside the mountain: a low breathing rumble, far-off water, the odd stone settling
+R.cave_loop = async () => makeLoop(await render(22, (ctx, out) => {
+  const n = noise(ctx, 0);
+  const lp = filter(ctx, 'lowpass', 90, 0.8);
+  const g = gainNode(ctx, 0.5);
+  const lfo = osc(ctx, 'sine', 0.05);
+  chain(lfo, gainNode(ctx, 0.2), g.gain);
+  chain(n, lp, g, out);
+  const n2 = noise(ctx, 0);
+  chain(n2, filter(ctx, 'bandpass', 900, 0.6), gainNode(ctx, 0.012), out);
+  for (let i = 0; i < 22; i++) {
+    const t = Math.random() * 20;
+    const f = 1400 + Math.random() * 2400;
+    const d = osc(ctx, 'sine', f, t, t + 0.12);
+    d.frequency.exponentialRampToValueAtTime(f * 0.55, t + 0.1);
+    const dg = gainNode(ctx, 0);
+    env(dg.gain, t, [[0, 0], [0.004, 0.05 + Math.random() * 0.06], [0.1, 0.0001, 'exp']]);
+    chain(d, dg, out);
+  }
+  for (let i = 0; i < 3; i++) noiseBurst(ctx, out, 2 + Math.random() * 17, 0.6, { type: 'lowpass', freq: 160, vol: 0.18, attack: 0.1 });
+}, 2), 2);
+
+// one drop into a pool
+R.drip = () => render(0.5, (ctx, out) => {
+  const f = 1600 + Math.random() * 1600;
+  const d = osc(ctx, 'sine', f, 0, 0.2);
+  d.frequency.exponentialRampToValueAtTime(f * 0.5, 0.12);
+  const g = gainNode(ctx, 0);
+  env(g.gain, 0, [[0, 0], [0.003, 0.25], [0.14, 0.0001, 'exp']]);
+  chain(d, g, out);
+  bell(ctx, out, 0.02, f * 0.7, 0.3, 0.03, [1, 1.7]);
+});
+
+// running water
+R.river_loop = async () => makeLoop(await render(8, (ctx, out) => {
+  const n = noise(ctx, 0);
+  const bp = filter(ctx, 'bandpass', 700, 0.5);
+  const lfo = osc(ctx, 'sine', 0.3);
+  chain(lfo, gainNode(ctx, 250), bp.frequency);
+  chain(n, bp, gainNode(ctx, 0.4), out);
+  const n2 = noise(ctx, 0);
+  chain(n2, filter(ctx, 'lowpass', 200), gainNode(ctx, 0.35), out);
+  for (let i = 0; i < 70; i++) {
+    const t = Math.random() * 7.6;
+    noiseBurst(ctx, out, t, 0.02 + Math.random() * 0.05, { type: 'bandpass', freq: 900 + Math.random() * 2500, q: 3, vol: 0.12 });
+  }
+}, 2), 1);
+
+// the CALDERA spinning up: turbines climbing, the core lighting, a deep thump as it takes load
+R.reactor_start = () => render(9, (ctx, out) => {
+  const w = osc(ctx, 'sawtooth', 30, 0, 9);
+  w.frequency.exponentialRampToValueAtTime(95, 6.5);
+  const wl = filter(ctx, 'lowpass', 120, 3);
+  wl.frequency.exponentialRampToValueAtTime(1600, 6.5);
+  const g = gainNode(ctx, 0);
+  env(g.gain, 0, [[0, 0], [1.5, 0.18], [6.5, 0.26], [9, 0.0001, 'exp']]);
+  chain(w, wl, g, out);
+  const whine = osc(ctx, 'sine', 220, 1, 9);
+  whine.frequency.exponentialRampToValueAtTime(1320, 6.6);
+  const wg = gainNode(ctx, 0);
+  env(wg.gain, 1, [[0, 0], [3, 0.04], [5.6, 0.06], [8, 0.0001, 'exp']]);
+  chain(whine, wg, out);
+  noiseBurst(ctx, out, 0, 6.5, { type: 'lowpass', freq: 150, vol: 0.45, attack: 2.5, sweepTo: 900 });
+  noiseBurst(ctx, out, 6.6, 1.6, { type: 'lowpass', freq: 500, vol: 1.0 });
+  tone(ctx, out, 6.6, 40, 2.2, { vol: 1.0 });
+  bell(ctx, out, 6.7, 110, 2.0, 0.2, [1, 2.76, 5.4]);
+});
+
+// a geothermal plant at work
+R.reactor_hum = async () => makeLoop(await render(6, (ctx, out) => {
+  const g = gainNode(ctx, 0.22);
+  [47, 94, 141, 188].forEach((f, i) => chain(osc(ctx, i ? 'sine' : 'sawtooth', f), gainNode(ctx, 0.35 / (i + 1)), g));
+  chain(g, filter(ctx, 'lowpass', 600), out);
+  const n = noise(ctx, 0);
+  chain(n, filter(ctx, 'lowpass', 140), gainNode(ctx, 0.3), out);
+  const t = osc(ctx, 'sine', 940);
+  const tg = gainNode(ctx, 0.008);
+  chain(osc(ctx, 'sine', 0.5), gainNode(ctx, 0.006), tg.gain);
+  chain(t, tg, out);
+}), 1);
+
+// the service lift: a clunk, the motor and the cable, a bell at the floor
+R.elevator = () => render(6, (ctx, out) => {
+  tone(ctx, out, 0, 70, 0.3, { vol: 0.7 });
+  noiseBurst(ctx, out, 0, 0.2, { type: 'lowpass', freq: 600, vol: 0.6 });
+  const m = osc(ctx, 'sawtooth', 52, 0.3, 5.3);
+  m.frequency.linearRampToValueAtTime(64, 1.5);
+  m.frequency.linearRampToValueAtTime(58, 5.0);
+  const g = gainNode(ctx, 0);
+  env(g.gain, 0.3, [[0, 0], [0.8, 0.14], [4.4, 0.13], [5.0, 0]]);
+  chain(m, filter(ctx, 'lowpass', 300, 1.5), g, out);
+  noiseBurst(ctx, out, 0.4, 4.6, { type: 'bandpass', freq: 1800, q: 1, vol: 0.05, attack: 0.6 });
+  tone(ctx, out, 5.2, 60, 0.3, { vol: 0.6 });
+  bell(ctx, out, 5.4, 988, 0.6, 0.12);
+});
+
 export const SYNTH_NAMES = Object.keys(R);
 
 export async function renderAll(onEach) {

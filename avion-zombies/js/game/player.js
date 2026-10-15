@@ -63,6 +63,7 @@ export class Player {
     this.lookY = 0;
     this.speed = 0;
     this.invuln = 0;
+    this.rooted = false;
     this.sync();
   }
 
@@ -99,6 +100,8 @@ export class Player {
     const game = this.game;
     const W = game.weapons;
     const busy = this.dead;
+    // rooted: can look around but not move (riding a lift)
+    const still = busy || this.rooted;
     // ---- look ------------------------------------------------------------------------------
     let [lx, ly] = input.consumeLook();
     const zoom = W.currentZoom();
@@ -133,8 +136,8 @@ export class Player {
 
     // ---- intents ---------------------------------------------------------------------------
     const ads = W.ads > 0.4;
-    const mx = busy ? 0 : input.moveX;
-    const my = busy ? 0 : input.moveY;
+    const mx = still ? 0 : input.moveX;
+    const my = still ? 0 : input.moveY;
     const sinY = Math.sin(this.yaw);
     const cosY = Math.cos(this.yaw);
     const fwdX = -sinY;
@@ -162,7 +165,7 @@ export class Player {
     if (my < 0.2) this.sprintToggle = false;
 
     // jump / boost jump
-    if (input.pressed.jump && !this.downed && !busy) {
+    if (input.pressed.jump && !this.downed && !still) {
       if (grounded && this.slideT <= 0) {
         if (this.crouched) this.crouched = false;
         else {
@@ -187,7 +190,7 @@ export class Player {
     }
     // dodge: dedicated key, or sprint key while airborne
     const dodgePressed = input.pressed.dodge || (!grounded && input.pressed.sprint && input.lastDevice === 'kbm');
-    if (dodgePressed && this.exoOnline && ex.charges > 0 && !busy) {
+    if (dodgePressed && this.exoOnline && ex.charges > 0 && !still) {
       ex.charges--;
       ex.recharge = 0;
       let dx = wishX;
@@ -292,10 +295,11 @@ export class Player {
     const targetH = this.downed ? DOWN_H : this.slideT > 0 ? SLIDE_H : this.crouched ? CROUCH_H : STAND_H;
     if (targetH > ch.h) {
       // standing up: make sure there is headroom
-      const cands = game.world.physics.query(ch.x, ch.z, ch.r);
-      let ok = true;
+      const phys = game.world.physics;
+      const cands = phys.query(ch.x, ch.z, ch.r);
+      let ok = !phys.rockAt(ch.x, ch.y + targetH + 0.05, ch.z);
       for (const c of cands) {
-        if (c.minY > ch.y + ch.h - 0.05 && c.minY < ch.y + targetH && game.world.physics.footprintOverlap(c, ch.x, ch.z, ch.r)) ok = false;
+        if (c.minY > ch.y + ch.h - 0.05 && c.minY < ch.y + targetH && phys.footprintOverlap(c, ch.x, ch.z, ch.r)) ok = false;
       }
       if (ok) ch.h = Math.min(targetH, ch.h + dt * 6);
       else this.crouched = true;
@@ -304,7 +308,7 @@ export class Player {
     const prevGrounded = ch.grounded;
     game.world.physics.moveCharacter(ch, dt, 0.5);
     game.zombies.pushPlayer(ch);
-    if (ch.y < -60) {
+    if (ch.y < (game.map.KILL_Y ?? -60)) {
       // fell off the world: put the player back at spawn
       const s = game.map.PLAYER_START;
       ch.x = s.x;

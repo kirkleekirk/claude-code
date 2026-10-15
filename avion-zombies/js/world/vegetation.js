@@ -395,12 +395,25 @@ class ChunkedInstances {
   }
 }
 
+// Where each layer is scattered. The defaults are Rainshadow's; other maps pass their own.
+const VEG_DEFAULTS = {
+  near: { x0: -150, x1: 110, z0: -150, z1: 120, count: 1700 },
+  far: { cx: -20, cz: -10, r0: 140, r1: 300, count: 2200, minY: -40 },
+  valley: { x0: -260, x1: -100, z0: -220, z1: 200, maxY: -60, count: 700 },
+  ferns: { x0: -110, x1: 80, z0: -110, z1: 90, count: 5200 },
+  grass: { x0: -95, x1: -20, z0: -70, z1: 20, count: 7000 },
+  rocks: { x0: -150, x1: 110, z0: -150, z1: 120, count: 900 },
+};
+
 export function buildVegetation({ scene, terrain, physics, materials, map, density }) {
   const group = new THREE.Group();
   group.name = 'vegetation';
   scene.add(group);
   const rng = makeRng(424242);
   const noise = makeNoise2D(99);
+  const cfg = { ...VEG_DEFAULTS, ...(map.config || {}) };
+  // trees stand on the outside surface (over a cave that is the mountain, not the cave floor)
+  const groundAt = map.surfaceHeight || ((x, z) => terrain.heightAt(x, z));
 
   // tree prototypes: 4 near variants, 2 far variants
   const protos = [];
@@ -440,7 +453,7 @@ export function buildVegetation({ scene, terrain, physics, materials, map, densi
     return false;
   };
   const placeTree = (x, z, far) => {
-    const y = terrain.heightAt(x, z);
+    const y = groundAt(x, z);
     const h = 18 + rng() * 26 + noise.fbm(x / 40, z / 40, 2) * 8;
     const sc = h / 30;
     const lean = (rng() - 0.5) * 0.04;
@@ -471,13 +484,13 @@ export function buildVegetation({ scene, terrain, physics, materials, map, densi
   for (const [x, z] of map.extraTrees || []) placeTree(x, z, false);
 
   // near forest: rejection sampled inside the world box but outside clearings
-  const nearCount = Math.floor(1700 * density.trees);
+  const nearCount = Math.floor(cfg.near.count * density.trees);
   let tries = 0;
   let placed = 0;
   while (placed < nearCount && tries < nearCount * 12) {
     tries++;
-    const x = rng.range(-150, 110);
-    const z = rng.range(-150, 120);
+    const x = rng.range(cfg.near.x0, cfg.near.x1);
+    const z = rng.range(cfg.near.z0, cfg.near.z1);
     const clear = map.treeClearance(x, z);
     if (clear <= 0) continue;
     // clumpier density using noise
@@ -487,22 +500,22 @@ export function buildVegetation({ scene, terrain, physics, materials, map, densi
     placed++;
   }
   // far ring: cheap trees filling the hills out to the fog
-  const farCount = Math.floor(2200 * density.trees);
+  const farCount = Math.floor(cfg.far.count * density.trees);
   for (let i = 0; i < farCount; i++) {
     const a = rng() * Math.PI * 2;
-    const r = 140 + Math.pow(rng(), 0.7) * 160;
-    const x = -20 + Math.cos(a) * r;
-    const z = -10 + Math.sin(a) * r;
+    const r = cfg.far.r0 + Math.pow(rng(), 0.7) * (cfg.far.r1 - cfg.far.r0);
+    const x = cfg.far.cx + Math.cos(a) * r;
+    const z = cfg.far.cz + Math.sin(a) * r;
     if (map.treeClearance(x, z) <= 0) continue;
-    if (terrain.heightAt(x, z) < -40) continue;
+    if (groundAt(x, z) < cfg.far.minY) continue;
     placeTree(x, z, true);
   }
   // valley below the cliff: a sea of treetops poking out of the fog
-  const valleyCount = Math.floor(700 * density.trees);
+  const valleyCount = cfg.valley ? Math.floor(cfg.valley.count * density.trees) : 0;
   for (let i = 0; i < valleyCount; i++) {
-    const x = rng.range(-260, -100);
-    const z = rng.range(-220, 200);
-    if (terrain.heightAt(x, z) > -60) continue;
+    const x = rng.range(cfg.valley.x0, cfg.valley.x1);
+    const z = rng.range(cfg.valley.z0, cfg.valley.z1);
+    if (groundAt(x, z) > cfg.valley.maxY) continue;
     placeTree(x, z, true);
   }
 
@@ -515,13 +528,13 @@ export function buildVegetation({ scene, terrain, physics, materials, map, densi
   // ---- ferns ------------------------------------------------------------------------
   const fernGeo = [makeFern(5), makeFern(6), makeFern(7)];
   const fernSets = fernGeo.map((g) => new ChunkedInstances(g, materials.fern, 30, { castShadow: false, receiveShadow: true }));
-  const fernCount = Math.floor(5200 * density.ferns);
+  const fernCount = Math.floor(cfg.ferns.count * density.ferns);
   for (let i = 0; i < fernCount; i++) {
-    const x = rng.range(-110, 80);
-    const z = rng.range(-110, 90);
+    const x = rng.range(cfg.ferns.x0, cfg.ferns.x1);
+    const z = rng.range(cfg.ferns.z0, cfg.ferns.z1);
     if (map.fernAllowed && !map.fernAllowed(x, z)) continue;
     if (noise.fbm(x / 18 + 50, z / 18, 3) < -0.1) continue;
-    const y = terrain.heightAt(x, z);
+    const y = groundAt(x, z);
     const sc = 0.7 + rng() * 0.9;
     q.setFromEuler(new THREE.Euler(0, rng() * Math.PI * 2, 0));
     m.compose(t.set(x, y - 0.05, z), q, s.set(sc, sc * (0.8 + rng() * 0.4), sc));
@@ -537,13 +550,13 @@ export function buildVegetation({ scene, terrain, physics, materials, map, densi
     [new THREE.Color(0.13, 0.16, 0.06), new THREE.Color(0.4, 0.4, 0.16)],
   ];
   const grassSets = meadowPal.map((p, i) => new ChunkedInstances(makeGrassTuft(300 + i, p), materials.grass, 25, { castShadow: false }));
-  const grassCount = Math.floor(7000 * density.ferns);
+  const grassCount = Math.floor(cfg.grass.count * density.ferns);
   for (let i = 0; i < grassCount; i++) {
-    const x = rng.range(-95, -20);
-    const z = rng.range(-70, 20);
+    const x = rng.range(cfg.grass.x0, cfg.grass.x1);
+    const z = rng.range(cfg.grass.z0, cfg.grass.z1);
     const mm = map.meadowMask(x, z);
     if (mm <= 0 || rng() > mm) continue;
-    const y = terrain.heightAt(x, z);
+    const y = groundAt(x, z);
     const sc = 0.8 + rng() * 0.8;
     q.setFromEuler(new THREE.Euler(0, rng() * Math.PI * 2, 0));
     m.compose(t.set(x, y - 0.02, z), q, s.set(sc, sc, sc));
@@ -555,18 +568,18 @@ export function buildVegetation({ scene, terrain, physics, materials, map, densi
   const rockGeo = [makeRock(11), makeRock(12), makeRock(13)];
   const rockSets = rockGeo.map((g) => new ChunkedInstances(g, materials.rock, 40));
   for (const r of map.rocks) {
-    const y = terrain.heightAt(r.x, r.z);
+    const y = groundAt(r.x, r.z);
     const sc = r.s;
     q.setFromEuler(new THREE.Euler(0, r.rot ?? rng() * 6.28, 0));
     m.compose(t.set(r.x, y + sc * 0.15, r.z), q, s.set(sc, sc, sc));
     rockSets[r.v ?? i3(rng)].add(m, null);
     physics.addCylinder({ x: r.x, z: r.z, r: sc * 1.05, y0: y - 1, y1: y + sc * 0.75, walkable: true, material: 'rock' });
   }
-  for (let i = 0; i < 900; i++) {
-    const x = rng.range(-150, 110);
-    const z = rng.range(-150, 120);
+  for (let i = 0; i < cfg.rocks.count; i++) {
+    const x = rng.range(cfg.rocks.x0, cfg.rocks.x1);
+    const z = rng.range(cfg.rocks.z0, cfg.rocks.z1);
     if (map.inPlayable(x, z, 8) || map.treeClearance(x, z) <= 0) continue;
-    const y = terrain.heightAt(x, z);
+    const y = groundAt(x, z);
     const sc = 0.6 + rng() * 2.2;
     q.setFromEuler(new THREE.Euler(0, rng() * 6.28, 0));
     m.compose(t.set(x, y, z), q, s.set(sc, sc, sc));
@@ -577,7 +590,7 @@ export function buildVegetation({ scene, terrain, physics, materials, map, densi
   const logGroup = [];
   for (const L of map.logs) {
     const { geometry, len, r } = makeLog(L.seed || 1);
-    const y = terrain.heightAt(L.x, L.z) + r * 0.8;
+    const y = groundAt(L.x, L.z) + r * 0.8;
     const mesh = new THREE.Mesh(geometry, materials.log);
     mesh.position.set(L.x, y, L.z);
     mesh.rotation.y = L.rot;

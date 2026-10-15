@@ -1,4 +1,4 @@
-import { settings, QUALITY_PRESETS, loadRecords } from '../settings.js';
+import { settings, QUALITY_PRESETS, loadRecords, mapRecord } from '../settings.js';
 import { formatTime } from '../util.js';
 import { audio } from '../engine/audio.js';
 
@@ -162,6 +162,7 @@ export class Menus {
     this.focusIndex = 0;
     if (name === 'options') this._syncOptions();
     if (name === 'main') this._refreshMain();
+    if (name === 'mapselect') this._refreshMaps();
     requestAnimationFrame(() => this.highlight());
   }
 
@@ -183,23 +184,35 @@ export class Menus {
   }
 
   _refreshMain() {
-    const r = loadRecords();
-    const dawn = r.daybreak ? `  •  DAYBREAK ${Math.floor(r.daybreak / 60)}:${String(r.daybreak % 60).padStart(2, '0')}` : '';
+    const all = loadRecords();
+    const info = this.game.map ? this.game.map.INFO : { id: 'rainshadow', name: 'RAINSHADOW', region: 'OLYMPIC PENINSULA' };
+    const r = mapRecord(all, info.id);
+    const dawn = info.id === 'rainshadow' && r.daybreak ? `  •  DAYBREAK ${Math.floor(r.daybreak / 60)}:${String(r.daybreak % 60).padStart(2, '0')}` : '';
+    $('#menu-map').textContent = info.name + ' • ' + info.region;
     $('#menu-best').textContent = (r.bestRound ? 'BEST: ROUND ' + r.bestRound : 'NO RECORD YET') + dawn;
   }
 
-  action(name) {
+  _refreshMaps() {
+    const all = loadRecords();
+    for (const el of document.querySelectorAll('[data-best]')) {
+      const r = mapRecord(all, el.dataset.best);
+      el.textContent = r.bestRound ? 'BEST: ROUND ' + r.bestRound : '';
+    }
+  }
+
+  action(name, el) {
     const game = this.game;
+    const mapId = el && el.dataset ? el.dataset.map : undefined;
     if (name !== 'back') audio.play('ui_click', { bus: 'ui', volume: 0.7 });
     switch (name) {
       case 'solo':
         this.open('mapselect');
         break;
       case 'start':
-        game.startMatch();
+        game.startMatch(false, mapId || game.mapId);
         break;
       case 'freeroam':
-        game.startMatch(true);
+        game.startMatch(true, mapId || game.mapId);
         break;
       case 'options':
         this.open('options');
@@ -220,7 +233,7 @@ export class Menus {
         game.quitToMenu();
         break;
       case 'retry':
-        game.startMatch();
+        game.startMatch(false, game.mapId);
         break;
       case 'reset-settings':
         settings.reset();

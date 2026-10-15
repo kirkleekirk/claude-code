@@ -18,6 +18,7 @@ export async function loadAvatars(url, textureUrls) {
   diffuse.colorSpace = THREE.SRGBColorSpace;
   diffuse.anisotropy = 4;
   emissive.colorSpace = THREE.SRGBColorSpace;
+  diffuse.userData.shared = emissive.userData.shared = true;
   const figures = json.figures.map((f) => {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(b64ToBuffer(f.position)), 3));

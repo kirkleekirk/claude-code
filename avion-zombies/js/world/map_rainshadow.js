@@ -8,6 +8,44 @@ import { mergeGeometries } from './materials.js';
 
 const noise = makeNoise2D(2026);
 
+// Everything the menus, intro, HUD and match flow need to know about this map.
+export const INFO = {
+  id: 'rainshadow',
+  name: 'RAINSHADOW',
+  region: 'OLYMPIC PENINSULA',
+  subtitle: 'Avion Exo Research Site 9',
+  loading: ['Shaping the Olympic Peninsula', 'Raising the ridge', 'Growing Douglas firs', 'Mapping zombie paths'],
+  intro: [
+    { text: 'RAINSHADOW', cls: 'big', speed: 70, pause: 500 },
+    { text: 'AVION EXO RESEARCH SITE 9 — OLYMPIC PENINSULA, WA', speed: 24 },
+    { text: 'OCT 13 — 18:47 PDT', speed: 30, pause: 600 },
+    { text: 'Containment failure in the exo test program. Site has gone dark.', cls: 'dim', speed: 22 },
+    { text: 'Survive.', cls: 'accent', speed: 60 },
+  ],
+  freeObjective: 'Free roam: explore Rainshadow',
+  // main menu background: slow dollies through the trees with silhouettes in the fog
+  menuShots: [
+    { from: [-33, 2.2, 36], to: [-40, 2.0, 22], look: [-80, 6, 8], dur: 22 },
+    { from: [-50, 9.5, -12], to: [-62, 9.8, -20], look: [-140, 4, -30], dur: 22 },
+    { from: [-4, 3, 40], to: [10, 3.4, 30], look: [24, 2, 10], dur: 20 },
+  ],
+  menuZombies: [[-48, 14], [-44, 9], [-52, 22], [-58, -14], [-64, -26], [-70, -18]],
+  menuZombieFace: [-30, 30],
+  powerMessage: ['POWER ON', 'Exo upgrades and the Weapon Forge are online'],
+  powerAnnounce: 'Power restored. Containment protocols offline.',
+  roundOneAnnounce: 'Containment breach. All personnel to evacuation points.',
+};
+
+export const TERRAIN = { minX: -280, minZ: -280, size: 560, res: 2 };
+
+export function objective(game) {
+  const p = game.player;
+  if (!p.exo.has) return game.zoneOpen[1] ? 'Equip the Exo Suit in the Checkpoint armory' : 'Reach the facility checkpoint and find an Exo Suit';
+  if (!game.world.power) return 'Restore power in Hangar 2';
+  if (!game.weapons.inv.some((w) => w.level > 0)) return 'Upgrade a weapon at the Weapon Forge';
+  return 'Survive';
+}
+
 export const ZONES = [
   { id: 0, name: 'TRAILHEAD', rects: [[-52, 6, -14, 46]], adjacent: [1, 3], indoor: 0 },
   { id: 1, name: 'CHECKPOINT', rects: [[-14, 6, 30, 46]], adjacent: [0, 2], indoor: 0 },
@@ -280,6 +318,10 @@ export const EXTRA_TREES = [
 // ------------------------------------------------------------------------------------------
 // Structures
 // ------------------------------------------------------------------------------------------
+export function build(B, ctx) {
+  return buildRainshadow(B, ctx);
+}
+
 export function buildRainshadow(B, ctx) {
   const { terrain, textures, materials: M } = ctx;
   const H = (x, z) => terrain.heightAt(x, z);
@@ -692,10 +734,10 @@ function buildLabs(B, M, textures, fx, signs) {
   }
   // corridor + lights
   for (let k = 0; k < 4; k++) {
-    B.lamp(24, y + 4.4, -7 - k * 5, { shape: 'tube', len: 1.6, color: 0xdcecff, intensity: 9, distance: 9, flicker: k === 2 ? 0.8 : 0.05, zone: 2, rot: Math.PI / 2 });
+    B.lamp(24, y + 4.4, -7 - k * 5, { shape: 'tube', len: 1.6, color: 0xdcecff, intensity: 9, distance: 9, flicker: k === 2 ? 0.8 : 0.05, zone: 2, rot: Math.PI / 2, dimUnpowered: true });
   }
   for (const [lx, lz] of [[12, 1], [32, 1], [13, -12], [13, -20], [35, -10], [35, -20]]) {
-    B.lamp(lx, y + 4.4, lz, { shape: 'tube', len: 1.8, color: 0xdcecff, intensity: 10, distance: 11, flicker: lx === 13 && lz === -20 ? 0.5 : 0.06, zone: 2 });
+    B.lamp(lx, y + 4.4, lz, { shape: 'tube', len: 1.8, color: 0xdcecff, intensity: 10, distance: 11, flicker: lx === 13 && lz === -20 ? 0.5 : 0.06, zone: 2, dimUnpowered: true });
   }
   // emergency beacons (red until the power is on)
   fx.beacons.push({ x: 20, y: y + 3.6, z: 5.6, color: 0xff2a1a }, { x: 24, y: y + 3.8, z: -25.6, color: 0xff2a1a });

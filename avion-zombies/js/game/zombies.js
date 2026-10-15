@@ -161,7 +161,8 @@ class Zombie {
     this.climb = null;
     this.leap = null;
     this.minion = !!opts.minion; // summoned by the Nightwarden, not part of the round's count
-    const y = mgr.world.physics.groundHeight(sp.x, sp.z, 0.3, 100);
+    // spawners under a roof or a walkway name the highest floor they may stand on
+    const y = mgr.world.physics.groundHeight(sp.x, sp.z, 0.3, sp.maxY ?? 100);
     this.ch.x = sp.x + rand(-0.3, 0.3);
     this.ch.z = sp.z + rand(-0.3, 0.3);
     this.ch.y = y;

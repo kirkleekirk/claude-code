@@ -259,10 +259,13 @@ body.touch-ui #hud-right #hud-weapon .ammo { order: -1; }
 .screen-head .kicker { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.24em; color: var(--accent); text-transform: uppercase; }
 .screen-head h2 { margin: 2px 0 0; font-size: clamp(34px, 5.2vh, 52px); font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
 .pause-stats { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.16em; color: var(--ink-dim); margin-top: 6px; }
-.map-card { border-left: 2px solid var(--accent); padding: 4px 0 4px 18px; max-width: 60ch; }
+.map-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 18px 28px; }
+.map-card { border-left: 2px solid var(--accent); padding: 4px 0 4px 18px; max-width: 60ch; display: flex; flex-direction: column; gap: 0; }
+.map-card .items.row { margin-top: 12px; }
+.map-card .best { min-height: 1.2em; margin-top: 8px; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.16em; color: var(--accent); }
 .map-card .coords { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.16em; color: var(--ink-faint); }
 .map-card h3 { margin: 4px 0 6px; font-size: 40px; letter-spacing: 0.24em; font-weight: 700; }
-.map-card p { margin: 0 0 10px; font-size: 18px; line-height: 1.35; color: var(--ink-dim); font-weight: 400; }
+.map-card p { margin: 0 0 10px; font-size: 17px; line-height: 1.35; color: var(--ink-dim); font-weight: 400; }
 .map-card ul { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; padding: 0; list-style: none; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; color: var(--accent); text-transform: uppercase; }
 .options-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; min-height: 0; max-height: 60vh; padding-right: 8px; }
 .opt-group { margin: 14px 0 4px; font-family: var(--font-mono); font-size: 12px; font-weight: 400; letter-spacing: 0.22em; color: var(--accent); text-transform: uppercase; }

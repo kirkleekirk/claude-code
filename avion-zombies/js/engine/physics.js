@@ -11,6 +11,15 @@ export class PhysicsWorld {
     this.colliders = [];
     this.grid = new Map();
     this.stamp = 1;
+    // optional: a CaveField (rock ceilings, lumpy walls, bullets) and a WalkField (smooth map edges)
+    this.cave = null;
+    this.walls = null;
+  }
+
+  // Is there rock at this point? (only caves have overhead rock)
+  rockAt(x, y, z) {
+    const cave = this.cave;
+    return cave !== null && cave.inExtent(x, z) && cave.sdf(x, y, z) < 0.04;
   }
 
   _insert(c) {
@@ -210,8 +219,27 @@ export class PhysicsWorld {
         }
         if (!moved) break;
       }
+      // map edges and cave walls
+      if (this.walls !== null) {
+        const p = this.walls.push(ch.x, ch.z, ch.r);
+        if (p) {
+          ch.x += p.x;
+          ch.z += p.z;
+          const vn = ch.vx * p.nx + ch.vz * p.nz;
+          if (vn < 0) {
+            ch.vx -= vn * p.nx;
+            ch.vz -= vn * p.nz;
+          }
+          hitWall = true;
+        }
+      }
       // vertical
       ch.y += ch.vy * sdt;
+      // rock overhead: heads stop at the cave ceiling
+      if (ch.vy > 0 && this.rockAt(ch.x, ch.y + ch.h + 0.08, ch.z)) {
+        ch.y = Math.min(ch.y, prevY);
+        ch.vy = 0;
+      }
       if (ch.vy > 0) {
         const cands = this.query(ch.x, ch.z, ch.r, this._tmpM);
         for (let i = 0; i < cands.length; i++) {
@@ -294,6 +322,13 @@ export class PhysicsWorld {
       if (th && th.dist < best) {
         best = th.dist;
         hit = { dist: th.dist, nx: th.nx, ny: th.ny, nz: th.nz, collider: null, material: 'dirt' };
+      }
+      if (this.cave !== null) {
+        const ch = this.cave.raycast(ox, oy, oz, dx, dy, dz, best);
+        if (ch && ch.dist < best) {
+          best = ch.dist;
+          hit = { dist: ch.dist, nx: ch.nx, ny: ch.ny, nz: ch.nz, collider: null, material: 'rock' };
+        }
       }
     }
     if (hit) {

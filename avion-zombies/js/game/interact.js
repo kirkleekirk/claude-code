@@ -27,6 +27,11 @@ function weighted(list) {
   return list[list.length - 1][0];
 }
 
+// Where a placed thing stands: an explicit floor (raised buildings), else the ground.
+function baseY(game, d) {
+  return d.floor ?? game.world.terrain.heightAt(d.x, d.z);
+}
+
 export class Interactable {
   constructor(game, pos, radius = 2.0) {
     this.game = game;
@@ -60,7 +65,7 @@ class DoorI extends Interactable {
 
 class WallBuy extends Interactable {
   constructor(game, data) {
-    const y = game.world.terrain.heightAt(data.x, data.z);
+    const y = baseY(game, data);
     super(game, new THREE.Vector3(data.x, y + data.y, data.z), 1.9);
     this.data = data;
     this.def = WEAPONS[data.weapon];
@@ -96,7 +101,7 @@ class WallBuy extends Interactable {
     const lm = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.2), new THREE.MeshBasicMaterial({ map: canvasTex(label), transparent: true, color: new THREE.Color(1.6, 1.6, 1.6) }));
     lm.position.set(0, -0.2, 0.032);
     group.add(lm);
-    game.scene.add(group);
+    game.mapRoot.add(group);
     this.group = group;
   }
   prompt() {
@@ -131,7 +136,7 @@ class WallBuy extends Interactable {
 
 class PerkMachine extends Interactable {
   constructor(game, data) {
-    const y = game.world.terrain.heightAt(data.x, data.z);
+    const y = baseY(game, data);
     super(game, new THREE.Vector3(data.x, y + 1.1, data.z), 2.0);
     this.data = data;
     this.def = PERKS[data.perk];
@@ -178,7 +183,7 @@ class PerkMachine extends Interactable {
     const slot = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.18, 0.1), M.black);
     slot.position.set(0, 0.62, 0.38);
     g.add(slot);
-    game.scene.add(g);
+    game.mapRoot.add(g);
     this.group = g;
     this.col = col;
     this.collider = game.world.physics.addBox({ x: data.x, y, z: data.z, w: 0.95, h: 2.15, d: 0.75, rot: data.rot, walkable: false, material: 'metal' });
@@ -186,7 +191,7 @@ class PerkMachine extends Interactable {
     this.uses = 0;
   }
   powered() {
-    return this.def.noPower || this.game.world.power;
+    return this.def.noPower || this.game.world.powered(this.data.circuit);
   }
   prompt() {
     const g = this.game;
@@ -225,7 +230,7 @@ class PerkMachine extends Interactable {
 
 class ExoStation extends Interactable {
   constructor(game, data) {
-    const y = game.world.terrain.heightAt(data.x, data.z);
+    const y = baseY(game, data);
     super(game, new THREE.Vector3(data.x, y + 1.2, data.z), 2.2);
     this.data = data;
     const g = new THREE.Group();
@@ -264,7 +269,7 @@ class ExoStation extends Interactable {
       part(new THREE.BoxGeometry(0.014, 0.28, 0.014), this.glow, sx * 0.09, 1.42, -0.0);
     }
     g.add(this.suit);
-    game.scene.add(g);
+    game.mapRoot.add(g);
     this.group = g;
     game.world.physics.addBox({ x: data.x, y, z: data.z, w: 1.4, h: 2.3, d: 0.7, rot: data.rot, walkable: false, material: 'metal' });
   }
@@ -287,59 +292,107 @@ class ExoStation extends Interactable {
 
 class PowerSwitch extends Interactable {
   constructor(game, data) {
-    const y = game.world.terrain.heightAt(data.x, data.z);
+    const y = baseY(game, data);
     super(game, new THREE.Vector3(data.x, y + 1.4, data.z), 2.2);
     this.data = data;
     const g = new THREE.Group();
     g.position.set(data.x, y, data.z);
     g.rotation.y = data.rot;
     const M = game.world.materials;
-    const panel = new THREE.Mesh(boxGeometry(1.6, 2.2, 0.35, 1), M.steelDark);
-    panel.position.y = 1.4;
-    g.add(panel);
-    const hz = new THREE.Mesh(boxGeometry(1.6, 0.2, 0.36, 1), M.hazard);
-    hz.position.y = 0.4;
-    g.add(hz);
-    this.lever = new THREE.Group();
-    this.lever.position.set(0, 1.5, 0.2);
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.6, 0.08), M.steel);
-    arm.position.y = 0.3;
-    const knob = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.1, 0.1), M.redPaint);
-    knob.position.y = 0.6;
-    this.lever.add(arm, knob);
-    this.lever.rotation.x = -0.5;
-    g.add(this.lever);
     this.lamp = basic({ color: new THREE.Color(5, 0.4, 0.2) });
     const lampM = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), this.lamp);
-    lampM.position.set(0.55, 2.25, 0.2);
-    g.add(lampM);
-    const sign = makeSign([{ text: 'MAIN POWER', size: 70 }, { text: 'REACTOR BUS A', size: 32, weight: 600 }], { w: 256, h: 128 });
-    const sm = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.6), std({ map: sign, roughness: 0.7 }));
-    sm.position.set(0, 2.15, 0.18);
-    g.add(sm);
-    game.scene.add(g);
+    this.lever = new THREE.Group();
+    if (data.style === 'breaker') {
+      // a wall-mounted breaker cabinet with a big throw handle on its side
+      this.facing = new THREE.Vector3(Math.sin(data.rot), 0, Math.cos(data.rot));
+      this.radius = 1.9;
+      this.pos.y = y + 1.4;
+      const cab = new THREE.Mesh(boxGeometry(0.72, 1.05, 0.28, 1), M.steelDark);
+      cab.position.set(0, 1.45, 0.14);
+      g.add(cab);
+      const door = new THREE.Mesh(boxGeometry(0.64, 0.95, 0.03, 1), M.steel);
+      door.position.set(0, 1.45, 0.295);
+      g.add(door);
+      const conduit = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.4, 6), M.steelDark);
+      conduit.position.set(-0.22, 2.65, 0.08);
+      g.add(conduit);
+      this.lever.position.set(0.42, 1.45, 0.16);
+      const pivot = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.08, 10), M.black);
+      pivot.rotation.z = Math.PI / 2;
+      this.lever.add(pivot);
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.42, 0.05), M.steel);
+      arm.position.set(0.03, 0.21, 0);
+      const knob = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.14, 0.07), M.redPaint);
+      knob.position.set(0.03, 0.44, 0);
+      this.lever.add(arm, knob);
+      g.add(this.lever);
+      lampM.position.set(0.22, 1.86, 0.31);
+      g.add(lampM);
+      const [l1, l2] = data.sign || ['BREAKER', 'PANEL'];
+      const sign = makeSign([{ text: l1, size: 44 }, { text: l2, size: 30, weight: 600 }], { w: 256, h: 112, bg: '#e7e2d4', fg: '#22262a', stripe: false });
+      const sm = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.22), std({ map: sign, roughness: 0.6 }));
+      sm.position.set(0, 1.62, 0.312);
+      g.add(sm);
+      const hz = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.06), M.hazard);
+      hz.position.set(0, 1.08, 0.312);
+      g.add(hz);
+      this.leverFrom = -0.95;
+      this.leverTo = 0.95;
+    } else {
+      const panel = new THREE.Mesh(boxGeometry(1.6, 2.2, 0.35, 1), M.steelDark);
+      panel.position.y = 1.4;
+      g.add(panel);
+      const hz = new THREE.Mesh(boxGeometry(1.6, 0.2, 0.36, 1), M.hazard);
+      hz.position.y = 0.4;
+      g.add(hz);
+      this.lever.position.set(0, 1.5, 0.2);
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.6, 0.08), M.steel);
+      arm.position.y = 0.3;
+      const knob = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.1, 0.1), M.redPaint);
+      knob.position.y = 0.6;
+      this.lever.add(arm, knob);
+      g.add(this.lever);
+      lampM.position.set(0.55, 2.25, 0.2);
+      g.add(lampM);
+      const sign = makeSign([{ text: 'MAIN POWER', size: 70 }, { text: 'REACTOR BUS A', size: 32, weight: 600 }], { w: 256, h: 128 });
+      const sm = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.6), std({ map: sign, roughness: 0.7 }));
+      sm.position.set(0, 2.15, 0.18);
+      g.add(sm);
+      this.leverFrom = -0.5;
+      this.leverTo = 1.1;
+    }
+    this.lever.rotation.x = this.leverFrom;
+    game.mapRoot.add(g);
     this.group = g;
     this.anim = 0;
   }
+  get on() {
+    return this.game.world.powered(this.data.circuit);
+  }
   prompt() {
-    if (this.game.world.power) return null;
-    return { text: 'Restore facility power', cost: 0 };
+    if (this.on) return null;
+    return { text: this.data.prompt || 'Restore facility power', cost: 0, sub: this.data.sub };
   }
   use() {
-    if (this.game.world.power) return;
+    if (this.on) return;
     this.anim = 0.001;
-    this.game.turnOnPower();
+    if (this.data.circuit) this.game.turnOnCircuit(this.data.circuit);
+    else this.game.turnOnPower();
   }
   update(dt) {
     if (this.anim > 0 && this.anim < 1) {
       this.anim = Math.min(1, this.anim + dt * 2.2);
-      this.lever.rotation.x = -0.5 + this.anim * 1.6;
+      this.lever.rotation.x = this.leverFrom + (this.leverTo - this.leverFrom) * this.anim;
+    } else if (this.on && this.anim === 0) {
+      // powered some other way (free roam): show the lever thrown
+      this.anim = 1;
+      this.lever.rotation.x = this.leverTo;
     }
-    this.lamp.color.setRGB(this.game.world.power ? 0.4 : 5, this.game.world.power ? 5 : 0.4, 0.3);
+    this.lamp.color.setRGB(this.on ? 0.4 : 5, this.on ? 5 : 0.4, 0.3);
   }
   reset() {
     this.anim = 0;
-    this.lever.rotation.x = -0.5;
+    this.lever.rotation.x = this.leverFrom;
   }
 }
 
@@ -395,7 +448,7 @@ class Printer extends Interactable {
     this.skull = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.6), new THREE.MeshBasicMaterial({ map: canvasTex(sk), transparent: true, color: new THREE.Color(3, 3, 3), side: THREE.DoubleSide, depthWrite: false }));
     this.skull.visible = false;
     this.holoSlot.add(this.skull);
-    game.scene.add(g);
+    game.mapRoot.add(g);
     this.group = g;
     this.collider = null;
     this.state = 'idle';
@@ -425,7 +478,12 @@ class Printer extends Interactable {
   }
   place(i) {
     const L = this.locations[i];
-    const y = this.game.world.terrain.heightAt(L.x, L.z);
+    const y = baseY(this.game, L);
+    // the locator beam stops at a roof or a cave ceiling
+    const beamH = L.beam ?? 60;
+    this.beam.visible = beamH > 0;
+    this.beam.scale.y = Math.max(0.01, beamH / 60);
+    this.beam.position.y = 1.6 + beamH / 2;
     this.group.position.set(L.x, y, L.z);
     this.group.rotation.y = L.rot;
     this.pos.set(L.x, y + 1.2, L.z);
@@ -439,7 +497,12 @@ class Printer extends Interactable {
   cost() {
     return this.game.powerups.active('firesale') ? 10 : 950;
   }
+  get powered() {
+    const c = this.locations[this.loc].circuit;
+    return !c || this.game.world.powered(c);
+  }
   prompt() {
+    if (this.state === 'idle' && !this.powered) return { text: 'Fabricator offline: no power', cost: null, disabled: true };
     if (this.state === 'idle') return { text: 'Fabricate a random weapon', cost: this.cost() };
     if (this.state === 'ready') {
       const name = this.result === 'lure' ? 'LURE DRONES' : WEAPONS[this.result].name;
@@ -450,6 +513,7 @@ class Printer extends Interactable {
   use() {
     const g = this.game;
     if (this.state === 'idle') {
+      if (!this.powered) return;
       if (!g.spend(this.cost())) return;
       this.state = 'printing';
       this.t = 0;
@@ -537,7 +601,7 @@ class Printer extends Interactable {
 // ---- Weapon forge (upgrade station / pack-a-punch) ------------------------------------------
 class Forge extends Interactable {
   constructor(game, data) {
-    const y = game.world.terrain.heightAt(data.x, data.z);
+    const y = baseY(game, data);
     super(game, new THREE.Vector3(data.x, y + 1.2, data.z), 2.4);
     this.data = data;
     this.facing = new THREE.Vector3(Math.sin(data.rot), 0, Math.cos(data.rot));
@@ -571,7 +635,7 @@ class Forge extends Interactable {
     this.slot = new THREE.Group();
     this.slot.position.set(0, 1.15, 0.85);
     g.add(this.slot);
-    game.scene.add(g);
+    game.mapRoot.add(g);
     this.group = g;
     game.world.physics.addBox({ x: data.x, y, z: data.z - 0.2, w: 2.6, h: 2.6, d: 1.5, rot: data.rot, walkable: false, material: 'metal' });
     this.state = 'idle';
@@ -579,7 +643,7 @@ class Forge extends Interactable {
   }
   prompt() {
     const g = this.game;
-    if (!g.world.power) return { text: 'Requires power', cost: null, disabled: true };
+    if (!g.world.powered(this.data.circuit)) return { text: 'Requires power', cost: null, disabled: true };
     if (this.state === 'ready') return { text: 'Take ' + weaponStats(this.item.id, this.item.level + 1).name, cost: null };
     if (this.state !== 'idle') return null;
     const c = g.weapons.cur;
@@ -590,7 +654,7 @@ class Forge extends Interactable {
   }
   use() {
     const g = this.game;
-    if (!g.world.power) return;
+    if (!g.world.powered(this.data.circuit)) return;
     if (this.state === 'ready') {
       g.weapons.give(this.item.id, this.item.level + 1);
       this.clearSlot();
@@ -626,7 +690,7 @@ class Forge extends Interactable {
   }
   update(dt, t) {
     this.holoMat.uniforms.uTime.value = t;
-    const on = this.game.world.power;
+    const on = this.game.world.powered(this.data.circuit);
     const base = on ? 1.2 : 0.08;
     let k = base;
     if (this.state === 'forging') {
@@ -670,13 +734,15 @@ export class Interactables {
     for (const p of map.PERKS) this.list.push(new PerkMachine(game, p));
     this.exo = new ExoStation(game, map.EXO_STATION);
     this.list.push(this.exo);
-    this.power = new PowerSwitch(game, map.POWER_SWITCH);
-    this.list.push(this.power);
+    this.switches = (map.POWER_SWITCHES || [map.POWER_SWITCH]).map((d) => new PowerSwitch(game, d));
+    this.power = this.switches[0];
+    this.list.push(...this.switches);
     this.printer = new Printer(game, map.BOX_LOCATIONS, map.BOX_START);
     this.list.push(this.printer);
     this.forge = new Forge(game, map.UPGRADE_STATION);
     this.list.push(this.forge);
     if (game.daybreak) for (const i of game.daybreak.interactables) this.list.push(i);
+    if (map.interactables) for (const i of map.interactables(game, Interactable)) this.list.push(i);
     this.current = null;
     this.prompt = null;
     this.time = 0;
