@@ -677,6 +677,267 @@ R.ambient_bed = async () => makeLoop(await render(34, (ctx, out) => {
   for (let i = 0; i < 7; i++) bell(ctx, bus, 2 + i * 4.6 + Math.random(), midi(72 + [0, 3, 7, 10, 2][i % 5]), 4, 0.03);
 }, 2), 2.5);
 
+// ---- Project Daybreak + the Nightwarden ---------------------------------------------------
+
+// Throat: a detuned saw growl through moving vocal-tract formants, plus breath and sub.
+function growl(ctx, out, t, dur, { f0 = 62, f1 = 48, vol = 0.5, rough = 3.5 } = {}) {
+  const bus = gainNode(ctx, 0);
+  env(bus.gain, t, [[0, 0], [0.12, vol], [dur * 0.7, vol * 0.85], [dur, 0.0001, 'exp']]);
+  const sh = shaper(ctx, rough);
+  for (let k = 0; k < 3; k++) {
+    const o = osc(ctx, 'sawtooth', f0 * (1 + k * 0.012), t, t + dur + 0.05);
+    o.frequency.exponentialRampToValueAtTime(f1 * (1 + k * 0.01), t + dur);
+    const vib = osc(ctx, 'sine', 7 + k * 1.3, t, t + dur + 0.05);
+    const vg = gainNode(ctx, f0 * 0.06);
+    chain(vib, vg, o.frequency);
+    chain(o, gainNode(ctx, 0.35), sh);
+  }
+  [[420, 6], [880, 5], [1900, 4]].forEach(([f, q], i) => {
+    const bp = filter(ctx, 'bandpass', f, q);
+    bp.frequency.linearRampToValueAtTime(f * (1.25 - i * 0.05), t + dur * 0.35);
+    bp.frequency.linearRampToValueAtTime(f * 0.8, t + dur);
+    chain(sh, bp, gainNode(ctx, [1, 0.7, 0.35][i]), bus);
+  });
+  const breath = noise(ctx, t, t + dur + 0.05);
+  chain(breath, filter(ctx, 'bandpass', 900, 0.8), gainNode(ctx, 0.25), bus);
+  const sub = osc(ctx, 'sine', f0 * 0.5, t, t + dur + 0.05);
+  chain(sub, gainNode(ctx, 0.6), bus);
+  bus.connect(out);
+}
+
+R.boss_roar = () => render(3.4, (ctx, out) => {
+  growl(ctx, out, 0, 3.2, { f0: 70, f1: 44, vol: 0.55 });
+  noiseBurst(ctx, out, 0, 2.8, { type: 'lowpass', freq: 160, vol: 0.5, attack: 0.3 });
+}, 2);
+
+R.boss_growl = () => render(1.6, (ctx, out) => growl(ctx, out, 0, 1.4, { f0: 58, f1: 50, vol: 0.4, rough: 2.5 }));
+
+R.boss_stomp = () => render(0.8, (ctx, out) => {
+  const s = tone(ctx, out, 0, 58, 0.45, { vol: 0.95 });
+  s.frequency.exponentialRampToValueAtTime(34, 0.4);
+  noiseBurst(ctx, out, 0, 0.35, { type: 'lowpass', freq: 420, vol: 0.8 });
+  noiseBurst(ctx, out, 0.01, 0.12, { type: 'bandpass', freq: 1300, q: 1.5, vol: 0.2 });
+});
+
+R.boss_slam = () => render(2.6, (ctx, out) => {
+  noiseBurst(ctx, out, 0, 0.06, { type: 'highpass', freq: 600, vol: 1.0 });
+  const body = noiseBurst(ctx, out, 0, 1.8, { type: 'lowpass', freq: 900, vol: 1.0 });
+  body.frequency.exponentialRampToValueAtTime(90, 1.6);
+  const sub = tone(ctx, out, 0, 52, 1.8, { vol: 1.0 });
+  sub.frequency.exponentialRampToValueAtTime(26, 1.6);
+  bell(ctx, out, 0.01, 180, 1.6, 0.12, [1, 2.4, 3.9]);
+  for (let i = 0; i < 16; i++) noiseBurst(ctx, out, 0.1 + Math.random() * 1.4, 0.03 + Math.random() * 0.08, { type: 'bandpass', freq: 300 + Math.random() * 1500, q: 2, vol: 0.18 });
+}, 2);
+
+R.shockwave = () => render(1.6, (ctx, out) => {
+  const f = noiseBurst(ctx, out, 0, 1.4, { type: 'bandpass', freq: 180, q: 1.2, vol: 0.8, attack: 0.05 });
+  f.frequency.exponentialRampToValueAtTime(1600, 1.2);
+  const o = tone(ctx, out, 0, 90, 1.3, { type: 'sawtooth', vol: 0.18, lp: 600 });
+  o.frequency.exponentialRampToValueAtTime(40, 1.2);
+});
+
+R.boss_charge = () => render(1.5, (ctx, out) => {
+  growl(ctx, out, 0, 1.2, { f0: 80, f1: 120, vol: 0.45, rough: 4 });
+  const f = noiseBurst(ctx, out, 0.2, 1.1, { type: 'bandpass', freq: 400, q: 1, vol: 0.4 });
+  f.frequency.exponentialRampToValueAtTime(2400, 1.2);
+});
+
+R.shield_hit = () => render(0.35, (ctx, out) => {
+  bell(ctx, out, 0, 1900 + Math.random() * 500, 0.3, 0.09, [1, 1.51, 2.32]);
+  tone(ctx, out, 0, 140, 0.1, { vol: 0.25 });
+  noiseBurst(ctx, out, 0, 0.04, { type: 'highpass', freq: 3500, vol: 0.2 });
+});
+
+R.shield_break = () => render(2.2, (ctx, out) => {
+  for (let i = 0; i < 40; i++) noiseBurst(ctx, out, Math.random() * 0.9, 0.01 + Math.random() * 0.05, { type: 'highpass', freq: 2500 + Math.random() * 4000, vol: 0.35 });
+  [0, 0.05, 0.11, 0.18].forEach((t, i) => bell(ctx, out, t, [2637, 2093, 1568, 1319][i], 1.4, 0.1, [1, 2.0, 2.76]));
+  const d = tone(ctx, out, 0, 400, 1.8, { type: 'sawtooth', vol: 0.12, lp: 2000 });
+  d.frequency.exponentialRampToValueAtTime(40, 1.8);
+  noiseBurst(ctx, out, 0, 0.5, { type: 'lowpass', freq: 500, vol: 0.7 });
+});
+
+R.shield_up = () => render(1.8, (ctx, out) => {
+  const f = noiseBurst(ctx, out, 0, 1.4, { type: 'bandpass', freq: 3000, q: 1, vol: 0.45, attack: 1.2 });
+  f.frequency.exponentialRampToValueAtTime(300, 1.4);
+  const o = tone(ctx, out, 0.2, 55, 1.5, { type: 'sawtooth', vol: 0.25, lp: 400, attack: 1.0 });
+  o.frequency.exponentialRampToValueAtTime(70, 1.5);
+  bell(ctx, out, 1.3, 110, 0.6, 0.15, [1, 2.76]);
+});
+
+R.orb_launch = () => render(0.9, (ctx, out) => {
+  const f = noiseBurst(ctx, out, 0, 0.7, { type: 'lowpass', freq: 300, q: 4, vol: 0.7, attack: 0.05 });
+  f.frequency.exponentialRampToValueAtTime(1800, 0.6);
+  const o = tone(ctx, out, 0, 160, 0.6, { type: 'triangle', vol: 0.25 });
+  o.frequency.exponentialRampToValueAtTime(420, 0.5);
+});
+
+R.orb_loop = async () => makeLoop(await render(2.2, (ctx, out) => {
+  const o = osc(ctx, 'sawtooth', 73, 0);
+  const lfo = osc(ctx, 'sine', 5.5);
+  chain(lfo, gainNode(ctx, 9), o.frequency);
+  chain(o, filter(ctx, 'bandpass', 600, 3), gainNode(ctx, 0.2), out);
+  for (let i = 0; i < 30; i++) noiseBurst(ctx, out, Math.random() * 2, 0.01, { type: 'highpass', freq: 3000, vol: 0.12 });
+}), 0.3);
+
+R.orb_burst = () => render(0.9, (ctx, out) => {
+  noiseBurst(ctx, out, 0, 0.35, { type: 'lowpass', freq: 1200, vol: 0.8 });
+  tone(ctx, out, 0, 90, 0.3, { vol: 0.6 });
+  for (let i = 0; i < 14; i++) noiseBurst(ctx, out, Math.random() * 0.6, 0.01, { type: 'highpass', freq: 3000, vol: 0.3 });
+  bell(ctx, out, 0, 990, 0.5, 0.05, [1, 1.7]);
+});
+
+R.daybreak_hum = async () => makeLoop(await render(4.0, (ctx, out) => {
+  const g = gainNode(ctx, 0.16);
+  [110, 165, 220, 330].forEach((f, i) => {
+    const o = osc(ctx, i ? 'sine' : 'triangle', f, 0);
+    const lfo = osc(ctx, 'sine', 0.25 + i * 0.1);
+    chain(lfo, gainNode(ctx, f * 0.004), o.frequency);
+    chain(o, gainNode(ctx, 0.5 / (i + 1)), g);
+  });
+  chain(g, filter(ctx, 'lowpass', 1400), out);
+}), 0.5);
+
+R.daybreak_charge = () => render(1.2, (ctx, out) => {
+  const o = tone(ctx, out, 0, 220, 1.0, { type: 'triangle', vol: 0.18 });
+  o.frequency.exponentialRampToValueAtTime(660, 0.9);
+  bell(ctx, out, 0.85, 1320, 0.35, 0.06);
+});
+
+R.daybreak_ready = () => render(1.8, (ctx, out) => {
+  [64, 68, 71, 76, 80].forEach((n, i) => bell(ctx, out, i * 0.09, midi(n + 12), 1.2, 0.12, [1, 2.0, 3.01]));
+  tone(ctx, out, 0, midi(52), 1.5, { type: 'triangle', vol: 0.18 });
+});
+
+R.daybreak_ignite = () => render(5.5, (ctx, out) => {
+  const pad = gainNode(ctx, 0);
+  env(pad.gain, 0, [[0, 0], [0.9, 0.2], [3.6, 0.16], [5.4, 0]]);
+  [40, 52, 56, 59, 64, 68].forEach((n) => {
+    for (const d of [-7, 7]) {
+      const o = osc(ctx, 'sawtooth', midi(n), 0, 5.5);
+      o.detune.value = d;
+      chain(o, filter(ctx, 'lowpass', 2400), pad);
+    }
+  });
+  pad.connect(out);
+  const sweep = noiseBurst(ctx, out, 0, 2.2, { type: 'bandpass', freq: 200, q: 0.7, vol: 0.6, attack: 1.4 });
+  sweep.frequency.exponentialRampToValueAtTime(6000, 2.0);
+  noiseBurst(ctx, out, 1.9, 1.6, { type: 'lowpass', freq: 600, vol: 0.9 });
+  tone(ctx, out, 1.9, 48, 1.4, { vol: 0.8 });
+  for (let i = 0; i < 10; i++) bell(ctx, out, 2.0 + i * 0.12, midi(76 + [0, 4, 7, 12, 16][i % 5]), 1.6, 0.05);
+}, 2);
+
+R.night_fall = () => render(4.2, (ctx, out) => {
+  const pad = gainNode(ctx, 0);
+  env(pad.gain, 0, [[0, 0], [0.6, 0.24], [3.0, 0.16], [4.2, 0]]);
+  [36, 39, 42].forEach((n) => {
+    const o = osc(ctx, 'sawtooth', midi(n + 12), 0, 4.2);
+    o.frequency.exponentialRampToValueAtTime(midi(n), 3.0);
+    chain(o, filter(ctx, 'lowpass', 500), pad);
+  });
+  pad.connect(out);
+  const th = noiseBurst(ctx, out, 0.3, 3.5, { type: 'lowpass', freq: 200, vol: 0.8, attack: 0.5 });
+  th.frequency.linearRampToValueAtTime(80, 3.5);
+}, 2);
+
+R.prism_hum = async () => makeLoop(await render(3.0, (ctx, out) => {
+  const g = gainNode(ctx, 0.1);
+  [1318, 1975, 2637].forEach((f, i) => {
+    const o = osc(ctx, 'sine', f, 0);
+    const trem = osc(ctx, 'sine', 3 + i * 1.7);
+    const tg = gainNode(ctx, 0.5);
+    chain(trem, gainNode(ctx, 0.5), tg.gain);
+    chain(o, tg, gainNode(ctx, 0.4 / (i + 1)), g);
+  });
+  g.connect(out);
+}), 0.4);
+
+R.prism_take = () => render(1.4, (ctx, out) => {
+  [76, 80, 83, 88, 92].forEach((n, i) => bell(ctx, out, i * 0.07, midi(n), 0.9, 0.1, [1, 2.0, 3.0]));
+  const o = tone(ctx, out, 0, 330, 0.6, { type: 'triangle', vol: 0.12 });
+  o.frequency.exponentialRampToValueAtTime(1320, 0.5);
+});
+
+R.prism_install = () => render(1.6, (ctx, out) => {
+  noiseBurst(ctx, out, 0, 0.06, { type: 'bandpass', freq: 2200, q: 2, vol: 0.5 });
+  tone(ctx, out, 0, 90, 0.2, { vol: 0.5 });
+  [64, 71, 76].forEach((n, i) => bell(ctx, out, 0.12 + i * 0.12, midi(n + 12), 1.2, 0.1));
+});
+
+R.mirror_servo = () => render(1.6, (ctx, out) => {
+  const o = osc(ctx, 'sawtooth', 160, 0, 1.2);
+  o.frequency.linearRampToValueAtTime(240, 0.6);
+  o.frequency.linearRampToValueAtTime(140, 1.1);
+  const lfo = osc(ctx, 'sine', 32, 0, 1.2);
+  chain(lfo, gainNode(ctx, 25), o.frequency);
+  const g = gainNode(ctx, 0);
+  env(g.gain, 0, [[0, 0], [0.05, 0.12], [1.05, 0.1], [1.2, 0]]);
+  chain(o, filter(ctx, 'bandpass', 900, 2), g, out);
+  noiseBurst(ctx, out, 1.15, 0.08, { type: 'lowpass', freq: 700, vol: 0.6 });
+  bell(ctx, out, 1.2, 1568, 0.4, 0.08);
+});
+
+R.radio_static = () => render(1.0, (ctx, out) => {
+  const n = noise(ctx, 0, 1.0);
+  const g = gainNode(ctx, 0);
+  env(g.gain, 0, [[0, 0], [0.03, 0.35], [0.7, 0.2], [1.0, 0]]);
+  chain(n, filter(ctx, 'bandpass', 1800, 0.8), g, out);
+  for (let i = 0; i < 20; i++) noiseBurst(ctx, out, Math.random() * 0.9, 0.01, { type: 'highpass', freq: 2500, vol: 0.4 });
+  tone(ctx, out, 0, 1000, 0.08, { type: 'square', vol: 0.05 });
+});
+
+R.boss_death = () => render(6, (ctx, out) => {
+  growl(ctx, out, 0, 3.2, { f0: 90, f1: 38, vol: 0.5 });
+  noiseBurst(ctx, out, 3.1, 0.08, { type: 'highpass', freq: 800, vol: 1.0 });
+  const body = noiseBurst(ctx, out, 3.1, 2.6, { type: 'lowpass', freq: 1600, vol: 1.0 });
+  body.frequency.exponentialRampToValueAtTime(110, 5.5);
+  const sub = tone(ctx, out, 3.1, 64, 2.2, { vol: 1.0 });
+  sub.frequency.exponentialRampToValueAtTime(28, 5.2);
+  [64, 68, 71, 76].forEach((n, i) => bell(ctx, out, 3.2 + i * 0.08, midi(n + 12), 2.6, 0.1));
+}, 2);
+
+R.victory = () => render(7, (ctx, out) => {
+  const seq = [[0, [52, 59, 64, 68]], [1.6, [49, 56, 61, 64]], [3.2, [45, 52, 57, 61]], [4.6, [47, 54, 59, 63, 66]]];
+  for (const [t, chord] of seq) {
+    const g = gainNode(ctx, 0);
+    env(g.gain, t, [[0, 0], [0.35, 0.16], [t === 4.6 ? 2.2 : 1.4, 0.12], [t === 4.6 ? 2.4 : 1.6, 0]]);
+    for (const n of chord) {
+      const o = osc(ctx, 'sawtooth', midi(n), t, t + 2.5);
+      o.detune.value = Math.random() * 10 - 5;
+      chain(o, filter(ctx, 'lowpass', 1800), g);
+    }
+    g.connect(out);
+    bell(ctx, out, t, midi(chord[chord.length - 1] + 12), 1.4, 0.1);
+  }
+  tone(ctx, out, 0, midi(28), 6.5, { vol: 0.25, attack: 0.4 });
+}, 2);
+
+// Battle drums for the boss fight: low toms and a pulsing drone, 8 bars of 92 bpm.
+R.boss_loop = async () => makeLoop(await render(10.9, (ctx, out) => {
+  const beat = 60 / 92;
+  const bus = gainNode(ctx, 0.55);
+  bus.connect(out);
+  const hit = (t, f, v) => {
+    const o = tone(ctx, bus, t, f, 0.35, { vol: v });
+    o.frequency.exponentialRampToValueAtTime(f * 0.55, t + 0.3);
+    noiseBurst(ctx, bus, t, 0.08, { type: 'lowpass', freq: 900, vol: v * 0.4 });
+  };
+  const pattern = [1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0];
+  for (let bar = 0; bar < 8; bar++) {
+    for (let i = 0; i < 16; i++) {
+      const t = (bar * 4 + i / 4) * beat;
+      if (t > 10.4) break;
+      if (pattern[i]) hit(t, i % 8 === 0 ? 62 : 82, i % 8 === 0 ? 0.9 : 0.55);
+      if (i % 4 === 2) noiseBurst(ctx, bus, t, 0.05, { type: 'highpass', freq: 5000, vol: 0.08 });
+    }
+  }
+  for (const [n, t] of [[38, 0], [41, 2.6], [36, 5.2], [43, 7.8]]) {
+    const o = osc(ctx, 'sawtooth', midi(n), t, t + 3.2);
+    const g = gainNode(ctx, 0);
+    env(g.gain, t, [[0, 0], [0.8, 0.06], [2.4, 0.05], [3.2, 0]]);
+    chain(o, filter(ctx, 'lowpass', 500), g, bus);
+  }
+}, 2), 0.5);
+
 export const SYNTH_NAMES = Object.keys(R);
 
 export async function renderAll(onEach) {

@@ -188,13 +188,16 @@ export function buildTextures() {
     const c = paint(S, S, (x, y, i) => {
       const rib = Math.sin((x / S) * Math.PI * 2 * 24);
       const shade = 0.78 + rib * 0.16;
-      const rr = clamp((rust[i] - 0.58) * 4, 0, 1) * clamp(y / S + 0.3, 0, 1);
+      // rust weeps down in streaks (noise stretched vertically) and gathers near the bottom
+      const streak = clamp((rust[Math.floor(y * 0.12) * S + x] - 0.56) * 3, 0, 1);
+      const blotch = clamp((rust[i] - 0.68) * 3, 0, 1);
+      const rr = Math.max(streak * 0.55, blotch) * clamp(y / S + 0.25, 0.25, 1);
       height[i] = rib * 0.5 + 0.5;
       const base = [128, 138, 134];
       return [
-        mix(base[0], 150, rr) * shade * (0.85 + n1[i] * 0.3),
-        mix(base[1], 88, rr) * shade * (0.85 + n1[i] * 0.3),
-        mix(base[2], 56, rr) * shade * (0.85 + n1[i] * 0.3),
+        mix(base[0], 124, rr) * shade * (0.85 + n1[i] * 0.3),
+        mix(base[1], 98, rr) * shade * (0.85 + n1[i] * 0.3),
+        mix(base[2], 78, rr) * shade * (0.85 + n1[i] * 0.3),
       ];
     });
     T.corrugated = toTexture(c);

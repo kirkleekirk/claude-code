@@ -47,7 +47,25 @@ export class HUD {
       dmg: $('#hud-damage'),
       stats: $('#hud-stats'),
       zone: $('#hud-zone'),
+      quest: $('#hud-quest'),
+      questList: $('#hud-quest ol'),
+      questTitle: $('#hud-quest .title'),
+      boss: $('#hud-boss'),
+      bossName: $('#hud-boss .name'),
+      bossState: $('#hud-boss .state'),
+      bossDay: $('#hud-boss .day'),
+      bossDayVal: $('#hud-boss .day .val'),
+      bossDayBar: $('#hud-boss .dbar i'),
+      radio: $('#hud-radio'),
+      radioWho: $('#hud-radio .who'),
+      radioLine: $('#hud-radio .line'),
+      victory: $('#hud-victory'),
+      victoryTitle: $('#hud-victory .title'),
+      victorySub: $('#hud-victory .sub'),
     };
+    this.bossLag = 1;
+    this.bossHp = 1;
+    this.radioT = 0;
     this.cache = {};
     this.hitT = 0;
     this.msgT = 0;
@@ -96,6 +114,79 @@ export class HUD {
     this.el.scope.hidden = true;
     this.el.roundWrap.classList.remove('flash');
     this.set('round', this.el.round, '');
+    this.el.quest.hidden = true;
+    this.el.boss.hidden = true;
+    this.el.radio.hidden = true;
+    this.el.victory.hidden = true;
+    this.radioT = 0;
+  }
+
+  // Project Daybreak checklist: steps = [{ text, hint, state: 'done' | 'active' | 'todo' }]
+  quest(title, steps) {
+    const el = this.el.quest;
+    if (!steps) {
+      el.hidden = true;
+      this.cache.quest = null;
+      return;
+    }
+    el.hidden = false;
+    const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+    const html = steps.map((st) => `<li class="${st.state}">${esc(st.text)}${st.hint && st.state === 'active' ? `<span class="hint">${esc(st.hint)}</span>` : ''}</li>`).join('');
+    this.set('questTitle', this.el.questTitle, title);
+    if (this.cache.quest !== html) {
+      const first = this.cache.quest == null;
+      this.cache.quest = html;
+      this.el.questList.innerHTML = html;
+      if (!first) {
+        el.classList.remove('flash');
+        void el.offsetWidth;
+        el.classList.add('flash');
+      }
+    }
+  }
+
+  // Boss bar: o = { name, hp 0..1, mode: 'shielded' | 'exposed' | '', state, dayFrac, dayText, dayReady }
+  boss(o) {
+    const el = this.el.boss;
+    if (!o) {
+      el.hidden = true;
+      return;
+    }
+    if (el.hidden) {
+      el.hidden = false;
+      this.bossLag = this.bossHp = o.hp;
+    }
+    this.set('bossName', this.el.bossName, o.name);
+    this.set('bossMode', el, o.mode || '', 'className');
+    this.set('bossState', this.el.bossState, o.state || '');
+    this.bossHp = o.hp;
+    this.set('bossDayVal', this.el.bossDayVal, o.dayText || '');
+    this.set('bossDayCls', this.el.bossDay, o.dayReady ? 'day ready' : 'day', 'className');
+    const d = Math.round(o.dayFrac * 200) / 200;
+    if (this.cache.bossDay !== d) {
+      this.cache.bossDay = d;
+      this.el.bossDayBar.style.setProperty('--d', d);
+    }
+  }
+
+  // Radio subtitle line from the Daybreak team, shown for `time` seconds.
+  radio(who, line, time = 5) {
+    this.el.radioWho.textContent = who;
+    this.el.radioLine.textContent = line;
+    this.el.radio.hidden = false;
+    this.radioT = time;
+  }
+
+  victory(title, sub) {
+    const el = this.el.victory;
+    this.el.victoryTitle.textContent = title;
+    this.el.victorySub.textContent = sub;
+    el.hidden = false;
+    el.style.animation = 'none';
+    void el.offsetWidth;
+    el.style.animation = '';
+    clearTimeout(this._victoryTimer);
+    this._victoryTimer = setTimeout(() => (el.hidden = true), 10000);
   }
 
   roundStart(n, swarm) {
@@ -135,12 +226,12 @@ export class HUD {
     this.el.objectiveWrap.hidden = !text;
   }
 
-  hitmarker(kill, head) {
+  hitmarker(kill, head, variant = '') {
     const h = this.el.hit;
     h.className = '';
     void h.offsetWidth;
-    h.className = 'show' + (kill ? ' kill' : '') + (head ? ' head' : '');
-    this.game.audio.play(kill ? 'hit_kill' : 'hitmarker', { bus: 'ui', volume: kill ? 0.5 : 0.4 });
+    h.className = 'show' + (kill ? ' kill' : '') + (head ? ' head' : '') + (variant ? ' ' + variant : '');
+    if (variant !== 'shield') this.game.audio.play(kill ? 'hit_kill' : 'hitmarker', { bus: 'ui', volume: kill ? 0.5 : 0.4 });
   }
 
   pointsPop(amount, doubled) {
@@ -255,11 +346,30 @@ export class HUD {
       // strip: 3 repeats x 8 headings x 108px; centre the current heading in a 360px window
       this.el.compass.style.transform = `translateX(${-(px + 864 + 18 - 180)}px)`;
     }
-    // messages
+    // boss bar: the pale "lag" segment drains after the real health
+    if (!this.el.boss.hidden) {
+      this.bossLag = Math.max(this.bossHp, this.bossLag - dt * 0.18);
+      const hp = Math.round(this.bossHp * 400) / 400;
+      const lag = Math.round(this.bossLag * 400) / 400;
+      if (this.cache.bossHpV !== hp) {
+        this.cache.bossHpV = hp;
+        this.el.boss.style.setProperty('--hp', hp);
+      }
+      if (this.cache.bossLagV !== lag) {
+        this.cache.bossLagV = lag;
+        this.el.boss.style.setProperty('--lag', lag);
+      }
+    }
+    if (this.radioT > 0) {
+      this.radioT -= dt;
+      if (this.radioT <= 0) this.el.radio.hidden = true;
+    }
+    // messages (the Daybreak checklist steps back while one is up, so they don't overlap)
     if (this.msgT > 0) {
       this.msgT -= dt;
       if (this.msgT <= 0) this.el.msg.classList.remove('show');
     }
+    this.el.quest.classList.toggle('dim', this.msgT > 0 && !!this.el.msgTitle.textContent);
     // power-up timers
     const timers = g.powerups.timerList();
     const sig = timers.map((t) => t.id + Math.ceil(t.t)).join(',');

@@ -73,6 +73,20 @@ export const EXO_STATION = { x: 25.3, z: 14, rot: -Math.PI / 2 };
 
 export const BOUNDS = { minX: -92, maxX: 44, minZ: -80, maxZ: 48 };
 
+// Project Daybreak: the array on the yard helipad, its console, three heliostat mirrors,
+// the three hidden focusing prisms, and where the Nightwarden can claw its way up.
+export const DAYBREAK = {
+  machine: { x: 0, z: -36 },
+  console: { x: 3.7, z: -33.0 },
+  mirrors: [{ x: -11.5, z: -31 }, { x: 11.5, z: -31.5 }, { x: -3, z: -44.2 }],
+  prisms: [
+    { id: 'ranger', name: 'Ranger Station', x: -26.05, z: 38.55, top: 0.82 },
+    { id: 'optics', name: 'Research Wing east lab', x: 33.0, z: -19.2, y: 1.5 },
+    { id: 'tower', name: 'Radio Tower', x: -44.1, z: -38.4, top: 0.85 },
+  ],
+  bossSpawns: [{ x: -16, z: -37 }, { x: 16.5, z: -38 }, { x: 4, z: -29.5 }, { x: 8, z: -58 }],
+};
+
 // ------------------------------------------------------------------------------------------
 // Terrain shaping
 // ------------------------------------------------------------------------------------------
@@ -365,9 +379,9 @@ export function buildRainshadow(B, ctx) {
   B.container(37, -36, Math.PI / 2, gy, 'steelDark', { len: 9 });
   fuelTank(B, M, -27, -41, gy);
   fuelTank(B, M, -22.5, -42.5, gy);
-  sandbags(B, M, 2, -34, 5, 0, gy);
+  sandbags(B, M, 8.5, -28.6, 5, 0.1, gy);
   jersey(B, M, 24, -31, 0.3, gy);
-  jersey(B, M, -8, -37, -0.4, gy);
+  jersey(B, M, -12.5, -41.5, -0.4, gy);
   helipad(B, M, 0, -36, gy);
   floodTower(B, M, -32, -27.5, gy, new THREE.Vector3(0.7, -0.45, -0.5));
   floodTower(B, M, 41, -27.5, gy, new THREE.Vector3(-0.7, -0.45, -0.5));
@@ -488,6 +502,11 @@ function buildCabin(B, M, H, x, z, textures, fx) {
   const sign = makeSign([{ text: 'RANGER STATION', size: 56 }, { text: 'OLYMPIC NF — CLOSED', size: 34, weight: 600 }], { bg: '#4a3626', fg: '#efe4cc', stripe: false });
   B.sign(x, y + h - 0.6, z + d / 2 + 0.19, 0, sign, 2.6, 1.2);
   B.lamp(x + w / 2 + 0.3, y + 2.6, z + 0.2, { color: 0xffc27a, intensity: 10, distance: 9, flicker: 0.15, zone: 0 });
+  // ranger's desk in the back corner (one of the Daybreak prisms sits on it)
+  const dx = x - w / 2 + 0.95;
+  const dz = z - d / 2 + 0.85;
+  B.box(dx, H(dx, dz), dz, 1.2, 0.82, 0.75, { mat: 'planks', uv: 1.5 });
+  B.box(dx + 0.35, H(dx, dz) + 0.82, dz - 0.15, 0.32, 0.22, 0.24, { mat: 'olive', collide: false });
 }
 
 function buildSupplyPod(B, M, H, x, z) {
@@ -741,8 +760,10 @@ function buildRadioTower(B, M, H, x, z, fx) {
   }
   B.mesh(mergeGeometries(parts), new THREE.Matrix4(), M.steelDark);
   B.physics.addBox({ x, y, z, w: 3.6, h: 6, d: 3.6, walkable: false, material: 'metal' });
-  // shack at the base
+  // shack at the base, with a radio bench outside its east wall
   B.box(x + 4.5, y, z - 1.0, 3.2, 2.6, 2.6, { mat: 'corrugated', walkable: true, uv: 2.6 });
+  B.box(x + 6.9, H(x + 6.9, z - 0.9) - 0.05, z - 0.9, 0.85, 0.9, 1.3, { mat: 'steelDark', walkable: true });
+  B.box(x + 7.0, H(x + 6.9, z - 0.9) + 0.85, z - 1.35, 0.5, 0.32, 0.3, { mat: 'black', collide: false });
   B.box(x + 4.5, y + 2.6, z - 1.0, 3.5, 0.15, 2.9, { mat: 'steelDark', walkable: true });
   // dishes
   for (const [dy, rot] of [[20, 0.6], [26, 2.4]]) {
@@ -775,6 +796,15 @@ function buildHangar(B, M, textures, fx, signs) {
   B.box(x0 + roofW / 2 - 0.3, y + H + 1.2, (z0 + z1) / 2, roofW, 0.3, z1 - z0 + 1.2, { mat: 'corrugated', rz: 0.12, collide: false, uv: 6 });
   B.box(x1 - roofW / 2 + 0.3, y + H + 1.2, (z0 + z1) / 2, roofW, 0.3, z1 - z0 + 1.2, { mat: 'corrugated', rz: -0.12, collide: false, uv: 6 });
   B.physics.addBox({ x: (x0 + x1) / 2, y: y + H, z: (z0 + z1) / 2, w: x1 - x0, h: 4, d: z1 - z0, walkable: false, nav: false });
+  // gable triangles at both ends so the sky does not show between the end walls and the roof
+  const gable = new THREE.Shape();
+  gable.moveTo(-(x1 - x0) / 2 - 0.3, 0);
+  gable.lineTo((x1 - x0) / 2 + 0.3, 0);
+  gable.lineTo(0, roofW * Math.sin(0.12) - 0.15);
+  gable.closePath();
+  const gableGeo = new THREE.ExtrudeGeometry(gable, { depth: 0.6, bevelEnabled: false });
+  gableGeo.translate(0, 0, -0.3);
+  for (const gz of [z0, z1]) B.mesh(gableGeo, new THREE.Matrix4().makeTranslation((x0 + x1) / 2, y + H - 0.05, gz), M.corrugated);
   B.box((x0 + x1) / 2, y - 0.15, (z0 + z1) / 2, x1 - x0, 0.2, z1 - z0, { mat: 'floor', collide: false, uv: 4, cast: false });
   // roof trusses
   for (let k = 0; k < 6; k++) {

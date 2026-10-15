@@ -50,6 +50,7 @@ export class Director {
     this.swarm = false;
     this.nextSwarm = 5 + Math.floor(Math.random() * 2);
     this.queueBonus = 0;
+    this.paused = false; // held while the Nightwarden fight runs
   }
 
   start() {
@@ -154,7 +155,7 @@ export class Director {
 
   update(dt) {
     const game = this.game;
-    if (this.state === 'idle' || game.over) return;
+    if (this.state === 'idle' || game.over || this.paused) return;
     if (this.state === 'intro') {
       this.t -= dt;
       if (this.t <= 0) this.beginRound(1);

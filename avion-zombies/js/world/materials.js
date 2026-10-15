@@ -42,7 +42,7 @@ export function buildMaterials(T) {
   M.tarp = std({ color: 0x3e4632, roughness: 0.95 });
   M.sandbag = std({ map: rep(T.gravel, 0.5), color: 0x9a8c6a, roughness: 1.0 });
   M.glass = std({ color: 0x8fb4c4, roughness: 0.08, metalness: 0.2, transparent: true, opacity: 0.22, depthWrite: false });
-  M.cryo = std({ color: 0x5ff2c8, emissive: 0x2fbf8e, emissiveIntensity: 0.5, roughness: 0.2, transparent: true, opacity: 0.32, depthWrite: false });
+  M.cryo = std({ color: 0x8fe6e2, emissive: 0x2fa8a0, emissiveIntensity: 0.28, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.2, depthWrite: false });
   M.chainlink = std({ map: T.chainlink, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.6, metalness: 0.7, color: 0xb6bcbe });
   M.lampWarm = basic({ color: 0xffd6a0, fog: true });
   M.lampCool = basic({ color: 0xd8ecff });
@@ -50,7 +50,7 @@ export function buildMaterials(T) {
   M.lampGreen = basic({ color: 0x4dffa0 });
   M.lampAmber = basic({ color: 0xffa040 });
   M.screen = std({ color: 0x0a1a20, emissive: 0x3fb8d8, emissiveIntensity: 0.8, roughness: 0.3 });
-  M.white = std({ color: 0xd9d7d0, roughness: 0.6 });
+  M.white = std({ map: rep(T.steel, 1), color: 0xc6c4bc, roughness: 0.66, metalness: 0.05 });
   M.redPaint = std({ color: 0x7a1c18, roughness: 0.6, metalness: 0.3 });
   M.foliage = std({ vertexColors: true, roughness: 0.95, metalness: 0.0, flatShading: false });
   M.fern = std({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide });

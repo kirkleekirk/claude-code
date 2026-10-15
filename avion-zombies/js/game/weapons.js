@@ -403,6 +403,7 @@ export class WeaponSystem {
       else if (h.part === 'limb') dmg *= 0.8;
       game.zombies.damage(h.zombie, dmg, { part: h.part, dir, point: h.point, weapon: s, source: 'bullet' });
       if (!firstPoint) firstPoint = h.point;
+      if (h.zombie.isBoss) pen = 0; // nothing punches through the Nightwarden
       pen--;
       dmgMul *= 0.7;
       end = h.dist;
@@ -412,6 +413,8 @@ export class WeaponSystem {
       if (wh) {
         this._impact(wh, dir);
         if (!firstPoint) firstPoint = new THREE.Vector3(wh.x, wh.y, wh.z);
+        // shootable props (the Daybreak heliostat mirrors)
+        if (wh.collider && wh.collider.onShot) wh.collider.onShot(wh, dir, s);
       }
     }
     if (s.explosive && firstPoint) game.explode(firstPoint, s.explosive, s.damage * 0.7, { small: true, noSelf: true });

@@ -391,6 +391,9 @@ export class World {
     this.scene.add(this.flashLight);
     this.boomLight = new THREE.PointLight(0xff8a40, 0, 22, 2);
     this.scene.add(this.boomLight);
+    // the Nightwarden's own glow (always in the scene so lighting never recompiles)
+    this.auxLight = new THREE.PointLight(0x9a6aff, 0, 14, 2);
+    this.scene.add(this.auxLight);
     this.boomT = 0;
     this.lightTimer = 0;
   }

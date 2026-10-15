@@ -43,6 +43,31 @@ Power-ups drop from kills: Max Ammo, Insta-Kill, Double Points, Kaboom (nuke) an
 
 Zombie types: walkers, runners and sprinters; **exo zombies** that boost-leap at you (round 6+); **EMZ** that knock your exo suit offline when they die near you (round 9+); and **bloaters** that burst into toxic gas (round 12+).
 
+## Project Daybreak (Easter egg and boss fight)
+
+*Spoilers.* After the power comes on, a radio call from Dr. Ilse Voss sets it up, and a **Project Daybreak** checklist appears under the objective. It works in a normal match and in free roam.
+
+1. **Recover three golden prisms** (each sits in a faint shaft of light): the desk in the **Ranger Station** cabin, a desk in the **Research Wing** east lab, and the bench beside the **Radio Tower** shack.
+2. **Install them** at the console of the **Daybreak array** on the Hangar Yard helipad.
+3. **Power** must be on.
+4. **Shoot the three heliostat mirrors** on posts around the array. Each one swings round to face the array and its lamp turns green.
+5. **Activate the array.** It drags the night in, and **the Nightwarden** claws its way out of the ground.
+
+**The fight.** At night its umbral shield blocks about 92% of damage. The array needs about 25 seconds to charge. When it's ready, use the console to **ignite Daybreak**: the sun comes up for 24 seconds, the shield shatters, and the chest plates open over a glowing **core** that takes triple damage. Then night falls, the shield comes back and the array recharges. Repeat until it drops.
+
+Its attacks all have a tell:
+
+- **Swipe.** A huge clawed arm swing up close. Don't stand in front of it.
+- **Slam.** Both fists go up, a red ring marks the impact, then a shockwave rolls out. Jump it.
+- **Charge.** It crouches, roars, and a red lane appears on the ground. Dodge sideways. If it hits a wall it is stunned for a moment.
+- **Shadow orbs.** Homing bolts. Shoot them down or outrun them.
+- **Summon.** At health thresholds and through the night it calls in its own zombies.
+- **Enraged** below half health: faster, double shockwaves, five orbs.
+
+If you run too far or climb out of reach, it shadow-steps after you.
+
+**Reward.** Every Exo upgrade installed, a Max Ammo, +5000 points, and a sunrise that stays for the rest of the match.
+
 ## Controls
 
 | Action | Keyboard / mouse | Controller |
@@ -66,7 +91,8 @@ Touch: drag the left side to move (push far to sprint), drag the right side to l
 ```
 index.html, css/style.css     page shell, HUD and menus
 js/main.js                    entry point
-js/game/                      game loop, player, weapons, zombies, rounds, buyables, power-ups
+js/game/                      game loop, player, weapons, zombies, rounds, buyables, power-ups,
+                              the Daybreak Easter egg (daybreak.js) and the Nightwarden boss (boss.js)
 js/world/                     terrain, sky and time of day, fog, forest, the Rainshadow map
 js/engine/                    audio + procedural sound synthesis, input, physics, nav flow field, particles, post-processing
 js/ui/                        HUD, menus, touch controls, vector icons

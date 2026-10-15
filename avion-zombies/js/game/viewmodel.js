@@ -581,11 +581,12 @@ export class ViewModel {
         break;
       }
       case 'inject': {
-        // perk install: wrist module pulse
+        // perk install: raise the wrist module into view (at arm's length, so the forearm
+        // does not swallow half the screen)
         const b = bump(0, 1);
         pos.y -= b * 0.15;
         rot.x -= b * 0.5;
-        setLeft(new THREE.Vector3(-0.08, -0.12 + b * 0.08, -0.3));
+        setLeft(new THREE.Vector3(-0.07, -0.2 + b * 0.07, -0.44));
         break;
       }
       default:

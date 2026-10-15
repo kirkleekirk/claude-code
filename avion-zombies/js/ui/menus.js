@@ -184,7 +184,8 @@ export class Menus {
 
   _refreshMain() {
     const r = loadRecords();
-    $('#menu-best').textContent = r.bestRound ? 'BEST: ROUND ' + r.bestRound : 'NO RECORD YET';
+    const dawn = r.daybreak ? `  •  DAYBREAK ${Math.floor(r.daybreak / 60)}:${String(r.daybreak % 60).padStart(2, '0')}` : '';
+    $('#menu-best').textContent = (r.bestRound ? 'BEST: ROUND ' + r.bestRound : 'NO RECORD YET') + dawn;
   }
 
   action(name) {

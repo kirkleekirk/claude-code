@@ -14,6 +14,8 @@ import { Director } from './director.js';
 import { Interactables } from './interact.js';
 import { Powerups } from './powerups.js';
 import { Grenades } from './grenades.js';
+import { Nightwarden } from './boss.js';
+import { Daybreak } from './daybreak.js';
 import { PERKS } from './weapons_data.js';
 import { HUD } from '../ui/hud.js';
 import { Menus } from '../ui/menus.js';
@@ -83,6 +85,9 @@ export class Game {
     this.director = new Director(this);
     this.powerups = new Powerups(this);
     this.grenades = new Grenades(this);
+    this.boss = new Nightwarden(this);
+    this.zombies.extra.push(this.boss, ...this.boss.orbs);
+    this.daybreak = new Daybreak(this);
     this.interact = new Interactables(this);
     this.hud = new HUD(this);
     this.touch = new TouchControls(this);
@@ -92,6 +97,7 @@ export class Game {
     this.world.sky.setRound(1, true);
     this.refreshEnvironment();
     this._buildMenuScene();
+    this._buildCryoSubjects();
     // warm up shaders so the first fight doesn't hitch
     this.menus.setBoot(0.96, 'Compiling shaders');
     try {
@@ -131,6 +137,7 @@ export class Game {
   applyQuality() {
     const q = settings.preset;
     this.world.sky.setShadowSize(q.shadowSize, q.shadows);
+    this.world.sky.setDetail(q.envLight !== false);
     this.renderer.shadowMap.enabled = q.shadows;
     this.renderer.shadowMap.needsUpdate = true;
     this.post.configure({ bloom: q.bloom, godrays: q.godrays, msaa: q.msaa });
@@ -159,6 +166,37 @@ export class Game {
       body.bones.head.scale.setScalar(0.86);
       this.scene.add(body.mesh);
       this.menuZombies.push({ body, phase: Math.random() * 10 });
+    });
+  }
+
+  // Frozen test subjects floating in the research wing's cryo pods.
+  _buildCryoSubjects() {
+    const pods = this.world.fxPoints.cryo || [];
+    const q = new THREE.Quaternion();
+    const v = new THREE.Vector3();
+    const arm = (bone, left, x, y, z) => {
+      v.set(left ? x : -x, y, z).normalize();
+      q.setFromUnitVectors(new THREE.Vector3(left ? 1 : -1, 0, 0), v);
+      bone.quaternion.premultiply(q);
+    };
+    pods.forEach((c, i) => {
+      const fig = this.avatars.figures[(i * 3 + 1) % this.avatars.figures.length];
+      const mat = makeZombieMaterial(this.avatars, { tint: 0x86a2aa, eye: 0x3d7a80, eyeIntensity: 0.8 });
+      const body = buildBody(fig, mat);
+      const B = body.bones;
+      q.setFromEuler(new THREE.Euler(0.38 + (i % 3) * 0.08, (i % 2 ? 0.2 : -0.15), (i % 2 ? 0.08 : -0.06)));
+      B.head.quaternion.multiply(q);
+      q.setFromEuler(new THREE.Euler(0.06, 0, (i % 2 ? 0.04 : -0.04)));
+      B.spine.quaternion.multiply(q);
+      arm(B.shoulderL, true, 0.18, -0.95, 0.12 + (i % 3) * 0.05);
+      arm(B.shoulderR, false, 0.18, -0.95, 0.2);
+      q.setFromEuler(new THREE.Euler(0.12, 0, 0));
+      B.kneeL.quaternion.multiply(q);
+      body.mesh.position.set(c.x, c.y - 0.02, c.z);
+      body.mesh.rotation.y = c.x < 13.5 ? Math.PI / 2 : -Math.PI / 2;
+      body.mesh.scale.setScalar(0.94);
+      body.mesh.castShadow = false;
+      this.scene.add(body.mesh);
     });
   }
 
@@ -244,12 +282,18 @@ export class Game {
     }
     this.zombies.markFlowDirty();
     if (!this.world.power) this.turnOnPower();
-    if (!this.player.exo.has) this.equipExo();
+    // already suited up: no injection animation or announcement
+    if (!this.player.exo.has) {
+      this.player.equipExo();
+      this.viewmodel.setExo(true);
+      this.interact.exo.suit.visible = false;
+    }
     this.player.points = 50000;
   }
 
   resetMatch() {
     this.zombies.reset();
+    this.daybreak.reset();
     this.particles.clear();
     this.grenades.reset();
     this.powerups.reset();
@@ -390,7 +434,8 @@ export class Game {
   objective() {
     const p = this.player;
     let text = '';
-    if (this.freeRoam) text = 'Free roam: explore Rainshadow';
+    if (this.daybreak && this.daybreak.fighting) text = 'Defeat the Nightwarden';
+    else if (this.freeRoam) text = 'Free roam: explore Rainshadow';
     else if (!p.exo.has) text = this.zoneOpen[1] ? 'Equip the Exo Suit in the Checkpoint armory' : 'Reach the facility checkpoint and find an Exo Suit';
     else if (!this.world.power) text = 'Restore power in Hangar 2';
     else if (!this.weapons.inv.some((w) => w.level > 0)) text = 'Upgrade a weapon at the Weapon Forge';
@@ -406,13 +451,17 @@ export class Game {
     this.scene.environment = settings.preset.envLight === false ? null : this.viewmodel.envTarget.texture;
     this._envT = sky.t;
     this._envBoost = sky.fogBoost;
+    this._envOvr = sky.overrideSig;
     this._envAt = this.time;
   }
 
   // Keep the ambient light in step with the sky; thin the haze and sky light indoors.
   updateAmbience(dt, x, z) {
     const sky = this.world.sky;
-    if ((Math.abs(sky.t - this._envT) > 0.02 || Math.abs(sky.fogBoost - this._envBoost) > 0.08) && this.time - this._envAt > 1) this.refreshEnvironment();
+    // forced day/night swings fast, so the sky light follows it more often while it moves
+    const ovrMoved = Math.abs(sky.overrideSig - (this._envOvr || 0)) > 0.05;
+    const gap = ovrMoved && sky.transitioning ? 0.25 : 1;
+    if ((Math.abs(sky.t - this._envT) > 0.02 || Math.abs(sky.fogBoost - this._envBoost) > 0.08 || ovrMoved) && this.time - this._envAt > gap) this.refreshEnvironment();
     const target = x === undefined ? 0 : this.map.indoorAt(x, z);
     this.indoorK = damp(this.indoorK || 0, target, 2.5, dt);
     sky.setIndoor(this.indoorK);
@@ -434,7 +483,8 @@ export class Game {
     else if (info.part === 'head' && info.source === 'bullet') pts = 100;
     else if (info.source === 'explosive' || info.source === 'microwave') pts = 50;
     if (info.source !== 'nuke') this.addPoints(pts);
-    this.director.onKilled(z);
+    if (z.minion) this.daybreak.onMinionKilled();
+    else this.director.onKilled(z);
     if (info.source !== 'nuke') this.powerups.maybeDrop(z.root.position);
   }
 
@@ -460,6 +510,7 @@ export class Game {
       const dir = new THREE.Vector3(z.ch.x - pos.x, 0, z.ch.z - pos.z).normalize();
       this.zombies.damage(z, dmgBase * (0.4 + 0.6 * k), { source: strong ? 'explosive' : 'slam-light', part: 'torso', dir, point: z.root.position.clone().setY(z.ch.y + 1), knock: strong ? 7 : 4 });
     }
+    for (const t of this.zombies.extra) if (t.alive) t.blast(pos, radius, dmgBase, strong ? 'explosive' : 'slam-light');
   }
 
   explode(pos, radius, damage, opts = {}) {
@@ -492,6 +543,7 @@ export class Game {
       const dir = new THREE.Vector3(z.ch.x - pos.x, 0.5, z.ch.z - pos.z).normalize();
       this.zombies.damage(z, damage * k, { source: 'explosive', part: 'torso', dir, point: z.root.position.clone().setY(z.ch.y + 1), knock: 5 * k });
     }
+    for (const t of this.zombies.extra) if (t.alive) t.blast(pos, radius, damage, 'explosive');
   }
 
   nuke() {
@@ -674,6 +726,8 @@ export class Game {
     }
     if (!this.freeRoam) this.director.update(dt);
     this.zombies.update(dt);
+    this.boss.update(dt);
+    this.daybreak.update(dt);
     this.grenades.update(dt);
     this.powerups.update(dt);
     this.particles.update(dt);

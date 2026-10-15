@@ -328,7 +328,6 @@ function makeGrassTuft(seed, palette) {
 }
 
 function makeRock(seed) {
-  const rng = makeRng(seed);
   const noise = makeNoise2D(seed);
   const g = new THREE.IcosahedronGeometry(1, 2);
   const p = g.attributes.position;
@@ -336,7 +335,9 @@ function makeRock(seed) {
     const x = p.getX(i);
     const y = p.getY(i);
     const z = p.getZ(i);
-    const d = 1 + noise.fbm(x * 1.7 + 3, z * 1.7 + y, 3) * 0.45 + (rng() - 0.5) * 0.05;
+    // displacement depends on position only, so the duplicated corner vertices of
+    // neighbouring faces move together (random jitter here tore visible cracks in the rock)
+    const d = 1 + noise.fbm(x * 1.7 + 3, z * 1.7 + y, 3) * 0.45 + noise.fbm(x * 5 + y * 3, z * 5 - y * 2, 2) * 0.04;
     p.setXYZ(i, x * d * 1.25, y * d * 0.75, z * d);
   }
   g.computeVertexNormals();
@@ -531,9 +532,9 @@ export function buildVegetation({ scene, terrain, physics, materials, map, densi
 
   // ---- meadow grass (ridge) ------------------------------------------------------------
   const meadowPal = [
-    [new THREE.Color(0.3, 0.22, 0.09), new THREE.Color(0.86, 0.56, 0.22)],
-    [new THREE.Color(0.28, 0.17, 0.08), new THREE.Color(0.78, 0.4, 0.17)],
-    [new THREE.Color(0.2, 0.22, 0.1), new THREE.Color(0.64, 0.6, 0.28)],
+    [new THREE.Color(0.2, 0.16, 0.06), new THREE.Color(0.56, 0.38, 0.14)],
+    [new THREE.Color(0.19, 0.12, 0.05), new THREE.Color(0.5, 0.28, 0.11)],
+    [new THREE.Color(0.13, 0.16, 0.06), new THREE.Color(0.4, 0.4, 0.16)],
   ];
   const grassSets = meadowPal.map((p, i) => new ChunkedInstances(makeGrassTuft(300 + i, p), materials.grass, 25, { castShadow: false }));
   const grassCount = Math.floor(7000 * density.ferns);

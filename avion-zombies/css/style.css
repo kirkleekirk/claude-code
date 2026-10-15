@@ -13,6 +13,7 @@
   --exo: #72c7ff;
   --good: #a8ffd2;
   --danger: #ff5a4a;
+  --sun: #ffc861;
   --font-display: 'Barlow Condensed', 'Arial Narrow', 'Roboto Condensed', 'Helvetica Neue', sans-serif;
   --font-mono: 'Share Tech Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
   --safe-t: env(safe-area-inset-top, 0px);
@@ -78,6 +79,45 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 #hud-objective .label { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.22em; color: var(--accent); text-transform: uppercase; }
 #hud-objective .text { font-size: clamp(14px, 2.2vh, 18px); font-weight: 500; letter-spacing: 0.04em; }
 #hud-zone { position: absolute; top: calc(70px + var(--safe-t)); left: calc(26px + var(--safe-l)); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.24em; color: var(--ink-faint); }
+#hud-quest { position: absolute; top: calc(92px + var(--safe-t)); left: calc(26px + var(--safe-l)); width: min(34vw, 330px); padding: 7px 12px 9px; background: linear-gradient(90deg, rgba(8, 9, 11, 0.62), rgba(8, 9, 11, 0)); border-left: 2px solid var(--sun); }
+#hud-quest .title { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.22em; color: var(--sun); text-transform: uppercase; margin-bottom: 4px; }
+#hud-quest ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+#hud-quest li { position: relative; padding-left: 17px; font-size: clamp(13px, 1.9vh, 16px); line-height: 1.2; letter-spacing: 0.03em; color: var(--ink-faint); }
+#hud-quest li::before { content: ''; position: absolute; left: 2px; top: 0.42em; width: 7px; height: 7px; border: 1px solid currentColor; transform: rotate(45deg); }
+#hud-quest li.done { color: var(--ink-dim); }
+#hud-quest li.done::before { background: var(--sun); border-color: var(--sun); }
+#hud-quest li.active { color: var(--ink); }
+#hud-quest li.active::before { border-color: var(--sun); box-shadow: 0 0 6px var(--sun); }
+#hud-quest li .hint { display: block; font-size: 0.84em; color: var(--sun); opacity: 0.85; }
+#hud-quest.flash { animation: questflash 1.4s ease-out; }
+#hud-quest { transition: opacity 0.3s; }
+#hud-quest.dim { opacity: 0.18; }
+#hud-boss:not([hidden]) ~ #hud-message { top: 25%; }
+/* the checklist drops below the boss bar while the fight is on */
+#hud-boss:not([hidden]) ~ #hud-quest { top: calc(146px + var(--safe-t)); }
+@keyframes questflash { 0% { background-color: rgba(255, 200, 97, 0.34); } 100% { background-color: rgba(255, 200, 97, 0); } }
+#hud-boss { position: absolute; top: calc(42px + var(--safe-t)); left: 50%; transform: translateX(-50%); width: min(64vw, 560px); text-align: center; }
+#hud-boss .name { font-weight: 700; font-size: clamp(16px, 2.6vh, 22px); letter-spacing: 0.36em; padding-left: 0.36em; color: #dcc8ff; text-shadow: 0 0 12px rgba(150, 90, 255, 0.65); text-transform: uppercase; }
+#hud-boss .bar { position: relative; height: 10px; margin: 5px 0 4px; background: rgba(0, 0, 0, 0.55); border: 1px solid rgba(220, 200, 255, 0.35); overflow: hidden; }
+#hud-boss .bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; transform-origin: left; }
+#hud-boss .bar .lag { background: rgba(255, 228, 210, 0.6); transform: scaleX(var(--lag, 1)); }
+#hud-boss .bar .hp { background: linear-gradient(90deg, #7a2ad8, #c04aff); transform: scaleX(var(--hp, 1)); box-shadow: 0 0 10px rgba(170, 80, 255, 0.7); }
+#hud-boss.shielded .bar .hp { background: repeating-linear-gradient(135deg, #4c3184 0 8px, #6e4cb8 8px 16px); box-shadow: none; }
+#hud-boss.exposed .bar .hp { background: linear-gradient(90deg, #ff7a2a, #ffd36a); box-shadow: 0 0 12px rgba(255, 170, 60, 0.8); }
+#hud-boss .state { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.2em; color: var(--ink-dim); text-transform: uppercase; min-height: 1.3em; }
+#hud-boss.exposed .state { color: var(--sun); }
+#hud-boss .day { display: flex; align-items: center; gap: 8px; margin: 6px auto 0; width: 76%; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.18em; color: var(--sun); text-transform: uppercase; }
+#hud-boss .dbar { flex: 1; height: 4px; background: rgba(255, 200, 97, 0.18); position: relative; }
+#hud-boss .dbar i { position: absolute; inset: 0; transform-origin: left; transform: scaleX(var(--d, 0)); background: var(--sun); box-shadow: 0 0 8px var(--sun); }
+#hud-boss .day.ready { color: #fff3c4; animation: flicker 0.7s steps(2) infinite; }
+#hud-boss .val { min-width: 6.5em; text-align: right; }
+#hud-radio { position: absolute; left: 50%; bottom: calc(150px + var(--safe-b)); transform: translateX(-50%); width: min(90vw, 680px); text-align: center; font-size: clamp(14px, 2.3vh, 19px); letter-spacing: 0.02em; text-shadow: 0 1px 3px #000, 0 0 10px rgba(0, 0, 0, 0.8); }
+#hud-radio .who { display: block; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.22em; color: var(--sun); text-transform: uppercase; margin-bottom: 2px; }
+#hud-victory { position: absolute; left: 50%; top: 24%; transform: translateX(-50%); text-align: center; width: min(92vw, 820px); animation: victory 10s ease-out forwards; }
+#hud-victory .kicker { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.3em; color: var(--sun); text-transform: uppercase; }
+#hud-victory .title { font-weight: 700; font-size: clamp(34px, 7vh, 64px); letter-spacing: 0.24em; padding-left: 0.24em; color: #fff1cc; text-shadow: 0 0 24px rgba(255, 190, 90, 0.75); text-transform: uppercase; }
+#hud-victory .sub { margin-top: 8px; font-size: clamp(14px, 2.2vh, 18px); color: var(--ink); letter-spacing: 0.05em; white-space: pre-line; }
+@keyframes victory { 0% { opacity: 0; transform: translate(-50%, 10px); } 6% { opacity: 1; transform: translate(-50%, 0); } 86% { opacity: 1; } 100% { opacity: 0; } }
 #hud-fps { position: absolute; top: calc(12px + var(--safe-t)); right: calc(20px + var(--safe-r)); font-family: var(--font-mono); font-size: 12px; color: var(--ink-dim); }
 
 #hud-crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; --spread: 8px; transition: opacity 0.12s; }
@@ -97,6 +137,9 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 #hud-hitmarker.show { animation: hit 0.22s ease-out; }
 #hud-hitmarker.kill::before, #hud-hitmarker.kill::after { background: linear-gradient(var(--danger) 0 32%, transparent 32% 68%, var(--danger) 68%); }
 #hud-hitmarker.head { width: 32px; height: 32px; margin: -16px 0 0 -16px; }
+#hud-hitmarker.shield { width: 20px; height: 20px; margin: -10px 0 0 -10px; }
+#hud-hitmarker.shield::before, #hud-hitmarker.shield::after { background: linear-gradient(#b796ff 0 32%, transparent 32% 68%, #b796ff 68%); }
+#hud-hitmarker.weak::before, #hud-hitmarker.weak::after { background: linear-gradient(var(--sun) 0 32%, transparent 32% 68%, var(--sun) 68%); }
 @keyframes hit { 0% { opacity: 1; transform: scale(0.8); } 100% { opacity: 0; transform: scale(1.15); } }
 #hud-damage { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
 #hud-damage .arc { position: absolute; left: -90px; top: -220px; width: 180px; height: 70px; transform-origin: 90px 220px; transform: rotate(var(--a)); background: radial-gradient(ellipse at 50% 100%, rgba(220, 20, 20, 0.85), rgba(220, 20, 20, 0) 70%); animation: arcfade 0.9s ease-out forwards; }
@@ -269,6 +312,13 @@ body.touch-ui #hud-right #hud-weapon .ammo { order: -1; }
   #hud-compass { top: calc(6px + var(--safe-t)); }
   #hud-objective { top: calc(34px + var(--safe-t)); max-width: 46vw; }
   #hud-zone { display: none; }
+  #hud-quest { top: calc(64px + var(--safe-t)); width: 46vw; padding: 5px 8px 6px; }
+  #hud-quest li { font-size: 12px; }
+  #hud-quest li .hint { display: none; }
+  #hud-quest li.active .hint { display: block; }
+  #hud-boss { top: calc(30px + var(--safe-t)); width: 58vw; }
+  #hud-boss:not([hidden]) ~ #hud-quest { top: calc(124px + var(--safe-t)); }
+  #hud-radio { bottom: calc(110px + var(--safe-b)); }
   .go-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .menu-col { gap: 14px; }
   .brand { margin-top: 0; }

@@ -27,7 +27,7 @@ function weighted(list) {
   return list[list.length - 1][0];
 }
 
-class Interactable {
+export class Interactable {
   constructor(game, pos, radius = 2.0) {
     this.game = game;
     this.pos = pos;
@@ -676,6 +676,7 @@ export class Interactables {
     this.list.push(this.printer);
     this.forge = new Forge(game, map.UPGRADE_STATION);
     this.list.push(this.forge);
+    if (game.daybreak) for (const i of game.daybreak.interactables) this.list.push(i);
     this.current = null;
     this.prompt = null;
     this.time = 0;

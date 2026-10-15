@@ -25,7 +25,7 @@ function boneWorld(bone, out, lx = 0, ly = 0, lz = 0) {
   return out.set(lx, ly, lz).applyMatrix4(bone.matrixWorld);
 }
 
-function raySphere(o, d, c, r) {
+export function raySphere(o, d, c, r) {
   const ox = o.x - c.x;
   const oy = o.y - c.y;
   const oz = o.z - c.z;
@@ -37,7 +37,7 @@ function raySphere(o, d, c, r) {
   return t >= 0 ? t : cc < 0 ? 0 : -1;
 }
 
-function rayCapsule(o, d, a, b, r) {
+export function rayCapsule(o, d, a, b, r) {
   const vx = b.x - a.x;
   const vy = b.y - a.y;
   const vz = b.z - a.z;
@@ -160,6 +160,7 @@ class Zombie {
     this.voice = null;
     this.climb = null;
     this.leap = null;
+    this.minion = !!opts.minion; // summoned by the Nightwarden, not part of the round's count
     const y = mgr.world.physics.groundHeight(sp.x, sp.z, 0.3, 100);
     this.ch.x = sp.x + rand(-0.3, 0.3);
     this.ch.z = sp.z + rand(-0.3, 0.3);
@@ -712,6 +713,8 @@ export class ZombieManager {
     this.hash = new Map();
     this.behindT = 0;
     this.stepBudget = 6;
+    // big non-pool targets (the Nightwarden, its orbs): same query/damage interface as a zombie
+    this.extra = [];
   }
 
   reset() {
@@ -867,6 +870,11 @@ export class ZombieManager {
       const h = z.raycast(o, d, maxDist);
       if (h) out.push(h);
     }
+    for (const t of this.extra) {
+      if (!t.alive) continue;
+      const h = t.raycast(o, d, maxDist, this.frame);
+      if (h) out.push(h);
+    }
     out.sort((a, b) => a.dist - b.dist);
     return out;
   }
@@ -883,6 +891,7 @@ export class ZombieManager {
       if (!this.world.physics.visible(o.x, o.y, o.z, z.ch.x, z.ch.y + 1.0, z.ch.z)) continue;
       out.push(z);
     }
+    for (const t of this.extra) if (t.alive && t.inCone && t.inCone(o, d, range, cosA)) out.push(t);
     return out;
   }
 
@@ -901,6 +910,17 @@ export class ZombieManager {
       if ((dx * fwd.x + dz * fwd.z) / (d * fl) < 0.45 && d > 0.7) continue;
       best = z;
       bestD = d;
+    }
+    for (const t of this.extra) {
+      if (!t.alive || !t.meleeReach) continue;
+      const dx = t.ch.x - eye.x;
+      const dz = t.ch.z - eye.z;
+      const d = Math.hypot(dx, dz) - t.meleeReach;
+      if (d > bestD) continue;
+      const fl = Math.hypot(fwd.x, fwd.z) || 1;
+      if ((dx * fwd.x + dz * fwd.z) / (Math.max(0.01, d + t.meleeReach) * fl) < 0.3) continue;
+      best = t;
+      bestD = Math.max(0, d);
     }
     return best;
   }
@@ -930,6 +950,22 @@ export class ZombieManager {
         best = { zombie: z, yawErr: -wrapAngle(yawTo - camYaw), pitchErr: pitchTo - camPitch };
       }
     }
+    for (const t of this.extra) {
+      if (!t.alive || !t.aimPoint) continue;
+      const aim = t.aimPoint();
+      if (!aim) continue;
+      const dx = aim.x - cam.position.x;
+      const dy = aim.y - cam.position.y;
+      const dz = aim.z - cam.position.z;
+      const d = Math.hypot(dx, dy, dz);
+      if (d > maxDist) continue;
+      const a = Math.acos(clamp((dx * fwd.x + dy * fwd.y + dz * fwd.z) / d, -1, 1));
+      if (a >= bestA || !this.world.physics.visible(cam.position.x, cam.position.y, cam.position.z, aim.x, aim.y, aim.z)) continue;
+      bestA = a;
+      const yawTo = Math.atan2(-dx, -dz);
+      const camYaw = Math.atan2(-fwd.x, -fwd.z);
+      best = { zombie: t, yawErr: -wrapAngle(yawTo - camYaw), pitchErr: Math.atan2(dy, Math.hypot(dx, dz)) - Math.atan2(fwd.y, Math.hypot(fwd.x, fwd.z)) };
+    }
     return best;
   }
 
@@ -947,11 +983,27 @@ export class ZombieManager {
         ch.z += (dz / d) * push;
       }
     }
+    for (const t of this.extra) {
+      if (!t.alive || !t.solid) continue;
+      const dx = ch.x - t.ch.x;
+      const dz = ch.z - t.ch.z;
+      const d2 = dx * dx + dz * dz;
+      const r = ch.r + t.ch.r;
+      if (d2 < r * r && d2 > 1e-6 && ch.y < t.ch.y + t.ch.h && ch.y + ch.h > t.ch.y) {
+        const d = Math.sqrt(d2);
+        ch.x += (dx / d) * (r - d);
+        ch.z += (dz / d) * (r - d);
+      }
+    }
   }
 
   // ---- damage + death ---------------------------------------------------------------------
   damage(z, amount, info) {
     if (!z.alive) return;
+    if (z.takeDamage) {
+      z.takeDamage(amount, info);
+      return;
+    }
     const game = this.game;
     if (info.source === 'microwave') {
       if (z.cook <= 0) {
@@ -998,7 +1050,7 @@ export class ZombieManager {
   }
 
   kill(z, info, gibbed = false) {
-    if (!z.alive) return;
+    if (!z.alive || z.takeDamage) return;
     const game = this.game;
     z.alive = false;
     z.state = 'dead';
