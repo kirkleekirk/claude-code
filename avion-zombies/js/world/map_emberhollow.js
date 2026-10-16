@@ -508,7 +508,7 @@ export const LIGHTING = {
     return 'plaza';
   },
   waveFrom: { x: 66, z: -224 },
-  waveSpeed: 34,
+  waveSpeed: 45,
   fog: 0x07080a,
   // fill light thrown back off the lit rock
   bounce: { k: 3.5, rho: 0.7, passes: 240, cap: 4, tint: 0xd8c7b0 },
