@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Avion Exo Zombies</title>
+<meta name="description" content="Round-based exo-suit zombie survival at an Avion black site in the Pacific Northwest.">
+<meta name="theme-color" content="#0d0f11">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700&family=Share+Tech+Mono&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="game" tabindex="0" aria-label="Game view"></canvas>
+
+<!-- ========================= HUD ========================= -->
+<div id="hud" hidden>
+  <div id="hud-compass" aria-hidden="true"><div class="strip"></div><div class="tick"></div></div>
+  <div id="hud-objective"><span class="label">Objective</span><span class="text"></span></div>
+  <div id="hud-zone"></div>
+  <div id="hud-boss" hidden>
+    <div class="name">The Nightwarden</div>
+    <div class="bar"><i class="lag"></i><i class="hp"></i></div>
+    <div class="state"></div>
+    <div class="day"><span class="label">Daybreak</span><div class="dbar"><i></i></div><span class="val"></span></div>
+  </div>
+  <div id="hud-quest" hidden><div class="title">Project Daybreak</div><ol></ol></div>
+  <div id="hud-radio" hidden><span class="who"></span><span class="line"></span></div>
+  <div id="hud-victory" hidden><div class="kicker">Project Daybreak complete</div><div class="title">The night is over</div><div class="sub"></div></div>
+  <div id="hud-crosshair"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i><b></b></div>
+  <div id="hud-hitmarker"></div>
+  <div id="hud-damage"></div>
+  <div id="hud-prompt" hidden><div class="row"><span class="key"></span><span class="text"></span><span class="cost"></span></div><div class="sub"></div></div>
+  <div id="hud-message"><div class="title"></div><div class="sub"></div></div>
+  <div id="hud-banner"></div>
+  <div id="hud-powerups"></div>
+  <div id="hud-left">
+    <div id="hud-perks"></div>
+    <div id="hud-points"><span class="value">500</span><div class="pops"></div></div>
+    <div id="hud-round"><span class="num"></span></div>
+  </div>
+  <div id="hud-right">
+    <div id="hud-exo" class="off"><span class="label">EXO</span><div class="pips"><i></i><i></i></div><span class="status">NO SUIT</span></div>
+    <div id="hud-equip"><span class="frag"></span><span class="lure"></span></div>
+    <div id="hud-weapon" data-t-swap><div class="name"></div><div class="level"></div><div class="ammo"><span class="mag"></span><span class="reserve"></span></div></div>
+  </div>
+  <div id="hud-down" hidden><div class="title">DOWN</div><div class="bar"><i></i></div><div class="sub">Exo Medic auto-injector engaged</div></div>
+  <div id="hud-scope" hidden><div class="ret"></div><div class="chev"></div></div>
+  <div id="hud-stats" hidden></div>
+  <div id="hud-fps" hidden></div>
+</div>
+
+<!-- ========================= TOUCH ========================= -->
+<div id="touch" hidden>
+  <div class="stick"><div class="knob"></div></div>
+  <button class="tb pause" data-t="pause" aria-label="Pause">II</button>
+  <button class="tb fire" data-t="fire" aria-label="Fire">FIRE</button>
+  <button class="tb ads" data-t="ads" aria-label="Aim">AIM</button>
+  <button class="tb jump" data-t="jump" aria-label="Jump">JUMP</button>
+  <button class="tb crouch" data-t="crouch" aria-label="Crouch, slide or slam">DUCK</button>
+  <button class="tb dodge" data-t="dodge" aria-label="Boost dodge">DASH</button>
+  <button class="tb reload" data-t="reload" aria-label="Reload">RLD</button>
+  <button class="tb melee" data-t="melee" aria-label="Melee">MELEE</button>
+  <button class="tb nade" data-t="lethal" aria-label="Throw grenade">NADE</button>
+  <button class="tb swap" data-t="swap" aria-label="Switch weapon">SWAP</button>
+  <button class="tb lure" data-t="tactical" aria-label="Throw lure drone" hidden>LURE</button>
+  <button class="tb use" data-t="interact" aria-label="Use" hidden>USE</button>
+</div>
+
+<!-- ========================= SCREENS ========================= -->
+<section class="screen boot" data-screen="boot">
+  <div class="boot-inner">
+    <svg class="emblem" viewBox="-70 -55 140 110" aria-hidden="true"><path d="M0 -48 L14 -14 L60 -26 L22 6 L0 46 L-22 6 L-60 -26 L-14 -14 Z M0 -18 L-8 2 L0 18 L8 2 Z" fill-rule="evenodd"/></svg>
+    <div class="wordmark">AVION</div>
+    <div id="boot-bar" class="bar"><i></i></div>
+    <div id="boot-status" class="status">Loading</div>
+  </div>
+</section>
+
+<section class="screen title" data-screen="title" hidden>
+  <div class="title-inner">
+    <svg class="emblem" viewBox="-70 -55 140 110" aria-hidden="true"><path d="M0 -48 L14 -14 L60 -26 L22 6 L0 46 L-22 6 L-60 -26 L-14 -14 Z M0 -18 L-8 2 L0 18 L8 2 Z" fill-rule="evenodd"/></svg>
+    <h1 class="logo">AVION</h1>
+    <div class="logo-sub">E X O &nbsp; Z O M B I E S</div>
+    <div class="press">Press any key or tap to begin</div>
+    <div class="hint">Headphones recommended</div>
+  </div>
+</section>
+
+<section class="screen menu" data-screen="main" hidden>
+  <div class="menu-col">
+    <header class="brand">
+      <svg class="emblem" viewBox="-70 -55 140 110" aria-hidden="true"><path d="M0 -48 L14 -14 L60 -26 L22 6 L0 46 L-22 6 L-60 -26 L-14 -14 Z M0 -18 L-8 2 L0 18 L8 2 Z" fill-rule="evenodd"/></svg>
+      <div><div class="logo">AVION</div><div class="logo-sub">EXO ZOMBIES</div></div>
+    </header>
+    <nav class="items">
+      <button class="mi" data-action="solo" data-desc="Pick a map and hold out alone.">Solo</button>
+      <button class="mi" data-action="options" data-desc="Audio, controls and graphics.">Options</button>
+      <button class="mi" data-action="controls" data-desc="Keyboard, controller and touch layouts.">Controls</button>
+      <button class="mi" data-action="credits" data-desc="Who made the sounds, models and music.">Credits</button>
+      <button class="mi" data-action="fullscreen" data-desc="Toggle fullscreen.">Fullscreen</button>
+    </nav>
+    <p class="desc"></p>
+    <footer class="menu-foot"><span id="menu-map">RAINSHADOW • OLYMPIC PENINSULA</span><span id="menu-best"></span></footer>
+  </div>
+</section>
+
+<section class="screen menu" data-screen="mapselect" hidden>
+  <div class="menu-col wide">
+    <header class="screen-head"><span class="kicker">Solo</span><h2>Select map</h2></header>
+    <div class="map-cards">
+      <article class="map-card" data-map="rainshadow">
+        <div class="coords">47.97°N &nbsp;123.49°W &nbsp;•&nbsp; ELEV 5,242 FT</div>
+        <h3>RAINSHADOW</h3>
+        <p>Avion's exo-suit test site, deep in the Olympic forest. The program went dark at sunset. Find an exo suit, get the power back, and hold out as dusk turns to night.</p>
+        <ul><li>Exo Armory</li><li>6 Exo upgrades</li><li>3D printer</li><li>Weapon Forge</li></ul>
+        <div class="best" data-best="rainshadow"></div>
+        <nav class="items row">
+          <button class="mi primary" data-action="start" data-map="rainshadow">Start match</button>
+          <button class="mi" data-action="freeroam" data-map="rainshadow">Free roam</button>
+        </nav>
+      </article>
+      <article class="map-card" data-map="emberhollow">
+        <div class="coords">46.18°N &nbsp;121.62°W &nbsp;•&nbsp; DEPTH 310 FT</div>
+        <h3>EMBER HOLLOW</h3>
+        <p>Daybreak traced the Nightwarden's power to a 1930s tourist cave in the Cascades, Avion's front for the CALDERA thermal reactor far below. Throw the surface breakers, take the tour, and keep going down.</p>
+        <ul><li>Area power switches</li><li>Show cave</li><li>Deep caverns</li><li>Thermal reactor</li></ul>
+        <div class="best" data-best="emberhollow"></div>
+        <nav class="items row">
+          <button class="mi primary" data-action="start" data-map="emberhollow">Start match</button>
+          <button class="mi" data-action="freeroam" data-map="emberhollow">Free roam</button>
+        </nav>
+      </article>
+    </div>
+    <nav class="items">
+      <button class="mi" data-action="back">Back</button>
+    </nav>
+  </div>
+</section>
+
+<section class="screen menu" data-screen="options" hidden>
+  <div class="menu-col wide">
+    <header class="screen-head"><span class="kicker">Settings</span><h2>Options</h2></header>
+    <div id="options-list" class="options-list"></div>
+    <nav class="items row">
+      <button class="mi" data-action="reset-settings">Reset to defaults</button>
+      <button class="mi" data-action="back">Back</button>
+    </nav>
+    <p class="fine">Tree and fern density follow the quality setting after a reload.</p>
+  </div>
+</section>
+
+<section class="screen menu" data-screen="controls" hidden>
+  <div class="menu-col wide">
+    <header class="screen-head"><span class="kicker">Reference</span><h2>Controls</h2></header>
+    <div class="controls-grid">
+      <div>
+        <h3>Keyboard &amp; mouse</h3>
+        <dl>
+          <dt>Move</dt><dd>W A S D</dd>
+          <dt>Look / fire / aim</dt><dd>Mouse • Left click • Right click</dd>
+          <dt>Jump • Boost jump</dt><dd>Space • Space in the air</dd>
+          <dt>Sprint</dt><dd>Shift</dd>
+          <dt>Boost dodge</dt><dd>X or Alt • Shift in the air</dd>
+          <dt>Crouch • Slide • Exo slam</dt><dd>C • C while sprinting • C in the air</dd>
+          <dt>Reload • Use</dt><dd>R • F</dd>
+          <dt>Melee</dt><dd>V • Mouse 3</dd>
+          <dt>Frag • Lure drone</dt><dd>E or G • Q</dd>
+          <dt>Switch weapon</dt><dd>1 / 2 • Mouse wheel</dd>
+          <dt>Stats • Pause</dt><dd>Tab • Esc</dd>
+        </dl>
+      </div>
+      <div>
+        <h3>Controller</h3>
+        <dl>
+          <dt>Move • Look</dt><dd>Left stick • Right stick</dd>
+          <dt>Fire • Aim</dt><dd>RT • LT</dd>
+          <dt>Jump • Boost jump</dt><dd>A • A in the air</dd>
+          <dt>Crouch • Slide • Slam</dt><dd>B</dd>
+          <dt>Boost dodge</dt><dd>LB</dd>
+          <dt>Frag • Lure drone</dt><dd>RB • D-pad left/right</dd>
+          <dt>Reload / Use</dt><dd>X</dd>
+          <dt>Switch weapon</dt><dd>Y</dd>
+          <dt>Sprint • Melee</dt><dd>L3 • R3</dd>
+          <dt>Pause</dt><dd>Start</dd>
+        </dl>
+        <h3>Touch</h3>
+        <p>Drag the left side to move (push far forward to sprint), drag the right side to look. Hold FIRE and slide your thumb to aim while shooting. A USE button appears next to anything you can buy.</p>
+      </div>
+    </div>
+    <nav class="items"><button class="mi" data-action="back">Back</button></nav>
+  </div>
+</section>
+
+<section class="screen menu" data-screen="credits" hidden>
+  <div class="menu-col wide">
+    <header class="screen-head"><span class="kicker">Thanks</span><h2>Credits</h2></header>
+    <div class="credits">
+      <p><b>Gunfire, reloads &amp; handling</b> — <i>Snake's Authentic Gun Sounds</i> and <i>Snake's SECOND Authentic Gun Sounds</i>, F8 Studios.</p>
+      <p><b>Zombie voices &amp; foley</b> — <i>Call of Duty: World at War</i> Nazi Zombies sound set © Activision / Treyarch, used here in a non-commercial fan project.</p>
+      <p><b>Zombie bodies</b> — Avatar crowd models from <i>Kinect Adventures!</i> (Xbox 360) © Microsoft, re-textured and animated procedurally.</p>
+      <p><b>Main menu theme</b> — supplied by the project's creator.</p>
+      <p><b>Inspiration</b> — <i>Call of Duty: Advanced Warfare</i> Exo Zombies and <i>Call of Duty: Ghosts</i>. Avion and Rainshadow are fictional.</p>
+      <p><b>Engine</b> — three.js r170 (MIT). Fonts: Barlow Condensed, Share Tech Mono (SIL OFL). Everything else is generated in code.</p>
+    </div>
+    <nav class="items"><button class="mi" data-action="back">Back</button></nav>
+  </div>
+</section>
+
+<section class="screen pause" data-screen="pause" hidden>
+  <div class="menu-col">
+    <header class="screen-head"><span class="kicker">Paused</span><h2>RAINSHADOW</h2><div id="pause-stats" class="pause-stats"></div></header>
+    <nav class="items">
+      <button class="mi" data-action="resume">Resume</button>
+      <button class="mi" data-action="options">Options</button>
+      <button class="mi" data-action="controls">Controls</button>
+      <button class="mi danger" data-action="quit">End game</button>
+    </nav>
+  </div>
+</section>
+
+<section class="screen intro" data-screen="intro" hidden>
+  <div id="intro-lines" class="intro-lines"></div>
+  <div class="skip">Press any key to skip</div>
+</section>
+
+<section class="screen gameover" data-screen="gameover" hidden>
+  <div class="go-inner">
+    <h2>GAME OVER</h2>
+    <div id="go-round" class="go-round"></div>
+    <div id="go-record" class="go-record"></div>
+    <dl id="go-stats" class="go-stats"></dl>
+    <nav class="items row">
+      <button class="mi primary" data-action="retry">Play again</button>
+      <button class="mi" data-action="quit">Main menu</button>
+    </nav>
+  </div>
+</section>
+
+<noscript><p style="color:#eee;font:16px sans-serif;padding:24px">Avion Exo Zombies needs JavaScript and WebGL 2.</p></noscript>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
