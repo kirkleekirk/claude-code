@@ -285,6 +285,26 @@ export class World {
     return false;
   }
 
+  // Is point p in view from the camera? Rock, walls and closed doors block it.
+  _inView(cam, p) {
+    const dx = p.x - cam.x;
+    const dy = p.y - cam.y;
+    const dz = p.z - cam.z;
+    const d = Math.hypot(dx, dy, dz);
+    const cave = this.cave;
+    const n = Math.ceil(d / 0.6);
+    for (let s = 1; s < n; s++) {
+      const t = s / n;
+      const x = cam.x + dx * t;
+      const y = cam.y + dy * t;
+      const z = cam.z + dz * t;
+      if (cave && cave.inExtent(x, z)) {
+        if (cave.sdfBase(x, y, z) < -0.1) return false;
+      } else if (y < this.terrain.surfaceAt(x, z) - 0.15) return false;
+    }
+    return !this.physics.raycast(cam.x, cam.y, cam.z, dx / d, dy / d, dz / d, d - 0.25, { noTerrain: true, filter: (c) => c.opaque || !!c.door });
+  }
+
   async _bakeLight(progress) {
     const MAP = this.map;
     const L = MAP.LIGHTING;
@@ -865,8 +885,10 @@ export class World {
     this.lightTimer -= dt;
     if (this.lightTimer <= 0) {
       this.lightTimer = 0.3;
-      const anchors = this.builder.lightAnchors.filter((a) => this.anchorActive(a));
-      anchors.sort((a, b) => ((a.x - camPos.x) ** 2 + (a.z - camPos.z) ** 2) - ((b.x - camPos.x) ** 2 + (b.z - camPos.z) ** 2));
+      const seen = (a) => (a.x - camPos.x) ** 2 + (a.z - camPos.z) ** 2 < (a.distance + 15) ** 2 && a.seen.some((p) => this._inView(camPos, p));
+      const anchors = this.builder.lightAnchors.filter((a) => this.anchorActive(a) && (!a.seen || seen(a)));
+      const key = (a) => ((a.x - camPos.x) ** 2 + (a.z - camPos.z) ** 2) * (a.priority ? 0.01 : 1);
+      anchors.sort((a, b) => key(a) - key(b));
       this.lightPool.forEach((slot, i) => {
         slot.anchor = anchors[i] || null;
         if (slot.anchor) {

@@ -227,9 +227,12 @@ export class Builder {
     // mesh: false for a light with no visible fitting (a glow from somewhere off-screen)
     if (o.mesh !== false) this.regionGroup(this.region).add(mesh);
     // circuit: lit only once that circuit has power (emergency lamps: only until it has)
+    // seen: {x,y,z} or a list: the lamp is only used while one of them is in view (real lights
+    // shine straight through rock, so a glow behind it would leak out); priority: takes a pool slot
+    // ahead of nearer lamps
     const anchor = {
       x, y: y - 0.3, z, color: new THREE.Color(color), intensity: o.intensity ?? 18, distance: o.distance ?? 14,
-      flicker: o.flicker || 0, breathe: o.breathe || 0, circuit: o.circuit ?? (o.needsPower ? 'main' : null), emergency: !!o.emergency,
+      flicker: o.flicker || 0, breathe: o.breathe || 0, seen: o.seen ? [].concat(o.seen) : null, priority: !!o.priority, circuit: o.circuit ?? (o.needsPower ? 'main' : null), emergency: !!o.emergency,
       dimUnpowered: !!o.dimUnpowered, zone: o.zone ?? -1, mesh, mat, baseColor: mat.color.clone(),
     };
     this.lightAnchors.push(anchor);

@@ -7,7 +7,7 @@ import { buildCliff, cliffHoles } from './eh_cliff.js';
 
 // The cave entrance plaza: flagstone paving on retaining walls, the 1931 stone portal of the
 // show cave, the old tour exit that Avion sealed behind concrete, the ticket booth (breaker on
-// its side), the tour shelter, interpretive signs, and the stairs down to the lodge trail and
+// its back), the tour shelter, interpretive signs, and the stairs down to the lodge trail and
 // the gem mine.
 const Y = PLAZA_Y;
 export const BOOTH = { x: -9.0, z: -15.2, w: 2.8, d: 2.3 };
@@ -75,7 +75,7 @@ export function buildPlaza(S) {
   avionPortal(S);
   buildCliff(S, cliffHoles);
 
-  // ---- ticket booth (the entrance breaker is on its west side) --------------------------------
+  // ---- ticket booth (the entrance breaker is on its back wall) --------------------------------
   {
     const { x, z, w, d } = BOOTH;
     B.box(x, Y, z, w, 1.0, d, { mat: X.stoneOut, uv: 3, walkable: false });

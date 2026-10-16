@@ -93,13 +93,15 @@ export function buildReactor(S, K) {
       for (const hy of [0.55, 1.05]) B.box((x1 + x2) / 2, R + hy, (z1 + z2) / 2, len, 0.07, 0.07, { mat: X.paintYellow, rot, collide: false });
       B.physics.addBox({ x: (x1 + x2) / 2, y: R, z: (z1 + z2) / 2, w: len, h: 1.15, d: 0.14, rot, walkable: false, material: 'metal', bullets: false });
     }
-    // the glow comes from the magma whatever the power: real lights at the rim, embers, steam
-    // (below the floor's edge, so they light the dome and the core from beneath, not the floor)
-    for (let k = 0; k < 4; k++) {
-      const a = (k / 4) * Math.PI * 2 + 0.4;
-      B.lamp(px + Math.cos(a) * 8, R - 2.2, pz + Math.sin(a) * 8, { color: 0xff5a18, intensity: 42, distance: 48, breathe: 0.3, glow: false, mesh: false });
+    // the glow comes from the magma whatever the power: real lights at the rim, embers, steam.
+    // The lights sit below the floor's edge, so they light the dome and the core from beneath but
+    // not the floor. They only shine while the pit is in view (otherwise they would light the
+    // river tunnel through the rock), and they take pool slots ahead of nearer small lamps.
+    const seen = [{ x: px, y: R + 3, z: pz }, { x: px, y: R + 14, z: pz }];
+    for (let k = 0; k < 3; k++) {
+      const a = (k / 3) * Math.PI * 2 + 0.4;
+      B.lamp(px + Math.cos(a) * 7, R - 2.2, pz + Math.sin(a) * 7, { color: 0xff5a18, intensity: 72, distance: 34, breathe: 0.3, seen, priority: true, glow: false, mesh: false });
     }
-    B.lamp(px, PIT.lava + 6, pz, { color: 0xff7a28, intensity: 26, distance: 36, breathe: 0.25, glow: false, mesh: false });
     for (let k = 0; k < 6; k++) {
       const a = (k / 6) * Math.PI * 2;
       fx.embers.push({ x: px + Math.cos(a) * 6, y: PIT.lava + 1, z: pz + Math.sin(a) * 6, r: 5 });
@@ -256,13 +258,30 @@ export function buildReactor(S, K) {
     B.box(bx, R + 6, bz - 0.15, 9.6, 2.1, 0.12, { mat: M.steelDark, collide: false });
     B.sign(bx, R + 7.05, bz - 0.06, 0, banner, 9.2, 1.8);
     for (const s of [-1, 1]) B.box(bx + s * 4.6, R, bz - 0.2, 0.18, 8.1, 0.18, { mat: M.steelDark, walkable: false });
+    // a light tower over the Weapon Forge
+    {
+      const lx = 63.4;
+      const lz = -213.1;
+      const y = F(lx, lz);
+      B.box(lx, y, lz, 0.9, 0.5, 0.9, { mat: X.paintYellow, walkable: true, uv: 1 });
+      B.cylinder(lx, y + 0.5, lz, 0.08, 4.2, { mat: M.steelDark, seg: 8, collide: false });
+      B.physics.addCylinder({ x: lx, z: lz, r: 0.2, y0: y, y1: y + 4.8, walkable: false, material: 'metal' });
+      const dir = new THREE.Vector3(64.5 - lx, R + 1.0 - (y + 4.6), -209.5 - lz).normalize();
+      const yaw = Math.atan2(dir.x, dir.z);
+      B.box(lx, y + 4.45, lz, 0.6, 0.36, 0.4, { mat: M.black, rot: yaw, collide: false });
+      B.bakedLamp(lx + dir.x * 0.25, y + 4.6 + dir.y * 0.25, lz + dir.z * 0.25, {
+        color: 0xfff0dc, intensity: 45, range: 16, circuit: 'reactor', glow: 1.0, rot: yaw, tilt: -Math.asin(dir.y),
+        fitting: new THREE.BoxGeometry(0.5, 0.04, 0.3), bright: 5, spot: { dir, angle: 0.8, penumbra: 0.5 },
+      });
+      K.reserve(lx, lz, 1.0);
+    }
     // a lamp over the lift's landing
     const ax = CAL.alcove.x;
     const az = CAL.alcove.z - 0.5;
     B.box(ax, R + 3.66, az, 0.6, 0.1, 0.32, { mat: M.steelDark, collide: false, cast: false });
     B.bakedLamp(ax, R + 3.6, az - 0.05, {
-      color: 0xffe4c0, intensity: 10, range: 10, circuit: 'reactor', glow: 0.6, fitting: new THREE.BoxGeometry(0.5, 0.03, 0.24), bright: 4,
-      spot: { dir: new THREE.Vector3(0, -1, -0.45), angle: 1.15, penumbra: 0.5 },
+      color: 0xffe4c0, intensity: 30, range: 12, circuit: 'reactor', glow: 0.6, fitting: new THREE.BoxGeometry(0.5, 0.03, 0.24), bright: 4,
+      spot: { dir: new THREE.Vector3(0, -1, -0.45), angle: 1.3, penumbra: 0.5 },
     });
     const lift = signTex([{ text: '↑ SERVICE LIFT', size: 64 }, { text: 'SURFACE • VISITOR CENTER', size: 30, weight: 600 }], { w: 512, h: 150, bg: '#1d2226', fg: '#e8e4d8' });
     K.board(CAL.alcove.x - 3.6, CAL.alcove.z - 5.4, 0.15, lift, 1.6, 0.47, { post: 1.7, boardMat: M.steelDark, postMat: M.steelDark });

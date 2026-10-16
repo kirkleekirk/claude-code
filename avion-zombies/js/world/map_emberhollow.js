@@ -482,7 +482,7 @@ export const LIGHTING = {
     // under the porch roof
     if (x > PORCH.x0 - 0.5 && x < PORCH.x1 + 0.5 && z > PORCH.z0 && z < PORCH.z1) return [0.72, 1];
     // inside the Kestrel's cabin
-    if (inKestrel(x, z)) return [0.22, 1];
+    if (inKestrel(x, z)) return [0.08, 0.6];
     return [1, 1];
   },
   // the lamp layers inside the lodge run from its raised floor to its ceiling
@@ -517,7 +517,7 @@ export const LIGHTING = {
   ambient: 0x0b0c0e,
   exposure: 2.0,
   headLight: 28,
-  headLightBelow: 0.3,
+  headLightBelow: 0.2,
   deepAt: 70,
 };
 
