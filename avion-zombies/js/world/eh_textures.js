@@ -235,8 +235,8 @@ export function ehMaterials(M) {
   X.calciteDry = std({ vertexColors: true, roughness: 0.75, metalness: 0 });
   X.calciteDouble = std({ vertexColors: true, roughness: 0.4, metalness: 0, side: THREE.DoubleSide });
   X.lake = std({ color: 0x04080a, roughness: 0.03, metalness: 0.3 });
-  // selenite: milky, glassy, catching any light going (a faint cold glow keeps it readable)
-  X.crystal = std({ vertexColors: true, color: 0xf4f8ff, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.62, emissive: 0x8fa4b0, emissiveIntensity: 0.22, depthWrite: false, side: THREE.DoubleSide });
+  // selenite: milky and faceted, with a faint cold glow that keeps it readable in the dark
+  X.crystal = std({ vertexColors: true, color: 0xfaf6ee, roughness: 0.12, metalness: 0, transparent: true, opacity: 0.7, emissive: 0x9aa6ac, emissiveIntensity: 0.12, depthWrite: false, side: THREE.DoubleSide, flatShading: true });
   X.water = std({ color: 0x0c1418, roughness: 0.04, metalness: 0.1, transparent: true, opacity: 0.88, depthWrite: false });
   X.hotWater = std({ color: 0x1d7c84, roughness: 0.05, metalness: 0.0, transparent: true, opacity: 0.78, emissive: 0x0c3a3e, emissiveIntensity: 0.5, depthWrite: false });
   X.lava = basic({ color: new THREE.Color(4.2, 1.1, 0.25) });

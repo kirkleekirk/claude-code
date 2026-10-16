@@ -100,6 +100,8 @@ export function buildDeep(S, K) {
     tripodLight(S, K, -145.2, -178.4, [-152, -37, -184], 0xfff0d8, 70, 18);
     tripodLight(S, K, -139.0, -169.0, [-138, -30, -160], 0x9ff0ff, 55, 18);
     tripodLight(S, K, -150.4, -176.0, [-158, -34, -172], 0xd8ecff, 60, 18);
+    // and more turned on the walls, so the surveyors could see the vault
+    K.washers(-142, -174, 8, { a0: 0.9, max: 24, colors: [0xe8f2ff, 0xfff0d8], intensity: 70, range: 24, pathClear: 2.2, fixture: (x, z, t, c, i, r) => tripodLight(S, K, x, z, t, c, i, r) });
     cableOnFloor(S, K, DEEP.boardwalk, -1.25);
     K.emergency(-131.0, F(-131.0, -171.6) + 0.35, -171.6, 0xffa040);
     K.scatter(70, K.inEllipse(-142, -174, 18, 15, 0.4), { seed: 52, clear: 0, kind: () => 'tite', titeL: 1.6 });

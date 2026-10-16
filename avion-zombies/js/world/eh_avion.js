@@ -75,7 +75,7 @@ export function buildAvion(S, K) {
     K.board(-80.2, L.z0 + 1.1, 0, safety, 1.6, 0.8, { post: 1.2, boardMat: M.steelDark, postMat: M.steelDark });
     const lh = signTex([{ text: 'LAMP HOUSE', size: 76 }, { text: 'CHECK OUT YOUR LAMP • CHECK IN YOUR TAG', size: 26, weight: 600 }], { w: 512, h: 170, bg: '#1d2226', fg: '#e8e4d8' });
     B.sign(-70.0, y + 3.2, -88.6, -Math.PI / 2, lh, 2.2, 0.73);
-    for (const [x, z] of [[-86, -90], [-77, -90], [-86, -82], [-77, -82]]) K.strip(x, z, 0, { intensity: 13, range: 11 });
+    for (const [x, z] of [[-86, -90], [-77, -90], [-86, -82], [-77, -82]]) K.strip(x, z, 0, { intensity: 22, range: 12 });
     K.emergency(-70.3, y + 2.6, -82.6, amber);
     for (const [x, z] of [[-86, -86], [-75, -92]]) B.box(x, y - 0.01, z, 0.8, 0.04, 0.55, { mat: X.grate, collide: false, cast: false });
   }
@@ -99,11 +99,34 @@ export function buildAvion(S, K) {
       }
     }
     // a man-car left at the bottom of the decline
+    // (open tub with two benches under a rockfall canopy, on a low frame over its wheels)
     const [cx, cz] = K.beside(track, 47, 0);
     const y = F(cx, cz);
-    B.box(cx, y + 0.25, cz, 1.1, 1.0, 2.4, { mat: X.paintYellow, walkable: true, rot: 0.06 });
-    B.box(cx, y + 1.25, cz, 1.1, 0.06, 2.4, { mat: M.steelDark, collide: false, rot: 0.06 });
-    for (const dz of [-0.8, 0.8]) for (const s of [-1, 1]) B.cylinder(cx + s * 0.45, y, cz + dz, 0.2, 0.08, { mat: M.black, horizontal: true, rot: 0, seg: 10, collide: false });
+    const rot = 0.06;
+    const c = Math.cos(rot);
+    const sn = Math.sin(rot);
+    const at = (lx, lz) => [cx + lx * c + lz * sn, cz - lx * sn + lz * c];
+    const part = (lx, ly, lz, w, h, d, mat) => {
+      const [x, z] = at(lx, lz);
+      B.box(x, y + ly, z, w, h, d, { mat, rot, collide: false, uv: 1 });
+    };
+    part(0, 0.2, 0, 1.2, 0.22, 2.6, M.steelDark);
+    part(0, 0.42, 0, 1.1, 0.05, 2.4, X.grate);
+    for (const s of [-1, 1]) {
+      part(s * 0.56, 0.42, 0, 0.06, 0.55, 2.4, X.paintYellow);
+      part(0, 0.42, s * 1.2, 1.18, 0.55, 0.06, X.paintYellow);
+      part(0, 0.7, s * 0.55, 1.0, 0.08, 0.42, M.black);
+      part(0, 0.78, s * 0.78, 1.0, 0.42, 0.06, M.black);
+      part(0, 0.18, s * 1.34, 1.2, 0.16, 0.1, M.hazard);
+      for (const t of [-1, 1]) part(s * 0.52, 0.97, t * 1.12, 0.06, 1.1, 0.06, M.steelDark);
+    }
+    part(0, 2.07, 0, 1.3, 0.06, 2.6, X.paintYellow);
+    B.physics.addBox({ x: cx, y: y + 0.2, z: cz, w: 1.2, h: 0.77, d: 2.6, rot, walkable: true, material: 'metal' });
+    B.physics.addBox({ x: cx, y: y + 2.05, z: cz, w: 1.3, h: 0.1, d: 2.6, rot, walkable: true, material: 'metal' });
+    for (const dz of [-0.8, 0.8]) for (const s of [-1, 1]) {
+      const [x, z] = at(s * 0.45, dz);
+      B.cylinder(x, y, z, 0.2, 0.08, { mat: M.black, horizontal: true, rot, seg: 10, collide: false });
+    }
   }
   wallEmergency(K, -84.5, -108, -1);
   wallEmergency(K, -86.6, -134, -1);

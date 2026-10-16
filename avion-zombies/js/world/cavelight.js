@@ -308,14 +308,16 @@ export class LightVolume {
       if (tick && (li & 3) === 0) await tick(li / this.lights.length);
     }
     this.sh = sh;
-    if (this.fns.solid) this._dilate();
+    if (this.fns.solid) {
+      this.solid = this._solidMask();
+      if (this.fns.bounce) this._bounce(this.fns.bounce);
+      this._dilate();
+    }
     this._buildTextures();
   }
 
-  // Samples buried in rock got no light; give them their open neighbours' average so the
-  // trilinear blend doesn't darken the walls next to them.
-  _dilate() {
-    const { nx, nz, layers, sh } = this;
+  _solidMask() {
+    const { nx, nz, layers } = this;
     const solid = new Uint8Array(nx * nz * layers);
     for (let k = 0; k < layers; k++) {
       for (let j = 0; j < nz; j++) {
@@ -326,8 +328,107 @@ export class LightVolume {
         }
       }
     }
+    return solid;
+  }
+
+  // Bounce light. Floods only light what they point at, but in a real cave the rock they hit
+  // throws a soft fill over everything around it. Spread the baked light through the open cave
+  // (rock keeps it in its chamber) and add it back as an even fill.
+  // b: { at(x,z) -> bool (columns that take part), k: strength, rho: share the rock throws back,
+  //      passes, tint: THREE.Color, cap }
+  _bounce(b) {
+    const { nx, nz, layers, sh, solid } = this;
+    const N = nx * nz * layers;
+    const open = new Uint8Array(N);
+    for (let j = 0; j < nz; j++) {
+      for (let i = 0; i < nx; i++) {
+        if (!b.at(this.minX + i * this.res, this.minZ + j * this.res)) continue;
+        for (let k = 0; k < layers; k++) {
+          const s = (k * nz + j) * nx + i;
+          if (!solid[s]) open[s] = 1;
+        }
+      }
+    }
+    // the glow right next to a lamp is no brighter a source than the rock it lights
+    const cap = b.cap ?? 4;
+    const ids = [];
+    for (let s = 0; s < N; s++) if (open[s]) ids.push(s);
+    const M = ids.length;
+    const slot = new Int32Array(N).fill(-1);
+    for (let m = 0; m < M; m++) slot[ids[m]] = m;
+    // open neighbours of each open sample (-1: rock or off the grid, which reflects)
+    const nb = new Int32Array(M * 6).fill(-1);
+    for (let m = 0; m < M; m++) {
+      const s = ids[m];
+      const i = s % nx;
+      const j = Math.floor(s / nx) % nz;
+      const k = Math.floor(s / (nx * nz));
+      if (i > 0) nb[m * 6] = slot[s - 1];
+      if (i < nx - 1) nb[m * 6 + 1] = slot[s + 1];
+      if (j > 0) nb[m * 6 + 2] = slot[s - nx];
+      if (j < nz - 1) nb[m * 6 + 3] = slot[s + nx];
+      if (k > 0) nb[m * 6 + 4] = slot[s - nx * nz];
+      if (k < layers - 1) nb[m * 6 + 5] = slot[s + nx * nz];
+    }
+    let cur = new Float32Array(M * 3);
+    let nxt = new Float32Array(M * 3);
+    for (let m = 0; m < M; m++) {
+      for (let c = 0; c < 3; c++) cur[m * 3 + c] = Math.min(sh[ids[m] * 12 + c], cap);
+    }
+    // Each pass lets the light take one more step. Rock it runs into soaks up part of it
+    // (rho is what bounces back), so a narrow tunnel loses its light within a few metres while
+    // a big chamber carries it across. The fill is the average over all the steps: sharp near
+    // what is lit, with long soft tails.
+    const passes = b.passes ?? 120;
+    const rho = b.rho ?? 1;
+    const acc = new Float32Array(M * 3);
+    for (let pass = 0; pass < passes; pass++) {
+      for (let m = 0; m < M; m++) {
+        const r0 = cur[m * 3];
+        const g0 = cur[m * 3 + 1];
+        const b0 = cur[m * 3 + 2];
+        let r = r0;
+        let g = g0;
+        let bl = b0;
+        let walls = 0;
+        for (let e = 0; e < 6; e++) {
+          const q = nb[m * 6 + e];
+          if (q < 0) {
+            walls++;
+            continue;
+          }
+          r += cur[q * 3];
+          g += cur[q * 3 + 1];
+          bl += cur[q * 3 + 2];
+        }
+        const back = walls * rho;
+        nxt[m * 3] = (r + r0 * back) / 7;
+        nxt[m * 3 + 1] = (g + g0 * back) / 7;
+        nxt[m * 3 + 2] = (bl + b0 * back) / 7;
+        acc[m * 3] += nxt[m * 3];
+        acc[m * 3 + 1] += nxt[m * 3 + 1];
+        acc[m * 3 + 2] += nxt[m * 3 + 2];
+      }
+      const t = cur;
+      cur = nxt;
+      nxt = t;
+    }
+    for (let m = 0; m < M * 3; m++) cur[m] = acc[m] / passes;
+    const tint = b.tint || new THREE.Color(1, 1, 1);
+    const kk = b.k ?? 0.5;
+    const tc = [tint.r * kk, tint.g * kk, tint.b * kk];
+    for (let m = 0; m < M; m++) {
+      for (let c = 0; c < 3; c++) sh[ids[m] * 12 + c] += cur[m * 3 + c] * tc[c];
+    }
+  }
+
+  // Samples buried in rock got no light; give them their open neighbours' average so the
+  // trilinear blend doesn't darken the walls next to them.
+  _dilate() {
+    const { nx, nz, layers, sh } = this;
+    const solid = this.solid.slice();
     const nb = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
-    for (let pass = 0; pass < 2; pass++) {
+    for (let pass = 0, n = Math.ceil(3 / this.res); pass < n; pass++) {
       const fixed = [];
       for (let k = 0; k < layers; k++) {
         for (let j = 0; j < nz; j++) {

@@ -229,7 +229,7 @@ export class Builder {
     // circuit: lit only once that circuit has power (emergency lamps: only until it has)
     const anchor = {
       x, y: y - 0.3, z, color: new THREE.Color(color), intensity: o.intensity ?? 18, distance: o.distance ?? 14,
-      flicker: o.flicker || 0, circuit: o.circuit ?? (o.needsPower ? 'main' : null), emergency: !!o.emergency,
+      flicker: o.flicker || 0, breathe: o.breathe || 0, circuit: o.circuit ?? (o.needsPower ? 'main' : null), emergency: !!o.emergency,
       dimUnpowered: !!o.dimUnpowered, zone: o.zone ?? -1, mesh, mat, baseColor: mat.color.clone(),
     };
     this.lightAnchors.push(anchor);

@@ -466,14 +466,14 @@ function inKestrel(x, z) {
 
 // ---- baked light ------------------------------------------------------------------------------
 export const LIGHTING = {
-  grid: { minX: -170, minZ: -258, maxX: 92, maxZ: 110, res: 1.5, layers: 6 },
+  grid: { minX: -170, minZ: -258, maxX: 92, maxZ: 110, res: 1.0, layers: 9 },
   // how much open sky reaches a spot: [ambient, sun]
   skyAt(x, z, overCave = z < cliffZ(x) - 0.2) {
     const cz = cliffZ(x);
     if (overCave) {
       // inside a portal tunnel the daylight fades over the first metres
       const nearPortal = Math.min(Math.abs(x - PORTAL_MAIN.x), Math.abs(x - PORTAL_EXIT.x)) < 4;
-      const k = nearPortal ? smoothstep(cz - 14, cz, z) * 0.55 : 0;
+      const k = nearPortal ? smoothstep(cz - 14, cz, z) * 0.42 : 0;
       return [k, 0];
     }
     // the visitor center (a little past its walls, so no daylight leaks in along their feet;
@@ -510,12 +510,14 @@ export const LIGHTING = {
   waveFrom: { x: 66, z: -224 },
   waveSpeed: 34,
   fog: 0x07080a,
-  fogDensity: 0.024,
-  fogGlow: 0.04,
+  // fill light thrown back off the lit rock
+  bounce: { k: 3.5, rho: 0.7, passes: 240, cap: 4, tint: 0xd8c7b0 },
+  fogDensity: 0.014,
+  fogGlow: 0.05,
   ambient: 0x0b0c0e,
   exposure: 2.0,
-  headLight: 38,
-  headLightBelow: 0.4,
+  headLight: 28,
+  headLightBelow: 0.3,
   deepAt: 70,
 };
 

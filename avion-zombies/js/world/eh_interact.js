@@ -214,7 +214,7 @@ function LiftCar(game, Interactable, end, shared) {
   add(new THREE.BoxGeometry(1.0, 0.04, 0.3), lampMat, cx, y + 2.55, cz);
   // the car light joins the world's lamp pool (lit once the reactor is on)
   game.world.builder.lightAnchors.push({
-    x: cx, y: y + 2.3, z: cz, color: new THREE.Color(0xe8f0ff), intensity: 1.8, distance: 5, flicker: 0, circuit: 'reactor',
+    x: cx, y: y + 2.3, z: cz, color: new THREE.Color(0xe8f0ff), intensity: 0.9, distance: 5, flicker: 0, circuit: 'reactor',
     emergency: false, dimUnpowered: false, zone: -1, mesh: null, mat: lampMat, baseColor: lampMat.color.clone(),
   });
   lampMat.color.multiplyScalar(game.world.powered('reactor') ? 1 : 0.04);

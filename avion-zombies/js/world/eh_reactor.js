@@ -14,7 +14,7 @@ export const CAL = {
   core: { x: PIT.x, z: PIT.z, r: 4.2, top: R + 14 },
   turbines: [{ x: 34, z: -240 }, { x: 70, z: -240 }],
   control: { x0: 76, x1: 83.5, z0: -231, z1: -217, floor: R + 0.9 },
-  masts: [[31.5, -217.5], [33.5, -238.5], [54, -248.4], [75.5, -242.5], [72.5, -205.5], [40, -206.5]],
+  masts: [[31.5, -217.5], [33.5, -238.5], [54, -248.4], [75.5, -242.5], [69, -209.5], [40, -206.5]],
   alcove: { x: 54, z: -199.6 },
 };
 
@@ -94,11 +94,12 @@ export function buildReactor(S, K) {
       B.physics.addBox({ x: (x1 + x2) / 2, y: R, z: (z1 + z2) / 2, w: len, h: 1.15, d: 0.14, rot, walkable: false, material: 'metal', bullets: false });
     }
     // the glow comes from the magma whatever the power: real lights at the rim, embers, steam
+    // (below the floor's edge, so they light the dome and the core from beneath, not the floor)
     for (let k = 0; k < 4; k++) {
       const a = (k / 4) * Math.PI * 2 + 0.4;
-      B.lamp(px + Math.cos(a) * 7, R - 3, pz + Math.sin(a) * 7, { color: 0xff5a18, intensity: 16, distance: 30, flicker: 0.18, glow: false, mesh: false });
+      B.lamp(px + Math.cos(a) * 8, R - 2.2, pz + Math.sin(a) * 8, { color: 0xff5a18, intensity: 42, distance: 48, breathe: 0.3, glow: false, mesh: false });
     }
-    B.lamp(px, PIT.lava + 6, pz, { color: 0xff7a28, intensity: 22, distance: 34, flicker: 0.12, glow: false, mesh: false });
+    B.lamp(px, PIT.lava + 6, pz, { color: 0xff7a28, intensity: 26, distance: 36, breathe: 0.25, glow: false, mesh: false });
     for (let k = 0; k < 6; k++) {
       const a = (k / 6) * Math.PI * 2;
       fx.embers.push({ x: px + Math.cos(a) * 6, y: PIT.lava + 1, z: pz + Math.sin(a) * 6, r: 5 });
@@ -206,8 +207,11 @@ export function buildReactor(S, K) {
       if (Math.abs(z - -224) < 1.5) continue;
       fx.screens.push({ x: C.x0 + 0.75, y: C.floor + 1.25, z, rot: Math.PI / 2 });
     }
-    for (const z of [C.z0 + 3, cz, C.z1 - 3]) K.strip(cx + 1.5, z, Math.PI / 2, { intensity: 16, range: 9 });
-    void h;
+    // ceiling lights under the roof (real lamps: the room is too small for the baked light)
+    for (const z of [C.z0 + 3, cz, C.z1 - 3]) {
+      B.box(cx + 1.5, C.floor + h - 0.07, z, 0.24, 0.07, 1.45, { mat: M.steel, collide: false, cast: false });
+      B.lamp(cx + 1.5, C.floor + h - 0.1, z, { color: 0xe8f0ff, intensity: 4, distance: 9, circuit: 'reactor', shape: 'tube', len: 1.3, rot: Math.PI / 2, glowSize: 1.0, bright: 4 });
+    }
   }
 
   // ---- mast lights round the dome, the lift alcove, signs ----------------------------------------------------
@@ -217,6 +221,22 @@ export function buildReactor(S, K) {
     B.cylinder(x, y, z, 0.32, 0.5, { mat: M.concrete, seg: 10 });
     B.cylinder(x, y + 0.5, z, 0.12, mh, { mat: M.steelDark, seg: 8, collide: false });
     B.physics.addCylinder({ x, z, r: 0.34, y0: y, y1: y + mh + 0.5, walkable: false, material: 'metal' });
+    // a third head turned on the dome behind the mast
+    {
+      let ox = x - CAL.core.x;
+      let oz = z - CAL.core.z;
+      const ol = Math.hypot(ox, oz);
+      ox /= ol;
+      oz /= ol;
+      const w = K.toWall(x, z, ox, oz, 20, 0.2) || { x: x + ox * 6, z: z + oz * 6 };
+      const dir = new THREE.Vector3(w.x - x, mh * 0.9, w.z - z).normalize();
+      const yaw = Math.atan2(dir.x, dir.z);
+      B.box(x, y + mh + 0.75, z, 0.6, 0.36, 0.44, { mat: M.black, rot: yaw, collide: false });
+      B.bakedLamp(x + dir.x * 0.3, y + mh + 0.8 + dir.y * 0.3, z + dir.z * 0.3, {
+        color: 0xffd8b0, intensity: 90, range: 28, circuit: 'reactor', glow: 1.2, rot: yaw, tilt: -Math.asin(dir.y),
+        fitting: new THREE.BoxGeometry(0.5, 0.04, 0.34), bright: 6, spot: { dir, angle: 1.05, penumbra: 0.6 },
+      });
+    }
     for (const off of [-0.7, 0.7]) {
       const dir = new THREE.Vector3(CAL.core.x - x, -mh, CAL.core.z - z).normalize();
       const yaw = Math.atan2(dir.x, dir.z);
@@ -236,6 +256,14 @@ export function buildReactor(S, K) {
     B.box(bx, R + 6, bz - 0.15, 9.6, 2.1, 0.12, { mat: M.steelDark, collide: false });
     B.sign(bx, R + 7.05, bz - 0.06, 0, banner, 9.2, 1.8);
     for (const s of [-1, 1]) B.box(bx + s * 4.6, R, bz - 0.2, 0.18, 8.1, 0.18, { mat: M.steelDark, walkable: false });
+    // a lamp over the lift's landing
+    const ax = CAL.alcove.x;
+    const az = CAL.alcove.z - 0.5;
+    B.box(ax, R + 3.66, az, 0.6, 0.1, 0.32, { mat: M.steelDark, collide: false, cast: false });
+    B.bakedLamp(ax, R + 3.6, az - 0.05, {
+      color: 0xffe4c0, intensity: 10, range: 10, circuit: 'reactor', glow: 0.6, fitting: new THREE.BoxGeometry(0.5, 0.03, 0.24), bright: 4,
+      spot: { dir: new THREE.Vector3(0, -1, -0.45), angle: 1.15, penumbra: 0.5 },
+    });
     const lift = signTex([{ text: '↑ SERVICE LIFT', size: 64 }, { text: 'SURFACE • VISITOR CENTER', size: 30, weight: 600 }], { w: 512, h: 150, bg: '#1d2226', fg: '#e8e4d8' });
     K.board(CAL.alcove.x - 3.6, CAL.alcove.z - 5.4, 0.15, lift, 1.6, 0.47, { post: 1.7, boardMat: M.steelDark, postMat: M.steelDark });
   }

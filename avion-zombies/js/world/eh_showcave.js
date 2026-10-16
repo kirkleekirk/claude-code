@@ -94,7 +94,11 @@ export function buildShowCave(S, K) {
   K.scatter(150, K.inEllipse(-10, -72, 26, 19, 0.2), { seed: 11, clear: 0, kind: () => 'tite', titeL: 2.2 });
   K.scatter(36, K.inEllipse(-10, -72, 25, 18, 0.2), { seed: 12, clear: 2.2, minWall: 1.2, kind: (r) => (r() < 0.8 ? 'mite' : 'boulder'), miteH: 2.6 });
   K.scatter(12, K.inEllipse(-10, -72, 26, 19, 0.2), { seed: 13, clear: 2.4, minWall: 0.4, maxWall: 3.0, kind: () => 'flow' });
-  // tour lighting: coloured floods on the formations, path lights, a lift for the dome
+  // tour lighting: floods washing the walls, coloured floods on the formations, path lights
+  K.washers(-10, -72, 16, { max: 32, colors: [0xffd2a0, 0xffc890, 0xffd2a0, 0xffb878, 0xd0e0ff], intensity: 80, range: 26, angle: 0.95 });
+  // uplights on the vault from behind the mound and the shore
+  K.flood(1.2, -73.8, [-4, 17, -80], 0xffe2c0, 120, 28, { angle: 0.85 });
+  K.flood(-20.6, -79.6, [-16, 14, -64], 0xffd8b0, 110, 28, { angle: 0.85 });
   K.flood(-3.6, -65.6, [3.8, 1.6, -70.6], 0xffb468, 90, 22, { angle: 0.55 });
   K.flood(-15.0, -67.8, [-26, MIRROR_LAKE.y, -71], 0x9fd2ff, 55, 20, { angle: 0.75 });
   K.flood(-12.4, -80.6, [-11, 5, -90], 0xffe0b8, 85, 22, { angle: 0.6 });
@@ -167,6 +171,7 @@ export function buildShowCave(S, K) {
   draperyRun(S, K, [[55.2, -88.6], [57.8, -94.2]], 3.6, 42);
   K.scatter(90, K.inEllipse(43, -93, 15, 12, -0.3), { seed: 31, clear: 0, kind: () => 'tite', titeL: 3.0 });
   K.scatter(16, K.inEllipse(43, -93, 14, 11, -0.3), { seed: 32, clear: 2.0, minWall: 1.0, kind: (r) => (r() < 0.75 ? 'mite' : 'boulder'), miteH: 3.2 });
+  K.washers(43, -93, 11, { a0: 0.3, max: 22, colors: [0xffcf98, 0xffcf98, 0xffb070], intensity: 85, range: 26, angle: 0.95 });
   K.flood(43.8, -93.8, [49.4, 9, -97.2], 0xffb060, 140, 30, { angle: 0.42 });
   K.flood(53.6, -91.6, [49.4, 7, -97.2], 0xffc888, 110, 28, { angle: 0.45 });
   K.flood(40.2, -89.2, [43, 18, -95], 0xc8e0ff, 120, 32, { angle: 0.95 });

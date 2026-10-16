@@ -146,11 +146,14 @@ export class Game {
     this._buildCryoSubjects();
     // caves: an exo helmet light that comes on in the dark
     this.headLight = null;
+    this.headFill = null;
     this.caveK = 0;
     this.headK = 0;
     if (this.world.lightVol) {
-      this.headLight = new THREE.SpotLight(0xe8efff, 0, 30, 0.52, 0.65, 1.5);
-      this.mapRoot.add(this.headLight, this.headLight.target);
+      this.headLight = new THREE.SpotLight(0xe8efff, 0, 32, 0.68, 0.85, 1.5);
+      // what the beam throws back off the rock: a dim glow all round
+      this.headFill = new THREE.PointLight(0xc8d2dc, 0, 12, 2);
+      this.mapRoot.add(this.headLight, this.headLight.target, this.headFill);
     }
   }
 
@@ -163,7 +166,15 @@ export class Game {
     const [amb] = L.skyAt(cam.x, cam.z);
     this.caveK = damp(this.caveK, 1 - amb, 1.4, dt);
     const s = W.lightAt(cam.x, cam.y, cam.z, this._camLight || (this._camLight = {}));
-    const lum = s.r * 0.3 + s.g * 0.59 + s.b * 0.11;
+    let lum = s.r * 0.3 + s.g * 0.59 + s.b * 0.11;
+    // the real lamps nearby count too (rooms lit by them aren't dark)
+    for (const slot of W.lightPool) {
+      const l = slot.light;
+      if (!slot.anchor || l.intensity <= 0) continue;
+      const d2 = l.position.distanceToSquared(cam);
+      if (d2 > l.distance * l.distance) continue;
+      lum += (0.25 * l.intensity * (l.color.r * 0.3 + l.color.g * 0.59 + l.color.b * 0.11)) / Math.max(1, d2);
+    }
     this.camLum = lum;
     const want = this.state === 'play' && amb < 0.35 && lum < (L.headLightBelow ?? 0.35) ? 1 : 0;
     this.headK = damp(this.headK, want, want ? 2.5 : 1.2, dt);
@@ -173,8 +184,12 @@ export class Game {
       const fwd = this._hlF || (this._hlF = new THREE.Vector3());
       this.camera.getWorldDirection(fwd);
       hl.position.set(cam.x + fwd.z * 0.15, cam.y + 0.12, cam.z - fwd.x * 0.15);
+      // a head lamp sits a little low of the eyeline
       hl.target.position.copy(cam).addScaledVector(fwd, 12);
+      hl.target.position.y -= 1.1;
       hl.target.updateMatrixWorld();
+      this.headFill.intensity = this.headK * (L.headFill ?? 1.6);
+      this.headFill.position.set(cam.x + fwd.x * 1.5, cam.y - 0.2, cam.z + fwd.z * 1.5);
     }
     // deep enough that no opening is in sight: skip the sky, the mountain and sun shadows
     const deep = W.depthAt(cam.x, cam.z) > (L.deepAt ?? 60);

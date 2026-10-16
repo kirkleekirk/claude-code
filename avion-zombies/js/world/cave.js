@@ -70,7 +70,7 @@ export const ROCK = {
   limestone: { id: 0, amp: 0.55, curve: 2.8, color: [0.6, 0.53, 0.45], floor: [0.42, 0.37, 0.32] },
   flowstone: { id: 1, amp: 0.4, curve: 2.4, color: [0.78, 0.64, 0.47], floor: [0.55, 0.46, 0.36] },
   blasted: { id: 2, amp: 0.16, curve: 0.9, color: [0.47, 0.46, 0.45], floor: [0.36, 0.35, 0.34] },
-  basalt: { id: 3, amp: 0.5, curve: 2.2, color: [0.2, 0.19, 0.19], floor: [0.17, 0.16, 0.16] },
+  basalt: { id: 3, amp: 0.5, curve: 2.2, color: [0.27, 0.255, 0.25], floor: [0.21, 0.2, 0.19] },
   crystal: { id: 4, amp: 0.45, curve: 2.6, color: [0.72, 0.66, 0.56], floor: [0.5, 0.45, 0.38] },
   built: { id: 5, amp: 0.05, curve: 0.5, color: [0.55, 0.54, 0.52], floor: [0.45, 0.44, 0.42] },
 };

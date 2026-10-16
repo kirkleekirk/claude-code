@@ -305,6 +305,8 @@ export class World {
       circuitAt: (x, z) => this.circuitIndex(L.circuitAt(x, z)),
       occluded: null,
       solid: (x, y, z) => (cave && cave.inExtent(x, z) ? cave.sdfBase(x, y, z) < 0 : y < terrain.surfaceAt(x, z) - 0.1),
+      // light bounced off the rock fills the chambers (underground only; daylight does it outside)
+      bounce: cave && L.bounce ? { ...L.bounce, tint: new THREE.Color(L.bounce.tint ?? 0xffffff), at: (x, z) => cave.inExtent(x, z) } : null,
     });
     if (cave) {
       // Cells at a chamber's edge (and in the rock just past it) have low ceilings; their walls
@@ -321,7 +323,7 @@ export class World {
           D[j * nx + i] = cave.distAt(x, z);
         }
       }
-      const R = 3;
+      const R = Math.ceil(4.5 / res);
       const C2 = new Float32Array(lv.ceil);
       for (let j = 0; j < nz; j++) {
         for (let i = 0; i < nx; i++) {
@@ -886,6 +888,8 @@ export class World {
         k = f > 1.2 - a.flicker ? 0.25 : 1 - a.flicker * 0.25 * Math.random();
         a.mat.color.copy(a.baseColor).multiplyScalar(k);
       }
+      // a slow swell, like light off moving magma
+      if (a.breathe) k *= 1 - a.breathe * (0.5 + 0.5 * Math.sin(t * 1.3 + a.x * 0.7) * Math.sin(t * 0.55 + a.z * 0.3));
       // lamps sit high under ceilings: give them enough punch to light the floor
       const dim = a.dimUnpowered && !this.power ? 0.6 : 1;
       slot.light.intensity = a.intensity * k * dim * 2.6;

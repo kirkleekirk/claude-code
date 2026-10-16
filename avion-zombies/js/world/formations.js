@@ -214,6 +214,9 @@ export function crystal(len, r, seed) {
   const p = g.attributes.position;
   const rng = makeRng(seed);
   const flat = 0.55 + rng() * 0.3;
+  // most blades are milky white; some carry a faint honey tint, some are clearer and cooler
+  const tint = rng();
+  const base = tint < 0.3 ? [1.0, 0.9, 0.74] : tint < 0.55 ? [0.86, 0.93, 1.0] : [0.97, 0.96, 0.93];
   const col = [];
   for (let i = 0; i < p.count; i++) {
     let x = p.getX(i);
@@ -227,8 +230,8 @@ export function crystal(len, r, seed) {
       y += Math.sign(y) * r * 0.9;
     }
     p.setXYZ(i, x, y, z);
-    const s = 0.9 + 0.1 * rng();
-    col.push(0.93 * s, 0.95 * s, 0.97 * s);
+    const s = 0.86 + 0.14 * rng();
+    col.push(base[0] * s, base[1] * s, base[2] * s);
   }
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   g.computeVertexNormals();

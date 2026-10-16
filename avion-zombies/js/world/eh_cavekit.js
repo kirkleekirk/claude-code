@@ -133,6 +133,42 @@ export function caveKit(S) {
     });
   };
 
+  // Wall washers: floods tucked in at the foot of a chamber's walls and aimed up the rock, the way
+  // show caves light their halls. Fans out from (cx,cz) in n directions and finds a dry, clear
+  // spot near the wall each way. o: { a0, max, colors, intensity, range, angle, height, skip,
+  // fixture(x, z, target, color, intensity, range) for a different kind of lamp }
+  K.washers = (cx, cz, n, o = {}) => {
+    let made = 0;
+    for (let k = 0; k < n; k++) {
+      if (o.skip && o.skip.includes(k)) continue;
+      const a = (o.a0 ?? 0) + (k / n) * Math.PI * 2;
+      const dx = Math.cos(a);
+      const dz = Math.sin(a);
+      const w = K.toWall(cx, cz, dx, dz, o.max ?? 40, 0.25);
+      if (!w) continue;
+      let spot = null;
+      for (let back = o.back ?? 1.4; back < 7 && !spot; back += 0.3) {
+        const x = w.x - dx * back;
+        const z = w.z - dz * back;
+        if (D(x, z) < 0.7 || !cave.walkableAt(x, z)) continue;
+        if (K.pathDist(x, z) < (o.pathClear ?? 2.0) || K.isReserved(x, z, 0.2)) continue;
+        spot = [x, z];
+      }
+      if (!spot) continue;
+      const [x, z] = spot;
+      const f = F(x, z);
+      const top = CEIL(w.x - dx * 1.5, w.z - dz * 1.5);
+      const h = clamp((top - f) * (o.height ?? 0.55), 2.5, o.maxH ?? 15);
+      const colors = o.colors || [0xffd2a0];
+      const target = [w.x + dx * 0.6, f + h, w.z + dz * 0.6];
+      if (o.fixture) o.fixture(x, z, target, colors[k % colors.length], o.intensity ?? 60, o.range ?? 22);
+      else K.flood(x, z, target, colors[k % colors.length], o.intensity ?? 60, o.range ?? 22, { angle: o.angle ?? 0.85, penumbra: 0.75, glow: 0.3 });
+      K.reserve(x, z, 0.6);
+      made++;
+    }
+    return made;
+  };
+
   // A caged bulb hanging from the rock on its cable (old tour lighting / Avion work light).
   K.hangLamp = (x, z, o = {}) => {
     const top = CEIL(x, z);
@@ -149,9 +185,11 @@ export function caveKit(S) {
   K.strip = (x, z, rot, o = {}) => {
     const y = CEIL(x, z) - 0.12;
     B.box(x, y - 0.02, z, 1.4, 0.08, 0.22, { mat: M.steel, rot, collide: false });
+    // the fitting shines down and out, not up into the rock
     B.bakedLamp(x, y - 0.06, z, {
       color: o.color ?? 0xe8f0ff, intensity: o.intensity ?? 12, range: o.range ?? 11, circuit: 'reactor', rot,
       glow: 0.8, fitting: new THREE.BoxGeometry(1.25, 0.03, 0.12), bright: 4,
+      spot: { dir: new THREE.Vector3(0, -1, 0), angle: 1.35, penumbra: 0.55 },
     });
   };
 
@@ -211,18 +249,37 @@ export function caveKit(S) {
     }
   };
 
-  // Cable tray on a tunnel wall: offset from the centre line, at a height above the floor.
+  // Cable tray on a tunnel wall: on brackets against the rock at a height above the floor,
+  // following the tunnel's slope. side: 1 right of the line, -1 left; w: how far to look for rock.
   K.tray = (pts, side, w, hgt = 2.4) => {
     const sm = K.samples(pts, 2.0);
-    for (let i = 0; i < sm.length - 1; i++) {
-      const [x, z, tx, tz] = sm[i];
-      const [x2, z2] = sm[i + 1];
-      const rot = Math.atan2(-tz, tx);
-      const off = side * (w / 2 - 0.15);
-      const cx = (x + x2) / 2 - tz * off;
-      const cz = (z + z2) / 2 + tx * off;
-      B.box(cx, (F(x, z) + F(x2, z2)) / 2 + hgt, cz, Math.hypot(x2 - x, z2 - z) + 0.02, 0.06, 0.22, { mat: M.steelDark, rot, collide: false, cast: false });
-      B.box(cx, (F(x, z) + F(x2, z2)) / 2 + hgt + 0.06, cz, Math.hypot(x2 - x, z2 - z) + 0.02, 0.05, 0.16, { mat: X.cable, rot, collide: false, cast: false });
+    const up = new THREE.Vector3(0, 1, 0);
+    const at = sm.map(([x, z, tx, tz]) => {
+      const y = F(x, z) + hgt;
+      const dx = -tz * side;
+      const dz = tx * side;
+      const hit = cave.raycast(x, y, z, dx, 0, dz, w);
+      const d = (hit ? hit.dist : w / 2) - 0.2;
+      return { p: new THREE.Vector3(x + dx * d, y, z + dz * d), dx, dz };
+    });
+    for (let i = 0; i < at.length - 1; i++) {
+      const a = at[i].p;
+      const b = at[i + 1].p;
+      const len = a.distanceTo(b);
+      if (len < 0.05) continue;
+      const dir = b.clone().sub(a).normalize();
+      // keep the tray level across: its width runs horizontally, square to the run
+      const across = new THREE.Vector3().crossVectors(dir, up).normalize();
+      const nrm = new THREE.Vector3().crossVectors(across, dir);
+      const basis = new THREE.Matrix4().makeBasis(dir, nrm, across);
+      const mid = a.clone().add(b).multiplyScalar(0.5);
+      const tray = new THREE.BoxGeometry(len + 0.03, 0.05, 0.3);
+      B.mesh(tray, basis.clone().setPosition(mid), M.steel, { cast: false });
+      const cables = new THREE.BoxGeometry(len + 0.03, 0.07, 0.2);
+      B.mesh(cables, basis.clone().setPosition(mid.x + nrm.x * 0.06, mid.y + nrm.y * 0.06, mid.z + nrm.z * 0.06), X.cable, { cast: false });
+      // a bracket back to the rock
+      const { dx, dz } = at[i];
+      B.box(a.x + dx * 0.12, a.y - 0.12, a.z + dz * 0.12, 0.05, 0.12, 0.42, { mat: M.steelDark, rot: Math.atan2(dx, dz), collide: false, cast: false });
     }
   };
 
@@ -284,6 +341,8 @@ export function caveKit(S) {
         B.mesh(flowLump(r, r * (0.5 + rng() * 0.4), r * (0.8 + rng() * 0.3), seed), placeAt(x, f - r * 0.2, z, rng() * 6), X.calcite);
         B.physics.addCylinder({ x, z, r: r * 0.8, y0: f - 0.5, y1: f + r * 0.4, walkable: true, material: 'rock' });
       }
+      // what stands on the floor keeps later props (lights, signs) off it
+      if (kind !== 'tite') K.reserve(x, z, 0.7);
       placed++;
     }
     return placed;
@@ -339,7 +398,6 @@ export function caveKit(S) {
     return null;
   };
 
-  void clamp;
   void signTex;
   return K;
 }
