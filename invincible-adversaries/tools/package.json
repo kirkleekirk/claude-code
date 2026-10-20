@@ -1,0 +1,16 @@
+{
+  "name": "invincible-adversaries-tools",
+  "private": true,
+  "description": "Asset pipeline for Invincible Adversaries (not needed to play).",
+  "type": "module",
+  "scripts": {
+    "optimize": "node optimize.mjs"
+  },
+  "dependencies": {
+    "@gltf-transform/core": "4.1.1",
+    "@gltf-transform/extensions": "4.1.1",
+    "@gltf-transform/functions": "4.1.1",
+    "meshoptimizer": "0.22.0",
+    "sharp": "0.33.5"
+  }
+}

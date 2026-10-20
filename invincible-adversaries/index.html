@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Invincible Adversaries</title>
+  <link rel="stylesheet" href="src/ui/styles.css" />
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three/three.module.min.js", "three/addons/": "./vendor/three/addons/" } }
+  </script>
+</head>
+<body data-screen="loading">
+  <canvas id="game"></canvas>
+
+  <!-- ===================== HUD ===================== -->
+  <div id="hud" class="hidden">
+    <canvas id="overlay"></canvas>
+    <div id="crosshair"><i></i><i></i><i></i><i></i><b></b></div>
+    <div id="hitmarker"><i></i><i></i><i></i><i></i></div>
+    <div id="dmgdir"></div>
+    <div id="topbar">
+      <div class="team t0"><div class="score">0</div><div class="slots"></div></div>
+      <div class="vs">VS</div>
+      <div class="team t1"><div class="slots"></div><div class="score">0</div></div>
+    </div>
+    <div id="feed"></div>
+    <div id="toasts"></div>
+    <div id="announce"></div>
+    <div id="choice" class="hidden">
+      <div class="ctitle">UNBOUND — CHOOSE</div>
+      <div class="opts">
+        <div class="opt beam"><kbd>LMB</kbd><div class="on">ANNIHILATION BEAM</div><div class="od">Giant matter-disintegration beam</div></div>
+        <div class="opt revive"><kbd>RMB</kbd><div class="on">RECONSTRUCTION</div><div class="od">Revive all fallen allies, shield &amp; heal the team</div></div>
+      </div>
+    </div>
+    <div id="respawn" class="hidden"><div class="t">ELIMINATED</div><div class="c">Respawning in <b>7</b></div><div class="hint">An allied Atom Eve's Reconstruction can bring you back</div></div>
+    <div id="bl">
+      <div class="hname"></div>
+      <div class="passive"></div>
+      <div class="flight hidden"><div class="fill"></div><span>FLIGHT</span></div>
+      <div class="hpbar"><div class="lag"></div><div class="hp"></div><div class="oh"></div><div class="sh"></div><div class="segs"></div></div>
+      <div class="hptext"></div>
+      <div class="status"></div>
+    </div>
+    <div id="abilities"></div>
+    <div id="ult">
+      <svg viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="44" pathLength="100"/><circle class="ring" cx="50" cy="50" r="44" pathLength="100"/></svg>
+      <div class="ico"></div><div class="pct">0%</div><div class="key">Q</div><div class="uname"></div>
+    </div>
+    <div id="keyhint"><kbd>WASD</kbd> move <kbd>SPACE</kbd> jump · double-tap to fly <kbd>CTRL</kbd> descend <kbd>H</kbd> swap hero <kbd>ESC</kbd> menu</div>
+  </div>
+
+  <!-- ===================== LOADING ===================== -->
+  <section id="loading" class="screen active">
+    <div class="logo small"><span class="l1">INVINCIBLE</span><span class="l2">ADVERSARIES</span></div>
+    <div class="bar"><i id="load-fill"></i></div>
+    <div id="load-msg">Loading…</div>
+  </section>
+
+  <!-- ===================== TITLE ===================== -->
+  <section id="title" class="screen">
+    <div class="title-wrap">
+      <div class="logo">
+        <span class="l1">INVINCIBLE<svg class="splat" viewBox="0 0 200 120" aria-hidden="true"><path d="M60 40c10-20 40-25 55-10 8-12 30-12 34 4 14-2 22 12 12 22 12 8 4 26-12 22-2 14-22 18-32 8-12 12-36 8-38-8-18 4-30-12-19-24-8-10 2-22 0-14z" fill="#b8000d"/><circle cx="160" cy="80" r="6" fill="#b8000d"/><circle cx="40" cy="70" r="4" fill="#b8000d"/><circle cx="175" cy="45" r="3" fill="#b8000d"/><path d="M100 90c2 10 0 22-3 28 6-4 8-14 8-26z" fill="#b8000d"/></svg></span>
+        <span class="l2">ADVERSARIES</span>
+      </div>
+      <div class="tagline">A fan-made Viltrumite-scale hero shooter · 3v3 training arena</div>
+      <div class="menu">
+        <button id="btn-play" class="btn primary">PLAY</button>
+        <button id="btn-controls" class="btn">CONTROLS</button>
+      </div>
+      <div id="controls-panel" class="panel controls">
+        <div class="ctl"><kbd>W A S D</kbd>Move (camera-relative; in flight W flies where you look)</div>
+        <div class="ctl"><kbd>Mouse</kbd>Aim</div>
+        <div class="ctl"><kbd>Space</kbd>Jump · <b>double-tap</b> to take off / land · hold to climb</div>
+        <div class="ctl"><kbd>Ctrl / C</kbd>Descend · land</div>
+        <div class="ctl"><kbd>LMB</kbd>Primary <kbd>RMB</kbd>Secondary</div>
+        <div class="ctl"><kbd>Shift</kbd><kbd>E</kbd><kbd>F</kbd>Abilities <kbd>Q</kbd>Ultimate</div>
+        <div class="ctl"><kbd>H</kbd>Swap hero any time <kbd>U</kbd>Instant ult (training)</div>
+        <div class="ctl"><kbd>Esc</kbd>Menu &amp; training options</div>
+      </div>
+    </div>
+    <div class="credit">Fan project. Characters © their respective owners. Models supplied by the player.</div>
+  </section>
+
+  <!-- ===================== HERO SELECT ===================== -->
+  <section id="select" class="screen">
+    <div class="sel-head"><span>CHOOSE YOUR</span> HERO</div>
+    <div id="hero-cards"></div>
+    <div id="hero-detail"></div>
+    <button id="btn-lock" class="btn primary lock">LOCK IN</button>
+    <div class="sel-hint">1 / 2 / 3 or ← → to pick · Enter to lock in</div>
+  </section>
+
+  <!-- ===================== PAUSE / TRAINING ===================== -->
+  <section id="pause" class="screen">
+    <div class="panel pause">
+      <div class="ptitle">PAUSED</div>
+      <div class="pbtns">
+        <button id="btn-resume" class="btn primary">RESUME</button>
+        <button id="btn-change" class="btn">CHANGE HERO</button>
+        <button id="btn-quit" class="btn ghost">QUIT TO TITLE</button>
+      </div>
+      <div class="pgrid">
+        <div class="group">
+          <div class="gt">TRAINING</div>
+          <label><input type="checkbox" id="opt-nocd" /> No cooldowns</label>
+          <label><input type="checkbox" id="opt-fastult" /> Fast ultimate charge</label>
+          <label><input type="checkbox" id="opt-god" /> God mode (you can't die)</label>
+          <label>Bots <select id="opt-bots"><option value="active">Fight back</option><option value="passive">Move only</option><option value="idle">Training dummies</option></select></label>
+          <label>Difficulty <select id="opt-diff"><option value="easy">Easy</option><option value="normal">Normal</option><option value="hard">Hard</option></select></label>
+          <div class="row"><button id="btn-fillult" class="btn small">FILL ULT</button><button id="btn-resetcd" class="btn small">RESET CDs</button><button id="btn-killbots" class="btn small">KO ENEMIES</button></div>
+        </div>
+        <div class="group">
+          <div class="gt">VIDEO &amp; AUDIO</div>
+          <label>Quality <select id="opt-quality"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
+          <label><input type="checkbox" id="opt-gore" /> Invincible-style gore</label>
+          <label><input type="checkbox" id="opt-comic" /> Comic impact text</label>
+          <label>Mouse sensitivity <input type="range" id="opt-sens" min="0.6" max="6" step="0.1" /></label>
+          <label><input type="checkbox" id="opt-invert" /> Invert Y</label>
+          <label>Volume <input type="range" id="opt-vol" min="0" max="100" step="1" /></label>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div id="fatal" class="hidden"></div>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
