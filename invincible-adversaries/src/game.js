@@ -295,6 +295,7 @@ export class Game {
     if (this.state === 'playing' || this.state === 'paused') this.hud.update(dt);
     this.renderer.fx.desat = this.player && this.player.dead ? Math.min(0.7, this.renderer.fx.desat + dt) : Math.max(0, this.renderer.fx.desat - dt * 2);
     if (!this.noRender) this.renderer.render(dt, this.time);
+    this.renderer.advance(dt);
     this.input.endFrame();
   }
 

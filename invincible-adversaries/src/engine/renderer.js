@@ -218,13 +218,21 @@ export class Renderer {
 
   flash(color, amount = 0.6) { this.fx.flashColor.set(color); this.fx.flash = Math.max(this.fx.flash, amount); }
 
+  /** Age shockwaves and decay transient screen effects. Runs every game step, rendered or not. */
+  advance(dt) {
+    this.waves = this.waves.filter((w) => (w.t += dt) < w.life);
+    const fx = this.fx;
+    fx.flash = Math.max(0, fx.flash - dt * 3.2);
+    fx.damage = Math.max(0, fx.damage - dt * 2.2);
+    fx.ca = Math.max(0, fx.ca - dt * 0.03 - fx.ca * dt * 3.0);
+  }
+
   render(dt, time) {
     const u = this.final.uniforms;
     u.uTime.value = time;
     // waves
     const v = new THREE.Vector3();
     for (let i = 0; i < MAX_WAVES; i++) { u.uWaves.value[i].set(0, 0, 0, 0); }
-    this.waves = this.waves.filter((w) => (w.t += dt) < w.life);
     this.waves.forEach((w, i) => {
       v.copy(w.p).project(this.camera);
       const behind = v.z > 1;
@@ -244,10 +252,6 @@ export class Renderer {
     u.uSpeedLines.value = fx.speedLines;
     u.uLowHp.value = fx.lowHp;
     u.uTint.value.copy(fx.tint);
-    // decay transient effects
-    fx.flash = Math.max(0, fx.flash - dt * 3.2);
-    fx.damage = Math.max(0, fx.damage - dt * 2.2);
-    fx.ca = Math.max(0, fx.ca - dt * 0.03 - fx.ca * dt * 3.0);
     this.composer.render(dt);
   }
 }
