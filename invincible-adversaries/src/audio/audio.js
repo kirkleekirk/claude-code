@@ -127,8 +127,8 @@ R.punch_heavy = (S, out, t0, v) => {
   burst(S, out, t0 + 0.01, { type: 'lowpass', f: 320, dur: 0.45, vol: 0.6, kind: 'brown', seed: v + 5 });
   return 0.9;
 };
-R.swing = (S, out, t0, v) => { sweepNoise(S, out, t0, { f0: 450, f1: 2600 + v * 200, f2: 900, dur: 0.2, Q: 1.6, vol: 0.55, attack: 0.07, seed: v }); return 0.35; };
-R.swing_heavy = (S, out, t0, v) => { sweepNoise(S, out, t0, { f0: 220, f1: 1300 + v * 100, f2: 400, dur: 0.34, Q: 1.3, vol: 0.75, attack: 0.12, seed: v + 4 }); thump(S, out, t0 + 0.05, { f0: 90, f1: 50, dur: 0.25, vol: 0.25 }); return 0.5; };
+R.swing = (S, out, t0, v) => { sweepNoise(S, out, t0, { f0: 450, f1: 2600 + v * 200, f2: 900, dur: 0.2, Q: 1.6, vol: 2.2, attack: 0.07, seed: v }); return 0.35; };
+R.swing_heavy = (S, out, t0, v) => { sweepNoise(S, out, t0, { f0: 220, f1: 1300 + v * 100, f2: 400, dur: 0.34, Q: 1.3, vol: 1.5, attack: 0.12, seed: v + 4 }); thump(S, out, t0 + 0.05, { f0: 90, f1: 50, dur: 0.25, vol: 0.4 }); return 0.5; };
 R.sonic_boom = (S, out, t0, v) => {
   const sh = S.shaper(2.5); sh.connect(out);
   burst(S, sh, t0, { type: 'highpass', f: 700, dur: 0.03, vol: 1.2, seed: v });
@@ -235,7 +235,7 @@ R.field = (S, out, t0, v) => {
   clicks(S, out, t0 + 0.02, { n: 50, dur: 1.4, f: 4200, Q: 3, vol: 0.18 });
   return 1.6;
 };
-R.crackle = (S, out, t0, v) => { clicks(S, out, t0, { n: 60, dur: 2, f: 3800, Q: 3, vol: 0.2, decay: false }); burst(S, out, t0, { f: 900, Q: 0.5, dur: 2, vol: 0.06, kind: 'pink', attack: 0.3, seed: v }); return 2; };
+R.crackle = (S, out, t0, v) => { clicks(S, out, t0, { n: 60, dur: 2, f: 3800, Q: 3, vol: 0.5, decay: false }); burst(S, out, t0, { f: 900, Q: 0.5, dur: 2, vol: 0.13, kind: 'pink', attack: 0.3, seed: v }); return 2; };
 R.rock_rip = (S, out, t0, v) => {
   burst(S, out, t0, { type: 'lowpass', f: 300, dur: 0.6, vol: 0.9, kind: 'brown', attack: 0.02, seed: v });
   for (let i = 0; i < 18; i++) burst(S, out, t0 + Math.random() * 0.35, { f: 500 + Math.random() * 1200, Q: 2, dur: 0.02 + Math.random() * 0.04, vol: 0.5, seed: i + v });
@@ -275,7 +275,7 @@ R.kill = (S, out, t0, v) => { tone(S, out, t0, { f: 880, type: 'triangle', a: 0.
 R.step = (S, out, t0, v) => { thump(S, out, t0, { f0: 95, f1: 55, dur: 0.07, vol: 0.45 }); burst(S, out, t0, { f: 900 + v * 150, Q: 0.8, dur: 0.045, vol: 0.22, kind: 'pink', seed: v }); return 0.2; };
 R.step_heavy = (S, out, t0, v) => { thump(S, out, t0, { f0: 80, f1: 38, dur: 0.18, vol: 0.85 }); burst(S, out, t0, { f: 600 + v * 100, Q: 0.8, dur: 0.06, vol: 0.32, kind: 'pink', seed: v }); burst(S, out, t0, { type: 'lowpass', f: 200, dur: 0.25, vol: 0.4, kind: 'brown', seed: v + 2 }); return 0.4; };
 R.land = (S, out, t0, v) => { thump(S, out, t0, { f0: 110, f1: 40, dur: 0.3, vol: 0.9 }); burst(S, out, t0, { f: 700, Q: 0.6, dur: 0.12, vol: 0.4, kind: 'pink', seed: v }); burst(S, out, t0, { type: 'lowpass', f: 260, dur: 0.4, vol: 0.4, kind: 'brown', seed: v + 1 }); return 0.6; };
-R.jump = (S, out, t0, v) => { sweepNoise(S, out, t0, { f0: 300, f1: 1600, dur: 0.22, Q: 1, vol: 0.4, attack: 0.05, seed: v }); return 0.3; };
+R.jump = (S, out, t0, v) => { sweepNoise(S, out, t0, { f0: 300, f1: 1600, dur: 0.22, Q: 1, vol: 1.4, attack: 0.05, seed: v }); return 0.3; };
 R.takeoff = (S, out, t0, v) => { sweepNoise(S, out, t0, { f0: 200, f1: 2200, f2: 700, dur: 0.6, Q: 0.8, vol: 0.7, attack: 0.1, seed: v }); thump(S, out, t0, { f0: 90, f1: 40, dur: 0.4, vol: 0.5 }); return 0.9; };
 R.death = (S, out, t0, v) => {
   thump(S, out, t0, { f0: 90, f1: 30, dur: 1.2, vol: 0.9 });
@@ -337,7 +337,7 @@ R.roar = (S, out, t0, v) => {
 };
 R.whistle = (S, out, t0, v) => { tone(S, out, t0, { f: 2400, f1: 380, type: 'sine', a: 0.1, d: 1.1, vol: 0.2, vib: 30, vibF: 9 }); sweepNoise(S, out, t0, { f0: 3000, f1: 600, dur: 1.2, Q: 3, vol: 0.3, attack: 0.6, kind: 'white', seed: v }); return 1.4; };
 R.ui_click = (S, out, t0, v) => { tone(S, out, t0, { f: 1500, type: 'triangle', a: 0.001, d: 0.06, vol: 0.18 }); return 0.12; };
-R.ui_hover = (S, out, t0, v) => { tone(S, out, t0, { f: 2400, type: 'sine', a: 0.001, d: 0.03, vol: 0.06 }); return 0.08; };
+R.ui_hover = (S, out, t0, v) => { tone(S, out, t0, { f: 2400, type: 'sine', a: 0.001, d: 0.03, vol: 0.12 }); return 0.08; };
 R.ui_select = (S, out, t0, v) => {
   sweepNoise(S, out, t0, { f0: 300, f1: 3000, dur: 0.4, Q: 1, vol: 0.45, attack: 0.2, kind: 'white', seed: v });
   [392, 523.25, 659.25, 783.99].forEach((f, i) => tone(S, out, t0 + 0.2 + i * 0.03, { f, type: 'triangle', a: 0.004, d: 0.7, vol: 0.12 }));
@@ -346,7 +346,7 @@ R.ui_select = (S, out, t0, v) => {
 };
 R.hurt = (S, out, t0, v) => { thump(S, out, t0, { f0: 160, f1: 60, dur: 0.15, vol: 0.5 }); burst(S, out, t0, { type: 'lowpass', f: 700, dur: 0.1, vol: 0.4, seed: v }); return 0.25; };
 R.ready = (S, out, t0, v) => { tone(S, out, t0, { f: 1318.5, type: 'sine', a: 0.002, d: 0.2, vol: 0.12 }); tone(S, out, t0 + 0.05, { f: 1975.5, type: 'sine', a: 0.002, d: 0.25, vol: 0.08 }); return 0.4; };
-R.denied = (S, out, t0, v) => { tone(S, out, t0, { f: 220, type: 'square', a: 0.002, d: 0.12, vol: 0.06 }); tone(S, out, t0 + 0.08, { f: 196, type: 'square', a: 0.002, d: 0.15, vol: 0.06 }); return 0.3; };
+R.denied = (S, out, t0, v) => { tone(S, out, t0, { f: 220, type: 'square', a: 0.002, d: 0.12, vol: 0.12 }); tone(S, out, t0 + 0.08, { f: 196, type: 'square', a: 0.002, d: 0.15, vol: 0.12 }); return 0.3; };
 
 const VARIANTS = { punch_light: 4, punch_heavy: 3, swing: 3, swing_heavy: 2, bolt_fire: 3, bolt_hit: 3, bubble_hit: 3, step: 4, step_heavy: 3, rock_hit: 2, zip: 2 };
 
