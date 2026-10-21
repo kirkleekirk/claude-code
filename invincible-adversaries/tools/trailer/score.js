@@ -239,9 +239,10 @@ window.renderScore = async ({ dur = 75, hits = {} } = {}) => {
   choir(13.0, 16.2, [62, 65, 69], 0.32);
   sub(14.0, 0.5, 50, 30, 1.5); stab(14.0, [50, 53, 57], 0.35, 0.8); metal(14.0, 0.2);
   // build into the drop: snare roll + toms + riser
-  for (let i = 0; i < 32; i++) { const t = 15.0 + i * 0.0625; snare(t, 0.15 + 0.75 * (i / 32) ** 2); }
-  for (const [k, f] of [[16.5, 110], [16.625, 98], [16.75, 82], [16.875, 70]]) tom(k, f, 0.9);
-  riser(15.0, 16.97, 0.45, 500, 9000);
+  // build into the drop, then a short drop-out so the downbeat hits from silence
+  for (let i = 0; i < 29; i++) { const t = 15.0 + i * 0.0625; snare(t, 0.15 + 0.75 * (i / 29) ** 2); }
+  for (const [k, f] of [[16.375, 110], [16.5, 98], [16.625, 82]]) tom(k, f, 0.9);
+  riser(15.0, 16.82, 0.45, 500, 9000);
 
   // ================================================================ groove helpers
   function grooveA(t0, bars, prog) { // Invincible: driving, bright
@@ -300,7 +301,7 @@ window.renderScore = async ({ dur = 75, hits = {} } = {}) => {
   }
 
   // ================================================================ INVINCIBLE (17 - 30.5)
-  hit(17.0, 1.0, 0.6); stab(17.0, [50, 53, 57, 62], 0.55);
+  hit(17.0, 1.0, 0.65); boom(17.0, 0.9); stab(17.0, [50, 53, 57, 62], 0.6);
   grooveA(17.0, 4.75, ['Dm', 'Bb', 'F', 'C']); // to 26.5
   for (const t of [19.0, 21.0, 22.5, 24.5]) { crash(t, 0.3, 1.6); }
   whoosh(21.0, 0.5, 0.35);
