@@ -25,14 +25,19 @@ const PARAMS = new URLSearchParams(location.search);
 const TOUCH_ONLY = matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches;
 
 /**
- * 3v3 lineups from the four heroes, with no repeats within a team and every hero on the field: the
- * player's team gets two of the others, the enemies whoever is left out plus two more.
+ * 3v3 lineups from the four heroes: nobody twice on a team, every hero on the field, and as many
+ * strategists on each side (so a team never faces two strategists with one). The player's team gets
+ * two of the others; the enemies get whoever was left out plus two of the player's team.
  */
 export function lineups(playerKey) {
   const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const strats = (team) => team.filter((k) => HEROES[k].role === 'STRATEGIST').length;
   const ally = [playerKey, ...shuffle(HERO_KEYS.filter((k) => k !== playerKey)).slice(0, 2)];
   const out = HERO_KEYS.filter((k) => !ally.includes(k));
-  const enemy = [...out, ...shuffle(HERO_KEYS.filter((k) => !out.includes(k))).slice(0, 3 - out.length)];
+  const pool = shuffle(ally.slice());
+  const pairs = [];
+  for (let i = 0; i < pool.length; i++) for (let j = i + 1; j < pool.length; j++) pairs.push([...out, pool[i], pool[j]]);
+  const enemy = pairs.find((e) => strats(e) === strats(ally)) || pairs[0];
   return [ally, enemy];
 }
 

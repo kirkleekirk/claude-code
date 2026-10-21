@@ -8,7 +8,7 @@ export const HEROES = {
     key: 'invincible', name: 'INVINCIBLE', real: 'Mark Grayson',
     role: 'DUELIST', roleTag: 'Flying Dive DPS',
     color: '#ffd400', accent: '#00aeef',
-    hp: 400,
+    hp: 425,
     radius: 0.42, height: 1.85,
     speed: 9.2, jump: 10.5,
     flight: { speed: 21, accel: 46, unlimited: true },

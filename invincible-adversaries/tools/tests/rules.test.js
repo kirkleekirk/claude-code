@@ -133,6 +133,24 @@ T.test('passive regeneration starts after the delay at the listed rate', () => {
   }
 });
 
+T.test('match lineups: three each, nobody twice on a team, every hero fielded, strategists even', async () => {
+  const { lineups } = await import(new URL('src/game.js', location.href).href);
+  const { HEROES, HERO_KEYS } = await import(new URL('src/heroes/data.js', location.href).href);
+  const strats = (t) => t.filter((k) => HEROES[k].role === 'STRATEGIST').length;
+  const seen = new Set();
+  for (const key of HERO_KEYS) for (let n = 0; n < 40; n++) {
+    const [a, b] = lineups(key);
+    const tag = `${key}: ${a} v ${b}`;
+    T.expect(a.length === 3 && b.length === 3 && a[0] === key, `${tag}: bad teams`);
+    T.expect(new Set(a).size === 3 && new Set(b).size === 3, `${tag}: a hero twice on one team`);
+    T.expect(HERO_KEYS.every((k) => a.includes(k) || b.includes(k)), `${tag}: a hero left out`);
+    T.expect(strats(a) === strats(b), `${tag}: ${strats(a)} strategists against ${strats(b)}`);
+    seen.add(`${[...a].sort()} v ${[...b].sort()}`);
+  }
+  T.info(`${seen.size} distinct matchups`);
+  T.expect(seen.size >= 4, `only ${seen.size} distinct matchups`);
+});
+
 T.test('training toggles: god mode, no cooldowns, fast ult', () => {
   let [p, foe] = pair('eve', 'omniman', { settings: { godMode: true } });
   T.w.damage(foe, p, 5000);

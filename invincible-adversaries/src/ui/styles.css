@@ -69,7 +69,8 @@ kbd { display: inline-block; min-width: 1.6em; padding: 0.05em 0.45em; margin-ri
 .card .name { font: 400 34px var(--display); letter-spacing: .03em; line-height: 1.05; }
 .card .tag { font-size: 15px; color: rgba(255,255,255,.75); }
 .card .hp { position: absolute; right: 16px; top: 14px; font: 800 14px var(--ui); color: rgba(255,255,255,.6); }
-#hero-detail { position: absolute; right: 40px; top: 40px; bottom: 120px; width: min(470px, 40vw); overflow-y: auto; padding-right: 6px; scrollbar-width: thin; }
+#hero-detail { position: absolute; right: 40px; top: 40px; bottom: 120px; width: min(470px, 40vw); overflow-y: auto; padding-right: 6px; scrollbar-width: thin; scrollbar-color: var(--hero) transparent; }
+#hero-detail.more { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 44px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 44px), transparent); }
 #hero-detail[data-hero=invincible] { --hero: #ffd400; } #hero-detail[data-hero=eve] { --hero: #ff4fd8; } #hero-detail[data-hero=omniman] { --hero: #ff3a45; } #hero-detail[data-hero=robot] { --hero: #ff9b3d; }
 #hero-detail .hd .role { font: 800 15px var(--ui); letter-spacing: .28em; color: var(--hero); }
 #hero-detail .hd .nm { font: 400 64px var(--display); line-height: 1; -webkit-text-stroke: 2px var(--ink); paint-order: stroke fill; text-shadow: 4px 4px 0 var(--ink); }
@@ -89,6 +90,32 @@ kbd { display: inline-block; min-width: 1.6em; padding: 0.05em 0.45em; margin-ri
 #hero-detail .ult .ab .t { color: var(--hero); }
 #btn-lock { position: absolute; right: 48px; bottom: 44px; font-size: 30px; padding: 14px 54px; }
 .sel-hint { position: absolute; left: 48px; bottom: 40px; color: rgba(255,255,255,.6); letter-spacing: .14em; font-size: 15px; }
+/* shorter screens: a denser detail panel so a whole kit fits (it scrolls below that) */
+@media (max-height: 960px) {
+  #hero-detail .hd .nm { font-size: 54px; }
+  #hero-detail .hd .real { margin-bottom: 6px; }
+  #hero-detail .stats { margin: 2px 0 10px; }
+  #hero-detail .passive { padding: 8px 12px; margin-bottom: 8px; }
+  #hero-detail .passive .d { font-size: 14px; line-height: 1.25; }
+  #hero-detail .ab { padding: 7px 9px; margin-bottom: 5px; }
+  #hero-detail .ab .ico { flex-basis: 38px; height: 38px; }
+  #hero-detail .ab .t { font-size: 17px; }
+  #hero-detail .ab .d { font-size: 13.5px; line-height: 1.2; }
+}
+@media (max-height: 760px) {
+  #hero-detail { top: 26px; bottom: 100px; }
+  #hero-detail .hd .role { font-size: 13px; }
+  #hero-detail .hd .nm { font-size: 44px; }
+  #hero-detail .hd .real { display: none; }
+  #hero-detail .stats { margin: 2px 0 8px; } #hero-detail .stats b { font-size: 17px; }
+  #hero-detail .passive { padding: 6px 10px; margin-bottom: 6px; }
+  #hero-detail .passive .d, #hero-detail .ab .d { font-size: 12.5px; line-height: 1.18; }
+  #hero-detail .ab { padding: 5px 8px; margin-bottom: 4px; gap: 10px; }
+  #hero-detail .ab .ico { flex-basis: 32px; height: 32px; } #hero-detail .ab .ico svg { width: 20px; height: 20px; }
+  #hero-detail .ab .t { font-size: 15.5px; }
+  #btn-lock { bottom: 26px; font-size: 26px; padding: 11px 46px; }
+  .sel-hint { bottom: 30px; }
+}
 
 /* ---------------------------------------------------------------- pause */
 #pause { background: rgba(3, 6, 14, .55); }

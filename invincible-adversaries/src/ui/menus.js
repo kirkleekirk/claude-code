@@ -73,6 +73,15 @@ export class Menus {
       <div class="passive"><div class="t">PASSIVE · ${d.passive.name}</div><div class="d">${d.passive.desc}</div></div>
       ${row(ab.primary)}${row(ab.secondary)}${row(ab.a1)}${row(ab.a2)}${row(ab.a3)}
       <div class="ult">${row(ab.ult)}</div>`;
+    det.scrollTop = 0;
+    // on short screens the list scrolls: fade its bottom edge while there's more below
+    if (!this.detFade) {
+      this.detFade = () => det.classList.toggle('more', det.scrollTop + det.clientHeight < det.scrollHeight - 4);
+      det.addEventListener('scroll', this.detFade, { passive: true });
+      if (window.ResizeObserver) new ResizeObserver(this.detFade).observe(det);
+      window.addEventListener('resize', this.detFade);
+    }
+    this.detFade();
     this.g.previewHero(k);
   }
 

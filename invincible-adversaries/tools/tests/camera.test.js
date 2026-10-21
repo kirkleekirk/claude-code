@@ -196,7 +196,7 @@ for (const key of HEROES) {
 
 T.test('camera stays continuous in a bot-driven 3v3 (2 minutes)', () => {
   // every hero on the field, as the game's lineups do; the camera follows the fastest flier
-  const LINEUPS = [['invincible', 'robot', 'eve'], ['omniman', 'robot', 'invincible']];
+  const LINEUPS = [['invincible', 'eve', 'omniman'], ['robot', 'invincible', 'omniman']];
   const spec = [];
   for (const team of [0, 1]) for (const [i, key] of LINEUPS[team].entries()) spec.push({ key, team, bot: true, at: [(i - 1) * 6, 0, team ? 40 : -40], face: [0, team ? -1 : 1] });
   spec[0].player = true; spec[0].bot = false;
