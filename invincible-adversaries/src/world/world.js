@@ -122,6 +122,14 @@ export class World {
     if (hit && hit.normal !== UP) return { point: hit.point.addScaledVector(_v, -radius * 0.5), normal: hit.normal };
     return null;
   }
+  /** true when a hero-sized body at p would be inside a wall or cover (rather than on top of it) */
+  blocked(p, r = 0.45) {
+    for (const o of this.obstacles) {
+      if (o.type === 'cyl') { if (p.y < o.h && Math.hypot(p.x - o.x, p.z - o.z) < o.r + r) return true; }
+      else if (p.x > o.min.x - r && p.x < o.max.x + r && p.z > o.min.z - r && p.z < o.max.z + r && p.y < o.max.y - 0.35 && p.y + 1.8 > o.min.y) return true;
+    }
+    return false;
+  }
   groundAt(x, z) {
     let y = 0;
     for (const o of this.obstacles) if (o.type === 'box' && x > o.min.x && x < o.max.x && z > o.min.z && z < o.max.z) y = Math.max(y, o.max.y);
@@ -178,7 +186,7 @@ export class World {
       src.damageDone += total;
       // an ultimate's own damage doesn't charge the next one
       if (src !== target && o.type !== 'ult') src.ult = Math.min(src.def.ultCost, src.ult + total * RULES.ultPerDamage);
-      if (src.key === 'omniman' && !o.noLifesteal && total > 0) this.heal(src, src, total * 0.25, { silent: true, noUlt: true });
+      if (src.key === 'omniman' && !o.noLifesteal && total > 0) this.heal(src, src, total * RULES.omniLifesteal, { silent: true, noUlt: true });
     }
     // reactions
     const power = o.power ?? clamp(amount / 60, 0.3, 1.5);

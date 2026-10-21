@@ -165,7 +165,8 @@ export class Travel {
       _w.copy(this.dir); _w.y = 0;
       if (_w.lengthSq() > 0.01) h.yaw = yawOf(_w);
     }
-    this.onStep && this.onStep(this.prev, h.pos, dt);
+    // onStep may end the travel by returning false (e.g. what is being carried hit a wall)
+    if (this.onStep && this.onStep(this.prev, h.pos, dt) === false) return false;
     if (wall && this.stopOnWall) { this.hitWall = true; return false; }
     if (h.pos.y <= h.groundY + 0.01 && this.dir.y < -0.05) { this.hitGround = true; return false; }
     if (!this.toPoint && this.done >= this.dist - 1e-4) return false;
@@ -191,7 +192,7 @@ export class Travel {
       _w.copy(this.dir); _w.y = 0;
       if (_w.lengthSq() > 0.01) h.yaw = yawOf(_w);
     }
-    this.onStep && this.onStep(this.prev, h.pos, dt);
+    if (this.onStep && this.onStep(this.prev, h.pos, dt) === false) return false;
     if (wall && this.stopOnWall) { this.hitWall = true; return false; }
     if (u > 0.5 && h.pos.y <= h.groundY + 0.01 && this.dir.y < -0.05) { this.hitGround = true; return false; }
     return u < 1;

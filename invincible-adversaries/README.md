@@ -37,14 +37,14 @@ Any static file server works too, for example `python3 -m http.server 5173` run 
 All three are meant to feel overpowered: high damage, short cooldowns and huge mobility. They are balanced against each other rather than toned down.
 
 ### Invincible: Duelist (flying dive DPS)
-375 HP · ground speed 9.2 · **unlimited flight** at 21 m/s · regenerates 35 HP/s after 4 s out of combat.
+400 HP · ground speed 9.2 · **unlimited flight** at 21 m/s · regenerates 35 HP/s after 3.5 s out of combat.
 
 | Key | Ability | Effect |
 | --- | --- | --- |
-| LMB | Viltrumite Barrage | 4-hit combo (34 / 34 / 40 / 62) that lunges onto targets near the crosshair. The finisher launches. |
-| RMB | Shockwave Clap | 16 m cone, 55 damage plus knockback. 2 charges, 3.5 s cooldown. |
-| Shift | Sonic Boom Dash | 32 m supersonic dash, 65 damage to everything in the path. |
-| E | Meteor Dive | Dive at a point up to 45 m away: 95 damage in 6 m and a knock-up. |
+| LMB | Viltrumite Barrage | 4-hit combo (44 / 44 / 52 / 80) that lunges onto targets near the crosshair. The finisher launches. |
+| RMB | Shockwave Clap | 16 m cone, 65 damage plus knockback. 2 charges, 3.5 s cooldown. |
+| Shift | Sonic Boom Dash | 32 m supersonic dash, 75 damage to everything in the path. |
+| E | Meteor Dive | Leap onto a point up to 45 m away (or dive straight down from the air): 95 damage in 6 m and a knock-up. |
 | F | Skyward Slam | Grab an enemy, rocket upward and slam them down for 110 damage plus a stun. |
 | Q | **Mach Breaker** | Launch into the sky, mark a target, then crash down at Mach 10: up to 420 damage in an 11 m crater. |
 
@@ -53,7 +53,7 @@ All three are meant to feel overpowered: high damage, short cooldowns and huge m
 
 | Key | Ability | Effect |
 | --- | --- | --- |
-| LMB | Particle Bolts | Rapid bolts that deal 24 damage each. Their splash mends allies for only 5 HP. |
+| LMB | Particle Bolts | Rapid bolts that deal 21 damage each. Their splash mends nearby allies (not Eve) for only 5 HP. |
 | RMB | Construct Fist | A giant energy fist: 90 damage and heavy knockback. |
 | Shift | Atomic Bubble | Bubble the ally under your crosshair, or yourself, absorbing 225 damage for 4 s. 2 charges. |
 | E | Disassembly Field | Enemies inside take **+25 % damage from all sources** and are slowed. |
@@ -61,15 +61,15 @@ All three are meant to feel overpowered: high damage, short cooldowns and huge m
 | Q | **Unbound** | Eve breaks her mental block, as in the *Atom Eve* special, then you choose. **LMB: Annihilation Beam**, a giant beam at 420 DPS. **RMB: Reconstruction**, which revives every fallen ally and gives the team bubbles and a heal. |
 
 ### Omni-Man: Vanguard (brawler tank)
-650 HP · ground speed 8.8, faster than a typical tank · 8 s of flight · **heals for 25 % of the damage he deals** · immune to knockback and slows, and stuns on him last half as long.
+550 HP · ground speed 8.8, faster than a typical tank · 8 s of flight · **heals for 15 % of the damage he deals** · immune to knockback and slows, and stuns on him last half as long.
 
 | Key | Ability | Effect |
 | --- | --- | --- |
-| LMB | Brutal Strikes | 3-hit cleaving combo (58 / 58 / 96). The hammer-fist finisher sends out a ground shock. |
+| LMB | Brutal Strikes | 3-hit cleaving combo (54 / 54 / 90). The hammer-fist finisher sends out a ground shock. |
 | RMB | Seismic Boulder | Rip up a chunk of the ground and throw it: 105 damage plus 45 splash. |
 | Shift | Viltrumite Charge | Charge 24 m, carry the first enemy hit and slam them: 120 damage in total. |
 | E | Thunderclap | 22 m cone, 85 damage, huge knockback and a 30 % slow. |
-| F | Conqueror's Will | 225 overhealth, +20 % damage and 30 % damage reduction for 4 s. |
+| F | Conqueror's Will | 150 overhealth, +20 % damage and 20 % damage reduction for 4 s. |
 | Q | **A Fraction of Our Power** | Blitz between up to 5 enemies within 40 m for 150 damage each, ending in a thunderclap. |
 
 ## Design: support without healbots
@@ -92,7 +92,7 @@ The game is built so that no team comp, 2-2-2 or otherwise, is mandatory:
 - **Rendering.** three.js r169 (vendored in `vendor/`) with cel-shaded hero materials, shader outlines and HDR post-processing: bloom, shockwaves, chromatic aberration, radial blur, anime speed lines, ACES tone mapping and film grain. Particles are GPU-instanced, and there are trails, decals and pooled dynamic lights.
 - **Animation.** All animation is procedural; none of the models' own animation clips are used. Three different skeletons are normalized into one pose space. On top of that run keyframed attack clips with anticipation and follow-through, two-bone IK for arms and legs, a gait system with planted feet, flight poses driven by velocity, hit reactions, and verlet physics for capes and hair.
 - **Audio.** Every sound effect is synthesized at load time with the Web Audio API, from 45 recipes with random variations, so the game ships no audio files. A convolution reverb, 3D panning and distance filtering place the sounds, and the wind and beam sounds play live.
-- **Bots.** Each hero has its own bot logic for targeting, movement, ability use and ultimates, including Eve's beam-or-revive choice.
+- **Bots.** Each hero has its own bot logic for targeting, movement, ability use and ultimates, including Eve's beam-or-revive choice. Invincible and Eve break off fights they are losing to recover, then come back.
 
 ```
 index.html        screens, HUD markup, import map
@@ -111,6 +111,24 @@ tools/            model conversion/optimization and the in-engine trailer pipeli
 ```
 
 Developer URL parameters: `?auto=invincible|eve|omniman` skips the menus, `?quality=low|medium|high` sets the graphics quality and `?autobot` lets a bot drive the player.
+
+## Tests
+
+`tools/tests/` holds headless tests that step the real game in Chromium, far faster than real time. They use Playwright from `tools/package.json` (`npm install` in `tools/`). Serve the game, then run them from `tools/`:
+
+```
+npm start                                           # in the project root
+cd tools && node tests/run.mjs                      # every suite
+node tests/run.mjs "eve" --file abilities.test.js   # tests whose name contains "eve", one file
+```
+
+`GAME_URL` points the runner at another server (default `http://localhost:5173/`). Runs are deterministic: each test reseeds `Math.random`.
+
+- **poses** plays every clip and locomotion mode of every hero and checks each frame: no NaN, no stretched limbs, a supporting foot on the ground, knees bending forward, no single-frame pose pops.
+- **transitions** covers drops, jumps, flight take-off and landing, flight running out, knockback tumbles on the ground and in the air, death, respawn, revive and teleports, plus Omni-Man's cape.
+- **abilities** checks every ability's damage, cooldowns and charges and that nothing is left behind afterwards, including when casters or targets die mid-ability, when you swap hero mid-ability, in mirror matches, into walls, at the arena edge and under the ceiling.
+- **rules** covers shields, overhealth, damage modifiers, lifesteal, ultimate charge, respawns, health orbs, regeneration, the training toggles, friendly fire and Omni-Man's unstoppable passive.
+- **soak** runs a 10-minute 3v3 bot match on hard and fails on NaN, heroes leaving the arena or ending up inside cover, stuck abilities, tumbles or carries, HP or ultimate out of bounds, late respawns, broken poses, and growing scene, effect or projectile counts.
 
 ## Credits and notice
 

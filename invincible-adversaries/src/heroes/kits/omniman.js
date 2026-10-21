@@ -150,7 +150,7 @@ export class OmniKit extends Kit {
     this.combo = (this.combo + 1) % 3;
     this.comboT = 0;
     const clip = [this.clips.hookR, this.clips.straightL, this.clips.hammer][i];
-    const dmg = [58, 58, 96][i];
+    const dmg = [54, 54, 90][i];
     this.nextAt = w.time + [0.32, 0.3, 0.55][i];
     const tgt = this.aimTarget(6.5, 0.6);
     if (tgt && tgt.pos.distanceTo(h.pos) > 2.3) h.override = new Lunge(h, tgt, { speed: 24, maxT: 0.2, stopDist: 1.4 });
@@ -262,7 +262,10 @@ export class OmniKit extends Kit {
       onStep: (a, b) => {
         tr.push(h.center);
         if (carried) {
+          const last = carried.pos.clone();
           carried.pos.copy(h.pos).addScaledVector(dir, 1.3); carried.pos.y = h.pos.y + 0.2; carried.vel.set(0, 0, 0);
+          // the carried enemy reaches the wall first: that's where they get slammed, not inside it
+          if (w.blocked(carried.pos, carried.radius)) { carried.pos.copy(last); travel.hitWall = true; return false; }
           return;
         }
         for (const e of w.heroes) {
@@ -355,9 +358,9 @@ export class OmniKit extends Kit {
     h.anim.play(this.clips.roar, {
       onEvent: (e) => {
         if (e !== 'roar' || h.dead) return;
-        h.overhealth = 225; h.ohT = 5;
+        h.overhealth = 150; h.ohT = 5;
         h.status.boost = 0.2; h.status.boostT = 4;
-        h.status.dr = 0.3; h.status.drT = 4;
+        h.status.dr = 0.2; h.status.drT = 4;
         h.U.uGlowColor.value.setRGB(1, 0.12, 0.05);
         this.fx.ring(_v.copy(h.pos).setY(0.1), { color: 0xff3020, intensity: 1.5, r1: 9, life: 0.6 });
         this.fx.sphere(h.center, { color: 0xff2a10, intensity: 1.0, r1: 4, life: 0.4 });
@@ -403,8 +406,13 @@ export class OmniKit extends Kit {
         if (phase === 'zip') {
           // approach to a point next to the target, from an alternating angle
           if (!s.approach) {
-            const ang = rand(0, TAU);
-            s.approach = new THREE.Vector3(Math.cos(ang) * 1.6, 0.2, Math.sin(ang) * 1.6);
+            // strike from a random side, but never from inside the cover the target stands next to
+            s.approach = new THREE.Vector3();
+            for (let i = 0; i < 8; i++) {
+              const ang = rand(0, TAU);
+              s.approach.set(Math.cos(ang) * 1.6, 0.2, Math.sin(ang) * 1.6);
+              if (!w.blocked(_u.copy(t.pos).add(s.approach))) break;
+            }
             w.sfx('zip', h.pos, { vol: 0.9 });
           }
           _v.copy(t.pos).add(s.approach);
@@ -413,6 +421,8 @@ export class OmniKit extends Kit {
           const sp = 95;
           const step = Math.min(d, sp * dt);
           if (d > 1e-3) h.pos.addScaledVector(_w.normalize(), step);
+          // hop over cover in the way instead of zipping through it
+          if (w.blocked(h.pos)) h.pos.y = Math.max(h.pos.y, w.groundAt(h.pos.x, h.pos.z) + 0.05);
           this.animVel.copy(_w).multiplyScalar(sp);
           h.yaw = yawOf(_u.subVectors(t.pos, h.pos));
           tr.push(h.center);
@@ -459,7 +469,10 @@ export class OmniKit extends Kit {
         w.shakeAt(h.pos, 0.7);
         h.anim.play(kit.clips.clap);
         h.vel.set(0, 0, 0);
-        h.mode = h.grounded ? 'ground' : 'fly';
+        // the blitz zips through cover without collisions and never updates `grounded`: settle him
+        // out of any obstacle and decide the mode from where he actually ended up
+        h.integrate(0);
+        h.mode = h.grounded ? 'ground' : (h.flyEnergy > 0.1 ? 'fly' : 'air');
       },
     };
     h.override = seq;

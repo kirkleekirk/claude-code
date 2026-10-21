@@ -288,6 +288,9 @@ export class Hero {
         this.onWallHit && this.onWallHit();
       }
     }
+    // feet inside a box's top band (rising up a wall, stepping onto a ledge): mantle onto the top
+    // rather than letting forward motion carry the body into the box
+    if (p.y < this.groundY) { p.y = this.groundY; if (this.vel.y < 0) this.vel.y = 0; }
     // bounds
     const R = Math.hypot(p.x, p.z);
     if (R > ARENA.boundR) { p.x *= ARENA.boundR / R; p.z *= ARENA.boundR / R; }

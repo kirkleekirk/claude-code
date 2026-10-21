@@ -252,5 +252,5 @@ window.T = (() => {
     ctx = null;
     return results;
   }
-  return { g, w, THREE, V, test, expect, fail, info, clr, stage, aim, center, run, press, teleport, log, dmgTo, dmgBy, cleanIssues, settle, skel, boneNaN, poseIssues, popIssues, capeIssues, watch, report, resetFx, runAll };
+  return { g, w, THREE, V, test, expect, fail, info, clr, reseed, stage, aim, center, run, press, teleport, log, dmgTo, dmgBy, cleanIssues, settle, skel, boneNaN, poseIssues, popIssues, capeIssues, watch, report, resetFx, runAll };
 })();

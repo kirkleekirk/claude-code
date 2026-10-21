@@ -454,6 +454,7 @@ export class Animator {
     const lyT = ly >= 0 ? ly : -Math.min(dn, Math.hypot(lx, lz) * 1.5 + dn * aimDown);
     const gd = s.groundDist ?? 99, tti = gd / Math.max(dn, 0.5);
     const flare = dn > 0.5 ? Math.max(1 - smoothstep(0.15, 0.6, tti), 1 - smoothstep(0.8, 2.5, gd)) * clamp01(dn / 1.5) : 0;
+    this.flare = flare;
     const tSpeed = Math.hypot(lx, lyT, lz) * (1 - flare) * (1 - 0.7 * this.brake);
     const cruise = smoothstep(3, 14, tSpeed);
     const boost = clamp01(s.boost || 0);
@@ -565,7 +566,12 @@ export class Animator {
   bodyTilt(dt, mode) {
     if (mode !== 'fly') this.bodyTarget.identity();
     // standing on the ground the feet have to get under the body quickly; falling can take longer
-    this.bodyQ.slerp(this.bodyTarget, dampT(mode === 'fly' ? 5.5 : mode === 'ground' ? 16 : 10, dt));
+    // (a flier about to touch down flips upright fast: a hard dive still lands feet-first), never
+    // faster than 16 rad/s so no recovery snaps the whole body round in a frame
+    let k = dampT(mode === 'fly' ? 5.5 + 16 * (this.flare || 0) : mode === 'ground' ? 16 : 10, dt);
+    const ang = this.bodyQ.angleTo(this.bodyTarget);
+    if (ang * k > 16 * dt) k = 16 * dt / ang;
+    this.bodyQ.slerp(this.bodyTarget, k);
     return this.bodyQ;
   }
 

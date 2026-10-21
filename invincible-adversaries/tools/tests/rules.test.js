@@ -59,12 +59,12 @@ T.test('no friendly fire; the dead take no damage or healing', () => {
   T.expect(T.w.damage(a, b, 50) === 0 && T.w.heal(a, b, 50) === 0, 'dead hero was damaged or healed');
 });
 
-T.test('omni-man heals for 25% of damage dealt', () => {
+T.test('omni-man heals for his lifesteal share of damage dealt', () => {
   const [omni, foe] = pair('omniman', 'invincible');
   omni.hp = omni.maxHp - 200;
   const hp0 = omni.hp;
   const dealt = T.w.damage(omni, foe, 100);
-  T.expect(near(omni.hp - hp0, dealt * 0.25, 0.01), `healed ${(omni.hp - hp0).toFixed(2)} for ${dealt} dealt`);
+  T.expect(near(omni.hp - hp0, dealt * T.RULES.omniLifesteal, 0.01), `healed ${(omni.hp - hp0).toFixed(2)} for ${dealt} dealt (${T.RULES.omniLifesteal * 100}%)`);
 });
 
 T.test('ult charge: damage, healing, shields, kills and time; capped; ults do not refill themselves', () => {

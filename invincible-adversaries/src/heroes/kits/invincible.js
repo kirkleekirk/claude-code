@@ -149,7 +149,7 @@ export class InvincibleKit extends Kit {
     this.combo = (this.combo + 1) % 4;
     this.comboT = 0;
     const clip = [this.clips.jab, this.clips.cross, this.clips.hook, this.clips.uppercut][i];
-    const dmg = [34, 34, 40, 62][i];
+    const dmg = [44, 44, 52, 80][i];
     const gap = [0.2, 0.22, 0.25, 0.46][i];
     this.nextAt = w.time + gap;
     const tgt = this.aimTarget(7.8, 0.55);
@@ -201,7 +201,7 @@ export class InvincibleKit extends Kit {
         for (const t of hits) {
           const kd = _w.subVectors(t.center, o).normalize();
           const kv = kd.clone().multiplyScalar(7); kv.y += 2.5;
-          w.damage(h, t, 55, { dir: kd.clone(), knock: kv, power: 0.9, type: 'ability' });
+          w.damage(h, t, 65, { dir: kd.clone(), knock: kv, power: 0.9, type: 'ability' });
           this.fx.punchImpact(t.center, kd, { power: 0.8, gore: false });
         }
         this.shockFx(o, dir, 1);
@@ -255,7 +255,7 @@ export class InvincibleKit extends Kit {
             hit.add(e);
             _w.subVectors(e.center, b); _w.addScaledVector(dir, -_w.dot(dir)); if (_w.lengthSq() < 0.01) _w.set(-dir.z, 0, dir.x); _w.normalize();
             const kv = _w.clone().multiplyScalar(9); kv.y += 6;
-            w.damage(h, e, 65, { dir: dir.clone(), knock: kv, power: 1.2, type: 'ability' });
+            w.damage(h, e, 75, { dir: dir.clone(), knock: kv, power: 1.2, type: 'ability' });
             this.fx.punchImpact(e.center, dir, { power: 1.3 });
             w.sfx('punch_heavy', e.center, { vol: 0.9 });
             w.hitstop(0.05, h);

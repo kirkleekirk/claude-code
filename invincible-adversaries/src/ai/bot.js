@@ -63,6 +63,13 @@ export class Bot {
     it.aimOrigin.copy(origin);
     it.aimPoint.copy(origin).addScaledVector(this.aim, Math.max(1, origin.distanceTo(_v)));
     it.aimHero = this.aim.dot(want) > 0.97 ? t : null;
+    // hit and run: the squishier heroes break off a trade they are losing, recover (regen, orbs)
+    // and come back, instead of trading blows until they drop
+    const hpf = h.hp / h.maxHp, thpf = t.hp / t.maxHp;
+    if (h.key !== 'omniman') {
+      if (!this.regroup && hpf < 0.45 && thpf > hpf + 0.1 && w.time - h.lastHurt < 2) this.regroup = true;
+      else if (this.regroup && (hpf > 0.85 || thpf < 0.2)) this.regroup = false;
+    }
     // movement & tactics
     this.navigate(dt, it, t, dist);
     if (mode === 'passive') return;
@@ -110,6 +117,7 @@ export class Bot {
       const p = k === 'invincible' ? 0.55 : k === 'eve' ? 0.35 : 0.25;
       this.flyWant = Math.random() < p || t.mode === 'fly' && t.pos.y > 4;
     }
+    if (this.regroup && k === 'invincible') this.flyWant = true;
     if (h.def.flight && !h.def.flight.unlimited && h.flyEnergy < 0.15) this.flyWant = false;
     if (this.flyWant && h.mode !== 'fly') { if (h.grounded) it.jump = true; else it.flyToggle = true; }
     if (!this.flyWant && h.mode === 'fly' && !h.override) it.down = true;
@@ -118,6 +126,7 @@ export class Bot {
     if (k === 'eve') range = clamp(range, 12, 26);
     const low = h.hp / h.maxHp < 0.3;
     if (low && k !== 'omniman') range += 12;
+    if (this.regroup) range = Math.max(range, 34);
     // move toward / away
     _v.subVectors(t.pos, h.pos); _v.y = 0;
     const flat = _v.length();
@@ -125,8 +134,8 @@ export class Bot {
     const aimYaw = yawOf(it.aimDir);
     let fwd = 0;
     if (flat > range + 2) fwd = 1;
-    else if (flat < range - 2 && k === 'eve') fwd = -1;
-    else if (k !== 'eve') fwd = flat > 1.6 ? 1 : 0;
+    else if (flat < range - 2 && (k === 'eve' || this.regroup)) fwd = -1;
+    else if (k !== 'eve' && !this.regroup) fwd = flat > 1.6 ? 1 : 0;
     // convert desired movement (toward target + strafe) into intents relative to aim yaw
     const rel = yawToT - aimYaw;
     const mz = Math.cos(rel) * fwd, mx = -Math.sin(rel) * fwd;
@@ -198,6 +207,7 @@ export class Bot {
       return;
     }
     if (h.override) return;
+    if (this.regroup && k === 'invincible' && dist > 3) return; // disengaging (still swings if cornered)
     if (k === 'invincible') {
       if (dist < 3.6) { it.primary = true; if (dist < 3 && this.can('a3', 0.25)) it.a3 = true; }
       else if (dist < 15 && los && aimed && this.can('secondary', 0.4)) it.secondaryPressed = true;

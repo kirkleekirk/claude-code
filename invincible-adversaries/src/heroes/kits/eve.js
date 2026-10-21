@@ -250,7 +250,7 @@ export class EveKit extends Kit {
     w.spawnProjectile({
       owner: h, pos: o, vel: dir.multiplyScalar(95), radius: 0.12, life: 1.6,
       onUpdate: (dt, p) => { tr.push(p); if (Math.random() < 0.6) kit.fx.add.spawn({ p, life: 0.12, size: 0.28, size1: 0.1, color: [3.5, 1.1, 3, 0.7], color1: [2, 0.2, 2, 0], shape: SHAPE.GLOW }); },
-      onHitHero: (e, p) => { w.damage(h, e, 24, { hitPos: p.clone(), power: 0.35, type: 'proj' }); return true; },
+      onHitHero: (e, p) => { w.damage(h, e, 21, { hitPos: p.clone(), power: 0.35, type: 'proj' }); return true; },
       onEnd: (proj, hero) => {
         tr.stop();
         const p = proj.pos;

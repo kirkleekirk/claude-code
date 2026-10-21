@@ -32,9 +32,9 @@ const sceneCount = () => T.g.scene.children.length - T.g.fx.decals.length;
 // [slot, enemy distance, frames, damage min, max, options]
 const SPECS = {
   invincible: [
-    ['primary', 2.4, 110, 100, 260, { hold: true }],
-    ['secondary', 8, 40, 35, 80],
-    ['a1', 10, 60, 45, 90],
+    ['primary', 2.4, 110, 120, 360, { hold: true }],
+    ['secondary', 8, 40, 45, 90],
+    ['a1', 10, 60, 55, 100],
     ['a2', 15, 90, 55, 110, { aimAt: (h, foe) => foe.pos.clone() }],
     ['a3', 3, 200, 70, 170],
     ['ult', 20, 420, 250, 470],
@@ -154,10 +154,10 @@ T.test('eve ult: reconstruction revives fallen allies', () => {
 T.test('omniman a3: conqueror grants overhealth, damage and damage reduction', () => {
   const [h, foe] = duel('omniman', 'invincible', 6);
   cast(h, foe, 'a3', 30);
-  T.expect(Math.abs(h.overhealth - 225) < 30, `overhealth ${h.overhealth}`);
-  T.expect(Math.abs(h.status.boost - 0.2) < 0.01 && Math.abs(h.status.dr - 0.3) < 0.01, `boost ${h.status.boost} dr ${h.status.dr}`);
+  T.expect(Math.abs(h.overhealth - 150) < 30, `overhealth ${h.overhealth}`);
+  T.expect(Math.abs(h.status.boost - 0.2) < 0.01 && Math.abs(h.status.dr - 0.2) < 0.01, `boost ${h.status.boost} dr ${h.status.dr}`);
   const got = T.w.damage(foe, h, 100, { noLifesteal: true });
-  T.expect(Math.abs(got - 70) < 0.5, `100 damage became ${got.toFixed(1)} under 30% DR`);
+  T.expect(Math.abs(got - 80) < 0.5, `100 damage became ${got.toFixed(1)} under 20% DR`);
   T.run(4.5 * 60);
   T.expect(h.status.boost === 0 && h.status.dr === 0, 'buff outlived its 4 s');
 });
