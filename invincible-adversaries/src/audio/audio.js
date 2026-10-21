@@ -300,22 +300,26 @@ R.revive = (S, out, t0, v) => {
   return 2.5;
 };
 R.unbound = (S, out, t0, v) => {
-  // rising choir-like pad with formants + crackles + final boom
+  // rising choir-like pad with formants + crackles, building to the burst 0.85 s in (unbound_burst,
+  // played on the animation's burst event)
   const freqs = [110, 164.8, 220, 277.2, 329.6];
-  const f1 = S.filt('bandpass', 730, 4), f2 = S.filt('bandpass', 1090, 5), mix = S.gain(1.0);
+  const f1 = S.filt('bandpass', 730, 4), f2 = S.filt('bandpass', 1090, 5), mix = S.gain(0.73);
   f1.connect(mix); f2.connect(mix); mix.connect(out);
   for (const f of freqs) for (const d of [-9, 0, 9]) {
     const o = S.osc('sawtooth', f), g = S.gain(0);
     o.detune.value = d;
-    S.env(o.frequency, t0, [[0, f * 0.5], [1.4, f]]);
-    g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.05, t0 + 1.3); g.gain.setTargetAtTime(0, t0 + 1.6, 0.4);
-    o.connect(g); g.connect(f1); g.connect(f2); o.start(t0); o.stop(t0 + 3.2);
+    S.env(o.frequency, t0, [[0, f * 0.5], [0.85, f]]);
+    g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.05, t0 + 0.8); g.gain.setTargetAtTime(0, t0 + 1.0, 0.4);
+    o.connect(g); g.connect(f1); g.connect(f2); o.start(t0); o.stop(t0 + 2.6);
   }
-  clicks(S, out, t0 + 0.3, { n: 80, dur: 1.4, f: 4200, Q: 3, vol: 0.2, decay: false });
+  clicks(S, out, t0 + 0.15, { n: 45, dur: 0.75, f: 4200, Q: 3, vol: 0.15, decay: false });
+  return 2.6;
+};
+R.unbound_burst = (S, out, t0, v) => {
   const sh = S.shaper(2.5); sh.connect(out);
-  thump(S, sh, t0 + 1.45, { f0: 100, f1: 28, dur: 1.6, sweep: 0.4, vol: 1.2 });
-  burst(S, out, t0 + 1.45, { type: 'lowpass', f: 2600, f1: 200, dur: 1.4, vol: 0.7, kind: 'pink', seed: v });
-  return 3.4;
+  thump(S, sh, t0, { f0: 100, f1: 28, dur: 1.6, sweep: 0.4, vol: 1.2 });
+  burst(S, out, t0, { type: 'lowpass', f: 2600, f1: 200, dur: 1.4, vol: 0.7, kind: 'pink', seed: v });
+  return 1.9;
 };
 R.beam_start = (S, out, t0, v) => {
   const sh = S.shaper(3); sh.connect(out);

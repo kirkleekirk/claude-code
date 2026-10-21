@@ -91,7 +91,7 @@ The game is built so that no team comp, 2-2-2 or otherwise, is mandatory:
 
 - **Rendering.** three.js r169 (vendored in `vendor/`) with cel-shaded hero materials, shader outlines and HDR post-processing: bloom, shockwaves, chromatic aberration, radial blur, anime speed lines, ACES tone mapping and film grain. Particles are GPU-instanced, and there are trails, decals and pooled dynamic lights.
 - **Animation.** All animation is procedural; none of the models' own animation clips are used. Three different skeletons are normalized into one pose space. On top of that run keyframed attack clips with anticipation and follow-through, two-bone IK for arms and legs, a gait system with planted feet, flight poses driven by velocity, hit reactions, and verlet physics for capes and hair.
-- **Audio.** Every sound effect is synthesized at load time with the Web Audio API, from 45 recipes with random variations, so the game ships no audio files. A convolution reverb, 3D panning and distance filtering place the sounds, and the wind and beam sounds play live.
+- **Audio.** Every sound effect is synthesized at load time with the Web Audio API, from 46 recipes with random variations, so the game ships no audio files. A convolution reverb, 3D panning and distance filtering place the sounds, and the wind and beam sounds play live.
 - **Bots.** Each hero has its own bot logic for targeting, movement, ability use and ultimates, including Eve's beam-or-revive choice. Invincible and Eve break off fights they are losing to recover, then come back.
 
 ```

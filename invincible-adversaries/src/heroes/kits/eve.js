@@ -420,6 +420,7 @@ export class EveKit extends Kit {
       onEvent: (e) => {
         if (e !== 'burst') return;
         const c = h.center.clone();
+        w.sfx('unbound_burst', c, { vol: 1, important: true });
         this.fx.sphere(c, { color: 0xff44dd, intensity: 1.6, r0: 0.5, r1: 9, life: 0.6, fresnel: 1.8 });
         this.fx.ring(c, { color: 0xff66ee, intensity: 1.8, r1: 14, life: 0.6, normal: UP });
         this.fx.energyBurst(c, { size: 3, n: 60 });
