@@ -448,6 +448,8 @@ export class Hero {
     this.killDir.copy(dir || _v.set(Math.sin(this.yaw + Math.PI), 0, Math.cos(this.yaw + Math.PI)));
     this.killDir.y = 0; if (this.killDir.lengthSq() < 0.01) this.killDir.set(0, 0, 1); this.killDir.normalize();
     this.endActions(true);
+    // the dead aren't stunned or slowed (the HUD would keep showing it through the death screen)
+    for (const k in this.status) this.status[k] = 0;
     this.anim.stop(0.1);
     this.mode = 'air';
     this.glowTarget = 0;
