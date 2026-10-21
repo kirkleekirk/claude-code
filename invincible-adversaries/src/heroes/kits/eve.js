@@ -85,7 +85,7 @@ export const EVE_CLIPS = clips({
     ],
   },
   getup: {
-    mask: FULL, fadeIn: 0.02, fadeOut: 0.25,
+    mask: FULL, fadeIn: 0.06, fadeOut: 0.25,
     keys: [
       { t: 0, p: { rootY: -0.4, spinePitch: 40, headPitch: -20, Barm: [0.35, -0.85, 0.35], Belbow: 40 } },
       { t: 0.3, e: 'inout', p: { rootY: -0.08, spinePitch: 10, headPitch: 0 } },

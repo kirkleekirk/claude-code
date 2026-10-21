@@ -181,7 +181,7 @@ function stage(spec, { hud = false, bots = 'idle' } = {}) {
     const gy = w.groundAt(h.pos.x, h.pos.z);
     if (s.fly) { h.mode = 'fly'; h.grounded = false; } else { h.pos.y = Math.max(h.pos.y, gy); h.mode = h.pos.y > gy + 0.05 ? 'air' : 'ground'; h.grounded = h.mode === 'ground'; }
     const f = (s.face || F.clone().negate()).clone(); f.y = 0; f.normalize();
-    h.intents.aimDir.copy(s.aim || f); h.aimDir.copy(h.intents.aimDir); h.yaw = Math.atan2(f.x, f.z);
+    h.intents.aimDir.copy(s.aim || f); h.aimDir.copy(h.intents.aimDir); h.yaw = h.visYaw = Math.atan2(f.x, f.z);
     h.intents.aimOrigin.copy(h.pos).add(V(0, 1.5, 0));
     h.intents.aimPoint.copy(h.pos).addScaledVector(h.intents.aimDir, 20);
     if (s.hp != null) h.hp = s.hp;

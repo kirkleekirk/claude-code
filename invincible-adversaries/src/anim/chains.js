@@ -120,6 +120,18 @@ class Chain {
           }
         }
       }
+      // capes stay on the back: no swinging in front of the torso plane or rising over the shoulders.
+      // The frame rotates with the torso, so in flight the cape still streams back over the body.
+      if (def.behind && env.torso) {
+        const a = p[0], F = env.torso.fwd, U = env.torso.up;
+        for (let i = 1; i < this.count; i++) {
+          _d.subVectors(p[i], a);
+          const f = _d.dot(F) - def.behind.fwd;
+          if (f > 0) p[i].addScaledVector(F, -f);
+          const u = _d.dot(U) - def.behind.up;
+          if (u > 0) p[i].addScaledVector(U, -u);
+        }
+      }
     }
   }
 
@@ -161,6 +173,13 @@ export class ChainSystem {
     this.time = 0;
   }
   reset() { for (const c of this.chains) c.reset(); }
+  /** move every simulated point rigidly (teleports keep the cape's shape and motion) */
+  transform(m) {
+    for (const c of this.chains) {
+      if (!c.initialized) continue;
+      for (let i = 0; i < c.count; i++) { c.p[i].applyMatrix4(m); c.pp[i].applyMatrix4(m); }
+    }
+  }
   update(dt, env) {
     if (!this.chains.length) return;
     this.time += dt;

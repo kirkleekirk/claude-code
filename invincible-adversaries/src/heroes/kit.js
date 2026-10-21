@@ -100,6 +100,7 @@ export class Lunge {
   constructor(hero, target, { speed = 26, maxT = 0.16, stopDist = 1.5, animMode } = {}) {
     this.h = hero; this.target = target; this.speed = speed; this.t = 0; this.maxT = maxT; this.stopDist = stopDist;
     this.faceAim = true; this.animMode = animMode;
+    this.slide = true; // the body moves faster than the step animation: feet travel with it
     this.animVel = new THREE.Vector3();
   }
   update(dt) {

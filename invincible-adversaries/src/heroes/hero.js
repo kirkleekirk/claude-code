@@ -5,9 +5,13 @@ import { Animator, STYLES } from '../anim/animator.js';
 import { dressHero } from './materials.js';
 import { HEROES, RULES } from './data.js';
 import { ARENA } from '../world/arena.js';
-import { clamp, clamp01, damp, dampT, lerp, wrapAngle, yawOf, pitchOf, TAU, DEG, ease, rand } from '../engine/math.js';
+import { clamp, clamp01, damp, dampT, lerp, smoothstep, wrapAngle, yawOf, pitchOf, TAU, DEG, ease, rand } from '../engine/math.js';
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _u = new THREE.Vector3(), _q = new THREE.Quaternion();
+const _q2 = new THREE.Quaternion(), _e = new THREE.Euler(), _m = new THREE.Matrix4(), X_AXIS = new THREE.Vector3(1, 0, 0);
+// fastest the body turns (rad/s): an aim flick behind turns the hero over a few frames instead of
+// flipping it in one, while aimDir (which every attack uses) still changes instantly
+const TURN_RATE = 18;
 const UP = new THREE.Vector3(0, 1, 0);
 const GRAVITY = 28;
 let UID = 1;
@@ -98,14 +102,19 @@ export class Hero {
   get targetable() { return !this.dead && !this.untargetable && !this.hidden; }
 
   spawnAt(p) {
+    this.root.updateMatrixWorld(true);
+    const from = _m.copy(this.root.matrixWorld);
     this.pos.copy(p);
     this.pos.x += rand(-4, 4); this.pos.z += rand(-2, 2);
     this.vel.set(0, 0, 0);
-    this.yaw = p.z < 0 ? 0 : Math.PI;
+    this.yaw = this.visYaw = p.z < 0 ? 0 : Math.PI;
     this.aimDir.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
     this.root.rotation.set(0, this.yaw, 0);
     this.mode = 'ground'; this.grounded = true;
     this.anim.feet.L.init = false; this.anim.feet.R.init = false;
+    // capes/hair are simulated in world space: carry them along, or they whip across the map
+    this.root.updateMatrixWorld(true);
+    this.anim.chains.transform(from.invert().premultiply(this.root.matrixWorld));
   }
 
   // ------------------------------------------------------------------ update
@@ -166,7 +175,9 @@ export class Hero {
       const ay = yawOf(this.aimDir);
       this.yaw = this.mode === 'tumble' ? this.yaw : (stunned ? this.yaw : ay);
     }
-    this.root.rotation.set(0, this.yaw, 0);
+    const turn = wrapAngle(this.yaw - this.visYaw), maxTurn = TURN_RATE * dt;
+    this.visYaw = wrapAngle(this.visYaw + clamp(turn, -maxTurn, maxTurn));
+    this.root.rotation.set(0, this.visYaw, 0);
     this.updateVisual(dt);
   }
 
@@ -214,7 +225,7 @@ export class Hero {
       this.vel.add(_w);
       // gentle bob correction when hovering
       this.integrate(dt);
-      if (this.grounded && this.vel.y <= 0.1 && (it && (it.down || _v.y < -0.5))) { this.mode = 'ground'; this.land(Math.abs(this.vel.y)); }
+      if (this.grounded && this.vel.y <= 0.1 && (it && (it.down || _v.y < -0.5))) { this.mode = 'ground'; this.land(Math.max(Math.abs(this.vel.y), this.landedSoft || 0)); this.landedSoft = 0; }
       else if (this.grounded) { this.grounded = false; this.pos.y = this.groundY + 0.02; if (this.vel.y < 0) this.vel.y = 0; }
       return;
     }
@@ -314,14 +325,21 @@ export class Hero {
     const s = this._animState ||= {};
     s.mode = mode === 'stun' ? 'ground' : mode;
     s.vel = this.override && this.override.animVel ? this.override.animVel : this.vel;
-    s.yaw = this.yaw;
+    s.yaw = this.visYaw;
     s.aimDir = this.aimDir;
     s.landed = this.landed; this.landed = 0;
+    s.groundDist = this.pos.y - this.groundY;
     s.boost = this.override && this.override.boost !== undefined ? this.override.boost : this.boost;
     s.combat = this.combatStance;
     s.deadT = this.deadT;
     s.flutter = this.override && this.override.flutter || 0;
     s.noLean = !!(this.override && this.override.noLean);
+    s.slide = !!(this.override && this.override.slide);
+    // tumbling: 0 while spinning, rising to 1 as touchdown nears (and while skidding on the ground)
+    if (mode === 'tumble' && !this.carriedBy) {
+      const tti = this.vel.y < -0.5 ? (this.pos.y - this.groundY) / -this.vel.y : 9;
+      s.tumbleSettle = this.grounded ? 1 : 1 - smoothstep(0.12, 0.5, tti);
+    } else s.tumbleSettle = 0;
     this.root.updateMatrixWorld(true);
     a.update(dt, s);
     // body tilt (flight / tumble / death)
@@ -337,9 +355,14 @@ export class Hero {
       this.visual.quaternion.copy(q);
       this.visual.position.set(0, 0.12 * k, 0);
     } else if (mode === 'tumble') {
-      const tv = a.tumbleVel;
-      a.tumble.multiply(_q.setFromEuler(new THREE.Euler(tv.x * dt, tv.y * dt, tv.z * dt)));
-      this.visual.quaternion.slerp(a.tumble, dampT(10, dt));
+      const tv = a.tumbleVel, k = s.tumbleSettle;
+      if (this.carriedBy) a.tumble.slerp(_q.setFromAxisAngle(X_AXIS, -0.35), dampT(6, dt)); // held: limp, leaning back
+      else a.tumble.multiply(_q.setFromEuler(_e.set(tv.x * dt * (1 - k), tv.y * dt * (1 - k), tv.z * dt * (1 - k))));
+      // spin while airborne, come upright before touching down
+      _q2.copy(a.tumble).slerp(_q.identity(), k);
+      this.visual.quaternion.slerp(_q2, dampT(10 + 8 * k, dt));
+      // body tilt picks up from here when the tumble ends, so recovery rotates instead of popping
+      a.bodyQ.copy(this.visual.quaternion);
       const pv = _v.set(0, this.rig.hipsHeight, 0);
       this.visual.position.copy(pv).sub(_w.copy(pv).applyQuaternion(this.visual.quaternion));
     } else {
@@ -434,6 +457,7 @@ export class Hero {
     this.mode = this.pos.y > 0.2 ? 'air' : 'ground';
     this.dissolve = 1; this.dissolveTarget = 0;
     this.visual.quaternion.identity(); this.visual.position.set(0, 0, 0);
+    this.anim.bodyQ.identity(); this.anim.bodyTarget.identity();
     this.anim.feet.L.init = false; this.anim.feet.R.init = false;
     this.anim.chains.reset();
     this.status.stunT = 0; this.status.slow = 0; this.status.vuln = 0;

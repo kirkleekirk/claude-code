@@ -151,8 +151,11 @@ export class Animator {
     this.flyBlend = damp(this.flyBlend, fly ? 1 : 0, 6, dt);
     const groundW = clamp01(1 - this.airBlend - this.flyBlend);
 
-    // --- ground locomotion ---
-    if (groundW > 0.001 || ground) this.groundLoco(dt, s, lx, lz, hspeed, ax, az);
+    // --- ground locomotion --- (a tumbling hero skids: legs hold the stance instead of running)
+    if (groundW > 0.001 || ground) {
+      if (mode === 'tumble') this.groundLoco(dt, s, 0, 0, 0, 0, 0);
+      else this.groundLoco(dt, s, lx, lz, hspeed, ax, az);
+    }
     // air (jump/fall) pose
     if (this.airBlend > 0.001) {
       this.tmp.reset();
@@ -207,9 +210,13 @@ export class Animator {
     out.v[CH.spineYaw] += this.flinchY.x * 0.4; out.v[CH.headYaw] += this.flinchY.x * 0.3;
     out.v[CH.LclavLift] += Math.abs(this.flinchP.x) * 0.4; out.v[CH.RclavLift] += Math.abs(this.flinchP.x) * 0.4;
 
-    // --- death ---
-    if (mode === 'dead') this.deadPose(out, s);
-    if (mode === 'tumble') this.tumblePose(out, dt, s);
+    // --- death / tumble --- (blended in and out so the limbs never switch pose in one frame)
+    this.deadW = mode === 'dead' ? damp(this.deadW || 0, 1, 18, dt) : 0;
+    if (this.deadW > 0.001) this.deadPose(out, s, this.deadW);
+    if (mode === 'tumble') this.lastSettle = s.tumbleSettle || 0;
+    this.tumbleW = damp(this.tumbleW || 0, mode === 'tumble' ? 1 : 0, mode === 'tumble' ? 30 : 14, dt);
+    if (mode === 'dead') this.tumbleW = 0;
+    if (this.tumbleW > 0.001) this.tumblePose(out, dt, s, this.tumbleW);
 
     // --- apply ---
     this.ctx.legYaw = this.legYaw;
@@ -218,8 +225,8 @@ export class Animator {
     if (this.chains.chains.length) {
       this.updateColliders();
       const wind = _w.set(0, 0, 0);
-      const flutter = clamp(s.vel.length() * 0.9, 0, 40) + (s.flutter || 0);
-      this.chains.update(dt, { wind, flutter, colliders: this.colliders });
+      const flutter = clamp(s.vel.length() * 0.45, 0, 16) + (s.flutter || 0);
+      this.chains.update(dt, { wind, flutter, colliders: this.colliders, torso: this.torso });
     }
   }
 
@@ -285,8 +292,9 @@ export class Animator {
       if (mb > 0.35 && ph < prevPh && this.onFootstep) this.onFootstep(side, 0.5 + rb * 0.5);
       this.footPhase[side] = ph;
     }
-    // idle stance with planted feet
-    this.updatePlants(dt, mb);
+    // idle stance with planted feet (only while standing; re-anchored on landing). A lunge slides
+    // the body faster than the gait shows, so the feet travel with it instead of staying planted.
+    this.updatePlants(dt, mb, s.mode === 'ground' && !s.slide);
     for (const side of ['L', 'R']) {
       const g = this._gait[side];
       const ft = this.feet[side];
@@ -318,7 +326,8 @@ export class Animator {
     const leanF = this.leanF.update(Math.min(dt, 0.05), clamp(az * 0.6 * la, -8, 9));
     const leanS = this.leanS.update(Math.min(dt, 0.05), clamp(-ax * 0.6 * la, -8, 8));
     b.v[CH.spinePitch] += (st.leanRun * rb + 3 * mb) * Math.max(0.2, dz) + leanF - st.chestUp * (1 - mb * 0.6);
-    b.v[CH.spineRoll] += leanS + (this.yawRate * speed * -0.6) / 1;
+    // lean into turns; clamped so a sharp aim flick while running can't fold the torso sideways
+    b.v[CH.spineRoll] += leanS + clamp(this.yawRate * speed * -0.6, -12, 12) * la;
     b.v[CH.spineYaw] += yawA * 1.35 * Math.cos(TAU * ph) * Math.sign(dz || 1) * mb - (this.legYaw / DEG);
     b.v[CH.headYaw] += -yawA * 0.5 * Math.cos(TAU * ph) * mb;
     b.v[CH.headPitch] += -(st.leanRun * rb * 0.5) * mb;
@@ -373,7 +382,7 @@ export class Animator {
     out.applyMatrix4(_m);
     return out;
   }
-  updatePlants(dt, mb) {
+  updatePlants(dt, mb, grounded = true) {
     const rig = this.rig, st = this.style;
     rig.space.updateWorldMatrix(true, false);
     const M = rig.space.matrixWorld;
@@ -383,15 +392,18 @@ export class Animator {
       // ideal idle stance position (model -> world)
       const split = (side === 'L' ? 1 : -1) * st.stanceSplit;
       const ideal = _w.set(sd.sx * (st.stanceW + 0.03), sd.ankleHeight, split).applyMatrix4(M);
-      if (!ft.init || mb > 0.5) {
-        // while moving, plants follow the gait so stopping is seamless
+      if (!grounded || !ft.init || mb > 0.5) {
+        // while moving, plants follow the gait so stopping is seamless; airborne, they ride along
+        // with the body and get re-planted on landing (ground loco still blends out after takeoff)
         const g = this._gait[side];
         ft.plant.copy(g).applyMatrix4(M);
         ft.plant.y = Math.min(ft.plant.y, M.elements[13] + sd.ankleHeight);
-        if (!ft.init) ft.plant.copy(ideal);
-        ft.init = true; ft.step = null;
+        if (!ft.init || !grounded) ft.plant.copy(ideal);
+        ft.init = grounded; ft.step = null;
         continue;
       }
+      // standing at a different height than the plant (dropped off a ledge): re-anchor, never reach up
+      if (Math.abs(ft.plant.y - ideal.y) > 0.2) { ft.plant.copy(ideal); ft.step = null; continue; }
       if (ft.step) {
         ft.step.u += dt / ft.step.dur;
         if (ft.step.u >= 1) { ft.plant.copy(ft.step.to); ft.step = null; this.onFootstep && this.onFootstep(side, 0.4); }
@@ -429,7 +441,16 @@ export class Animator {
   flyPose(p, dt, s, lx, ly, lz) {
     const st = this.style, t = this.time;
     const speed = Math.hypot(lx, ly, lz);
-    const cruise = smoothstep(3, 14, speed);
+    // Sinking only tips the body into a head-first dive when there's forward motion to dive along
+    // or the hero aims down; a plain descent stays feet-first. Close to the ground on the way
+    // down the body flares upright so every landing happens on the feet.
+    const dn = Math.max(0, -ly);
+    const aimDown = clamp01(-s.aimDir.y * 1.4 - 0.2);
+    const lyT = ly >= 0 ? ly : -Math.min(dn, Math.hypot(lx, lz) * 1.5 + dn * aimDown);
+    const gd = s.groundDist ?? 99, tti = gd / Math.max(dn, 0.5);
+    const flare = dn > 0.5 ? Math.max(1 - smoothstep(0.15, 0.6, tti), 1 - smoothstep(0.8, 2.5, gd)) * clamp01(dn / 1.5) : 0;
+    const tSpeed = Math.hypot(lx, lyT, lz) * (1 - flare);
+    const cruise = smoothstep(3, 14, tSpeed);
     const boost = clamp01(s.boost || 0);
     const vFwd = lz / Math.max(speed, 1e-3), vUp = ly / Math.max(speed, 1e-3);
     const ascend = clamp01(vUp) * smoothstep(2, 8, speed);
@@ -513,15 +534,21 @@ export class Animator {
     p.v[CH.LlegX] += clamp(-lx * 0.01, -0.15, 0.15);
     p.v[CH.RlegX] += clamp(lx * 0.01, -0.15, 0.15);
 
-    // body orientation (visual root) in container-yaw frame
-    const k = smoothstep(1.5, 11, speed) * 0.96;
+    // body orientation (visual root) in container-yaw frame; only flight drives it, so the
+    // fly pose blending out after a landing can't tip a running hero into the superman pose
+    if (s.mode !== 'fly') return;
+    const k = smoothstep(1.5, 11, tSpeed) * 0.96;
     const vz = lz < 0 ? lz * 0.3 : lz;
-    _v.set(lx, ly, vz);
+    _v.set(lx, lyT, vz);
     if (_v.lengthSq() > 1e-6) _v.normalize(); else _v.set(0, 1, 0);
     _w.copy(UP).lerp(_v, k);
     if (_w.lengthSq() < 1e-6) _w.copy(UP);
     _w.normalize();
-    this.bodyTarget.setFromUnitVectors(UP, _w);
+    // rotate about UP x dir; a straight-down dive pitches forward instead of picking an arbitrary roll
+    _u.crossVectors(UP, _w);
+    const sn = _u.length();
+    if (sn < 1e-4) _u.set(1, 0, 0); else _u.divideScalar(sn);
+    this.bodyTarget.setFromAxisAngle(_u, Math.atan2(sn, UP.dot(_w)));
     // banking from yaw rate
     const bankT = clamp(-this.yawRate * Math.min(speed, 30) * 0.035, -1.0, 1.0);
     this.bank.update(dt, bankT);
@@ -531,9 +558,9 @@ export class Animator {
 
   /** body tilt (relative to container yaw frame) for the hero to apply around the pelvis */
   bodyTilt(dt, mode) {
-    const target = (mode === 'fly' || this.flyBlend > 0.05) ? this.bodyTarget : _q.identity();
-    if (mode !== 'fly') this.bodyTarget.slerp(_q2.identity(), dampT(6, dt));
-    this.bodyQ.slerp(target, dampT(mode === 'fly' ? 5.5 : 8, dt));
+    if (mode !== 'fly') this.bodyTarget.identity();
+    // standing on the ground the feet have to get under the body quickly; falling can take longer
+    this.bodyQ.slerp(this.bodyTarget, dampT(mode === 'fly' ? 5.5 : mode === 'ground' ? 16 : 10, dt));
     return this.bodyQ;
   }
 
@@ -587,25 +614,44 @@ export class Animator {
     }
   }
 
-  deadPose(out, s) {
+  deadPose(out, s, w = 1) {
     const t = s.deadT;
     const u = clamp01(t / 0.6);
-    out.assign({
+    const d = this._dp ||= new Pose();
+    d.copy(out);
+    d.assign({
       Barm: [0.75, -0.5, 0.15], Belbow: 35, Bfist: 0.2, Bspread: 0.3,
       Lleg: [0.12, -0.98, 0.05], Lknee: 25, Rleg: [0.05, -0.95, 0.2], Rknee: 40,
       BlegIkW: 0, BfootGround: 0, BfootPitch: 30,
       headPitch: -15 + u * 10, headYaw: 25, spinePitch: -8,
       LikW: 0, RikW: 0,
     });
-    out.v[CH.rootY] = 0;
+    d.v[CH.rootY] = 0;
+    out.lerp(d, w);
   }
 
-  tumblePose(out, dt, s) {
-    out.assign({
+  tumblePose(out, dt, s, w = 1) {
+    const air = this._tp ||= new Pose();
+    const res = this._tr ||= new Pose();
+    res.copy(out);
+    air.copy(out);
+    air.assign({
       Barm: [0.7, 0.2, 0.3], Belbow: 50, Bfist: 0.3,
       Lleg: [0.15, -0.6, 0.6], Lknee: 80, Rleg: [0.1, -0.9, 0.2], Rknee: 50,
       BlegIkW: 0, BfootGround: 0, spinePitch: 20, headPitch: 15, LikW: 0, RikW: 0,
     });
+    // coming down (tumbleSettle -> 1) the hero rights itself into a braced crouch: the legs keep
+    // the ground stance, and every getup clip starts from this same crouch
+    const k = clamp01(s.mode === 'tumble' ? s.tumbleSettle || 0 : this.lastSettle || 0);
+    if (k < 0.001) res.copy(air);
+    else {
+      const sk = this._sk ||= new Pose();
+      sk.copy(out);
+      sk.assign({ rootY: -0.42, spinePitch: 38, headPitch: -18, Barm: [0.5, -0.6, 0.35], Belbow: 45, Bfist: 0.5, LikW: 0, RikW: 0 });
+      res.copy(air);
+      res.lerp(sk, k);
+    }
+    out.lerp(res, w);
   }
 
   updateColliders() {
@@ -614,6 +660,14 @@ export class Animator {
     r.rigPos(r.hips.bone, _v); toWorld(r, _v, c[0].a);
     r.rigPos(r.spine[r.spine.length - 1].bone, _v); toWorld(r, _v, c[0].b);
     c[0].r = 0.13 * (r.hipsHeight / 1.0);
+    // torso frame for cape constraints: up along the spine, forward = facing made orthogonal to it
+    const T = (this.torso ||= { up: new THREE.Vector3(), fwd: new THREE.Vector3() });
+    T.up.subVectors(c[0].b, c[0].a).normalize();
+    const m = r.space.matrixWorld.elements;
+    T.fwd.set(m[8], m[9], m[10]).normalize();
+    T.fwd.addScaledVector(T.up, -T.fwd.dot(T.up));
+    if (T.fwd.lengthSq() < 1e-6) T.fwd.set(m[4], m[5], m[6]).negate();
+    T.fwd.normalize();
     for (let i = 0; i < 2; i++) {
       const sd = r.side[i ? 'R' : 'L'];
       r.rigPos(sd.thigh.bone, _v); toWorld(r, _v, c[i + 1].a);

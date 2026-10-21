@@ -91,7 +91,7 @@ export const INV_CLIPS = clips({
   superland: {
     mask: FULL, fadeIn: 0.04, fadeOut: 0.32,
     keys: [
-      { t: 0, p: { rootY: -0.58, rootPitch: 8, spinePitch: 40, headPitch: -26, LlegIkW: 0, Lleg: [0.12, -0.42, -0.9], Lknee: 128, LfootPitch: 35, LfootGround: 0, RlegIkW: 1, RlegIk: [-0.15, 0.1, 0.48], RfootGround: 1,
+      { t: 0, p: { rootY: -0.54, rootPitch: 8, spinePitch: 40, headPitch: -26, LlegIkW: 0, Lleg: [0.1, -0.95, -0.12], Lknee: 86, LfootPitch: -35, LfootGround: 0, RlegIkW: 1, RlegIk: [-0.15, 0.1, 0.48], RfootGround: 1,
         RikW: 1, Rik: [0.05, -1.4, 0.45], Rpole: [1, 0, -0.3], Rfist: 1, LikW: 1, Lik: [0.95, -0.25, -0.35], Lpole: [0.2, -0.9, -0.4], Lfist: 0.8 } },
       { t: 0.32, e: 'out', p: { rootY: -0.55, spinePitch: 34, headPitch: -18 } },
       { t: 0.5, e: 'inout', p: { rootY: -0.45, spinePitch: 22, headPitch: -6 } },
@@ -105,7 +105,7 @@ export const INV_CLIPS = clips({
     ],
   },
   getup: {
-    mask: FULL, fadeIn: 0.02, fadeOut: 0.25,
+    mask: FULL, fadeIn: 0.06, fadeOut: 0.25,
     keys: [
       { t: 0, p: { rootY: -0.45, spinePitch: 45, headPitch: -20, Barm: [0.3, -0.9, 0.35], Belbow: 50, Bfist: 0.7 } },
       { t: 0.32, e: 'inout', p: { rootY: -0.1, spinePitch: 12, headPitch: 0 } },

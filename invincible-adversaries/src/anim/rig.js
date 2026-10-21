@@ -42,7 +42,7 @@ export const RIG_DEFS = {
     R: { clav: 'Armature_r_Arm_ClavicleSHJnt', upper: 'Armature_r_Arm_ShoulderSHJnt', fore: 'Armature_r_Arm_ElbowSHJnt', hand: 'Armature_r_Arm_WristSHJnt', thigh: 'Armature_r_Leg_HipSHJnt', shin: 'Armature_r_Leg_KneeSHJnt', foot: 'Armature_r_Leg_AnkleSHJnt', toe: 'Armature_r_Leg_BallSHJnt', fingers: fingersEve('r') },
     chains: [
       { name: 'hair', bones: ['Armature_hair_01_01SHJnt', 'Armature_hair_01_02SHJnt', 'Armature_hair_01_03SHJnt', 'Armature_hair_01_04SHJnt'], tipExtend: 0.09, stiffness: 0.22, drag: 0.9, gravity: 0.7, radius: 0.09 },
-      { name: 'cape', bones: ['Armature_cape_01_01SHJnt', 'Armature_cape_01_02SHJnt', 'Armature_cape_01_03SHJnt'], tipExtend: 0.11, stiffness: 0.12, drag: 1.1, gravity: 1.0, radius: 0.13 },
+      { name: 'cape', bones: ['Armature_cape_01_01SHJnt', 'Armature_cape_01_02SHJnt', 'Armature_cape_01_03SHJnt'], tipExtend: 0.11, stiffness: 0.12, drag: 1.6, gravity: 1.0, radius: 0.13, behind: { fwd: 0.08, up: 0.1 } },
     ],
   },
   omniman: {
@@ -55,9 +55,9 @@ export const RIG_DEFS = {
     L: { clav: 'ValveBipedBip01_L_Clavicle', upper: 'ValveBipedBip01_L_UpperArm', fore: 'ValveBipedBip01_L_Forearm', hand: 'ValveBipedBip01_L_Hand', thigh: 'ValveBipedBip01_L_Thigh', shin: 'ValveBipedBip01_L_Calf', foot: 'ValveBipedBip01_L_Foot', toe: 'ValveBipedBip01_L_Toe0', fingers: fingersValve('L') },
     R: { clav: 'ValveBipedBip01_R_Clavicle', upper: 'ValveBipedBip01_R_UpperArm', fore: 'ValveBipedBip01_R_Forearm', hand: 'ValveBipedBip01_R_Hand', thigh: 'ValveBipedBip01_R_Thigh', shin: 'ValveBipedBip01_R_Calf', foot: 'ValveBipedBip01_R_Foot', toe: 'ValveBipedBip01_R_Toe0', fingers: fingersValve('R') },
     chains: [
-      { name: 'capeL', bones: ['Bone_Cape_3_01', 'Bone_Cape_3_02', 'Bone_Cape_3_03', 'Bone_Cape_3_04', 'Bone_Cape_3_05', 'Bone_Cape_3_06', 'cape_07_l'], stiffness: 0.06, drag: 1.4, gravity: 1.0, radius: 0.12, group: 'cape' },
-      { name: 'capeC', bones: ['Bone_Cape_4_01', 'Bone_Cape_4_02', 'Bone_Cape_4_03', 'Bone_Cape_4_04', 'Bone_Cape_4_05', 'Bone_Cape_4_06', 'cape_07_c'], stiffness: 0.06, drag: 1.4, gravity: 1.0, radius: 0.14, group: 'cape' },
-      { name: 'capeR', bones: ['Bone_Cape_5_01', 'Bone_Cape_5_02', 'Bone_Cape_5_03', 'Bone_Cape_5_04', 'Bone_Cape_5_05', 'Bone_Cape_5_06', 'cape_07_r'], stiffness: 0.06, drag: 1.4, gravity: 1.0, radius: 0.12, group: 'cape' },
+      { name: 'capeL', bones: ['Bone_Cape_3_01', 'Bone_Cape_3_02', 'Bone_Cape_3_03', 'Bone_Cape_3_04', 'Bone_Cape_3_05', 'Bone_Cape_3_06', 'cape_07_l'], stiffness: 0.08, drag: 2.6, gravity: 1.0, radius: 0.12, group: 'cape', behind: { fwd: 0.04, up: 0.06 } },
+      { name: 'capeC', bones: ['Bone_Cape_4_01', 'Bone_Cape_4_02', 'Bone_Cape_4_03', 'Bone_Cape_4_04', 'Bone_Cape_4_05', 'Bone_Cape_4_06', 'cape_07_c'], stiffness: 0.08, drag: 2.6, gravity: 1.0, radius: 0.14, group: 'cape', behind: { fwd: 0.04, up: 0.06 } },
+      { name: 'capeR', bones: ['Bone_Cape_5_01', 'Bone_Cape_5_02', 'Bone_Cape_5_03', 'Bone_Cape_5_04', 'Bone_Cape_5_05', 'Bone_Cape_5_06', 'cape_07_r'], stiffness: 0.08, drag: 2.6, gravity: 1.0, radius: 0.12, group: 'cape', behind: { fwd: 0.04, up: 0.06 } },
     ],
   },
 };

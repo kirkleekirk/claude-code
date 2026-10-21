@@ -90,7 +90,7 @@ export const OMNI_CLIPS = clips({
     ],
   },
   getup: {
-    mask: FULL, fadeIn: 0.02, fadeOut: 0.25,
+    mask: FULL, fadeIn: 0.06, fadeOut: 0.25,
     keys: [
       { t: 0, p: { rootY: -0.45, spinePitch: 40, headPitch: -20, Barm: [0.35, -0.85, 0.35], Belbow: 45, Bfist: 1 } },
       { t: 0.3, e: 'inout', p: { rootY: -0.1, spinePitch: 10 } },
@@ -280,6 +280,7 @@ export class OmniKit extends Kit {
       h.anim.stop(0.2);
       if (h.isPlayer) w.renderer.fx.speedLines = 0;
       h.vel.copy(dir).multiplyScalar(6);
+      const carriedHit = !!carried;
       if (carried) {
         const e = carried; carried = null;
         e.carriedBy = null; h.carrying = null;
@@ -294,6 +295,12 @@ export class OmniKit extends Kit {
         if (w.settings.comic) kit.fx.comic(p.clone().add(_w.set(0, 1.2, 0)), 'BAM!', { size: 2.2 });
       }
       if (!h.grounded) h.mode = h.def.flight && h.flyEnergy > 0.1 ? 'fly' : 'air';
+      else if (!carriedHit) {
+        // a charge along the ground ends in a skid: drop into the heavy landing crouch
+        h.anim.play(kit.clips.land, { fadeIn: 0.12 });
+        kit.fx.dustRing(h.pos, { n: 16, speed: 7, size: 0.7, size1: 2.2, life: 0.6 });
+        w.sfx('step_heavy', h.pos, { vol: 0.8 });
+      }
     };
     h.override = travel;
   }
