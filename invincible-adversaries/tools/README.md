@@ -39,3 +39,21 @@ The optional last two arguments simplify the meshes whose names match the regex 
 | Invincible | 5.8 MB | 0.6 MB | 33k |
 | Atom Eve | 1.4 MB | 0.2 MB | 4k |
 | Omni-Man | 19.6 MB | 1.4 MB | 94k |
+
+## Gameplay trailer
+
+`trailer/` renders the trailer in-engine. `director.js` stages each shot, flies the camera and draws the title cards. It also records the game's own audio on the trailer clock. `capture.mjs` runs shots headlessly in Chromium and pipes 1080p frames to ffmpeg. `score.js` synthesizes the music to fit the edit. `mix.sh` ducks the music under the sound effects, normalizes loudness to -14 LUFS and muxes the result.
+
+You need ffmpeg and Python 3 with numpy. Start the game with `npm start`, then:
+
+```sh
+cd tools
+npm install
+npm run trailer   # writes trailer/out/trailer.mp4
+```
+
+Rendering is slow without a GPU: about 1 hour for the 73.5-second cut on four CPU cores. For a quick look, run a low-resolution preview of chosen shots:
+
+```sh
+node trailer/capture.mjs trailer/out/preview inv_mach,eve_ult --preview 10
+```

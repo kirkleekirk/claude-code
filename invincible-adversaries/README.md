@@ -107,7 +107,7 @@ src/vfx/          particles and effects
 src/audio/        procedural SFX engine
 src/ai/           bots
 src/ui/           HUD, menus, icons, styles
-tools/            model conversion and optimization pipeline
+tools/            model conversion/optimization and the in-engine trailer pipeline
 ```
 
 Developer URL parameters: `?auto=invincible|eve|omniman` skips the menus, `?quality=low|medium|high` sets the graphics quality and `?autobot` lets a bot drive the player.
