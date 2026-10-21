@@ -83,6 +83,8 @@ export class Game {
     this.audio = new AudioEngine();
     this.audio.volume = this.saved.volume ?? 0.8;
     this.world = new World({ scene: this.scene, fx: this.fx, audio: this.audio, renderer: this.renderer, camRig: this.camRig, obstacles: this.arena.obstacles });
+    // a respawn moves the player across the map: cut rather than chase
+    this.world.on('respawn', (e) => { if (e.hero === this.player) this.camRig.cut(); });
     this.input = new Input(this.canvas);
     this.input.onLockChange = (locked) => { if (!locked && this.state === 'playing' && !this._noPause) this.pause(); };
     this.pc = new PlayerController(this);
@@ -193,7 +195,7 @@ export class Game {
     this.player = this.spawn(key, 0, { isPlayer: true, name: 'YOU' });
     for (const k of HERO_KEYS) if (k !== key) this.spawn(k, 0);
     for (const k of HERO_KEYS) this.spawn(k, 1);
-    this.camRig.yaw = 0; this.camRig.pitch = -0.12; this.camRig.initialized = false;
+    this.camRig.yaw = 0; this.camRig.pitch = -0.12; this.camRig.cut();
     if (!PARAMS.has('capture')) this.input.lock();
     this.ensureAudio();
     this.hud.toast(TOUCH_ONLY ? 'A bot is playing your hero. Use a keyboard and mouse to play yourself.' : 'Fight! ESC for menu & training options');
@@ -210,6 +212,7 @@ export class Game {
     this.player.kit = new KITS[key](this.player);
     this.player.pos.copy(pos);
     this.world.add(this.player);
+    if (old.dead) this.camRig.cut();
     this.fx.pillar(pos, { color: HEROES[key].color, height: 16, radius: 1.3, life: 1.2 });
     this.player.dissolve = 1; this.player.dissolveTarget = 0;
     if (this.playerBot) {
@@ -306,11 +309,10 @@ export class Game {
     this.input.endFrame();
   }
 
-  collide = (from, back, dist) => {
-    _w.copy(back).normalize();
-    const hit = this.world.rayWorld(from, _w, dist + 0.3);
-    if (hit) return Math.max(0.6, hit.dist - 0.35);
-    return dist;
+  // clear distance along a ray, for camera collision
+  camRay = (from, dir, dist) => {
+    const hit = this.world.rayWorld(from, dir, dist);
+    return hit ? hit.dist : dist;
   };
 
   updateCamera(dt) {
@@ -357,7 +359,7 @@ export class Game {
     const highAlt = p.pos.y > 60;
     cr.zoom = damp(cr.zoom, 0, 6, dt);
     const tgt = { root: p.root, camHeight: p.camHeight, camDist: p.camDist * (highAlt ? 2.6 : 1) * (p.dead ? 1.6 : 1) };
-    cr.update(dt, tgt, this.collide, { speed, flying: p.mode === 'fly', boost: !!(p.override && p.override.boost) });
+    cr.update(dt, tgt, this.camRay, { speed, flying: p.mode === 'fly', boost: !!(p.override && p.override.boost) });
   }
 
   updatePreview(dt) {

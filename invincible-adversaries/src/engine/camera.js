@@ -2,12 +2,25 @@ import * as THREE from 'three';
 import { clamp, damp, dampT, fbm1, lerp, DEG } from './math.js';
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _fwd = new THREE.Vector3(), _right = new THREE.Vector3();
+const _arm = new THREE.Vector3(), _q = new THREE.Vector3(), _d = new THREE.Vector3(), _o = new THREE.Vector3();
+const UP = new THREE.Vector3(0, 1, 0);
+// Nothing but cut() moves the camera in one jump. The boom length eases toward what the situation asks
+// for, collisions pull it in fast but over several frames, and a fast hero drags the follow point along
+// instead of it jumping onto the hero.
+const MAX_LAG = 3; // m the follow point may trail the hero
+const BOOM_SPEED = 12; // m/s the wanted boom length may change (speed, altitude, death)
+const BOOM_IN = 20; // m/s a collision may pull the camera in
+const BOOM_OUT = 3; // /s easing back out once clear...
+const BOOM_HOLD = 0.25; // ...for this long (strafing past a row of pillars)
+const PROBE = 0.3; // m: radius of the collision probe around the camera
+const MIN_ARM = 0.6; // m: closest the camera comes to the follow point
 
 export class ThirdPersonCamera {
   constructor(aspect) {
     this.cam = new THREE.PerspectiveCamera(72, aspect, 0.08, 3200);
     this.yaw = 0; this.pitch = -0.08;
-    this.dist = 4.2; this.curDist = 4.2;
+    this.dist = 4.2; this.curDist = 4.2; this.want = 4.2;
+    this.armNow = 4.2; this.clearT = 0; this.cuts = 0; this.lift = 0;
     this.shoulder = 0.62; this.height = 1.55;
     this.fovBase = 72; this.fovKick = 0; this.fov = 72;
     this.trauma = 0; this.shakeT = 0;
@@ -29,6 +42,8 @@ export class ThirdPersonCamera {
   }
   addTrauma(t) { this.trauma = Math.min(1.25, this.trauma + t); }
   kick(f) { this.fovKick = Math.max(this.fovKick, f); }
+  /** jump straight to the target on the next update (match start, respawn, hero swap) */
+  cut() { this.initialized = false; this.cuts++; }
 
   forward(out = _fwd) {
     const cp = Math.cos(this.pitch);
@@ -36,29 +51,53 @@ export class ThirdPersonCamera {
   }
 
   /**
-   * target: hero (uses position, height), obstacles for collision, opts {speed, flying, boost}
+   * target: hero (uses position, height); ray(from, dir, dist) returns the clear distance along a ray
+   * (camera collision); opts {speed, flying, boost}
    */
-  update(dt, target, collide, opts = {}) {
+  update(dt, target, ray, opts = {}) {
     const h = target.camHeight || this.height;
-    const dist = (target.camDist || this.dist) * (1 + clamp(opts.speed || 0, 0, 60) * 0.006) * (1 - this.zoom * 0.35);
+    const want = (target.camDist || this.dist) * (1 + clamp(opts.speed || 0, 0, 60) * 0.006) * (1 - this.zoom * 0.35);
     this.pivot.copy(target.root.position);
     this.pivot.y += h;
-    if (!this.initialized) { this.pivotSmooth.copy(this.pivot); this.initialized = true; }
-    // follow with slight lag (tighter when slow)
-    const lag = opts.flying ? 14 : 22;
-    this.pivotSmooth.lerp(this.pivot, dampT(lag, dt));
-    if (this.pivotSmooth.distanceToSquared(this.pivot) > 36) this.pivotSmooth.copy(this.pivot);
+    const cutNow = !this.initialized;
+    if (cutNow) { this.pivotSmooth.copy(this.pivot); this.want = want; this.clearT = 0; this.initialized = true; }
+    // the boom length asked for can change in one frame (a dash ending, a landing, dropping out of the
+    // stratosphere), so ease toward it
+    this.want += clamp((want - this.want) * dampT(3, dt), -BOOM_SPEED * dt, BOOM_SPEED * dt);
+    // follow with slight lag (tighter when slow), at most MAX_LAG behind
+    this.pivotSmooth.lerp(this.pivot, dampT(opts.flying ? 14 : 22, dt));
+    const gap = this.pivotSmooth.distanceTo(this.pivot);
+    if (gap > MAX_LAG) this.pivotSmooth.lerp(this.pivot, 1 - MAX_LAG / gap);
     const fwd = this.forward(_fwd);
     _right.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw)).negate(); // camera right
-    // desired camera position: behind & over the shoulder
+    // the arm runs from the follow point to the spot behind and over the shoulder
     const shoulder = this.shoulder * (1 - this.zoom * 0.2);
-    const desired = _v.copy(this.pivotSmooth).addScaledVector(_right, shoulder);
-    const camBack = _w.copy(fwd).multiplyScalar(-dist);
-    // collision: shorten boom
-    let d = dist;
-    if (collide) d = collide(desired, camBack, dist);
-    this.curDist = d < this.curDist ? d : damp(this.curDist, d, 6, dt);
-    const camPos = this.pos.copy(desired).addScaledVector(fwd, -this.curDist);
+    const arm = _arm.copy(_right).multiplyScalar(shoulder).addScaledVector(fwd, -this.want);
+    const armLen = arm.length();
+    arm.multiplyScalar(1 / armLen);
+    // collision: the clear share of the arm. Backed against a wall taller than the follow point, the arm
+    // starts higher up, over the wall, rather than leaving the camera inside it
+    let clear = 1, liftWant = 0;
+    if (ray) {
+      const base = this.clearShare(this.pivotSmooth, arm, armLen, ray);
+      if (base * armLen < MIN_ARM + 0.3 && arm.y > -0.5) {
+        const room = Math.min(1.3, ray(this.pivotSmooth, UP, 1.6) - 0.3);
+        if (room > 0.3 && this.clearShare(_o.copy(this.pivotSmooth).addScaledVector(UP, room), arm, armLen, ray) * armLen > base * armLen + 0.6) liftWant = room;
+      }
+      this.lift = cutNow ? liftWant : liftWant > this.lift ? Math.min(liftWant, this.lift + 8 * dt) : damp(this.lift, liftWant, 2.5, dt);
+      clear = this.lift > 0.01 ? this.clearShare(_o.copy(this.pivotSmooth).addScaledVector(UP, this.lift), arm, armLen, ray) : base;
+      clear = clamp(clear, Math.min(1, MIN_ARM / armLen), 1);
+    } else this.lift = 0;
+    // the arm pulls in fast but over a few frames (a one-frame jump reads as a snap), whether a wall
+    // or a shorter wanted boom asks for it, and eases back out once clear
+    const reach = clear * armLen;
+    if (cutNow) this.armNow = reach;
+    else if (reach < this.armNow) {
+      this.armNow -= Math.min((this.armNow - reach) * dampT(18, dt), BOOM_IN * dt);
+      this.clearT = 0;
+    } else if ((this.clearT += dt) > BOOM_HOLD) this.armNow = Math.min(reach, damp(this.armNow, reach, BOOM_OUT, dt));
+    this.curDist = this.armNow;
+    const camPos = this.pos.copy(this.pivotSmooth).addScaledVector(UP, this.lift).addScaledVector(arm, this.armNow);
     if (camPos.y < 0.25) camPos.y = 0.25;
     // FOV
     this.fovKick = damp(this.fovKick, 0, 3, dt);
@@ -86,6 +125,23 @@ export class ThirdPersonCamera {
     this.cam.rotateX(sy * 0.12);
     this.cam.updateProjectionMatrix();
     this.cam.updateMatrixWorld();
+  }
+
+  /**
+   * the clear share of the arm from origin: traced to the camera spot and to four points around it, so
+   * a pillar edge shortens the arm gradually rather than all at once
+   */
+  clearShare(origin, arm, armLen, ray) {
+    let c = 1;
+    for (let i = 0; i < 5; i++) {
+      const q = _q.copy(origin).addScaledVector(arm, armLen);
+      if (i === 1 || i === 2) q.addScaledVector(_right, i === 1 ? PROBE : -PROBE);
+      else if (i > 2) q.y += i === 3 ? PROBE : -PROBE;
+      const d = _d.subVectors(q, origin), len = d.length();
+      d.multiplyScalar(1 / len);
+      c = Math.min(c, (ray(origin, d, len + 0.3) - 0.35) / len);
+    }
+    return c;
   }
 
   /** world ray from screen center */

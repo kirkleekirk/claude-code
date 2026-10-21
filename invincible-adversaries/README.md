@@ -128,6 +128,7 @@ node tests/run.mjs "eve" --file abilities.test.js   # tests whose name contains 
 - **transitions** covers drops, jumps, flight take-off and landing, flight running out, knockback tumbles on the ground and in the air, death, respawn, revive and teleports, plus Omni-Man's cape.
 - **abilities** checks every ability's damage, cooldowns and charges and that nothing is left behind afterwards, including when casters or targets die mid-ability, when you swap hero mid-ability, in mirror matches, into walls, at the arena edge and under the ceiling.
 - **rules** covers shields, overhealth, damage modifiers, lifesteal, ultimate charge, respawns, health orbs, regeneration, the training toggles, friendly fire and Omni-Man's unstoppable passive.
+- **camera** feeds the mouse filter bogus pointer-lock spikes and real flicks, then runs each hero past pillars, into cover, through flight, every ability and ult, knockback and death, plus a 2-minute bot match, and fails on any one-frame jump of the camera's boom or follow point, a view turn the player didn't make, or the camera stuck inside a wall.
 - **soak** runs a 10-minute 3v3 bot match on hard and fails on NaN, heroes leaving the arena or ending up inside cover, stuck abilities, tumbles or carries, HP or ultimate out of bounds, late respawns, broken poses, and growing scene, effect or projectile counts.
 
 ## Credits and notice
