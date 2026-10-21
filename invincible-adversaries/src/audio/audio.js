@@ -421,10 +421,12 @@ R.barrier_break = (S, out, t0, v) => {
   return 1.0;
 };
 R.emp_throw = (S, out, t0, v) => {
-  tone(S, out, t0, { f: 1760, type: 'square', a: 0.002, d: 0.05, vol: 0.06 });
-  tone(S, out, t0 + 0.09, { f: 1760, type: 'square', a: 0.002, d: 0.05, vol: 0.06 });
-  sweepNoise(S, out, t0, { f0: 500, f1: 2000, dur: 0.2, Q: 1, vol: 0.5, attack: 0.05, seed: v });
-  return 0.35;
+  // two armed-charge chirps over a crackling whoosh: the cue that an EMP is on its way
+  tone(S, out, t0, { f: 1760, type: 'square', a: 0.002, d: 0.05, vol: 0.14 });
+  tone(S, out, t0 + 0.09, { f: 1760, type: 'square', a: 0.002, d: 0.05, vol: 0.14 });
+  sweepNoise(S, out, t0, { f0: 500, f1: 2000, dur: 0.2, Q: 1, vol: 1.1, attack: 0.05, seed: v });
+  clicks(S, out, t0 + 0.02, { n: 12, dur: 0.3, f: 3200, Q: 5, vol: 0.22 });
+  return 0.4;
 };
 R.emp_blast = (S, out, t0, v) => {
   // a crackling electric boom, then everything powering down
