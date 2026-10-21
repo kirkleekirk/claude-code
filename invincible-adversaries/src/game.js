@@ -283,6 +283,7 @@ export class Game {
     if (this.playerBot && this.player) { this.camRig.yaw = damp(this.camRig.yaw, this.camRig.yaw + wrapA(yawOf(this.player.intents.aimDir) - this.camRig.yaw), 6, dt); this.camRig.pitch = damp(this.camRig.pitch, Math.asin(clamp(this.player.intents.aimDir.y, -1, 1)) * 0.6 - 0.1, 4, dt); }
     let gdt = dt;
     if (w.hitstopT > 0) { w.hitstopT -= dt; gdt = dt * 0.06; }
+    w.realDt = dt;
     if (this.state !== 'paused') {
       w.update(gdt);
       this.fx.update(gdt);

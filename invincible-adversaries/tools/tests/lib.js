@@ -34,8 +34,14 @@ window.T = (() => {
    * Stage heroes. spec: [{ key, team, at:[x,y,z], fly, player, bot, face:[x,z], hp }]
    * Bots run only for entries with bot:true; everyone else is driven through intents.
    */
+  // world events recorded per stage() (the world has no off(), so one listener set feeds this log)
+  const log = { damage: [], heal: [], kill: [], ult: [], respawn: [] };
+  for (const ev of Object.keys(log)) w.on(ev, (e) => log[ev].push({ ...e, t: w.time }));
+  const dmgTo = (h, since = -1) => log.damage.filter((e) => e.target === h && e.t >= since).reduce((a, e) => a + e.amount, 0);
+  const dmgBy = (h, since = -1) => log.damage.filter((e) => e.src === h && e.t >= since).reduce((a, e) => a + e.amount, 0);
   function stage(spec, { bots = 'idle', settings = {} } = {}) {
     g.clearWorld(); resetFx();
+    for (const k in log) log[k].length = 0;
     g.state = 'playing'; g.menus.show(null); g.hud.show(false);
     Object.assign(w.settings, { bots, noCooldowns: false, fastUlt: false, godMode: false, comic: true, difficulty: 'normal' }, settings);
     w.score = [0, 0];
@@ -65,6 +71,30 @@ window.T = (() => {
   /** step n frames at 60 Hz; fn(k) runs before each step (return false to stop early) */
   let frame = 0;
   function run(n, fn) { for (let k = 0; k < n; k++) { if (fn && fn(k) === false) return k; g.noRender = true; g.step(1 / 60); frame++; } return n; }
+  /** state an ability must not leave behind once it is over (or once its caster died) */
+  function cleanIssues(h) {
+    const out = [], A = T.ARENA;
+    if (h.override) out.push('override still active');
+    if (h.untargetable) out.push('left untargetable');
+    if (h.carrying) out.push(`still carrying ${h.carrying.key}`);
+    if (h.carriedBy) out.push(`still carried by ${h.carriedBy.key}`);
+    if (![h.pos.x, h.pos.y, h.pos.z, h.vel.x, h.vel.y, h.vel.z].every(Number.isFinite)) out.push('NaN position/velocity');
+    if (A && Math.hypot(h.pos.x, h.pos.z) > A.boundR + 0.1) out.push(`outside the arena (r ${Math.hypot(h.pos.x, h.pos.z).toFixed(1)})`);
+    if (A && h.pos.y > A.ceiling + 0.1) out.push(`above the ceiling (${h.pos.y.toFixed(1)})`);
+    if (h.pos.y < w.groundAt(h.pos.x, h.pos.z) - 0.1 && !h.dead) out.push(`below the ground (${h.pos.y.toFixed(2)})`);
+    if (h.kit && h.kit.busyT > 0.05) out.push(`kit still busy (${h.kit.busyT.toFixed(2)} s)`);
+    if (h.isPlayer && g.renderer.fx.speedLines > 0.01) out.push('speed lines left on');
+    if (h.status.rootT > 0.05) out.push('left rooted');
+    return out;
+  }
+  /** step until every hero is out of overrides, carries and tumbles (fn drives intents); returns frames or -1 */
+  function settle(hs, max = 600, fn) {
+    for (let k = 0; k < max; k++) {
+      if (hs.every((h) => h.dead || (!h.override && !h.carriedBy && !h.carrying && h.mode !== 'tumble' && (!h.kit || h.kit.free) && !(h.kit && h.kit.ultState)))) return k;
+      run(1, () => { for (const h of hs) clr(h.intents); fn && fn(k); });
+    }
+    return -1;
+  }
   /** move a hero instantly, carrying its world-space cape/hair simulation along (as spawnAt does) */
   function teleport(h, pt) {
     h.root.updateMatrixWorld(true);
@@ -122,7 +152,7 @@ window.T = (() => {
       if (!allowLift && tilt < 0.45 && Math.min(fy[0], fy[1]) > gy + 0.35) out.push(`no foot on the ground (lowest ${(Math.min(...fy) - gy).toFixed(2)} m up)`);
       if (s.head.y < s.hips.y + 0.25) out.push(`head not above hips`);
       // knees bend forward relative to the pelvis, never backwards
-      const legYaw = h.yaw + (h.anim.legYaw || 0);
+      const legYaw = (h.visYaw ?? h.yaw) + (h.anim.legYaw || 0);
       const fwd = V(Math.sin(legYaw), 0, Math.cos(legYaw));
       for (const side of ['L', 'R']) {
         const b = s[side];
@@ -208,6 +238,8 @@ window.T = (() => {
   };
 
   async function runAll(filter) {
+    T.ARENA = (await import(new URL('src/world/arena.js', location.href).href)).ARENA;
+    T.RULES = (await import(new URL('src/heroes/data.js', location.href).href)).RULES;
     const results = [];
     for (const t of tests) {
       if (filter && !t.name.includes(filter)) continue;
@@ -220,5 +252,5 @@ window.T = (() => {
     ctx = null;
     return results;
   }
-  return { g, w, THREE, V, test, expect, fail, info, clr, stage, aim, center, run, press, teleport, skel, boneNaN, poseIssues, popIssues, capeIssues, watch, report, resetFx, runAll };
+  return { g, w, THREE, V, test, expect, fail, info, clr, stage, aim, center, run, press, teleport, log, dmgTo, dmgBy, cleanIssues, settle, skel, boneNaN, poseIssues, popIssues, capeIssues, watch, report, resetFx, runAll };
 })();

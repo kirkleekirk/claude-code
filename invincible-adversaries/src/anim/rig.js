@@ -387,6 +387,27 @@ export class Rig {
     if (sd.toe) sd.toe.setDelta(_q.setFromAxisAngle(_a.set(1, 0, 0), P('toe') * DEG));
   }
 
+  /**
+   * After apply(): any foot below the world floor (FK legs or a fading air pose under a crouch can
+   * push one through) is re-solved with leg IK onto it.
+   */
+  floorFeet(v, ctx, floorY) {
+    const e = this.space.matrixWorld.elements, scale = Math.hypot(e[0], e[1], e[2]);
+    let fixed = false;
+    for (const s of ['L', 'R']) {
+      const sd = this.side[s];
+      _fp.setFromMatrixPosition(sd.foot.bone.matrixWorld);
+      const minY = floorY + sd.ankleHeight * scale * 0.9;
+      if (_fp.y >= minY) continue;
+      _fp.y = minY;
+      _fp.applyMatrix4(this._spaceInv);
+      v[CH[s + 'legIkW']] = 1; v[CH[s + 'legIkX']] = _fp.x; v[CH[s + 'legIkY']] = _fp.y; v[CH[s + 'legIkZ']] = _fp.z;
+      this._solveLeg(s, v, ctx);
+      fixed = true;
+    }
+    if (fixed) this.space.updateMatrixWorld(true);
+  }
+
   /** Current rig-space position of a joint (after apply). */
   jointPos(s, part, out) { return this.rigPos(this.side[s][part].bone, out); }
 }
@@ -396,7 +417,7 @@ const FIST_THUMB = [25, 30, 35];
 const REST_CURL = [14, 18, 10];
 const SPREAD = { index: 9, middle: 0, ring: -7, pinky: -14 };
 
-const _ikS = new THREE.Vector3(), _ikT = new THREE.Vector3(), _ikP = new THREE.Vector3();
+const _ikS = new THREE.Vector3(), _ikT = new THREE.Vector3(), _ikP = new THREE.Vector3(), _fp = new THREE.Vector3();
 const _ikRes = { d: new THREE.Vector3(), h: new THREE.Vector3(), bend: 0, elbow: new THREE.Vector3() };
 const _t1 = new THREE.Vector3(), _t2 = new THREE.Vector3(), _t3 = new THREE.Vector3();
 

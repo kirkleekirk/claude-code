@@ -56,7 +56,7 @@ for (const key of KEYS) {
     T.run(20, () => { T.clr(h.intents); T.aim(h, ahead(h)); });
     T.w.kill(foe, h);
     T.expect(h.dead, 'not dead after kill');
-    T.run(Math.ceil((T.g.world.constructor.RULES?.respawn ?? 7) * 60) + 30, () => { T.clr(h.intents); });
+    T.run(Math.ceil((T.RULES.respawn) * 60) + 30, () => { T.clr(h.intents); });
     T.expect(!h.dead, 'did not respawn within respawn time + 0.5 s');
     let r = T.watch([h], 60, () => { T.clr(h.intents); T.aim(h, ahead(h)); });
     T.report('after respawn', r);

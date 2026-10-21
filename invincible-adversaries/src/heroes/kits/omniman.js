@@ -174,7 +174,7 @@ export class OmniKit extends Kit {
           }
           w.shakeAt(h.pos, 0.4);
         }
-        if (hits.length) { w.hitstop(fin ? 0.1 : 0.06); w.shakeAt(h.pos, 0.22); if (fin && w.settings.comic && Math.random() < 0.4) this.fx.comic(hits[0].center.clone().add(_w.set(0, 1, 0)), 'CRUNCH!', { size: 2 }); }
+        if (hits.length) { w.hitstop(fin ? 0.1 : 0.06, h); w.shakeAt(h.pos, 0.22); if (fin && w.settings.comic && Math.random() < 0.4) this.fx.comic(hits[0].center.clone().add(_w.set(0, 1, 0)), 'CRUNCH!', { size: 2 }); }
       },
     });
   }
@@ -198,7 +198,12 @@ export class OmniKit extends Kit {
           w.sfx('rock_rip', p, { vol: 0.9 });
           rock = boulderMesh();
           w.scene.add(rock);
-          const follow = () => { if (!rock || !rock.parent) return false; h.bonePos('handR', _u); rock.position.copy(_u).addScaledVector(UP, 0.35); rock.rotation.y += 0.02; return !thrown; };
+          const follow = () => {
+            if (!rock || !rock.parent) return false;
+            // the thrower died or left before the throw: drop the rock instead of carrying it forever
+            if (h.dead || !w.heroes.includes(h)) { w.scene.remove(rock); rock = null; return false; }
+            h.bonePos('handR', _u); rock.position.copy(_u).addScaledVector(UP, 0.35); rock.rotation.y += 0.02; return !thrown;
+          };
           let thrown = false;
           this.fx.every(follow);
           rock.userData.setThrown = () => { thrown = true; };
@@ -269,13 +274,13 @@ export class OmniKit extends Kit {
               w.damage(h, e, 85, { power: 1.2, type: 'ability' });
               kit.fx.punchImpact(e.center, dir, { power: 1.5 });
               w.sfx('punch_heavy', e.center, { vol: 1 });
-              w.hitstop(0.05);
+              w.hitstop(0.05, h);
             }
           }
         }
       },
     });
-    travel.onEnd = () => {
+    travel.onEnd = (died) => {
       tr.stop();
       h.anim.stop(0.2);
       if (h.isPlayer) w.renderer.fx.speedLines = 0;
@@ -284,6 +289,7 @@ export class OmniKit extends Kit {
       if (carried) {
         const e = carried; carried = null;
         e.carriedBy = null; h.carrying = null;
+        if (died) return; // dropped, not slammed
         const p = e.center.clone();
         w.damage(h, e, 35, { stun: 0.6, knock: dir.clone().multiplyScalar(12).setY(5), forceKnock: false, power: 1.5, type: 'ability' });
         kit.fx.punchImpact(p, dir, { power: 2.2 });
@@ -291,9 +297,10 @@ export class OmniKit extends Kit {
         if (travel.hitWall) { kit.fx.rocks(p, { n: 14, speed: 9, size: 0.25 }); kit.fx.smoke(p, { n: 8, size: 1.2, size1: 3 }); }
         w.renderer.addWave(p, { strength: 0.05, life: 0.5 });
         w.sfx('punch_heavy', p, { vol: 1 }); w.sfx('ground_slam', p, { vol: 0.6, rate: 1.3 });
-        w.hitstop(0.1); w.shakeAt(p, 0.5);
+        w.hitstop(0.1, h); w.shakeAt(p, 0.5);
         if (w.settings.comic) kit.fx.comic(p.clone().add(_w.set(0, 1.2, 0)), 'BAM!', { size: 2.2 });
       }
+      if (died) return;
       if (!h.grounded) h.mode = h.def.flight && h.flyEnergy > 0.1 ? 'fly' : 'air';
       else if (!carriedHit) {
         // a charge along the ground ends in a skid: drop into the heavy landing crouch
@@ -336,7 +343,7 @@ export class OmniKit extends Kit {
         w.renderer.fx.ca = Math.max(w.renderer.fx.ca, 0.01);
         w.sfx('thunderclap', o, { vol: 1.1, important: true });
         w.shakeAt(o, 0.75);
-        if (hits.length) w.hitstop(0.07);
+        if (hits.length) w.hitstop(0.07, h);
       },
     });
   }
@@ -429,7 +436,7 @@ export class OmniKit extends Kit {
             kit.fx.ring(t.center, { r1: 4, life: 0.3, normal: dir, intensity: 1.2 });
             w.renderer.addWave(t.center, { strength: 0.05, life: 0.4 });
             w.sfx('punch_heavy', t.center, { vol: 1, important: true });
-            w.hitstop(0.09); w.shakeAt(t.center, 0.45);
+            w.hitstop(0.09, h); w.shakeAt(t.center, 0.45);
             if (w.settings.comic && idx === strikes.length - 1) kit.fx.comic(t.center.clone().add(_w.set(0, 1.5, 0)), 'THINK, MARK!', { size: 3.6, life: 1.1, fill: '#ff2d2d' });
           }
           if (pt > 0.16) { phase = 'zip'; pt = 0; idx++; this.boost = 1; }
@@ -437,10 +444,11 @@ export class OmniKit extends Kit {
         }
         return false;
       },
-      onEnd() {
+      onEnd(died) {
         tr.stop();
         h.untargetable = false;
         kit.blitzing = false;
+        if (died) return;
         // finishing thunderclap
         const p = h.pos.clone(); p.y = Math.max(p.y, w.groundAt(p.x, p.z));
         for (const e of w.inSphere(h.center, 7, kit.enemyFilter())) w.damage(h, e, 80, { knock: _w.subVectors(e.pos, p).setY(0).normalize().multiplyScalar(12).setY(6).clone(), power: 1.2, type: 'ult' });

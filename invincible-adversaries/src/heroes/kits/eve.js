@@ -256,9 +256,10 @@ export class EveKit extends Kit {
         const p = proj.pos;
         kit.fx.energyBurst(p, { size: 0.42, n: 6 });
         w.sfx('bolt_hit', p, { vol: 0.35, minGap: 0.03 });
-        // small splash + weak heal for allies near the impact
+        // small splash + weak heal for allies near the impact (not Eve herself: point-blank that
+        // would be ~35 HP/s of self-healing)
         for (const e of w.inSphere(p, 1.2, kit.enemyFilter())) if (e !== hero) w.damage(h, e, 8, { noFlinch: true, power: 0.1 });
-        for (const a of w.inSphere(p, 4, kit.allyFilter(true))) {
+        for (const a of w.inSphere(p, 4, kit.allyFilter(false))) {
           const got = w.heal(h, a, 5);
           if (got > 0) kit.fx.add.spawn({ p: a.center, v: [0, 1.5, 0], life: 0.5, size: 0.12, size1: 0.02, color: [1.2, 3, 1.8, 1], color1: [1, 3, 1.5, 0], shape: SHAPE.STAR });
         }
@@ -427,7 +428,7 @@ export class EveKit extends Kit {
         w.shakeAt(c, 0.5);
         h.glowTarget = 0.5;
         // knock back nearby enemies a little
-        for (const e2 of w.inSphere(c, 6, kit.enemyFilter())) w.damage(h, e2, 30, { knock: _w.subVectors(e2.pos, h.pos).setY(0).normalize().multiplyScalar(10).setY(4).clone() });
+        for (const e2 of w.inSphere(c, 6, kit.enemyFilter())) w.damage(h, e2, 30, { knock: _w.subVectors(e2.pos, h.pos).setY(0).normalize().multiplyScalar(10).setY(4).clone(), type: 'ult' });
       },
     });
     const start = h.pos.y;
@@ -575,7 +576,7 @@ export class EveKit extends Kit {
         revived.push(a);
         w.emit('revive', { by: h, hero: a });
       } else if (a.pos.distanceTo(h.pos) < 35) {
-        w.heal(h, a, 200);
+        w.heal(h, a, 200, { noUlt: true });
         fx.healBurst(a.pos, { color: [3, 1.2, 2.6, 1] });
       }
       if (!a.dead) this.applyBubble(a, 150, 3);

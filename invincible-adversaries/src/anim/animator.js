@@ -222,6 +222,7 @@ export class Animator {
     // --- apply ---
     this.ctx.legYaw = this.legYaw;
     rig.apply(out, this.ctx);
+    if (mode === 'ground' && s.floorY != null) rig.floorFeet(out.v, this.ctx, s.floorY);
     // secondary chains
     if (this.chains.chains.length) {
       this.updateColliders();

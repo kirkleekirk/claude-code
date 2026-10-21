@@ -329,6 +329,7 @@ export class Hero {
     s.aimDir = this.aimDir;
     s.landed = this.landed; this.landed = 0;
     s.groundDist = this.pos.y - this.groundY;
+    s.floorY = this.groundY;
     s.boost = this.override && this.override.boost !== undefined ? this.override.boost : this.boost;
     s.combat = this.combatStance;
     s.deadT = this.deadT;
@@ -434,7 +435,7 @@ export class Hero {
     this.vel.x = damp(this.vel.x, 0, 3, dt); this.vel.z = damp(this.vel.z, 0, 3, dt);
     this.integrate(dt);
     if (this.deadT > 1.6) this.dissolveTarget = 1;
-    this.respawnT -= dt;
+    this.respawnT -= this.world.realDt ?? dt; // a respawn timer doesn't pause for other heroes' hitstop
     if (this.respawnT <= 0) this.world.respawn(this);
   }
 
@@ -443,15 +444,20 @@ export class Hero {
     this.respawnT = RULES.respawn;
     this.killDir.copy(dir || _v.set(Math.sin(this.yaw + Math.PI), 0, Math.cos(this.yaw + Math.PI)));
     this.killDir.y = 0; if (this.killDir.lengthSq() < 0.01) this.killDir.set(0, 0, 1); this.killDir.normalize();
-    if (this.override) { const o = this.override; this.override = null; o.onEnd && o.onEnd(true); }
-    if (this.carrying) { this.carrying.carriedBy = null; this.carrying = null; }
-    if (this.carriedBy) { this.carriedBy.carrying = null; this.carriedBy = null; }
-    if (this.bubble) { this.bubble.fx && this.bubble.fx.pop(true); this.bubble = null; }
-    this.kit && this.kit.onDeath && this.kit.onDeath();
+    this.endActions(true);
     this.anim.stop(0.1);
     this.mode = 'air';
     this.glowTarget = 0;
     this.deaths++;
+  }
+
+  /** end abilities, carries and the bubble (on death, and when the hero leaves the world) */
+  endActions(died) {
+    if (this.override) { const o = this.override; this.override = null; o.onEnd && o.onEnd(died); }
+    if (this.carrying) { this.carrying.carriedBy = null; this.carrying = null; }
+    if (this.carriedBy) { this.carriedBy.carrying = null; this.carriedBy = null; }
+    if (this.bubble) { this.bubble.fx && this.bubble.fx.pop(true); this.bubble = null; }
+    this.kit && this.kit.onDeath && this.kit.onDeath();
   }
 
   revive(at, hpFrac = 1) {

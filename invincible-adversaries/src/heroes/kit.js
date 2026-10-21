@@ -126,9 +126,12 @@ export class Lunge {
   }
 }
 
-/** Generic straight-line travel (dashes, dives, charges). */
+/**
+ * Generic travel (dashes, dives, charges): a straight line, or with toPoint + arc a leap that rises
+ * `arc` metres above the chord and comes down on the point.
+ */
 export class Travel {
-  constructor(hero, { dir, speed, dist, onStep, onEnd, animMode = 'fly', boost = 1, faceDir = true, stopOnWall = true, toPoint = null, flutter = 30 }) {
+  constructor(hero, { dir, speed, dist, onStep, onEnd, animMode = 'fly', boost = 1, faceDir = true, stopOnWall = true, toPoint = null, flutter = 30, arc = 0 }) {
     this.h = hero; this.dir = dir.clone().normalize(); this.speed = speed; this.dist = dist; this.done = 0;
     this.onStep = onStep; this.onEnd = onEnd; this.animMode = animMode; this.boost = boost; this.faceDir = faceDir;
     this.stopOnWall = stopOnWall; this.toPoint = toPoint; this.flutter = flutter;
@@ -136,10 +139,16 @@ export class Travel {
     this.animVel = this.dir.clone().multiplyScalar(speed);
     this.prev = new THREE.Vector3();
     this.hitWall = false;
+    if (toPoint && arc > 0) {
+      this.arc = arc; this.start = hero.pos.clone(); this.chord = this.start.distanceTo(toPoint); this.u = 0;
+      // chord speed that keeps the speed along the parabola about `speed`
+      this.chordSpeed = speed / (1 + (8 / 3) * (arc / Math.max(this.chord, 1)) ** 2);
+    }
   }
   update(dt) {
     const h = this.h;
     this.prev.copy(h.pos);
+    if (this.arc) return this.updateArc(dt);
     let step = this.speed * dt;
     if (this.toPoint) { const d = h.pos.distanceTo(this.toPoint); if (d < step) step = d; this.dir.subVectors(this.toPoint, h.pos).normalize(); if (d < 0.05) return false; }
     else if (this.done + step > this.dist) step = this.dist - this.done;
@@ -162,5 +171,29 @@ export class Travel {
     if (!this.toPoint && this.done >= this.dist - 1e-4) return false;
     void before;
     return true;
+  }
+  updateArc(dt) {
+    const h = this.h;
+    this.u = Math.min(1, this.u + this.chordSpeed * dt / Math.max(this.chord, 1e-3));
+    const u = this.u;
+    h.pos.lerpVectors(this.start, this.toPoint, u);
+    h.pos.y += 4 * this.arc * u * (1 - u);
+    this.dir.subVectors(h.pos, this.prev);
+    const moved = this.dir.length();
+    if (moved > 1e-5) this.dir.multiplyScalar(1 / moved);
+    h.vel.copy(this.dir).multiplyScalar(moved / Math.max(dt, 1e-4));
+    this.animVel.copy(h.vel);
+    let wall = false;
+    h.onWallHit = () => { wall = true; };
+    h.integrate(0);
+    h.onWallHit = null;
+    if (this.faceDir) {
+      _w.copy(this.dir); _w.y = 0;
+      if (_w.lengthSq() > 0.01) h.yaw = yawOf(_w);
+    }
+    this.onStep && this.onStep(this.prev, h.pos, dt);
+    if (wall && this.stopOnWall) { this.hitWall = true; return false; }
+    if (u > 0.5 && h.pos.y <= h.groundY + 0.01 && this.dir.y < -0.05) { this.hitGround = true; return false; }
+    return u < 1;
   }
 }

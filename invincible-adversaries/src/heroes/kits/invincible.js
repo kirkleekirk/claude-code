@@ -170,7 +170,7 @@ export class InvincibleKit extends Kit {
           hitSfx: fin ? 'punch_heavy' : 'punch_light', fxPower: fin ? 1.6 : 1,
           onHit: (e2, p) => { if (fin && w.settings.comic && Math.random() < 0.35) this.fx.comic(_v.copy(p).add(_w.set(0, 0.8, 0)), ['POW!', 'WHAM!', 'THWACK!'][(Math.random() * 3) | 0], { size: 1.8 }); },
         });
-        if (hits.length) { w.hitstop(fin ? 0.09 : 0.045); w.shakeAt(h.pos, fin ? 0.35 : 0.14); }
+        if (hits.length) { w.hitstop(fin ? 0.09 : 0.045, h); w.shakeAt(h.pos, fin ? 0.35 : 0.14); }
       },
     });
   }
@@ -207,7 +207,7 @@ export class InvincibleKit extends Kit {
         this.shockFx(o, dir, 1);
         w.sfx('thunderclap', o, { vol: 0.6, rate: 1.3 });
         w.shakeAt(o, 0.3);
-        if (hits.length) w.hitstop(0.04);
+        if (hits.length) w.hitstop(0.04, h);
       },
     });
   }
@@ -258,7 +258,7 @@ export class InvincibleKit extends Kit {
             w.damage(h, e, 65, { dir: dir.clone(), knock: kv, power: 1.2, type: 'ability' });
             this.fx.punchImpact(e.center, dir, { power: 1.3 });
             w.sfx('punch_heavy', e.center, { vol: 0.9 });
-            w.hitstop(0.05);
+            w.hitstop(0.05, h);
           }
         }
       },
@@ -280,14 +280,25 @@ export class InvincibleKit extends Kit {
     if (_v.length() > 45) target = h.pos.clone().addScaledVector(_v.normalize(), 45);
     if (target.y < 0.3) target.y = w.groundAt(target.x, target.z);
     if (target.distanceTo(h.pos) < 3) { w.sfx('denied', null, { ui: true }); return; }
+    // diving at a hero: touch down just in front of them (still deep inside the blast), not inside them
+    if (it.aimHero && it.aimHero.team !== h.team) {
+      _v.set(h.pos.x - target.x, 0, h.pos.z - target.z);
+      if (_v.lengthSq() > 1e-4) target.addScaledVector(_v.normalize(), Math.min(it.aimHero.radius + h.radius + 0.25, 1.4));
+      target.y = Math.max(target.y, w.groundAt(target.x, target.z));
+    }
     this.use('a2');
     w.sfx('whistle', h.pos, { vol: 0.6, rate: 1.6 });
     h.anim.play(this.clips.divePrep);
     const dir = _v.subVectors(target, h.pos).normalize().clone();
     const tr = this.fx.trail({ color: 0xffe2a8, intensity: 1.6, width: 0.5, life: 0.35, max: 40, minDist: 0.25 });
-    const travel = new Travel(h, { dir, speed: 74, dist: 999, toPoint: target, animMode: 'fly', boost: 1, onStep: () => tr.push(h.center) });
-    travel.onEnd = () => {
+    // from the ground (or anything flatter than a real dive) leap up and come down on the point,
+    // which clears low cover and lands the slam from above
+    const flat = Math.hypot(target.x - h.pos.x, target.z - h.pos.z), drop = h.pos.y - target.y;
+    const arc = clamp(flat * 0.22 - drop * 0.5, 0, 9);
+    const travel = new Travel(h, { dir, speed: 74, dist: 999, toPoint: target, arc, animMode: 'fly', boost: 1, onStep: () => tr.push(h.center) });
+    travel.onEnd = (died) => {
       tr.stop();
+      if (died) return; // a dive cut short by death doesn't land
       const p = h.pos.clone();
       const onGround = p.y < w.groundAt(p.x, p.z) + 1.2;
       if (onGround) { this.fx.groundSlam(p, { power: 1.25 }); h.mode = 'ground'; h.vel.set(0, 0, 0); h.anim.play(this.clips.superland); h.status.rootT = 0.38; this.busyT = 0.38; }
@@ -300,7 +311,7 @@ export class InvincibleKit extends Kit {
         const kv = _w.clone().multiplyScalar(6); kv.y = 9;
         w.damage(h, e, 95 * (1 - clamp01(d / 6) * 0.35), { dir: _w.clone(), knock: kv, power: 1.3, type: 'ability' });
       }
-      if (hits.length) w.hitstop(0.07);
+      if (hits.length) w.hitstop(0.07, h);
     };
     h.override = travel;
   }
@@ -364,7 +375,7 @@ export class InvincibleKit extends Kit {
             kit.fx.blood(tgt.center, UP, { n: 14, speed: 9 });
             w.sfx('ground_slam', p, { vol: 1 }); w.sfx('punch_heavy', p);
             if (w.settings.comic) kit.fx.comic(p.clone().add(_w.set(0, 2.2, 0)), 'SLAM!', { size: 2.4 });
-            w.hitstop(0.11); w.shakeAt(p, 0.65);
+            w.hitstop(0.11, h); w.shakeAt(p, 0.65);
             h.pos.y = Math.max(h.pos.y, gy + 1.5);
             h.vel.set(0, 7, 0); h.mode = 'fly';
             return false;
@@ -476,7 +487,7 @@ export class InvincibleKit extends Kit {
         w.renderer.fx.ca = 0.015;
         w.renderer.addWave(p, { strength: 0.09, life: 0.9, speed: 2.2, width: 0.12 });
         w.sfx('explosion', p, { vol: 1.1, important: true, reverb: 0.6 });
-        w.hitstop(0.13);
+        w.hitstop(0.13, h);
         w.shakeAt(p, 1.1);
         if (w.settings.comic) kit.fx.comic(p.clone().add(_w.set(0, 4, 0)), 'KRAKOOM!', { size: 4.5, life: 1.1, fill: '#ff5a1f' });
         h.anim.play(kit.clips.superland);

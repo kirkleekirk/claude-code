@@ -31,6 +31,8 @@ export class World {
 
   add(h) { this.heroes.push(h); return h; }
   remove(h) {
+    // end whatever the hero was in the middle of first (a carried enemy, an ult, a bubble...)
+    h.endActions(true);
     this.heroes = this.heroes.filter((x) => x !== h);
     this.scene.remove(h.root);
     h.kit && h.kit.dispose && h.kit.dispose();
@@ -158,7 +160,7 @@ export class World {
       b.amt -= a; amt -= a; absorbed = a;
       b.fx && b.fx.hit(hitPos);
       this.sfx('bubble_hit', hitPos, { vol: 0.5, minGap: 0.05 });
-      if (b.owner && b.owner !== target) b.owner.ult += a * RULES.ultPerShield;
+      if (b.owner && b.owner !== target) b.owner.ult = Math.min(b.owner.def.ultCost, b.owner.ult + a * RULES.ultPerShield);
       if (b.owner) b.owner.healingDone += a;
       if (b.amt <= 0.5) { b.fx && b.fx.pop(true); target.bubble = null; this.sfx('bubble_break', hitPos, { vol: 0.8 }); }
     }
@@ -174,7 +176,8 @@ export class World {
     if (src) {
       src.lastCombat = now;
       src.damageDone += total;
-      if (src !== target) src.ult = Math.min(src.def.ultCost, src.ult + total * RULES.ultPerDamage);
+      // an ultimate's own damage doesn't charge the next one
+      if (src !== target && o.type !== 'ult') src.ult = Math.min(src.def.ultCost, src.ult + total * RULES.ultPerDamage);
       if (src.key === 'omniman' && !o.noLifesteal && total > 0) this.heal(src, src, total * 0.25, { silent: true, noUlt: true });
     }
     // reactions
@@ -245,7 +248,16 @@ export class World {
     const k = clamp(1 - d / 60, 0, 1);
     this.camRig.addTrauma(amount * (0.25 + 0.75 * k));
   }
-  hitstop(t) { this.hitstopT = Math.max(this.hitstopT, t); }
+  /**
+   * Freeze the world briefly on a heavy hit, but only around the local player (src is the hitter).
+   * Hitstop is global, so with six heroes brawling a freeze for every far-off hit would stall the
+   * game ~15% of the time; bot-only scenes (the title brawl) skip it.
+   */
+  hitstop(t, src) {
+    const p = this.heroes.find((x) => x.isPlayer);
+    if (!p || !src || (src !== p && src.pos.distanceToSquared(p.pos) > 14 * 14)) return;
+    this.hitstopT = Math.max(this.hitstopT, t);
+  }
 
   // ------------------------------------------------------------------ orbs
   makeOrbs() {
