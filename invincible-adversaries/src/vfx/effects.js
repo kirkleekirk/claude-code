@@ -324,10 +324,11 @@ const BUBBLE_FRAG = /* glsl */`
       if (h.w > 1.0 || hl < 1e-4) continue;
       float ang = acos(clamp(dot(vObj, h.xyz / hl), -1.0, 1.0));
       float rr = h.w * 2.2;
-      hit += exp(-pow((ang - rr) * 7.0, 2.0)) * (1.0 - h.w) * 2.0 + exp(-ang * 6.0) * (1.0 - h.w) * (1.0 - h.w) * 2.0;
+      hit += exp(-pow((ang - rr) * 7.0, 2.0)) * (1.0 - h.w) * 0.85 + exp(-ang * 6.0) * (1.0 - h.w) * (1.0 - h.w) * 0.7;
     }
-    float a = 0.06 + fr * 0.9 + edge * (0.22 + fr * 0.6) * (0.6 + 0.4 * cell) + shimmer * 0.12 + hit;
-    a *= uOpacity * (1.0 + uPulse * 0.8);
+    // hits ripple across the shell; kept moderate because the bubble is additive and blooms
+    float a = 0.06 + fr * 0.9 + edge * (0.22 + fr * 0.6) * (0.6 + 0.4 * cell) + shimmer * 0.12 + min(hit, 1.2);
+    a *= uOpacity * (1.0 + uPulse * 0.3);
     a *= 1.0 - uBreak;
     a *= gl_FrontFacing ? 1.0 : 0.4;
     gl_FragColor = vec4(uColor * a, a);
@@ -609,12 +610,15 @@ export class Effects {
   // ---------- composite effects ----------
   punchImpact(pos, dir, { power = 1, color = 0xffffff, gore = true } = {}) {
     const c = new THREE.Color(color);
-    this.star(pos, { color: [2.6 * c.r, 2.5 * c.g, 2.3 * c.b, 1], size: 0.9 * power, life: 0.09 });
-    this.glow(pos, { color: [1.5, 1.4, 1.25, 0.7], size: 0.55 * power, life: 0.14 });
+    // kept compact: the struck hero has to stay readable through the impact frames
+    this.star(pos, { color: [2.0 * c.r, 1.9 * c.g, 1.75 * c.b, 1], size: 0.6 * power, life: 0.075 });
+    this.glow(pos, { color: [1.3, 1.2, 1.1, 0.5], size: 0.42 * power, life: 0.12 });
     this.sparks(pos, dir, { n: Math.round(10 * power), speed: 11 * power, spread: 0.9, life: 0.26, color: [3.0, 2.5, 1.8, 1], size: 0.05 });
     this.ring(pos, { color: 0xffffff, intensity: 1.1, r0: 0.15, r1: 1.3 * power, life: 0.2, normal: _u.copy(dir).normalize(), soft: 0.6 });
     if (gore) this.blood(pos, dir, { n: Math.round(6 * power), speed: 6 + power * 3 });
-    this.lights.flash(pos, 0xfff0d0, 8 * power, 5, 0.1);
+    // light from just in front of the impact (the fist side): at the contact point itself the
+    // inverse-square falloff would blow out the struck hero's chest
+    this.lights.flash(_w.copy(pos).addScaledVector(_u.copy(dir).normalize(), -0.7), 0xfff0d0, 5 * power, 4.5, 0.09);
     if (power > 1.2) this.renderer.addWave(pos, { strength: 0.025 * power, life: 0.35, speed: 1.2, width: 0.05 });
   }
   groundSlam(pos, { power = 1, color = 0xffffff, crater = true, dust = true } = {}) {

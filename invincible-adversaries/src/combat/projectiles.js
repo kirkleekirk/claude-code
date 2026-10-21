@@ -34,6 +34,17 @@ export class Projectile {
       const ally = h.team === this.team;
       if (h === this.owner) continue;
       if (ally && !this.o.hitAllies) continue;
+      // a bubbled hero is hit on the bubble: the shot splashes on its surface
+      const sr = h.shieldRadius ? h.shieldRadius() : 0;
+      if (sr > 0) {
+        const t = segSphere(this.prev, this.pos, h.bubbleCenter(_c), sr + this.radius);
+        if (t < 0) continue;
+        this.hitSet.add(h);
+        _a.copy(this.prev).lerp(this.pos, t);
+        const stop = this.o.onHitHero ? this.o.onHitHero(h, _a, this) : true;
+        if (!this.o.pierce || stop === true) { this.pos.copy(_a); this.end(h); return false; }
+        continue;
+      }
       const R = this.radius + h.radius;
       if (segSegDist2(this.prev, this.pos, h.capA, h.capB) <= R * R) {
         this.hitSet.add(h);
@@ -61,6 +72,19 @@ export class Projectile {
     this.dead = true;
     this.o.onEnd && this.o.onEnd(this, hero, hit);
   }
+}
+
+/** first t in [0,1] where segment a->b enters the sphere (c, r); 0 when a starts inside, -1 on a miss */
+function segSphere(a, b, c, r) {
+  const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+  const fx = a.x - c.x, fy = a.y - c.y, fz = a.z - c.z;
+  const cc = fx * fx + fy * fy + fz * fz - r * r;
+  if (cc <= 0) return 0;
+  const A = dx * dx + dy * dy + dz * dz, B = 2 * (fx * dx + fy * dy + fz * dz);
+  const disc = B * B - 4 * A * cc;
+  if (A < 1e-12 || disc < 0) return -1;
+  const t = (-B - Math.sqrt(disc)) / (2 * A);
+  return t >= 0 && t <= 1 ? t : -1;
 }
 
 function closestT(a, b, p) {

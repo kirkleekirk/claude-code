@@ -180,11 +180,12 @@ export class World {
     // reactions
     const power = o.power ?? clamp(amount / 60, 0.3, 1.5);
     if (dealt > 0) {
-      target.flash = Math.min(0.85, Math.max(target.flash, 0.12 + power * 0.42));
+      target.flash = Math.min(0.75, Math.max(target.flash, 0.1 + power * 0.32));
       target.flashColor.set(o.flashColor || 0xffffff);
     }
     const dir = o.dir || (src ? _v.subVectors(target.pos, src.pos).setY(0).normalize() : _v.set(0, 0, 1));
-    if (!o.noFlinch) {
+    // a hit the bubble swallowed whole doesn't reach the body, so it doesn't flinch it
+    if (!o.noFlinch && !(dealt === 0 && absorbed > 0)) {
       _w.copy(dir);
       target.root.updateMatrixWorld();
       _q.copy(target.root.quaternion).invert();

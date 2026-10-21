@@ -6,6 +6,10 @@ window.T = (() => {
   const V = (x, y, z) => new THREE.Vector3(x, y, z);
   const tests = [];
   let ctx = null;
+  // deterministic runs: every test starts from the same seeded Math.random (mulberry32)
+  let seed = 1;
+  Math.random = () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const reseed = (s) => { seed = 0; for (const ch of s) seed = (Math.imul(seed, 31) + ch.charCodeAt(0)) | 0; };
   const test = (name, fn) => tests.push({ name, fn });
   const expect = (cond, msg) => { if (!cond) ctx.fail.push(msg); return !!cond; };
   const fail = (msg) => ctx.fail.push(msg);
@@ -208,6 +212,7 @@ window.T = (() => {
     for (const t of tests) {
       if (filter && !t.name.includes(filter)) continue;
       ctx = { fail: [], info: [] };
+      reseed(t.name);
       const t0 = performance.now();
       try { await t.fn(); } catch (e) { ctx.fail.push('threw: ' + (e.stack || e).toString().split('\n').slice(0, 4).join(' | ')); }
       results.push({ name: t.name, ms: Math.round(performance.now() - t0), fail: ctx.fail, info: ctx.info });

@@ -31,19 +31,23 @@ for (const key of KEYS) {
     }
   });
 
-  T.test(`${key}: knockback tumble recovers on the ground and in the air`, () => {
-    const [h] = T.stage([{ key, player: true, at: [0, 0, 0] }]);
-    T.run(30, () => { T.clr(h.intents); T.aim(h, ahead(h)); });
-    h.knock(T.V(14, 9, 0), { force: true });
-    let r = T.watch([h], 200, () => { T.clr(h.intents); T.aim(h, ahead(h)); });
-    T.report('ground tumble', r);
-    T.expect(h.mode === 'ground', `tumble did not end on the ground (${h.mode})`);
-    if (h.def.flight) {
-      T.teleport(h, T.V(h.pos.x, 12, h.pos.z)); h.mode = 'fly'; h.grounded = false;
-      h.knock(T.V(-14, 6, 0), { force: true });
-      r = T.watch([h], 120, () => { T.clr(h.intents); T.aim(h, ahead(h)); });
-      T.report('air tumble', r);
-      T.expect(h.mode === 'fly', `flier knocked out of flight did not recover into flight (${h.mode})`);
+  T.test(`${key}: knockback tumbles recover on the ground and in the air`, () => {
+    // several knocks: each one gets a different random spin
+    const knocks = [[14, 9, 0], [-10, 12, 6], [0, 5, -16], [8, 14, 8], [-16, 3, 0], [4, 10, -12]];
+    for (const [i, kv] of knocks.entries()) {
+      const [h] = T.stage([{ key, player: true, at: [0, 0, 0] }]);
+      T.run(30, () => { T.clr(h.intents); T.aim(h, ahead(h)); });
+      h.knock(T.V(...kv), { force: true });
+      let r = T.watch([h], 200, () => { T.clr(h.intents); T.aim(h, ahead(h)); });
+      T.report(`ground tumble ${i}`, r);
+      T.expect(h.mode === 'ground', `tumble ${i} did not end on the ground (${h.mode})`);
+      if (h.def.flight) {
+        T.teleport(h, T.V(h.pos.x, 12, h.pos.z)); h.mode = 'fly'; h.grounded = false;
+        h.knock(T.V(-kv[0], kv[1] * 0.6, -kv[2]), { force: true });
+        r = T.watch([h], 120, () => { T.clr(h.intents); T.aim(h, ahead(h)); });
+        T.report(`air tumble ${i}`, r);
+        T.expect(h.mode === 'fly', `flier knocked out of flight (${i}) did not recover into flight (${h.mode})`);
+      }
     }
   });
 

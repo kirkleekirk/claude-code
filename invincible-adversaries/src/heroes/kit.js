@@ -84,10 +84,12 @@ export class Kit {
     }
     for (const e of hits) {
       const dir = _w.subVectors(e.center || e.pos, h.center || h.pos).normalize();
-      const hp = _u.copy(e.center || e.pos).addScaledVector(dir, -e.radius * 0.8);
+      // a bubbled target is struck on the bubble's surface (no blood: the shield took it)
+      const sr = e.shieldRadius ? e.shieldRadius() : 0;
+      const hp = sr > 0 ? e.bubbleCenter(_u).addScaledVector(dir, -sr) : _u.copy(e.center || e.pos).addScaledVector(dir, -e.radius * 0.8);
       const kv = dir.clone().multiplyScalar(knock); kv.y += up;
       this.w.damage(h, e, dmg, { hitPos: hp.clone(), dir: dir.clone(), knock: kv, power, type: 'melee' });
-      this.fx.punchImpact(hp, dir, { power: fxPower, gore: gore && this.w.settings.gore });
+      this.fx.punchImpact(hp, dir, { power: fxPower, gore: sr === 0 && gore && this.w.settings.gore, color: sr > 0 ? 0xffc8f6 : 0xffffff });
       this.w.sfx(hitSfx, hp, { vol: 0.9 });
       onHit && onHit(e, hp, dir);
     }

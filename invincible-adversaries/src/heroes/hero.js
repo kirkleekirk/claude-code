@@ -357,10 +357,13 @@ export class Hero {
     } else if (mode === 'tumble') {
       const tv = a.tumbleVel, k = s.tumbleSettle;
       if (this.carriedBy) a.tumble.slerp(_q.setFromAxisAngle(X_AXIS, -0.35), dampT(6, dt)); // held: limp, leaning back
-      else a.tumble.multiply(_q.setFromEuler(_e.set(tv.x * dt * (1 - k), tv.y * dt * (1 - k), tv.z * dt * (1 - k))));
-      // spin while airborne, come upright before touching down
-      _q2.copy(a.tumble).slerp(_q.identity(), k);
-      this.visual.quaternion.slerp(_q2, dampT(10 + 8 * k, dt));
+      else {
+        // spin while airborne; coming down, the spin itself unwinds toward upright (moving the state
+        // rather than blending a spinning target, which flips sides whenever it passes 180°)
+        a.tumble.multiply(_q.setFromEuler(_e.set(tv.x * dt * (1 - k), tv.y * dt * (1 - k), tv.z * dt * (1 - k))));
+        if (k > 0) a.tumble.slerp(_q.identity(), dampT(16 * k, dt));
+      }
+      this.visual.quaternion.slerp(a.tumble, dampT(10 + 8 * k, dt));
       // body tilt picks up from here when the tumble ends, so recovery rotates instead of popping
       a.bodyQ.copy(this.visual.quaternion);
       const pv = _v.set(0, this.rig.hipsHeight, 0);
@@ -374,7 +377,7 @@ export class Hero {
     }
     this.bodyUp.set(0, 1, 0).applyQuaternion(this.visual.quaternion).applyQuaternion(this.root.quaternion);
     // material fx
-    this.flash = Math.max(0, this.flash - dt * 6);
+    this.flash = Math.max(0, this.flash - dt * 7);
     this.U.uFlash.value = this.flash;
     this.U.uFlashColor.value.copy(this.flashColor);
     this.glow = damp(this.glow, this.glowTarget, 6, dt);
@@ -420,6 +423,8 @@ export class Hero {
     return b.getWorldPosition(out);
   }
   bubbleCenter(out) { return out.copy(this.center || this.pos); }
+  /** radius of the active bubble shield (0 without one): hits land on it, not on the body */
+  shieldRadius() { return this.bubble ? (this.bubble.fx ? this.bubble.fx.radius : this.height * 0.62) : 0; }
   chestPos(out) { return out.copy(this.center || this.pos).addScaledVector(this.bodyUp, 0.25); }
 
   // ------------------------------------------------------------------ death

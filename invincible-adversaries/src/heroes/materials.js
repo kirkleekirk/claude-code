@@ -52,15 +52,18 @@ const lightsChunk = THREE.ShaderChunk.lights_physical_pars_fragment
 if (!lightsChunk.includes('toonIrradiance * BRDF_Lambert')) console.warn('toon lighting patch did not apply');
 
 export function patchHeroMaterial(mat, U, opts = {}) {
+  // per-material share of the team rim light (thin cloth is seen edge-on across every fold,
+  // where a full fresnel rim would wash it in the team colour)
+  const rimMul = { value: opts.rimMul ?? 1 };
   mat.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, U);
+    Object.assign(sh.uniforms, U, { uRimMul: rimMul });
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vObjPos;')
       .replace('#include <skinning_vertex>', '#include <skinning_vertex>\nvObjPos = transformed;');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
         varying vec3 vObjPos;
-        uniform float uFlash, uRimStr, uGlow, uDissolve, uDissolveScale, uTime, uSat, uBright;
+        uniform float uFlash, uRimStr, uRimMul, uGlow, uDissolve, uDissolveScale, uTime, uSat, uBright;
         uniform vec3 uFlashColor, uRim, uGlowColor, uDissolveColor;
         ${TOON_RAMP}
         ${NOISE}`)
@@ -74,9 +77,9 @@ export function patchHeroMaterial(mat, U, opts = {}) {
         {
           vec3 Vv = normalize(vViewPosition);
           float fres = pow(1.0 - saturate(dot(normal, Vv)), 3.0);
-          outgoingLight += uRim * fres * uRimStr;
+          outgoingLight += uRim * fres * uRimStr * uRimMul;
           outgoingLight += uGlowColor * uGlow * (0.25 + fres * 2.2);
-          outgoingLight = mix(outgoingLight, uFlashColor, clamp(uFlash, 0.0, 1.0) * 0.65);
+          outgoingLight = mix(outgoingLight, uFlashColor, clamp(uFlash, 0.0, 1.0) * 0.5);
           if (uDissolve > 0.0) {
             float n = fbm3(vObjPos * uDissolveScale + vec3(0.0, uTime * 0.6, 0.0));
             float th = uDissolve * 1.08 - 0.04;
@@ -87,7 +90,7 @@ export function patchHeroMaterial(mat, U, opts = {}) {
         }
         #include <opaque_fragment>`);
   };
-  mat.customProgramCacheKey = () => 'hero-toon-v5';
+  mat.customProgramCacheKey = () => 'hero-toon-v6';
   mat.needsUpdate = true;
   return mat;
 }
@@ -153,9 +156,10 @@ export function dressHero(scene, key, team, opts = {}) {
     }
     const m = o.material;
     if (m.isMeshStandardMaterial) {
+      const cloth = /cape/i.test(o.name) || /cape/i.test(m.name);
       m.roughness = tune.rough; m.metalness = 0;
-      m.envMapIntensity = 0.6;
-      patchHeroMaterial(m, U);
+      m.envMapIntensity = cloth ? 0.25 : 0.6;
+      patchHeroMaterial(m, U, { rimMul: cloth ? 0.2 : 1 });
     }
     meshes.push(o);
     if (opts.outline !== false) {

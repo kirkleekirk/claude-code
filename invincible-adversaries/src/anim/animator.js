@@ -138,6 +138,7 @@ export class Animator {
     const ly = s.vel.y;
     // acceleration (local)
     const ax = (lx - this.prevVel.x) / Math.max(dt, 1e-3), az = (lz - this.prevVel.z) / Math.max(dt, 1e-3);
+    const ay = (ly - this.prevVel.y) / Math.max(dt, 1e-3);
     this.prevVel.set(lx, ly, lz);
     this.yawRate = damp(this.yawRate, wrap(s.yaw - this.prevYaw) / Math.max(dt, 1e-3), 8, dt);
     this.prevYaw = s.yaw;
@@ -164,7 +165,7 @@ export class Animator {
     }
     if (this.flyBlend > 0.001) {
       this.tmp.reset();
-      this.flyPose(this.tmp, dt, s, lx, ly, lz);
+      this.flyPose(this.tmp, dt, s, lx, ly, lz, ax, ay, az);
       base.lerp(this.tmp, this.flyBlend);
     }
     // landing compression
@@ -438,9 +439,12 @@ export class Animator {
   }
 
   // ---------------- flight ----------------
-  flyPose(p, dt, s, lx, ly, lz) {
+  flyPose(p, dt, s, lx, ly, lz, ax = 0, ay = 0, az = 0) {
     const st = this.style, t = this.time;
     const speed = Math.hypot(lx, ly, lz);
+    // braking: decelerating against the motion pulls the body upright and a little back to stop
+    const decel = -(ax * lx + ay * ly + az * lz) / Math.max(speed, 1e-3);
+    this.brake = damp(this.brake || 0, clamp01((decel - 6) / 20) * smoothstep(2, 6, speed), 8, dt);
     // Sinking only tips the body into a head-first dive when there's forward motion to dive along
     // or the hero aims down; a plain descent stays feet-first. Close to the ground on the way
     // down the body flares upright so every landing happens on the feet.
@@ -449,7 +453,7 @@ export class Animator {
     const lyT = ly >= 0 ? ly : -Math.min(dn, Math.hypot(lx, lz) * 1.5 + dn * aimDown);
     const gd = s.groundDist ?? 99, tti = gd / Math.max(dn, 0.5);
     const flare = dn > 0.5 ? Math.max(1 - smoothstep(0.15, 0.6, tti), 1 - smoothstep(0.8, 2.5, gd)) * clamp01(dn / 1.5) : 0;
-    const tSpeed = Math.hypot(lx, lyT, lz) * (1 - flare);
+    const tSpeed = Math.hypot(lx, lyT, lz) * (1 - flare) * (1 - 0.7 * this.brake);
     const cruise = smoothstep(3, 14, tSpeed);
     const boost = clamp01(s.boost || 0);
     const vFwd = lz / Math.max(speed, 1e-3), vUp = ly / Math.max(speed, 1e-3);
@@ -541,7 +545,7 @@ export class Animator {
     const vz = lz < 0 ? lz * 0.3 : lz;
     _v.set(lx, lyT, vz);
     if (_v.lengthSq() > 1e-6) _v.normalize(); else _v.set(0, 1, 0);
-    _w.copy(UP).lerp(_v, k);
+    _w.copy(UP).lerp(_v, k).addScaledVector(_v, -0.3 * this.brake);
     if (_w.lengthSq() < 1e-6) _w.copy(UP);
     _w.normalize();
     // rotate about UP x dir; a straight-down dive pitches forward instead of picking an arbitrary roll
