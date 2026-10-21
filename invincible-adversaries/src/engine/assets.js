@@ -7,6 +7,7 @@ export const MODEL_URLS = {
   invincible: 'assets/models/invincible.glb',
   eve: 'assets/models/atom-eve.glb',
   omniman: 'assets/models/omni-man.glb',
+  robot: 'assets/models/robot.glb',
 };
 
 const loader = new GLTFLoader();

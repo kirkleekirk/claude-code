@@ -13,15 +13,28 @@ import { HERO_KEYS, HEROES } from './heroes/data.js';
 import { InvincibleKit } from './heroes/kits/invincible.js';
 import { EveKit } from './heroes/kits/eve.js';
 import { OmniKit } from './heroes/kits/omniman.js';
+import { RobotKit } from './heroes/kits/robot.js';
 import { Bot } from './ai/bot.js';
 import { HUD } from './ui/hud.js';
 import { Menus } from './ui/menus.js';
 
-const KITS = { invincible: InvincibleKit, eve: EveKit, omniman: OmniKit };
+const KITS = { invincible: InvincibleKit, eve: EveKit, omniman: OmniKit, robot: RobotKit };
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _u = new THREE.Vector3();
 const PARAMS = new URLSearchParams(location.search);
 // phones and tablets without a mouse: a bot plays the player's hero so the match can be watched
 const TOUCH_ONLY = matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches;
+
+/**
+ * 3v3 lineups from the four heroes, with no repeats within a team and every hero on the field: the
+ * player's team gets two of the others, the enemies whoever is left out plus two more.
+ */
+export function lineups(playerKey) {
+  const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const ally = [playerKey, ...shuffle(HERO_KEYS.filter((k) => k !== playerKey)).slice(0, 2)];
+  const out = HERO_KEYS.filter((k) => !ally.includes(k));
+  const enemy = [...out, ...shuffle(HERO_KEYS.filter((k) => !out.includes(k))).slice(0, 3 - out.length)];
+  return [ally, enemy];
+}
 
 class PlayerController {
   constructor(game) { this.g = game; }
@@ -134,6 +147,8 @@ export class Game {
     this.bots = [];
     this.player = null; this.playerBot = null;
     this.world.projectiles = [];
+    for (const b of this.world.barriers) b.dispose();
+    this.world.barriers = [];
     this.world.score = [0, 0];
     this.world.feed = [];
     if (this.preview) { this.scene.remove(this.preview.root); this.preview = null; }
@@ -153,7 +168,9 @@ export class Game {
     this.menus.show('title');
     this.hud.show(false);
     // attract mode: bots brawling behind the logo
-    for (const k of HERO_KEYS) { this.spawn(k, 0); this.spawn(k, 1); }
+    const [a, b] = lineups(HERO_KEYS[Math.floor(Math.random() * HERO_KEYS.length)]);
+    for (const k of a) this.spawn(k, 0);
+    for (const k of b) this.spawn(k, 1);
     for (const h of this.world.heroes) { h.pos.z *= 0.35; }
     this.world.settings.bots = 'active';
     this.orbit = 0;
@@ -193,8 +210,9 @@ export class Game {
     this.menus.show(null);
     this.hud.show(true);
     this.player = this.spawn(key, 0, { isPlayer: true, name: 'YOU' });
-    for (const k of HERO_KEYS) if (k !== key) this.spawn(k, 0);
-    for (const k of HERO_KEYS) this.spawn(k, 1);
+    const [ally, enemy] = lineups(key);
+    for (const k of ally.slice(1)) this.spawn(k, 0);
+    for (const k of enemy) this.spawn(k, 1);
     this.camRig.yaw = 0; this.camRig.pitch = -0.12; this.camRig.cut();
     if (!PARAMS.has('capture')) this.input.lock();
     this.ensureAudio();
@@ -373,9 +391,10 @@ export class Game {
     if (this.previewT > 2.2 && h.kit && !h.override) {
       this.previewT = -1.5;
       const k = h.key, c = h.kit.clips;
-      const seqs = { invincible: ['jab', 'cross', 'uppercut'], omniman: ['roar', 'hammer'], eve: ['pulse', 'fistCast'] }[k];
+      const seqs = { invincible: ['jab', 'cross', 'uppercut'], omniman: ['roar', 'hammer'], eve: ['pulse', 'fistCast'], robot: ['dronesCast', 'barrierCast', 'salvo'] }[k];
       const name = seqs[this.previewPose++ % seqs.length];
       if (c[name]) h.anim.play(c[name]);
+      if (k === 'robot' && name === 'salvo') h.kit.podT = 0.9;
       if (k === 'eve') { h.glowTarget = 0.35; setTimeout(() => { if (h) h.glowTarget = 0; }, 900); }
     }
     h.combatStance = damp(h.combatStance, 1, 1, dt);

@@ -60,7 +60,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 0.05em 0.45em; margin-ri
 .card { position: relative; text-align: left; border: none; cursor: pointer; padding: 16px 20px 16px 64px; background: rgba(12, 18, 32, .78); color: #fff; transform: skewX(-10deg); transition: transform .15s, background .15s, box-shadow .15s; border-left: 6px solid var(--c); overflow: hidden; }
 .card::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, var(--c), transparent 70%); opacity: 0; transition: opacity .2s; }
 .card > * { position: relative; z-index: 1; display: block; transform: skewX(10deg); }
-.card.invincible { --c: #ffd400; } .card.eve { --c: #ff4fd8; } .card.omniman { --c: #e8212e; }
+.card.invincible { --c: #ffd400; } .card.eve { --c: #ff4fd8; } .card.omniman { --c: #e8212e; } .card.robot { --c: #ff9b3d; }
 .card:hover { transform: skewX(-10deg) translateX(6px); }
 .card.sel { transform: skewX(-10deg) translateX(18px) scale(1.04); box-shadow: 0 0 0 2px var(--c), 0 10px 40px rgba(0,0,0,.5); }
 .card.sel::after { opacity: .28; }
@@ -70,7 +70,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 0.05em 0.45em; margin-ri
 .card .tag { font-size: 15px; color: rgba(255,255,255,.75); }
 .card .hp { position: absolute; right: 16px; top: 14px; font: 800 14px var(--ui); color: rgba(255,255,255,.6); }
 #hero-detail { position: absolute; right: 40px; top: 40px; bottom: 120px; width: min(470px, 40vw); overflow-y: auto; padding-right: 6px; scrollbar-width: thin; }
-#hero-detail[data-hero=invincible] { --hero: #ffd400; } #hero-detail[data-hero=eve] { --hero: #ff4fd8; } #hero-detail[data-hero=omniman] { --hero: #ff3a45; }
+#hero-detail[data-hero=invincible] { --hero: #ffd400; } #hero-detail[data-hero=eve] { --hero: #ff4fd8; } #hero-detail[data-hero=omniman] { --hero: #ff3a45; } #hero-detail[data-hero=robot] { --hero: #ff9b3d; }
 #hero-detail .hd .role { font: 800 15px var(--ui); letter-spacing: .28em; color: var(--hero); }
 #hero-detail .hd .nm { font: 400 64px var(--display); line-height: 1; -webkit-text-stroke: 2px var(--ink); paint-order: stroke fill; text-shadow: 4px 4px 0 var(--ink); }
 #hero-detail .hd .real { color: rgba(255,255,255,.6); font-size: 17px; letter-spacing: .12em; margin-bottom: 10px; }
@@ -108,7 +108,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 0.05em 0.45em; margin-ri
 /* ---------------------------------------------------------------- HUD */
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
 #overlay { position: absolute; inset: 0; }
-#hud[data-hero=invincible] { --hero: #ffd400; } #hud[data-hero=eve] { --hero: #ff4fd8; } #hud[data-hero=omniman] { --hero: #ff3a45; }
+#hud[data-hero=invincible] { --hero: #ffd400; } #hud[data-hero=eve] { --hero: #ff4fd8; } #hud[data-hero=omniman] { --hero: #ff3a45; } #hud[data-hero=robot] { --hero: #ff9b3d; }
 #crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
 #crosshair i { position: absolute; background: #fff; box-shadow: 0 0 2px #000, 0 0 1px #000; }
 #crosshair i:nth-child(1) { width: 2px; height: 8px; left: -1px; top: -16px; }
@@ -136,7 +136,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 0.05em 0.45em; margin-ri
 #topbar .slot { position: relative; width: 38px; height: 38px; display: grid; place-items: center; background: rgba(8,12,22,.75); transform: skewX(-10deg); border-bottom: 3px solid var(--tc); }
 #topbar .t0 .slot { --tc: var(--ally); } #topbar .t1 .slot { --tc: var(--enemy); }
 #topbar .slot svg { width: 22px; height: 22px; transform: skewX(10deg); }
-#topbar .slot.invincible svg { fill: #ffd400; stroke: #ffd400; } #topbar .slot.eve svg { fill: #ff4fd8; stroke: #ff4fd8; } #topbar .slot.omniman svg { fill: #ff4a4a; stroke: #ff4a4a; }
+#topbar .slot.invincible svg { fill: #ffd400; stroke: #ffd400; } #topbar .slot.eve svg { fill: #ff4fd8; stroke: #ff4fd8; } #topbar .slot.omniman svg { fill: #ff4a4a; stroke: #ff4a4a; } #topbar .slot.robot svg { fill: #ff9b3d; stroke: #ff9b3d; }
 #topbar .slot.me { box-shadow: 0 0 0 2px #fff; }
 #topbar .slot.dead { opacity: .45; filter: grayscale(1); }
 #topbar .slot b { position: absolute; inset: 0; display: grid; place-items: center; font: 400 20px var(--display); color: #fff; transform: skewX(10deg); text-shadow: 0 0 4px #000; }
@@ -200,7 +200,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 0.05em 0.45em; margin-ri
 #bl .hptext .ohn { color: var(--yellow); } #bl .hptext .shn { color: var(--pink); }
 #bl .status { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
 .chip { font: 800 12px var(--ui); letter-spacing: .14em; padding: 2px 8px; transform: skewX(-12deg); background: rgba(255,255,255,.12); }
-.chip.bad { background: rgba(255, 60, 60, .78); } .chip.good { background: rgba(255, 196, 0, .8); color: #111; } .chip.eve { background: rgba(255, 79, 216, .8); } .chip.fly { background: rgba(0, 174, 239, .7); }
+.chip.bad { background: rgba(255, 60, 60, .78); } .chip.good { background: rgba(255, 196, 0, .8); color: #111; } .chip.eve { background: rgba(255, 79, 216, .8); } .chip.fly { background: rgba(0, 174, 239, .7); } .chip.robot { background: rgba(60, 200, 235, .75); color: #071016; }
 
 #abilities { position: absolute; right: 30px; bottom: 26px; display: flex; gap: 10px; }
 .tile { position: relative; width: 72px; height: 72px; background: rgba(8, 12, 22, .78); border: 2px solid rgba(255,255,255,.18); transform: skewX(-10deg); }

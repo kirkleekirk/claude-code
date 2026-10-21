@@ -466,10 +466,14 @@ export class Effects {
     this.alpha.update(dt);
     this.lights.update(dt);
     this.debris.update(dt);
-    this.items = this.items.filter((it) => { const a = it.update(dt); if (!a) it.dispose(this.scene); return a; });
+    // (an item or updater may spawn new ones while it runs, e.g. a shockwave ringing each hero it
+    // reaches: those land on the fresh list and are kept)
+    const items = this.items; this.items = [];
+    this.items = items.filter((it) => { const a = it.update(dt); if (!a) it.dispose(this.scene); return a; }).concat(this.items);
     const cam = this.cam();
     this.trails = this.trails.filter((t) => { const a = t.update(dt, cam); if (!a) t.dispose(); return a; });
-    this.updaters = this.updaters.filter((u) => u(dt) !== false);
+    const ups = this.updaters; this.updaters = [];
+    this.updaters = ups.filter((u) => u(dt) !== false).concat(this.updaters);
     // decals fade
     for (let i = this.decals.length - 1; i >= 0; i--) {
       const d = this.decals[i];

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Pose, CH, NCH } from './pose.js';
+import { Pose, CH, NCH, makeMask } from './pose.js';
 import { ChainSystem } from './chains.js';
 import { DEG, TAU, clamp, clamp01, lerp, damp, dampT, smoothstep, Spring, noise1, fbm1, ease } from '../engine/math.js';
 
@@ -9,6 +9,13 @@ const _m = new THREE.Matrix4();
 const UP = new THREE.Vector3(0, 1, 0);
 const FWD = new THREE.Vector3(0, 0, 1);
 const frac = (x) => x - Math.floor(x);
+const LEGS = makeMask(['legs']);
+// Robot on his hoverbike: thighs along the seat, shins down to the pegs, hands forward on the grips
+const RIDE = {
+  rootY: -0.16, spinePitch: 16, headPitch: -10,
+  BikW: 1, Bik: [0.42, -0.55, 0.66], Bpole: [1, -0.5, -0.4], Bfist: 0.95, BhandFlex: 0,
+  Lleg: [0.17, -0.42, 0.89], Rleg: [0.17, -0.42, 0.89], Bknee: 100, BfootPitch: 18, BlegIkW: 0, BfootGround: 0,
+};
 
 export const STYLES = {
   invincible: {
@@ -25,6 +32,11 @@ export const STYLES = {
     stanceW: 0.09, stanceSplit: 0.05, cadenceBase: 1.05, cadencePerSpeed: 0.18, cadenceMax: 2.6,
     bob: 0.04, crouchRun: 0.035, leanRun: 13, armSwing: 0.6, elbowRun: 85, yawAmp: 11, rollAmp: 5, swayAmp: 0.035,
     stepHeight: 0.24, fistRun: 0.25, heavy: 0, flyPose: 'eve', idle: 'graceful', chestUp: 2,
+  },
+  robot: {
+    stanceW: 0.12, stanceSplit: 0.07, cadenceBase: 0.95, cadencePerSpeed: 0.16, cadenceMax: 2.4,
+    bob: 0.035, crouchRun: 0.05, leanRun: 11, armSwing: 0.5, elbowRun: 85, yawAmp: 6, rollAmp: 3, swayAmp: 0.015,
+    stepHeight: 0.26, fistRun: 0.6, heavy: 0.4, flyPose: 'ride', idle: 'tactical', chestUp: 3,
   },
 };
 
@@ -151,6 +163,8 @@ export class Animator {
     this.airBlend = damp(this.airBlend, air ? 1 : 0, air ? 14 : 18, dt);
     this.flyBlend = damp(this.flyBlend, fly ? 1 : 0, 6, dt);
     const groundW = clamp01(1 - this.airBlend - this.flyBlend);
+    // aim first: the hoverbike grips are converted into the aim frame while building the fly pose
+    this.computeAim(s);
 
     // --- ground locomotion --- (a tumbling hero skids: legs hold the stance instead of running)
     if (groundW > 0.001 || ground) {
@@ -183,7 +197,6 @@ export class Animator {
     base.v[CH.LclavLift] += br * 1.4; base.v[CH.RclavLift] += br * 1.4;
 
     // --- aim / look ---
-    this.computeAim(s);
     const aimYaw = Math.atan2(this.aimRig.x, this.aimRig.z);
     const aimPitch = Math.asin(clamp(this.aimRig.y, -1, 1));
     this.combat = damp(this.combat || 0, s.combat || 0, 4, dt);
@@ -371,6 +384,13 @@ export class Animator {
         elbow: lerp(18, 110, combat), fist: lerp(0.55, 1, combat), twist: lerp(0, -25, combat), flex: 0,
       };
     }
+    if (k === 'tactical') {
+      // Robot: arms held a little off the body; in combat the wrist cannons come up, ready to fire
+      return {
+        x: lerp(0.24, 0.3, combat) + n * 0.02, y: lerp(-0.95, -0.62, combat), z: lerp(0.08, 0.5, combat),
+        elbow: lerp(24, 72, combat), fist: lerp(0.5, 0.85, combat), twist: lerp(0, -30, combat), flex: lerp(-4, 10, combat),
+      };
+    }
     if (k === 'proud') {
       return { x: 0.3 + n * 0.02, y: -0.95, z: 0.02, elbow: 22 + n * 4, fist: 0.75, twist: 8, flex: -6 };
     }
@@ -478,6 +498,9 @@ export class Animator {
         Lleg: [0.04, -0.98, 0.04], Lknee: 10, Rleg: [0.02, -0.96, 0.16], Rknee: 42,
         BfootPitch: 40, BlegIkW: 0, BfootGround: 0, Btoe: 10,
       });
+    } else if (st.flyPose === 'ride') {
+      // seated on the hoverbike: Robot's kit pins the hands to the grips (ctx.ikTarget)
+      hov.assign(RIDE);
     } else if (st.flyPose === 'omni') {
       hov.assign({
         rootY: bobY, spinePitch: -6, headPitch: -4,
@@ -503,6 +526,8 @@ export class Animator {
         Lleg: [0.03, -0.99, -0.06], Lknee: 6, Rleg: [0.01, -0.98, -0.02], Rknee: 26,
         BfootPitch: 55, BlegIkW: 0, BfootGround: 0,
       });
+    } else if (st.flyPose === 'ride') {
+      cr.assign(RIDE).assign({ spinePitch: 26, headPitch: -18, Bknee: 110 });
     } else if (st.flyPose === 'omni') {
       cr.assign({
         spinePitch: -8,
@@ -526,6 +551,7 @@ export class Animator {
       Bleg: [0.01, -1, -0.03], Bknee: 3, BfootPitch: 60, BlegIkW: 0, BfootGround: 0,
     });
     if (st.flyPose === 'superman') bo.assign({ Rarm: [0.02, 0.99, 0.12], Relbow: 0, Larm: [0.02, 0.99, 0.1], Lelbow: 0 });
+    if (st.flyPose === 'ride') bo.reset().assign(RIDE).assign({ spinePitch: 34, headPitch: -26, Bknee: 114 });
     // ascend: fist up (superman), body upright
     const as = this._fp4 ||= new Pose(); as.reset();
     as.assign({
@@ -535,11 +561,18 @@ export class Animator {
     });
     if (st.flyPose === 'eve') as.assign({ Rarm: [0.35, -0.85, -0.15], Larm: [0.35, -0.85, -0.15], Rfist: 0, Lfist: 0, Belbow: 20 });
     if (st.flyPose === 'omni') as.assign({ Rarm: [0.25, -0.95, -0.1], Relbow: 10 });
+    if (st.flyPose === 'ride') as.reset().assign(RIDE).assign({ spinePitch: 8, headPitch: -4 });
 
+    if (st.flyPose === 'ride' && this.rideGrip) for (const q of [hov, cr, bo, as]) this.gripIK(q);
     p.copy(hov);
     p.lerp(cr, cruise * (1 - ascend));
     p.lerp(as, ascend);
     p.lerp(bo, boost);
+    if (st.flyPose === 'ride') {
+      // legs come off the pegs to meet the ground as a landing nears
+      if (flare > 0) p.lerp(this._fp5 ||= new Pose().assign({ Lleg: [0.07, -0.97, 0.18], Rleg: [0.07, -0.97, 0.18], Bknee: 22, BfootPitch: 8, BlegIkW: 0, BfootGround: 0 }), flare, LEGS);
+      return this.rideTilt(dt, s, lx, ly, lz, speed);
+    }
     // leg flutter & drift
     const fl = Math.sin(t * 2.1) * 4 * (1 - boost);
     p.v[CH.Lknee] += fl; p.v[CH.Rknee] -= fl;
@@ -567,6 +600,33 @@ export class Animator {
     const bankT = clamp(-this.yawRate * Math.min(speed, 30) * 0.035, -1.0, 1.0);
     this.bank.update(dt, bankT);
     _q2.setFromAxisAngle(FWD, this.bank.x * smoothstep(4, 15, speed));
+    this.bodyTarget.multiply(_q2);
+  }
+
+  /**
+   * Hands on the hoverbike's grips (rideGrip: rig-space points the kit sets): IK targets are
+   * shoulder-relative and turn with the aim, so convert the fixed grips into that frame. Clips that
+   * use the arms (firing from the bike) then blend away from the grips and back without a pop.
+   */
+  gripIK(q) {
+    for (const s of ['L', 'R']) {
+      const sd = this.rig.side[s], g = this.rideGrip[s];
+      _w.copy(g).sub(this.rig.rigPos(sd.upper.bone, _v)).divideScalar(sd.armLen).applyQuaternion(_q.copy(this.ctx.aimQ).invert());
+      q.v[CH[s + 'ikW']] = 1; q.v[CH[s + 'ikX']] = _w.x * sd.sx; q.v[CH[s + 'ikY']] = _w.y; q.v[CH[s + 'ikZ']] = _w.z;
+    }
+  }
+
+  /**
+   * On the hoverbike the rider stays seated: the bike noses down with forward speed and up as it
+   * climbs, and banks into turns and strafes, instead of laying flat along the velocity.
+   */
+  rideTilt(dt, s, lx, ly, lz, speed) {
+    if (s.mode !== 'fly') return;
+    const pitch = clamp(lz / 18, -0.6, 1) * 0.2 - clamp(ly / 12, -1, 1) * 0.16 - this.brake * 0.12;
+    this.bodyTarget.setFromAxisAngle(_u.set(1, 0, 0), pitch);
+    const bankT = clamp(-this.yawRate * Math.min(speed, 30) * 0.03 - lx / 18 * 0.32, -0.55, 0.55);
+    this.bank.update(dt, bankT);
+    _q2.setFromAxisAngle(FWD, this.bank.x * smoothstep(1, 8, speed));
     this.bodyTarget.multiply(_q2);
   }
 

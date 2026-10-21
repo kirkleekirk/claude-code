@@ -15,6 +15,7 @@ export class World {
     this.heroes = [];
     this.projectiles = [];
     this.zones = [];
+    this.barriers = []; // hard-light walls: { team, segT(a, b), hit(point, amount), update(dt), dispose() }
     this.orbs = [];
     this.time = 0;
     this.hitstopT = 0;
@@ -135,6 +136,24 @@ export class World {
     for (const o of this.obstacles) if (o.type === 'box' && x > o.min.x && x < o.max.x && z > o.min.z && z < o.max.z) y = Math.max(y, o.max.y);
     return y;
   }
+  /** the first barrier not of `team` that the segment a->b crosses: { barrier, t, point } or null */
+  barrierHit(a, b, team) {
+    let best = null;
+    for (const br of this.barriers) {
+      if (br.team === team || !br.alive) continue;
+      const t = br.segT(a, b);
+      if (t >= 0 && (!best || t < best.t)) best = { barrier: br, t };
+    }
+    if (best) best.point = a.clone().lerp(b, best.t);
+    return best;
+  }
+  /** the same along a ray: { barrier, dist, point } or null */
+  barrierRay(origin, dir, maxDist, team) {
+    if (!this.barriers.length) return null;
+    const hit = this.barrierHit(origin, _u.copy(origin).addScaledVector(dir, maxDist), team);
+    if (hit) hit.dist = hit.t * maxDist;
+    return hit;
+  }
   lineOfSight(a, b) {
     _v.subVectors(b, a); const d = _v.length(); _v.normalize();
     const hit = this.rayWorld(a, _v, d);
@@ -151,6 +170,12 @@ export class World {
     if (src && src !== target && src.team === target.team) return 0;
     let amt = amount;
     if (src && src.status.boost > 0) amt *= 1 + src.status.boost;
+    // a hard-light barrier between the attacker (or o.from, e.g. a blast centre) and the target takes
+    // the hit instead; damage over time from a zone the target stands in isn't blocked
+    if (this.barriers.length && src && src !== target && o.type !== 'dot') {
+      const bh = this.barrierHit(o.from || src.center || src.pos, target.center || target.pos, src.team);
+      if (bh) { bh.barrier.hit(bh.point, amt, src); return 0; }
+    }
     if (target.status.vuln > 0) amt *= 1 + target.status.vuln;
     if (target.status.dr > 0) amt *= 1 - target.status.dr;
     if (target.spawnProtect > 0) amt *= 0.3;
@@ -327,6 +352,7 @@ export class World {
     }
     this.projectiles = this.projectiles.filter((p) => p.update(dt));
     this.zones = this.zones.filter((z) => z.update(dt) !== false);
+    this.barriers = this.barriers.filter((b) => b.update(dt) !== false);
     this.updateOrbs(dt);
   }
 }

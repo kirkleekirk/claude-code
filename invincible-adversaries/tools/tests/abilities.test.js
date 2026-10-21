@@ -53,6 +53,14 @@ const SPECS = {
     // with fewer than three enemies the blitz revisits one: 3 x 150 + the 80 finisher
     ['ult', 15, 420, 450, 620],
   ],
+  robot: [
+    ['primary', 12, 70, 70, 260, { hold: true }],
+    ['secondary', 12, 130, 60, 230],
+    ['a1', 10, 40, 0, 0],
+    ['a2', 10, 140, 30, 60, { aimAt: (h, foe) => foe.pos.clone() }],
+    ['a3', 10, 60, 0, 0],
+    ['ult', 12, 200, 15, 40],
+  ],
 };
 
 for (const key of Object.keys(SPECS)) {
@@ -77,7 +85,8 @@ for (const key of Object.keys(SPECS)) {
       T.expect(f >= 0, `did not settle within 15 s (override ${!!h.override}, foe ${foe.mode})`);
       T.run(30, () => { T.clr(h.intents); T.clr(foe.intents); });
       expectClean(`${slot} afterwards`, [h, foe]);
-      for (let k = 0; k < 360 && T.w.zones.length; k++) T.run(1); // lingering zones (Eve's field) expire
+      // lingering zones (Eve's field), barriers and drones run out
+      for (let k = 0; k < 420 && (T.w.zones.length || T.w.barriers.length || (h.kit.drones && h.kit.drones.length)); k++) T.run(1);
       T.expect(sceneCount() <= base + 1, `scene grew by ${sceneCount() - base} objects`);
       if (slot !== 'ult' && def.cd && !def.charges) {
         // pressing again on cooldown does nothing
@@ -162,6 +171,259 @@ T.test('omniman a3: conqueror grants overhealth, damage and damage reduction', (
   T.expect(h.status.boost === 0 && h.status.dr === 0, 'buff outlived its 4 s');
 });
 
+T.test('robot a1: the barrier stops enemy fire from either side and lets allies shoot through', () => {
+  const [rb, foe, ally] = T.stage([
+    { key: 'robot', player: true, at: [0, 0, 0], face: [0, 1] },
+    { key: 'eve', team: 1, at: [0, 0, 12], face: [0, -1] },
+    { key: 'eve', team: 0, at: [1.2, 0, -1], face: [0, 1] },
+  ]);
+  foe.maxHp = foe.hp = BIG;
+  cast(rb, foe, 'a1', 40);
+  const br = T.w.barriers[0];
+  T.expect(!!br && br.team === rb.team && br.alive, 'no barrier went up');
+  if (!br) return;
+  T.expect(Math.abs(br.c.z - 4) < 0.5 && Math.abs(br.c.x) < 0.5, `barrier at (${br.c.x.toFixed(1)}, ${br.c.z.toFixed(1)}), expected 4 m ahead`);
+  const hp0 = br.hp;
+  let t0 = T.w.time;
+  // the enemy shoots at Robot and his ally: the wall takes all of it
+  T.run(75, (k) => { T.clr(foe.intents); T.aim(foe, T.center(k % 40 < 20 ? rb : ally)); foe.intents.primary = true; });
+  const through = T.dmgTo(rb, t0) + T.dmgTo(ally, t0);
+  T.expect(through === 0, `enemy fire got through (${through.toFixed(0)})`);
+  T.expect(hp0 - br.hp > 100, `the barrier took only ${(hp0 - br.hp).toFixed(0)}`);
+  // allies shoot out through it
+  t0 = T.w.time;
+  T.run(75, () => { T.clr(foe.intents); T.clr(ally.intents); T.aim(ally, T.center(foe)); ally.intents.primary = true; });
+  T.expect(T.dmgTo(foe, t0) > 50, `the ally's shots were stopped (${T.dmgTo(foe, t0).toFixed(0)})`);
+  // from behind: an enemy on Robot's side can't shoot an ally beyond the wall either
+  T.teleport(foe, T.V(0, 0, 1.5)); T.teleport(ally, T.V(0, 0, 9));
+  t0 = T.w.time;
+  T.run(60, () => { T.clr(foe.intents); T.clr(ally.intents); T.aim(foe, T.center(ally)); foe.intents.primary = true; });
+  T.expect(T.dmgTo(ally, t0) === 0, `fire from behind the wall got through (${T.dmgTo(ally, t0).toFixed(0)})`);
+});
+
+T.test('robot a1: fat projectiles and blasts do not reach heroes hugging the far side', () => {
+  for (const foeKey of ['omniman', 'eve', 'robot']) {
+    const [rb, foe, ally] = T.stage([
+      { key: 'robot', player: true, at: [0, 0, 0], face: [0, 1] },
+      { key: foeKey, team: 1, at: [0, 0, 16], face: [0, -1] },
+      { key: 'invincible', team: 0, at: [0.4, 0, 3.4] },
+    ]);
+    foe.maxHp = foe.hp = BIG;
+    cast(rb, foe, 'a1', 40);
+    const t0 = T.w.time;
+    // boulder, Eve's fist, an EMP
+    const slot = foeKey === 'robot' ? 'a2' : 'secondary';
+    cast(foe, ally, slot, 150, { aimAt: () => T.center(ally) });
+    T.expect(T.dmgTo(ally, t0) === 0 && T.dmgTo(rb, t0) === 0, `${foeKey} ${slot} reached behind the barrier (ally ${T.dmgTo(ally, t0).toFixed(0)}, robot ${T.dmgTo(rb, t0).toFixed(0)})`);
+    T.expect(!ally.disrupted, `${foeKey} ${slot}: the EMP disrupted through the barrier`);
+    T.expect(T.w.barriers.length === 0 || T.w.barriers[0].hp < T.w.barriers[0].maxHp, `${foeKey} ${slot} missed the barrier`);
+  }
+});
+
+T.test('robot a1: the barrier breaks after 700 damage and fades after 5 s', () => {
+  const [rb, foe] = duel('robot', 'omniman', 12);
+  cast(rb, foe, 'a1', 40);
+  let br = T.w.barriers[0];
+  T.expect(!!br, 'no barrier went up');
+  if (!br) return;
+  const hp0 = rb.hp;
+  for (let i = 0; i < 2; i++) T.expect(T.w.damage(foe, rb, 300) === 0, `hit ${i + 1} was not blocked`);
+  T.expect(Math.abs(br.hp - 100) < 0.5 && br.alive, `barrier at ${br.hp} HP after 600 damage`);
+  T.w.damage(foe, rb, 300);
+  T.expect(!br.alive, 'barrier did not break at 0 HP');
+  T.expect(rb.hp === hp0, 'the breaking hit carried through');
+  T.expect(T.w.damage(foe, rb, 50, { noLifesteal: true }) > 0, 'damage still blocked after the barrier broke');
+  T.run(30);
+  T.expect(T.w.barriers.length === 0 && !br.mesh.parent, 'broken barrier still in the scene');
+  // (the breaking hit only counts for the 100 HP the wall had left)
+  const soak = 700 * T.RULES.ultPerShield;
+  T.expect(rb.ult > soak - 1 && rb.ult < soak + 10, `soaking 700 charged the ult ${rb.ult.toFixed(0)} (expected ${soak} + passive)`);
+  // a fresh one times out after 5 s
+  for (const k in rb.cd) rb.cd[k] = 0;
+  cast(rb, foe, 'a1', 40);
+  br = T.w.barriers[0];
+  T.run(4.2 * 60);
+  T.expect(br && br.alive, 'barrier gone before 5 s');
+  T.run(60);
+  T.expect(T.w.barriers.length === 0, 'barrier outlived 5 s');
+});
+
+T.test('robot a2: the EMP pops bubbles and overhealth and locks abilities and flight for 2 s', () => {
+  const [rb, eve, omni] = T.stage([
+    { key: 'robot', player: true, at: [0, 0, 0], face: [0, 1] },
+    { key: 'eve', team: 1, at: [-1, 3, 10], fly: true, face: [0, -1] },
+    { key: 'omniman', team: 1, at: [2, 0, 10], face: [0, -1] },
+  ]);
+  eve.maxHp = eve.hp = omni.maxHp = omni.hp = BIG;
+  eve.kit.applyBubble(eve);
+  omni.overhealth = 150; omni.ohT = 5;
+  const keepFlying = () => { T.clr(eve.intents); eve.intents.up = eve.pos.y < 3; };
+  cast(rb, null, 'a2', 70, { aimAt: () => T.V(0.5, 0.5, 10), extra: keepFlying });
+  T.expect(!eve.bubble, 'bubble survived the EMP');
+  T.expect(omni.overhealth === 0, `overhealth left: ${omni.overhealth}`);
+  T.expect(eve.status.disruptT > 1 && omni.status.disruptT > 1, `disrupt ${eve.status.disruptT.toFixed(2)} / ${omni.status.disruptT.toFixed(2)} s`);
+  T.expect(eve.mode !== 'fly', `the flier kept flying (${eve.mode})`);
+  // locked out of abilities, the ult and flight; weapons still fire
+  omni.ult = omni.def.ultCost;
+  const t0 = T.w.time;
+  T.run(30, (k) => {
+    T.clr(omni.intents); T.aim(omni, T.center(rb)); omni.intents.a1 = omni.intents.a2 = omni.intents.a3 = k === 0; omni.intents.ult = k === 4;
+    T.clr(eve.intents); T.aim(eve, T.center(rb)); eve.intents.flyToggle = eve.intents.jump = k === 2; eve.intents.a3 = k === 6; eve.intents.primary = true;
+  });
+  T.expect(!omni.override && omni.ult === omni.def.ultCost && omni.cd.a1 === 0 && omni.cd.a3 === 0, `Omni-Man used an ability while disrupted (cd ${JSON.stringify(omni.cd)})`);
+  T.expect(eve.mode !== 'fly', 'Eve took off while disrupted');
+  T.expect(eve.cd.a3 === 0, 'Eve used an ability while disrupted');
+  T.expect(T.dmgBy(eve, t0) > 0, 'weapons stopped firing while disrupted');
+  T.run(100, () => { T.clr(omni.intents); T.clr(eve.intents); });
+  T.expect(!omni.disrupted && !eve.disrupted, 'the disrupt outlived 2 s');
+  T.run(5, (k) => { T.clr(omni.intents); T.aim(omni, T.center(rb)); omni.intents.a3 = k === 0; });
+  T.expect(omni.cd.a3 > 0, 'abilities still locked after the disrupt');
+});
+
+T.test('robot a3: repair drones heal the most hurt allies and cut the damage they take', () => {
+  const [rb, a, b, foe] = T.stage([
+    { key: 'robot', player: true, at: [0, 0, 0], face: [0, 1] },
+    { key: 'invincible', team: 0, at: [5, 0, 0] },
+    { key: 'omniman', team: 0, at: [-5, 0, 0] },
+    { key: 'eve', team: 1, at: [0, 0, 30] },
+  ]);
+  a.hp = a.maxHp - 260; b.hp = b.maxHp - 100;
+  const a0 = a.hp, b0 = b.hp, r0 = rb.hp;
+  const quiet = () => { for (const x of [rb, a, b]) x.lastHurt = T.w.time; }; // no passive regeneration
+  cast(rb, null, 'a3', 40, { aimAt: () => T.V(0, 1, 10), extra: quiet });
+  const on = (x) => rb.kit.drones.filter((d) => d.target === x).length;
+  T.expect(rb.kit.drones.length === 3 && on(a) === 2 && on(b) === 1, `drones on ${rb.kit.drones.map((d) => d.target.key)} (want invincible x2, omniman)`);
+  T.run(60, quiet);
+  T.expect(a.status.dr >= 0.15 && b.status.dr >= 0.15, `no damage reduction while repairing (${a.status.dr}, ${b.status.dr})`);
+  const got = T.w.damage(foe, a, 100, { noLifesteal: true });
+  a.hp += got; a.healingDone = 0; // (undo it)
+  T.expect(Math.abs(got - 85) < 0.5, `100 damage became ${got.toFixed(1)} under repair`);
+  T.run(5 * 60, quiet);
+  T.expect(Math.abs(a.hp - a0 - 200) < 8, `two drones healed ${(a.hp - a0).toFixed(0)} (expected 2 x 25 HP/s x 4 s)`);
+  T.expect(b.hp === b.maxHp && rb.hp === r0, `one drone healed ${(b.hp - b0).toFixed(0)} of 100; Robot ${(rb.hp - r0).toFixed(0)}`);
+  T.expect(rb.kit.drones.length === 0, `${rb.kit.drones.length} drones still out`);
+  T.expect(sceneCount() < 200, 'scene not cleaned');
+  // a drone whose patient dies moves on to the next most hurt ally
+  for (const k in rb.cd) rb.cd[k] = 0;
+  a.hp = a.maxHp - 200; b.hp = b.maxHp - 150;
+  cast(rb, null, 'a3', 40, { aimAt: () => T.V(0, 1, 10), extra: quiet });
+  T.w.kill(foe, a);
+  T.run(30, quiet);
+  T.expect(rb.kit.drones.length === 3 && rb.kit.drones.every((d) => d.target === b || d.target === rb), `drones after the patient died: ${rb.kit.drones.map((d) => d.target && d.target.key)}`);
+});
+
+T.test('robot ult: the override wave disrupts and exposes enemies and overclocks allies', () => {
+  const [rb, ally, foe, far] = T.stage([
+    { key: 'robot', player: true, at: [0, 0, 0], face: [0, 1] },
+    { key: 'invincible', team: 0, at: [6, 0, 0] },
+    { key: 'omniman', team: 1, at: [0, 0, 20] },
+    { key: 'eve', team: 1, at: [0, 0, -45] },
+  ]);
+  foe.maxHp = foe.hp = BIG;
+  ally.cd.a1 = 5; ally.charges.secondary = 0;
+  rb.ult = rb.def.ultCost;
+  const t0 = T.w.time;
+  cast(rb, foe, 'ult', 100);
+  T.expect(foe.status.disruptT > 2.2, `disrupt ${foe.status.disruptT.toFixed(2)} s`);
+  T.expect(Math.abs(foe.status.vuln - 0.2) < 0.01, `vuln ${foe.status.vuln}`);
+  // (Robot's own overclock lands first, so the wave hits for 20 x 1.2)
+  T.expect(Math.abs(T.dmgTo(foe, t0) - 24) < 1, `wave dealt ${T.dmgTo(foe, t0).toFixed(1)}`);
+  T.expect(!far.disrupted && T.dmgTo(far, t0) === 0, 'the wave reached 45 m');
+  T.expect(ally.cd.a1 === 0 && ally.charges.secondary === ally.def.abilities.secondary.charges, `ally cooldowns not reset (a1 ${ally.cd.a1}, charges ${ally.charges.secondary})`);
+  for (const x of [ally, rb]) T.expect(Math.abs(x.status.boost - 0.2) < 0.01 && Math.abs(x.status.haste - 0.2) < 0.01, `${x.key} overclock: boost ${x.status.boost}, haste ${x.status.haste}`);
+  T.expect(T.settle([rb], 300) >= 0, 'the ult did not end');
+  expectClean('override afterwards', [rb, foe]);
+  // overclocked allies run 20% faster
+  T.run(60, () => { T.clr(ally.intents); ally.intents.mz = 1; T.aim(ally, ally.pos.clone().add(T.V(0, 1.4, 10))); });
+  const v = Math.hypot(ally.vel.x, ally.vel.z);
+  T.expect(Math.abs(v / ally.def.speed - 1.2) < 0.06, `overclocked speed ${v.toFixed(2)} vs ${ally.def.speed}`);
+  T.run(5.2 * 60);
+  T.expect(ally.status.haste === 0 && ally.status.boost === 0, 'overclock outlived 6 s');
+  T.expect(!foe.disrupted && foe.status.vuln === 0, 'the override outlived 3 s');
+});
+
+T.test('robot passive: he and allies within 20 m recharge abilities 20% faster', () => {
+  const [rb, near, far] = T.stage([
+    { key: 'robot', player: true, at: [0, 0, 0] },
+    { key: 'omniman', team: 0, at: [8, 0, 0] },
+    { key: 'omniman', team: 0, at: [-30, 0, 0] },
+  ]);
+  rb.cd.a1 = near.cd.a1 = far.cd.a1 = 6;
+  T.run(240);
+  T.expect(Math.abs(near.cd.a1 - 1.2) < 0.05 && Math.abs(rb.cd.a1 - 1.2) < 0.05, `in range: ${near.cd.a1.toFixed(2)} / ${rb.cd.a1.toFixed(2)} s left of 6 after 4 s (expected 1.2)`);
+  T.expect(Math.abs(far.cd.a1 - 2) < 0.05, `out of range: ${far.cd.a1.toFixed(2)} s left (expected 2)`);
+  T.w.kill(null, rb);
+  near.cd.a1 = 6; T.run(60);
+  T.expect(Math.abs(near.cd.a1 - 5) < 0.05, `uplink kept working after Robot died (${near.cd.a1.toFixed(2)})`);
+});
+
+T.test('robot hoverbike: comes in on take-off, peels away on landing, crashes if he dies on it', () => {
+  const [rb] = T.stage([{ key: 'robot', player: true, at: [0, 0, 0], face: [0, 1] }]);
+  const bike = rb.kit.bike;
+  T.expect(bike.ok, 'no hoverbike mesh in the model');
+  const base = sceneCount();
+  T.run(50, (k) => { T.clr(rb.intents); rb.intents.flyToggle = rb.intents.jump = k === 0; rb.intents.up = k > 2 && k < 30; });
+  T.expect(rb.mode === 'fly' && bike.state === 'on' && bike.root.visible && bike.U.uDissolve.value === 0, `not riding the bike (mode ${rb.mode}, bike ${bike.state})`);
+  T.run(300, () => { if (rb.mode === 'ground') return false; T.clr(rb.intents); rb.intents.down = true; });
+  T.expect(rb.mode === 'ground' && bike.state === 'off' && !bike.root.visible, `bike still out after landing (mode ${rb.mode}, bike ${bike.state})`);
+  T.expect(bike.ghosts.length === 1 && bike.ghosts[0].how === 'away', 'the bike did not peel away');
+  T.run(90);
+  T.expect(bike.ghosts.length === 0 && sceneCount() <= base, `bike left behind (${bike.ghosts.length} ghosts, scene +${sceneCount() - base})`);
+  // killed in the air: it falls and blows up
+  T.teleport(rb, T.V(0, 10, 0)); rb.mode = 'fly'; rb.grounded = false;
+  T.run(30);
+  rb.invuln = 0; T.w.kill(null, rb);
+  T.run(2);
+  T.expect(bike.ghosts.length === 1 && bike.ghosts[0].how === 'crash', `no crash (${bike.ghosts.map((g) => g.how)})`);
+  T.run(4 * 60);
+  T.expect(bike.ghosts.length === 0, 'the crashed bike was never cleaned up');
+  // knocked out of the sky by an EMP: the bike leaves
+  T.run(Math.ceil(T.RULES.respawn) * 60);
+  T.teleport(rb, T.V(0, 6, 0)); rb.mode = 'fly'; rb.grounded = false;
+  T.run(30);
+  rb.status.disruptT = 2;
+  T.run(3);
+  T.expect(rb.mode !== 'fly' && bike.state === 'off', `still on the bike while disrupted (${rb.mode}, ${bike.state})`);
+  T.settle([rb], 300);
+  T.run(120);
+  T.expect(sceneCount() <= base + 1, `scene grew by ${sceneCount() - base}`);
+});
+
+T.test('robot: swapping hero mid-flight takes the bike, drones and barrier with him', () => {
+  const [rb, foe] = duel('robot', 'omniman', 10);
+  const base = sceneCount();
+  T.g.fromGame = true;
+  cast(rb, foe, 'a1', 40);
+  for (const k in rb.cd) rb.cd[k] = 0;
+  rb.hp -= 100;
+  cast(rb, foe, 'a3', 15);
+  T.run(40, (k) => { T.clr(rb.intents); rb.intents.flyToggle = rb.intents.jump = k === 0; rb.intents.up = k > 2; });
+  T.expect(rb.kit.bike.riding && rb.kit.drones.length === 3 && T.w.barriers.length === 1, `setup: bike ${rb.kit.bike.state}, ${rb.kit.drones.length} drones, ${T.w.barriers.length} barriers`);
+  T.g.changeHero('eve');
+  T.run(60);
+  T.expect(T.w.barriers.length === 0, 'barrier outlived the swap');
+  T.expect(sceneCount() <= base + 1, `scene grew by ${sceneCount() - base} objects`);
+});
+
+T.test("eve's beam stops at a robot barrier until it breaks", () => {
+  const [eve, rb] = T.stage([{ key: 'eve', player: true, at: [0, 0, 0], face: [0, 1] }, { key: 'robot', team: 1, at: [0, 0, 16], face: [0, -1] }]);
+  rb.maxHp = rb.hp = BIG;
+  cast(rb, eve, 'a1', 30);
+  const br = T.w.barriers[0];
+  T.expect(!!br, 'no barrier went up');
+  if (!br) return;
+  eve.ult = eve.def.ultCost;
+  const t0 = T.w.time;
+  let before = null;
+  cast(eve, rb, 'ult', 330, { extra: () => {
+    if (eve.kit.ultState && eve.kit.ultState.phase === 'choose') eve.intents.primaryPressed = true;
+    if (before === null && !br.alive) before = T.dmgTo(rb, t0);
+  } });
+  T.expect(before !== null, 'the beam never broke the barrier');
+  T.expect(before === 0, `${before && before.toFixed(0)} beam damage went through the barrier`);
+  T.expect(T.dmgTo(rb, t0) > 100, `the beam did not reach Robot once the barrier broke (${T.dmgTo(rb, t0).toFixed(0)})`);
+});
+
 // ---------------------------------------------------------------- edge cases
 for (const [key, slot, dist] of [['invincible', 'a3', 3], ['omniman', 'a1', 7]]) {
   T.test(`${key} ${slot}: the carried target dying mid-carry ends the carry cleanly`, () => {
@@ -175,7 +437,7 @@ for (const [key, slot, dist] of [['invincible', 'a3', 3], ['omniman', 'a1', 7]])
   });
 }
 
-const CASTS = { invincible: ['a1', 'a2', 'a3', 'ult'], eve: ['a2', 'secondary', 'ult'], omniman: ['a1', 'secondary', 'ult'] };
+const CASTS = { invincible: ['a1', 'a2', 'a3', 'ult'], eve: ['a2', 'secondary', 'ult'], omniman: ['a1', 'secondary', 'ult'], robot: ['secondary', 'a1', 'a2', 'a3', 'ult'] };
 for (const key of Object.keys(CASTS)) {
   for (const slot of CASTS[key]) {
     T.test(`${key} ${slot}: the caster dying mid-ability leaves nothing behind`, () => {
@@ -191,7 +453,7 @@ for (const key of Object.keys(CASTS)) {
         T.run(60, () => { T.clr(foe.intents); });
         const late = T.log.damage.filter((e) => e.src === h && e.t > tDeath && e.type !== 'proj' && e.type !== 'dot').reduce((a, e) => a + e.amount, 0);
         // (projectiles already in flight may still land; abilities the caster performs may not)
-        const fired = slot === 'secondary';
+        const fired = slot === 'secondary' || (key === 'robot' && slot === 'a2'); // (an EMP already thrown still goes off)
         T.expect(late === 0 || fired, `${at}f: the dead caster still dealt ${late.toFixed(0)} damage`);
         T.expect(!h.override && !h.carrying && !h.untargetable, `${at}f: caster state left after death (override ${!!h.override})`);
         T.expect(!(h.kit.ultState), `${at}f: ult state left after death`);
@@ -206,7 +468,7 @@ for (const key of Object.keys(CASTS)) {
   }
 }
 
-for (const [key, slot, dist] of [['invincible', 'a3', 3], ['omniman', 'a1', 7], ['invincible', 'ult', 10], ['eve', 'ult', 10], ['eve', 'a1', 5]]) {
+for (const [key, slot, dist] of [['invincible', 'a3', 3], ['omniman', 'a1', 7], ['invincible', 'ult', 10], ['eve', 'ult', 10], ['eve', 'a1', 5], ['robot', 'a1', 8], ['robot', 'a3', 8], ['robot', 'ult', 10]]) {
   T.test(`${key} ${slot}: swapping hero mid-ability leaves nothing behind`, () => {
     const [h, foe] = duel(key, 'omniman', dist);
     if (slot === 'ult') h.ult = h.def.ultCost;
@@ -233,6 +495,10 @@ T.test('mirror matches: simultaneous charges, slams, dashes and ults resolve', (
     ['omniman', 'omniman', 'ult', 'ult', 15],
     ['invincible', 'omniman', 'ult', 'ult', 20],
     ['eve', 'omniman', 'ult', 'a1', 10],
+    ['robot', 'robot', 'ult', 'ult', 12],
+    ['robot', 'eve', 'a1', 'ult', 12],
+    ['robot', 'omniman', 'a2', 'a1', 10],
+    ['robot', 'invincible', 'ult', 'a3', 4],
   ];
   for (const [ka, kb, sa, sb, dist] of pairs) {
     const [a, b] = T.stage([{ key: ka, player: true, at: [0, 0, 0], face: [0, 1] }, { key: kb, team: 1, at: [0, 0, dist], face: [0, -1] }]);
@@ -254,7 +520,7 @@ T.test('mirror matches: simultaneous charges, slams, dashes and ults resolve', (
 
 T.test('dashes, charges, dives and ults at the arena edge stay inside it', () => {
   const R = T.ARENA.boundR - 6;
-  const cases = [['invincible', 'a1'], ['invincible', 'a2'], ['invincible', 'ult'], ['omniman', 'a1'], ['omniman', 'ult'], ['eve', 'secondary']];
+  const cases = [['invincible', 'a1'], ['invincible', 'a2'], ['invincible', 'ult'], ['omniman', 'a1'], ['omniman', 'ult'], ['eve', 'secondary'], ['robot', 'a1'], ['robot', 'secondary']];
   for (const [key, slot] of cases) {
     const [h, foe] = T.stage([{ key, player: true, at: [R, 0, 0], face: [1, 0] }, { key: 'eve', team: 1, at: [R - 6, 0, 3] }]);
     if (slot === 'ult') h.ult = h.def.ultCost;
@@ -279,7 +545,7 @@ T.test('abilities into walls and under the ceiling end cleanly', () => {
     const inside = h.pos.x > box.min.x + 0.05 && h.pos.x < box.max.x - 0.05 && h.pos.z > box.min.z + 0.05 && h.pos.z < box.max.z - 0.05 && h.pos.y < box.max.y - 0.3;
     T.expect(!inside, `${key} ${slot}: ended inside the cover box`);
   }
-  for (const [key, slot] of [['invincible', 'a3'], ['invincible', 'ult'], ['eve', 'ult']]) {
+  for (const [key, slot] of [['invincible', 'a3'], ['invincible', 'ult'], ['eve', 'ult'], ['robot', 'ult'], ['robot', 'a1']]) {
     const top = T.ARENA.ceiling - 4;
     const [h, foe] = T.stage([{ key, player: true, at: [0, top, 0], fly: true, face: [0, 1] }, { key: 'eve', team: 1, at: [0, top, 2.5], fly: true }]);
     h.ult = h.def.ultCost;
@@ -290,7 +556,7 @@ T.test('abilities into walls and under the ceiling end cleanly', () => {
 });
 
 T.test('stunned heroes cannot start abilities', () => {
-  for (const key of ['invincible', 'eve', 'omniman']) {
+  for (const key of ['invincible', 'eve', 'omniman', 'robot']) {
     const [h, foe] = duel(key, 'omniman', 8);
     h.status.stunT = 1;
     const t0 = T.w.time;

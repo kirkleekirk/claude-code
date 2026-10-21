@@ -4,8 +4,10 @@
 const MINUTES = 10;
 
 T.test(`3v3 bots on hard for ${MINUTES} game-minutes`, () => {
+  // every hero on the field, as the game's lineups do, with both strategists mirrored
+  const LINEUPS = [['invincible', 'eve', 'robot'], ['omniman', 'robot', 'eve']];
   const spec = [];
-  for (const team of [0, 1]) for (const [i, key] of ['invincible', 'eve', 'omniman'].entries()) spec.push({ key, team, bot: true, at: [(i - 1) * 6, 0, team ? 48 : -48], face: [0, team ? -1 : 1] });
+  for (const team of [0, 1]) for (const [i, key] of LINEUPS[team].entries()) spec.push({ key, team, bot: true, at: [(i - 1) * 6, 0, team ? 48 : -48], face: [0, team ? -1 : 1] });
   spec[0].player = true; spec[0].bot = false;
   const hs = T.stage(spec, { bots: 'active', settings: { difficulty: 'hard' } });
   // the player's hero is driven by a bot too, as in the game's autobot mode
@@ -16,7 +18,7 @@ T.test(`3v3 bots on hard for ${MINUTES} game-minutes`, () => {
   const st = new Map(hs.map((h) => [h, { ovr: 0, tumble: 0, carried: 0, dead: 0, maxOvr: 0, maxTumble: 0, still: 0, maxStill: 0, last: h.pos.clone() }]));
   const counts = () => ({
     scene: T.g.scene.children.length - fx.decals.length, items: fx.items.length, trails: fx.trails.length,
-    updaters: fx.updaters.length, projectiles: w.projectiles.length, zones: w.zones.length, decals: fx.decals.length,
+    updaters: fx.updaters.length, projectiles: w.projectiles.length, zones: w.zones.length, barriers: w.barriers.length, decals: fx.decals.length,
     heap: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : 0,
   });
   const issues = {};
@@ -70,7 +72,7 @@ T.test(`3v3 bots on hard for ${MINUTES} game-minutes`, () => {
   const late = counts();
   for (const k in issues) T.fail(`${issues[k].first} (x${issues[k].n})`);
   // bounded resources: the end of the match must not hold far more than minute one did
-  for (const k of ['scene', 'items', 'trails', 'updaters', 'projectiles', 'zones']) {
+  for (const k of ['scene', 'items', 'trails', 'updaters', 'projectiles', 'zones', 'barriers']) {
     if (late[k] > Math.max(early[k] * 2, early[k] + 30)) T.fail(`${k} grew from ${early[k]} (1 min) to ${late[k]} (${MINUTES} min)`);
   }
   T.expect(late.decals <= 64, `${late.decals} decals alive`);

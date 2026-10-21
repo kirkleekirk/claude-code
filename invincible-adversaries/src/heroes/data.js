@@ -46,6 +46,27 @@ export const HEROES = {
       ult: { name: 'UNBOUND', key: 'Q', icon: 'ult_eve', desc: 'Break the mental block. Then choose: LMB Annihilation Beam (giant beam, 420 DPS) or RMB Reconstruction (revive ALL fallen allies + team-wide bubbles and heal).' },
     },
   },
+  robot: {
+    key: 'robot', name: 'ROBOT', real: 'Rudy Connors',
+    role: 'STRATEGIST', roleTag: 'Tactician & Tech',
+    color: '#ff9b3d', accent: '#5ee8ff',
+    hp: 350,
+    radius: 0.4, height: 1.9,
+    speed: 8.4, jump: 9.8,
+    flight: { speed: 18, accel: 38, duration: 6.5, regen: 1.5, unlimited: false },
+    regen: { delay: 3.5, rate: 18 },
+    camDist: 3.9, camHeight: 1.55,
+    ultCost: 2200,
+    passive: { name: 'Tactical Uplink', desc: 'Flies on his hoverbike (6.5s). Self-repairs 18 HP/s after 3.5s. He and allies within 20m recharge abilities 20% faster.' },
+    abilities: {
+      primary: { name: 'Wrist Cannons', key: 'LMB', icon: 'cannon', desc: 'Alternating plasma shots, 17 damage each, 8 a second. No healing: Robot supports with tech, not his gun.' },
+      secondary: { name: 'Micro-Missiles', key: 'RMB', icon: 'missiles', cd: 7, desc: 'The back pod fires 8 homing micro-missiles: 14 damage each, plus 12 splash.' },
+      a1: { name: 'Hard-Light Barrier', key: 'SHIFT', icon: 'barrier', cd: 12, desc: 'Project a 7m hard-light wall that stops all enemy fire for 5s (700 HP). Allies shoot through it.' },
+      a2: { name: 'EMP Disruptor', key: 'E', icon: 'emp', cd: 12, desc: 'Throw an EMP charge: 40 damage in 7m. Pops bubbles and overhealth, and locks enemy abilities and flight for 2s.' },
+      a3: { name: 'Repair Drones', key: 'F', icon: 'drones', cd: 15, desc: 'Send 3 drones to the most hurt allies within 25m (Robot included): 25 HP/s for 4s and 15% less damage taken.' },
+      ult: { name: 'TACTICAL OVERRIDE', key: 'Q', icon: 'ult_robot', desc: 'Hack the battlefield: a 35m wave disrupts enemies for 3s (no abilities or flight, +20% damage taken) and overclocks allies for 6s (cooldowns reset, +20% damage and speed).' },
+    },
+  },
   omniman: {
     key: 'omniman', name: 'OMNI-MAN', real: 'Nolan Grayson',
     role: 'VANGUARD', roleTag: 'Brawler Tank',
@@ -69,7 +90,7 @@ export const HEROES = {
   },
 };
 
-export const HERO_KEYS = ['invincible', 'eve', 'omniman'];
+export const HERO_KEYS = ['invincible', 'eve', 'robot', 'omniman'];
 
 export const RULES = {
   respawn: 7,
@@ -81,4 +102,6 @@ export const RULES = {
   ultPassive: 6, // points / s
   killUlt: 120,
   omniLifesteal: 0.15,
+  uplinkRange: 20, // Robot's Tactical Uplink
+  uplinkCdRate: 0.2, // extra cooldown recharge rate it gives
 };

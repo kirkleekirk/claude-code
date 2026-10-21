@@ -24,7 +24,8 @@ export class Bot {
     this.seen = 0;
     this.stuckT = 0; this.lastPos = new THREE.Vector3();
     this.ultT = 0;
-    this.preferRange = { invincible: 2.2, omniman: 2.5, eve: 18 }[hero.key];
+    this.preferRange = { invincible: 2.2, omniman: 2.5, eve: 18, robot: 16 }[hero.key];
+    this.ranged = hero.key === 'eve' || hero.key === 'robot';
   }
   get d() { return DIFF[this.w.settings.difficulty] || DIFF.normal; }
 
@@ -48,7 +49,7 @@ export class Bot {
     const tp = t.center || t.pos;
     const dist = h.pos.distanceTo(t.pos);
     // aim (with lead for projectile heroes)
-    const lead = h.key === 'eve' ? clamp(dist / 95, 0, 0.5) : (h.key === 'omniman' ? clamp(dist / 42, 0, 0.8) : 0);
+    const lead = h.key === 'eve' ? clamp(dist / 95, 0, 0.5) : h.key === 'robot' ? clamp(dist / 140, 0, 0.4) : (h.key === 'omniman' ? clamp(dist / 42, 0, 0.8) : 0);
     _v.copy(tp).addScaledVector(t.vel, lead);
     if (h.key === 'omniman' && dist > 8) _v.y += dist * 0.012;
     // error noise
@@ -114,7 +115,7 @@ export class Bot {
     this.flyT -= dt;
     if (this.flyT <= 0) {
       this.flyT = rand(2.5, 6);
-      const p = k === 'invincible' ? 0.55 : k === 'eve' ? 0.35 : 0.25;
+      const p = k === 'invincible' ? 0.55 : k === 'eve' ? 0.35 : k === 'robot' ? 0.3 : 0.25;
       this.flyWant = Math.random() < p || t.mode === 'fly' && t.pos.y > 4;
     }
     if (this.regroup && k === 'invincible') this.flyWant = true;
@@ -123,7 +124,7 @@ export class Bot {
     if (!this.flyWant && h.mode === 'fly' && !h.override) it.down = true;
     // desired range
     let range = this.preferRange;
-    if (k === 'eve') range = clamp(range, 12, 26);
+    if (this.ranged) range = clamp(range, 12, 26);
     const low = h.hp / h.maxHp < 0.3;
     if (low && k !== 'omniman') range += 12;
     if (this.regroup) range = Math.max(range, 34);
@@ -134,17 +135,17 @@ export class Bot {
     const aimYaw = yawOf(it.aimDir);
     let fwd = 0;
     if (flat > range + 2) fwd = 1;
-    else if (flat < range - 2 && (k === 'eve' || this.regroup)) fwd = -1;
-    else if (k !== 'eve' && !this.regroup) fwd = flat > 1.6 ? 1 : 0;
+    else if (flat < range - 2 && (this.ranged || this.regroup)) fwd = -1;
+    else if (!this.ranged && !this.regroup) fwd = flat > 1.6 ? 1 : 0;
     // convert desired movement (toward target + strafe) into intents relative to aim yaw
     const rel = yawToT - aimYaw;
     const mz = Math.cos(rel) * fwd, mx = -Math.sin(rel) * fwd;
     it.mz = mz; it.mx = mx;
-    const strafeAmt = k === 'eve' ? 0.9 : (flat < 6 ? 0.6 : 0.35);
+    const strafeAmt = this.ranged ? 0.9 : (flat < 6 ? 0.6 : 0.35);
     it.mx += this.strafe * strafeAmt;
     // vertical matching in flight
     if (h.mode === 'fly') {
-      const dy = (t.pos.y + (k === 'eve' ? 3 : 0.5)) - h.pos.y;
+      const dy = (t.pos.y + (k === 'eve' ? 3 : k === 'robot' ? 1.5 : 0.5)) - h.pos.y;
       if (dy > 1.5) it.up = true; else if (dy < -1.5) it.down = true;
       if (h.pos.y > 40) it.down = true;
     }
@@ -194,6 +195,12 @@ export class Bot {
           const deadAlly = w.heroes.some((x) => x.team === h.team && x.dead);
           if (deadAlly || (los && dist < 45)) { it.ult = true; this.ultChoice = deadAlly ? 'revive' : 'beam'; }
         } else if (k === 'omniman') { if (dist < 30 && los) it.ult = true; }
+        else if (k === 'robot') {
+          // the override pays off with several heroes in the wave
+          const foes = w.heroes.filter((e) => e.team !== h.team && e.targetable && e.pos.distanceTo(h.pos) < 30).length;
+          const mates = allies.filter((a) => a.pos.distanceTo(h.pos) < 30).length;
+          if (foes >= 2 || (foes >= 1 && mates >= 1) || (dist < 20 && this.ultT > 4)) it.ult = true;
+        }
         else if (dist < 40) it.ult = true;
       }
     } else this.ultT = 0;
@@ -237,6 +244,17 @@ export class Bot {
       }
       if (dist < 26 && los && (enemiesNear >= 2 || t.key === 'omniman') && this.can('a2', 0.35)) it.a2 = true;
       const hurt = allies.concat([h]).filter((a) => a.pos.distanceTo(h.pos) < 15 && a.hp / a.maxHp < 0.65).length;
+      if (hurt >= 1 && this.can('a3', 0.6)) it.a3 = true;
+    } else if (k === 'robot') {
+      if (los && dist < 70 && it.aimDir.dot(_v.subVectors(t.center, it.aimOrigin).normalize()) > 0.95) it.primary = true;
+      if (los && dist < 45 && aimed && this.can('secondary', 0.45)) it.secondaryPressed = true;
+      // a barrier toward the target when the team is taking fire
+      const pressed = allies.concat([h]).some((a) => w.time - a.lastHurt < 0.8 && a.pos.distanceTo(h.pos) < 14);
+      if (pressed && dist > 7 && dist < 40 && los && this.can('a1', 0.6)) it.a1 = true;
+      // EMP a group, a flier, a target hiding behind a bubble or overhealth, or a diver closing in
+      const grouped = w.heroes.filter((e) => e.team !== h.team && e.targetable && e.pos.distanceTo(t.pos) < 7).length;
+      if (dist < 28 && los && (grouped >= 2 || t.mode === 'fly' || t.bubble || t.overhealth > 50 || (dist < 12 && (t.key === 'invincible' || t.key === 'omniman'))) && this.can('a2', 0.55)) it.a2 = true;
+      const hurt = allies.concat([h]).filter((a) => a.pos.distanceTo(h.pos) < 25 && a.hp / a.maxHp < 0.7).length;
       if (hurt >= 1 && this.can('a3', 0.6)) it.a3 = true;
     }
   }

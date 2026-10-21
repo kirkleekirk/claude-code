@@ -135,7 +135,7 @@ export class OmniKit extends Kit {
       this.fx.add.spawn({ p: _v, v: [0, rand(1, 3), 0], life: 0.45, size: 0.18, size1: 0.02, color: [3.5, 0.5, 0.3, 0.8], color1: [2, 0.1, 0, 0], shape: SHAPE.GLOW });
     }
     if (h.override) return;
-    if (it.ult && h.ultReady && this.free) return this.rampage(it);
+    if (it.ult && this.ultOk()) return this.rampage(it);
     if (it.a1 && this.ready('a1') && this.free) return this.charge(it);
     if (it.a2 && this.ready('a2') && this.free) return this.thunderclap(it);
     if (it.a3 && this.ready('a3') && this.free) return this.conqueror(it);
@@ -218,7 +218,7 @@ export class OmniKit extends Kit {
           const r = rock; rock = null;
           const spin = new THREE.Vector3(rand(-8, 8), rand(-8, 8), rand(-8, 8));
           w.spawnProjectile({
-            owner: h, pos: o, vel: dir.multiplyScalar(42), radius: 0.75, gravity: 9, life: 3,
+            owner: h, pos: o, vel: dir.multiplyScalar(42), radius: 0.75, gravity: 9, life: 3, dmg: 105,
             onUpdate: (dt, p) => {
               r.position.copy(p); r.rotation.x += spin.x * dt; r.rotation.y += spin.y * dt; r.rotation.z += spin.z * dt;
               if (Math.random() < 0.5) kit.fx.alpha.spawn({ p, v: [rand(-1, 1), rand(-1, 1), rand(-1, 1)], life: 0.5, size: 0.3, size1: 0.9, color: [0.55, 0.52, 0.48, 0.4], color1: [0.6, 0.58, 0.55, 0], shape: SHAPE.SMOKE });

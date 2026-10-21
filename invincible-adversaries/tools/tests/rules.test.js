@@ -121,7 +121,7 @@ T.test('health orbs heal 150, ignore full-health heroes and come back after 15 s
 });
 
 T.test('passive regeneration starts after the delay at the listed rate', () => {
-  for (const key of ['invincible', 'eve', 'omniman']) {
+  for (const key of ['invincible', 'eve', 'robot', 'omniman']) {
     const [h] = T.stage([{ key, player: true, at: [0, 0, 0] }]);
     const rg = h.def.regen;
     h.hp = h.maxHp - 200; h.lastHurt = T.w.time;

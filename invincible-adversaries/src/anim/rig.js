@@ -25,6 +25,11 @@ const fingersValve = (s) => {
   return { thumb: f(0), index: f(1), middle: f(2), ring: f(3), pinky: f(4) };
 };
 
+const fingersBip = (s) => {
+  const f = (n) => [0, 1, 2].map((i) => `bip_${n}_${i}_${s}`);
+  return { thumb: f('thumb'), index: f('index'), middle: f('middle'), ring: f('ring'), pinky: f('pinky') };
+};
+
 export const RIG_DEFS = {
   invincible: {
     hips: 'Hips',
@@ -44,6 +49,17 @@ export const RIG_DEFS = {
       { name: 'hair', bones: ['Armature_hair_01_01SHJnt', 'Armature_hair_01_02SHJnt', 'Armature_hair_01_03SHJnt', 'Armature_hair_01_04SHJnt'], tipExtend: 0.09, stiffness: 0.22, drag: 0.9, gravity: 0.7, radius: 0.09 },
       { name: 'cape', bones: ['Armature_cape_01_01SHJnt', 'Armature_cape_01_02SHJnt', 'Armature_cape_01_03SHJnt'], tipExtend: 0.11, stiffness: 0.12, drag: 1.6, gravity: 1.0, radius: 0.13, behind: { fwd: 0.08, up: 0.1 } },
     ],
+  },
+  robot: {
+    hips: 'bip_pelvis',
+    spine: ['bip_spine_0', 'bip_spine_1', 'bip_spine_2', 'bip_spine_3', 'bip_spine_4'], spineW: [0.18, 0.2, 0.2, 0.22, 0.2],
+    neck: 'bip_neck', head: 'bip_head',
+    // the chest panels are skinned to proxy chains hanging off spine_2: they ride with the bones they shadow
+    follow: [['spine_04_proxy_l', 'bip_spine_3'], ['spine_04_proxy_r', 'bip_spine_3'], ['spine_04_proxy_c', 'bip_spine_3'],
+      ['clavicle_l_proxy_l', 'bip_collar_L'], ['clavicle_r_proxy_r', 'bip_collar_R'], ['clavicle_l_proxy_c', 'bip_collar_L'], ['clavicle_r_proxy_c', 'bip_collar_R']],
+    L: { clav: 'bip_collar_L', upper: 'bip_upperArm_L', fore: 'bip_lowerArm_L', hand: 'bip_hand_L', thigh: 'bip_hip_L', shin: 'bip_knee_L', foot: 'bip_foot_L', toe: 'bip_toe_L', fingers: fingersBip('L') },
+    R: { clav: 'bip_collar_R', upper: 'bip_upperArm_R', fore: 'bip_lowerArm_R', hand: 'bip_hand_R', thigh: 'bip_hip_R', shin: 'bip_knee_R', foot: 'bip_foot_R', toe: 'bip_toe_R', fingers: fingersBip('R') },
+    chains: [],
   },
   omniman: {
     hips: 'ValveBipedBip01_Pelvis',

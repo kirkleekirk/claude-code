@@ -28,6 +28,8 @@ export class Kit {
   cdOf(k) { return (this.h.def.abilities[k].cd || 0) * (this.w.settings.noCooldowns ? 0.02 : 1); }
   ready(k) {
     const h = this.h;
+    // an EMP locks the abilities (weapons still fire)
+    if (h.disrupted && k !== 'primary' && k !== 'secondary') return false;
     if (h.def.abilities[k].charges) return h.charges[k] > 0;
     return (h.cd[k] || 0) <= 0;
   }
@@ -40,6 +42,8 @@ export class Kit {
     } else h.cd[k] = cdOverride ?? this.cdOf(k);
   }
   get free() { return this.busyT <= 0 && !this.h.override; }
+  /** the ultimate can start now */
+  ultOk() { return this.h.ultReady && !this.h.disrupted && this.free; }
   msg(text) { this.w.emit('message', { hero: this.h, text }); }
 
   /** best enemy near crosshair within range & cone */

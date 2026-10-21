@@ -4,7 +4,8 @@ import { segSegDist2 } from '../engine/math.js';
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
 
 /**
- * Swept-sphere projectile. o: { owner, pos, vel, radius, gravity, life, onHitHero(h, p), onHitWorld(p, n), onUpdate(dt, p), onEnd(), pierce, hitAllies }
+ * Swept-sphere projectile. o: { owner, pos, vel, radius, gravity, life, onHitHero(h, p), onHitWorld(p, n), onUpdate(dt, p), onEnd(), pierce, hitAllies,
+ * dmg (what an enemy barrier takes when this stops on it) }
  */
 export class Projectile {
   constructor(world, o) {
@@ -28,6 +29,9 @@ export class Projectile {
     this.vel.y -= this.gravity * dt;
     this.pos.addScaledVector(this.vel, dt);
     const w = this.world;
+    // an enemy barrier crossed this step stops the shot; heroes behind it are out of reach
+    const bh = w.barriers.length ? w.barrierHit(this.prev, this.pos, this.team) : null;
+    const tb = bh ? bh.t : 2;
     // heroes
     for (const h of w.heroes) {
       if (!h.targetable || this.hitSet.has(h)) continue;
@@ -38,7 +42,7 @@ export class Projectile {
       const sr = h.shieldRadius ? h.shieldRadius() : 0;
       if (sr > 0) {
         const t = segSphere(this.prev, this.pos, h.bubbleCenter(_c), sr + this.radius);
-        if (t < 0) continue;
+        if (t < 0 || t > tb || this.walled(t, _c)) continue;
         this.hitSet.add(h);
         _a.copy(this.prev).lerp(this.pos, t);
         const stop = this.o.onHitHero ? this.o.onHitHero(h, _a, this) : true;
@@ -47,13 +51,24 @@ export class Projectile {
       }
       const R = this.radius + h.radius;
       if (segSegDist2(this.prev, this.pos, h.capA, h.capB) <= R * R) {
-        this.hitSet.add(h);
         // contact point: closest on path to hero center
         _c.copy(h.center || h.pos);
         const t = closestT(this.prev, this.pos, _c);
+        if (t > tb || this.walled(t, _c)) continue;
+        this.hitSet.add(h);
         _a.copy(this.prev).lerp(this.pos, t);
         const stop = this.o.onHitHero ? this.o.onHitHero(h, _a, this) : true;
         if (!this.o.pierce || stop === true) { this.pos.copy(_a); this.end(h); return false; }
+      }
+    }
+    if (bh) {
+      const wh = w.sweepWorld(this.prev, this.pos, this.radius);
+      if (!wh || wh.point.distanceToSquared(this.prev) > bh.point.distanceToSquared(this.prev)) {
+        // ends a few centimetres short of the wall, so a blast there stays on the shooter's side
+        this.pos.copy(this.prev).lerp(this.pos, Math.max(0, bh.t - 0.05 / Math.max(1e-6, this.prev.distanceTo(this.pos))));
+        bh.barrier.hit(bh.point, this.o.dmg ?? 25, this.owner);
+        this.end(null, { point: bh.point.clone(), normal: bh.barrier.normalAt(this.prev), barrier: bh.barrier });
+        return false;
       }
     }
     // world
@@ -66,6 +81,11 @@ export class Projectile {
     }
     this.o.onUpdate && this.o.onUpdate(dt, this.pos, this);
     return true;
+  }
+  /** a fat shot touching a hero at t along this step: true when an enemy barrier lies between (it can graze someone hugging the far side) */
+  walled(t, center) {
+    const w = this.world;
+    return w.barriers.length > 0 && !!w.barrierHit(_b.copy(this.prev).lerp(this.pos, t), center, this.team);
   }
   end(hero, hit) {
     if (this.dead) return;

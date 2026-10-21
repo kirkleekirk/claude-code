@@ -16,6 +16,12 @@ const P = {
   ult_inv: '<circle cx="12" cy="14" r="7" fill="none" stroke-width="2"/><path d="M12 1v8M9 6l3 3 3-3" stroke-width="2.4" stroke-linecap="round" fill="none"/><path d="M5 18c2 1 5 1.5 7 1.5s5-.5 7-1.5" stroke-width="1.6" fill="none"/>',
   ult_eve: '<path d="M12 1l2 7 7-2-5 5 5 5-7-2-2 7-2-7-7 2 5-5-5-5 7 2z"/><circle cx="12" cy="12" r="2.5" fill="#fff"/>',
   ult_omni: '<path d="M4 4l8 16 8-16h-4l-4 9-4-9z"/>',
+  cannon: '<path d="M3 10h11l3-2h3v8h-3l-3-2H3z"/><path d="M21 9.5l2-1.5M21 12h2.5M21 14.5l2 1.5" stroke-width="1.6" stroke-linecap="round" fill="none"/>',
+  missiles: '<path d="M6 3l2.5 5v8h-5V8zM12 2l2.5 5v8h-5V7zM18 3l2.5 5v8h-5V8z"/><path d="M6 18v3M12 17v4M18 18v3" stroke-width="1.8" stroke-linecap="round" fill="none"/>',
+  barrier: '<path d="M3 5c6-2 12-2 18 0v14c-6 2-12 2-18 0z" fill="none" stroke-width="2.2"/><path d="M8 9.5l2-1.2 2 1.2v2.4l-2 1.2-2-1.2zM12 12l2-1.2 2 1.2v2.4l-2 1.2-2-1.2z" fill="none" stroke-width="1.3"/>',
+  emp: '<circle cx="12" cy="12" r="9.5" fill="none" stroke-width="2"/><path d="M13 3.5L7.5 13h4l-1 7.5L16.5 11h-4z"/>',
+  drones: '<ellipse cx="12" cy="14" rx="9" ry="3" fill="none" stroke-width="1.8"/><path d="M8.5 14a3.5 2.5 0 0 0 7 0z"/><path d="M12 2.5v7M8.5 6h7" stroke-width="2.4" stroke-linecap="round" fill="none"/>',
+  ult_robot: '<path d="M12 1.5l9 5.2v10.6l-9 5.2-9-5.2V6.7z" fill="none" stroke-width="2"/><path d="M7 11.5c1.5-1.5 3-1.5 4.2 0M12.8 11.5c1.2-1.5 2.7-1.5 4.2 0" stroke-width="2.2" stroke-linecap="round" fill="none"/><path d="M8 16h8" stroke-width="1.8" fill="none"/>',
   jump: '<path d="M12 3l6 7h-4v6h-4v-6H6z"/><path d="M6 20h12" stroke-width="2" fill="none"/>',
   fly: '<path d="M2 14c4-1 7-3 10-7 3 4 6 6 10 7-4 0-7 1-10 3-3-2-6-3-10-3z"/>',
 };

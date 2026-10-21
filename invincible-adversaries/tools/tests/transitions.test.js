@@ -1,5 +1,5 @@
 // Mode transitions: every way a hero leaves and re-enters the ground must end in a sane pose.
-const KEYS = ['invincible', 'eve', 'omniman'];
+const KEYS = ['invincible', 'eve', 'robot', 'omniman'];
 const ahead = (h) => h.pos.clone().add(T.V(Math.sin(h.yaw) * 10, 1.4, Math.cos(h.yaw) * 10));
 
 for (const key of KEYS) {

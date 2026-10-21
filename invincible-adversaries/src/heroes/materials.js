@@ -95,7 +95,7 @@ export function patchHeroMaterial(mat, U, opts = {}) {
   return mat;
 }
 
-/** Inverted-hull outline that shares the skinned geometry & skeleton. */
+/** Inverted-hull outline that shares the skinned geometry & skeleton (or a plain mesh's geometry). */
 export function makeOutlineMaterial(color, U, width = 2.6) {
   const m = new THREE.MeshBasicMaterial({ color, side: THREE.BackSide });
   const ou = { uOutline: { value: width }, uResY: { value: 1080 } };
@@ -107,7 +107,12 @@ export function makeOutlineMaterial(color, U, width = 2.6) {
       .replace('#include <skinning_vertex>', '#include <skinning_vertex>\nvObjPos = transformed;')
       .replace('#include <project_vertex>', `#include <project_vertex>
         {
+          // the basic material only declares objectNormal for skinned meshes
+          #ifdef USE_SKINNING
           vec3 nv = normalize(normalMatrix * objectNormal);
+          #else
+          vec3 nv = normalize(normalMatrix * normal);
+          #endif
           vec4 nc = projectionMatrix * vec4(nv, 0.0);
           vec2 nd = nc.xy; float nl = length(nd);
           if (nl > 1e-5) nd /= nl;
@@ -123,7 +128,7 @@ export function makeOutlineMaterial(color, U, width = 2.6) {
         }
         #include <opaque_fragment>`);
   };
-  m.customProgramCacheKey = () => 'hero-outline-v2';
+  m.customProgramCacheKey = () => 'hero-outline-v3';
   return m;
 }
 
@@ -139,6 +144,7 @@ export function dressHero(scene, key, team, opts = {}) {
     invincible: { sat: 1.12, bright: 1.0, rough: 0.78 },
     eve: { sat: 1.08, bright: 1.05, rough: 0.6 },
     omniman: { sat: 1.32, bright: 1.12, rough: 0.62 },
+    robot: { sat: 0.9, bright: 1.04, rough: 0.42 },
   }[key];
   U.uSat.value = tune.sat; U.uBright.value = tune.bright;
   const outlineColor = team === 0 ? 0x06080f : 0x2a0006;

@@ -5,7 +5,7 @@ import { clamp, clamp01 } from '../engine/math.js';
 
 const _v = new THREE.Vector3();
 const KEYS = ['secondary', 'a1', 'a2', 'a3'];
-const HERO_ICON = { invincible: 'dash', eve: 'field', omniman: 'ult_omni' };
+const HERO_ICON = { invincible: 'dash', eve: 'field', omniman: 'ult_omni', robot: 'cannon' };
 
 export class HUD {
   constructor(game) {
@@ -98,6 +98,9 @@ export class HUD {
     if (p.status.vuln > 0) chips.push('<span class="chip bad">VULNERABLE</span>');
     if (p.status.slow > 0) chips.push('<span class="chip bad">SLOWED</span>');
     if (p.status.stunT > 0) chips.push('<span class="chip bad">STUNNED</span>');
+    if (p.status.disruptT > 0) chips.push('<span class="chip bad">DISRUPTED</span>');
+    if (p.status.haste > 0) chips.push('<span class="chip good">OVERCLOCK</span>');
+    if (p.status.uplinkT > 0 && p.key !== 'robot') chips.push('<span class="chip robot">UPLINK</span>');
     if (p.status.boost > 0) chips.push('<span class="chip good">+DMG</span>');
     if (p.status.dr > 0) chips.push('<span class="chip good">-DMG TAKEN</span>');
     if (p.bubble) chips.push('<span class="chip eve">BUBBLE</span>');
@@ -278,6 +281,7 @@ export class HUD {
       let sx = x + bw / 2 + 6;
       c.font = `800 ${Math.round(10 * scale + 2)}px "Barlow Condensed", sans-serif`; c.textAlign = 'left';
       if (h.status.vuln > 0) { c.fillStyle = '#ff9a3c'; c.fillText('VULN', sx, y + bh); sx += 30 * scale; }
+      if (h.status.disruptT > 0) { c.fillStyle = '#7fb8ff'; c.fillText('EMP', sx, y + bh); sx += 26 * scale; }
       if (h.status.stunT > 0) { c.fillStyle = '#ffe14a'; c.fillText('STUN', sx, y + bh); }
       if (h.ultReady) { c.fillStyle = enemy ? '#ffb000' : '#9ff'; c.textAlign = 'center'; c.fillText('★ ULT', x, y - bh - 18 * scale); }
       c.globalAlpha = 1;

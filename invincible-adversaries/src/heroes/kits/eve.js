@@ -215,7 +215,7 @@ export class EveKit extends Kit {
     }
     if (this.ultState) { this.ultUpdate(dt, it); return; }
     if (h.override) return;
-    if (it.ult && h.ultReady && this.free) return this.unbound();
+    if (it.ult && this.ultOk()) return this.unbound();
     if (it.a1 && this.ready('a1') && this.free) return this.bubble(it);
     if (it.a2 && this.ready('a2') && this.free) return this.field(it);
     if (it.a3 && this.ready('a3') && this.free) return this.pulse(it);
@@ -248,7 +248,7 @@ export class EveKit extends Kit {
     const tr = this.fx.trail({ color: 0xff55dd, intensity: 2.6, width: 0.07, life: 0.12, max: 12, minDist: 0.2 });
     const kit = this;
     w.spawnProjectile({
-      owner: h, pos: o, vel: dir.multiplyScalar(95), radius: 0.12, life: 1.6,
+      owner: h, pos: o, vel: dir.multiplyScalar(95), radius: 0.12, life: 1.6, dmg: 21,
       onUpdate: (dt, p) => { tr.push(p); if (Math.random() < 0.6) kit.fx.add.spawn({ p, life: 0.12, size: 0.28, size1: 0.1, color: [3.5, 1.1, 3, 0.7], color1: [2, 0.2, 2, 0], shape: SHAPE.GLOW }); },
       onHitHero: (e, p) => { w.damage(h, e, 21, { hitPos: p.clone(), power: 0.35, type: 'proj' }); return true; },
       onEnd: (proj, hero) => {
@@ -286,7 +286,7 @@ export class EveKit extends Kit {
         let age = 0;
         this.fx.converge(o, { n: 18, radius: 1.6, life: 0.2 });
         w.spawnProjectile({
-          owner: h, pos: o, vel: dir.clone().multiplyScalar(48), radius: 0.95, life: 1.3,
+          owner: h, pos: o, vel: dir.clone().multiplyScalar(48), radius: 0.95, life: 1.3, dmg: 90,
           onUpdate: (dt, p) => {
             age += dt;
             mesh.position.copy(p);
@@ -371,7 +371,7 @@ export class EveKit extends Kit {
         const tr = this.fx.trail({ color: 0xff55dd, intensity: 2, width: 0.18, life: 0.3, max: 20, minDist: 0.15 });
         w.sfx('swing', o, { vol: 0.5, rate: 1.4 });
         w.spawnProjectile({
-          owner: h, pos: o, vel: dir.multiplyScalar(30), radius: 0.3, gravity: 16, life: 3,
+          owner: h, pos: o, vel: dir.multiplyScalar(30), radius: 0.3, gravity: 16, life: 3, dmg: 10,
           onUpdate: (dt, p) => { orb.position.copy(p); tr.push(p); },
           onEnd: (proj) => { tr.stop(); w.scene.remove(orb); orb.geometry.dispose(); w.zones.push(new Field(kit, proj.pos)); },
         });
@@ -523,7 +523,10 @@ export class EveKit extends Kit {
     // origin between hands
     h.bonePos('handL', _v); h.bonePos('handR', _w);
     const o = _v.add(_w).multiplyScalar(0.5).addScaledVector(st.dir, 0.25).clone();
-    const hitW = w.rayWorld(o, st.dir, 95);
+    let hitW = w.rayWorld(o, st.dir, 95);
+    // an enemy barrier stops the beam and soaks its damage
+    const hitB = w.barrierRay(o, st.dir, hitW ? hitW.dist : 95, h.team);
+    if (hitB) hitW = { dist: hitB.dist, point: hitB.point, normal: hitB.barrier.normalAt(o), barrier: hitB.barrier };
     const len = hitW ? hitW.dist : 95;
     const end = o.clone().addScaledVector(st.dir, len);
     st.beam.set(o, end, power);
@@ -544,8 +547,11 @@ export class EveKit extends Kit {
     st.tick -= dt;
     if (st.tick <= 0) {
       st.tick = 0.1;
+      if (hitW && hitW.barrier) hitW.barrier.hit(end, 42 * power * (1 + h.status.boost), h);
       for (const e of w.heroes) {
         if (e.team === h.team || !e.targetable) continue;
+        // (heroes behind the barrier the beam ends on are covered by its hit above)
+        if (hitW && hitW.barrier && w.barrierHit(o, e.center, h.team)) continue;
         const d = segPoint(o, end, e.center);
         if (d < 1.7 + e.radius) {
           const kv = st.dir.clone().multiplyScalar(2.2);

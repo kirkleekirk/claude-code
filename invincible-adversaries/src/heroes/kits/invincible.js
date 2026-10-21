@@ -133,7 +133,7 @@ export class InvincibleKit extends Kit {
     this.comboT += dt;
     if (this.comboT > 0.75) this.combo = 0;
     if (h.override) { if (this.seq && this.seq.input) this.seq.input(it); return; }
-    if (it.ult && h.ultReady && this.free) return this.machBreaker(it);
+    if (it.ult && this.ultOk()) return this.machBreaker(it);
     if (it.a1 && this.ready('a1') && this.free) return this.dash(it);
     if (it.a2 && this.ready('a2') && this.free) return this.dive(it);
     if (it.a3 && this.ready('a3') && this.free) return this.slam(it);

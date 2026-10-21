@@ -60,7 +60,8 @@ export class Hero {
     this.hp = this.maxHp;
     this.overhealth = 0; this.ohT = 0;
     this.bubble = null;
-    this.status = { slow: 0, slowT: 0, vuln: 0, vulnT: 0, stunT: 0, dr: 0, drT: 0, boost: 0, boostT: 0, rootT: 0 };
+    // disruptT: no abilities or flight (EMP); haste: extra move speed; uplinkT: faster cooldowns (Robot's passive)
+    this.status = { slow: 0, slowT: 0, vuln: 0, vulnT: 0, stunT: 0, dr: 0, drT: 0, boost: 0, boostT: 0, rootT: 0, disruptT: 0, haste: 0, hasteT: 0, uplinkT: 0 };
     this.mode = 'ground';
     this.grounded = true;
     this.groundY = 0;
@@ -98,7 +99,8 @@ export class Hero {
   get ultReady() { return this.ult >= this.def.ultCost; }
   get camHeight() { return this.def.camHeight; }
   get camDist() { return this.def.camDist; }
-  get speedFactor() { return (1 - (this.unstoppable ? 0 : this.status.slow)); }
+  get speedFactor() { return (1 - (this.unstoppable ? 0 : this.status.slow)) * (1 + this.status.haste); }
+  get disrupted() { return this.status.disruptT > 0; }
   get targetable() { return !this.dead && !this.untargetable && !this.hidden; }
 
   spawnAt(p) {
@@ -121,15 +123,19 @@ export class Hero {
   update(dt, time) {
     this.time = time;
     const it = this.intents;
-    if (this.dead) { this.updateDead(dt); this.updateVisual(dt); return; }
+    // kit.tick runs every frame, even stunned, carried or dead (Robot's hoverbike and back pods)
+    if (this.dead) { this.updateDead(dt); this.updateVisual(dt); this.kit && this.kit.tick && this.kit.tick(dt); return; }
     // timers
     const st = this.status;
-    for (const k of ['slowT', 'vulnT', 'drT', 'boostT']) if (st[k] > 0) { st[k] -= dt; if (st[k] <= 0) { st[k] = 0; st[k.replace('T', '')] = 0; } }
+    for (const k of ['slowT', 'vulnT', 'drT', 'boostT', 'hasteT']) if (st[k] > 0) { st[k] -= dt; if (st[k] <= 0) { st[k] = 0; st[k.replace('T', '')] = 0; } }
     if (st.stunT > 0) st.stunT -= dt;
+    if (st.disruptT > 0) st.disruptT = Math.max(0, st.disruptT - dt);
+    if (st.uplinkT > 0) st.uplinkT = Math.max(0, st.uplinkT - dt);
     if (st.rootT > 0) st.rootT -= dt;
     if (this.invuln > 0) this.invuln -= dt;
     if (this.spawnProtect > 0) this.spawnProtect -= dt;
-    for (const k in this.cd) if (this.cd[k] > 0) this.cd[k] = Math.max(0, this.cd[k] - dt);
+    const cdt = dt * (st.uplinkT > 0 ? 1 + RULES.uplinkCdRate : 1);
+    for (const k in this.cd) if (this.cd[k] > 0) this.cd[k] = Math.max(0, this.cd[k] - cdt);
     if (this.ohT > 0) this.ohT -= dt; else if (this.overhealth > 0) this.overhealth = Math.max(0, this.overhealth - 60 * dt);
     if (this.bubble) {
       this.bubble.t -= dt;
@@ -165,7 +171,7 @@ export class Hero {
       } else if (!this.grounded && this.tumbleT < 0) {
         // recover in mid-air: fliers knocked out of flight stabilise, everyone else falls with air control
         const f = this.def.flight;
-        this.mode = this.tumbleFly && f && (f.unlimited || this.flyEnergy > 0.15) ? 'fly' : 'air';
+        this.mode = this.tumbleFly && f && (f.unlimited || this.flyEnergy > 0.15) && !this.disrupted ? 'fly' : 'air';
       }
     } else {
       this.move(dt, stunned ? null : it);
@@ -179,6 +185,7 @@ export class Hero {
     this.visYaw = wrapAngle(this.visYaw + clamp(turn, -maxTurn, maxTurn));
     this.root.rotation.set(0, this.visYaw, 0);
     this.updateVisual(dt);
+    this.kit && this.kit.tick && this.kit.tick(dt);
   }
 
   move(dt, it) {
@@ -188,7 +195,9 @@ export class Hero {
     const fx = Math.sin(ay), fz = Math.cos(ay);
     const rx = -Math.cos(ay), rz = Math.sin(ay);
     const mx = it ? it.mx : 0, mz = it ? it.mz : 0;
-    const canFly = !!d.flight;
+    const canFly = !!d.flight && !this.disrupted;
+    // an EMP drops a flier out of the sky
+    if (this.mode === 'fly' && this.disrupted) this.mode = 'air';
     // toggle flight
     if (it && canFly) {
       const tryFly = it.flyToggle || (it.jump && !this.grounded && this.mode === 'air') || (this.mode === 'air' && it.jumpHeld && this.vel.y < -2);
@@ -416,8 +425,8 @@ export class Hero {
 
   onFootstep(side, k) {
     if (this.dead || !this.grounded) return;
-    const heavy = this.key === 'omniman';
-    this.world.sfx(heavy ? 'step_heavy' : 'step', this.pos, { vol: (heavy ? 0.55 : 0.32) * k, minGap: 0.12, key: this.id, ref: 4 });
+    const heavy = this.key === 'omniman', metal = this.key === 'robot';
+    this.world.sfx(heavy ? 'step_heavy' : metal ? 'step_metal' : 'step', this.pos, { vol: (heavy ? 0.55 : metal ? 0.42 : 0.32) * k, minGap: 0.12, key: this.id, ref: 4 });
     if (heavy && k > 0.6) this.world.shakeAt(this.pos, 0.04);
   }
 

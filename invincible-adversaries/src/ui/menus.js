@@ -48,11 +48,12 @@ export class Menus {
     lock.addEventListener('click', () => this.lockIn());
     window.addEventListener('keydown', (e) => {
       if (document.body.dataset.screen !== 'select') return;
-      const i = ['Digit1', 'Digit2', 'Digit3'].indexOf(e.code);
+      const i = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(e.code);
       if (i >= 0) this.pick(HERO_KEYS[i]);
       if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); this.lockIn(); }
-      if (e.code === 'ArrowRight') this.pick(HERO_KEYS[(HERO_KEYS.indexOf(this.selected) + 1) % 3]);
-      if (e.code === 'ArrowLeft') this.pick(HERO_KEYS[(HERO_KEYS.indexOf(this.selected) + 2) % 3]);
+      const n = HERO_KEYS.length;
+      if (e.code === 'ArrowRight') this.pick(HERO_KEYS[(HERO_KEYS.indexOf(this.selected) + 1) % n]);
+      if (e.code === 'ArrowLeft') this.pick(HERO_KEYS[(HERO_KEYS.indexOf(this.selected) + n - 1) % n]);
     });
     this.pick(this.selected, true);
   }

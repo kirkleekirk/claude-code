@@ -352,7 +352,167 @@ R.hurt = (S, out, t0, v) => { thump(S, out, t0, { f0: 160, f1: 60, dur: 0.15, vo
 R.ready = (S, out, t0, v) => { tone(S, out, t0, { f: 1318.5, type: 'sine', a: 0.002, d: 0.2, vol: 0.12 }); tone(S, out, t0 + 0.05, { f: 1975.5, type: 'sine', a: 0.002, d: 0.25, vol: 0.08 }); return 0.4; };
 R.denied = (S, out, t0, v) => { tone(S, out, t0, { f: 220, type: 'square', a: 0.002, d: 0.12, vol: 0.12 }); tone(S, out, t0 + 0.08, { f: 196, type: 'square', a: 0.002, d: 0.15, vol: 0.12 }); return 0.3; };
 
-const VARIANTS = { punch_light: 4, punch_heavy: 3, swing: 3, swing_heavy: 2, bolt_fire: 3, bolt_hit: 3, bubble_hit: 3, step: 4, step_heavy: 3, rock_hit: 2, zip: 2 };
+// ---------------- Robot ----------------
+R.plasma_fire = (S, out, t0, v) => {
+  // a punchy blaster: an FM zap sweeping down, a click and a little body
+  const p = 1 + (v - 1) * 0.06;
+  const car = S.osc('square', 900 * p), mod = S.osc('sine', 1350 * p), mg = S.gain(600), lp = S.filt('lowpass', 5000, 0.8), g = S.gain(0);
+  S.env(car.frequency, t0, [[0, 900 * p], [0.09, 160 * p]]);
+  S.env(mg.gain, t0, [[0, 700], [0.1, 10]]);
+  mod.connect(mg); mg.connect(car.frequency);
+  S.ad(g.gain, t0, 0.001, 0.11, 0.26);
+  S.chain(car, lp, g, out); car.start(t0); mod.start(t0); car.stop(t0 + 0.3); mod.stop(t0 + 0.3);
+  burst(S, out, t0, { type: 'highpass', f: 2500, dur: 0.012, vol: 0.4, seed: v });
+  thump(S, out, t0, { f0: 180, f1: 70, dur: 0.08, vol: 0.45 });
+  return 0.35;
+};
+R.plasma_hit = (S, out, t0, v) => {
+  burst(S, out, t0, { f: 2200 + v * 300, Q: 1.2, dur: 0.05, vol: 0.5, seed: v });
+  clicks(S, out, t0, { n: 6, dur: 0.08, f: 4200, vol: 0.25 });
+  thump(S, out, t0, { f0: 220, f1: 90, dur: 0.06, vol: 0.3 });
+  return 0.2;
+};
+R.missile_launch = (S, out, t0, v) => {
+  burst(S, out, t0, { type: 'highpass', f: 1800, dur: 0.02, vol: 0.5, seed: v });
+  sweepNoise(S, out, t0, { f0: 600, f1: 3200, f2: 1400, dur: 0.35, Q: 1.4, vol: 0.9, attack: 0.03, kind: 'white', seed: v + 1 });
+  thump(S, out, t0, { f0: 140, f1: 70, dur: 0.12, vol: 0.4 });
+  return 0.5;
+};
+R.missile_boom = (S, out, t0, v) => {
+  const sh = S.shaper(2.6); sh.connect(out);
+  burst(S, sh, t0, { type: 'highpass', f: 1200, dur: 0.02, vol: 0.9, seed: v });
+  thump(S, sh, t0, { f0: 140, f1: 45, dur: 0.5, sweep: 0.15, vol: 0.9 });
+  burst(S, sh, t0, { type: 'lowpass', f: 2600, f1: 240, dur: 0.5, vol: 0.7, kind: 'pink', seed: v + 1 });
+  clicks(S, out, t0 + 0.02, { n: 14, dur: 0.4, f: 3200, vol: 0.2 });
+  return 0.9;
+};
+R.pod_open = (S, out, t0, v) => {
+  // two clacks and a servo whine
+  burst(S, out, t0, { f: 1800, Q: 3, dur: 0.02, vol: 0.6, seed: v });
+  burst(S, out, t0 + 0.07, { f: 1400, Q: 3, dur: 0.025, vol: 0.55, seed: v + 1 });
+  tone(S, out, t0, { f: 520, f1: 980, type: 'sawtooth', a: 0.01, d: 0.12, vol: 0.05 });
+  thump(S, out, t0 + 0.07, { f0: 160, f1: 90, dur: 0.07, vol: 0.35 });
+  return 0.3;
+};
+R.barrier_up = (S, out, t0, v) => {
+  // a hard-light wall: a rising hum, crystalline pings and a settling thrum
+  const bp = S.filt('bandpass', 400, 2), g = S.gain(0); bp.connect(g); g.connect(out);
+  for (const f of [110, 165, 220.5]) { const o = S.osc('sawtooth', f); S.env(o.frequency, t0, [[0, f * 0.7], [0.3, f]]); o.connect(bp); o.start(t0); o.stop(t0 + 1.2); }
+  S.env(bp.frequency, t0, [[0, 300], [0.3, 2400], [1.0, 900]]);
+  g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.22, t0 + 0.25); g.gain.setTargetAtTime(0, t0 + 0.4, 0.25);
+  [1318.5, 1760, 2349.3, 2637].forEach((f, i) => tone(S, out, t0 + 0.05 + i * 0.045, { f, type: 'sine', a: 0.003, d: 0.5, vol: 0.07 }));
+  sweepNoise(S, out, t0, { f0: 800, f1: 6000, dur: 0.3, Q: 2, vol: 0.3, attack: 0.25, kind: 'white', seed: v });
+  thump(S, out, t0 + 0.22, { f0: 100, f1: 55, dur: 0.45, vol: 0.45 });
+  return 1.3;
+};
+R.barrier_hit = (S, out, t0, v) => {
+  tone(S, out, t0, { f: 1900 + v * 260, type: 'sine', a: 0.001, d: 0.22, vol: 0.12 });
+  tone(S, out, t0, { f: 2850 + v * 300, type: 'sine', a: 0.001, d: 0.15, vol: 0.06 });
+  burst(S, out, t0, { f: 3000, Q: 2, dur: 0.02, vol: 0.3, seed: v });
+  thump(S, out, t0, { f0: 160, f1: 80, dur: 0.1, vol: 0.35 });
+  return 0.4;
+};
+R.barrier_break = (S, out, t0, v) => {
+  const sh = S.shaper(2); sh.connect(out);
+  burst(S, sh, t0, { type: 'highpass', f: 2200, dur: 0.05, vol: 0.8, seed: v });
+  clicks(S, out, t0, { n: 60, dur: 0.6, f: 5200, Q: 4, vol: 0.32 });
+  [2637, 2093, 1568, 1175].forEach((f, i) => tone(S, out, t0 + i * 0.04, { f, f1: f * 0.6, type: 'triangle', a: 0.002, d: 0.4, vol: 0.06 }));
+  thump(S, sh, t0, { f0: 130, f1: 50, dur: 0.4, vol: 0.6 });
+  return 1.0;
+};
+R.emp_throw = (S, out, t0, v) => {
+  tone(S, out, t0, { f: 1760, type: 'square', a: 0.002, d: 0.05, vol: 0.06 });
+  tone(S, out, t0 + 0.09, { f: 1760, type: 'square', a: 0.002, d: 0.05, vol: 0.06 });
+  sweepNoise(S, out, t0, { f0: 500, f1: 2000, dur: 0.2, Q: 1, vol: 0.5, attack: 0.05, seed: v });
+  return 0.35;
+};
+R.emp_blast = (S, out, t0, v) => {
+  // a crackling electric boom, then everything powering down
+  const sh = S.shaper(3); sh.connect(out);
+  burst(S, sh, t0, { type: 'highpass', f: 900, dur: 0.03, vol: 1, seed: v });
+  thump(S, sh, t0, { f0: 120, f1: 35, dur: 0.9, sweep: 0.3, vol: 1 });
+  clicks(S, out, t0, { n: 80, dur: 0.9, f: 3800, Q: 5, vol: 0.35 });
+  tone(S, out, t0 + 0.02, { f: 2400, f1: 90, type: 'sawtooth', a: 0.01, d: 0.9, vol: 0.06 });
+  tone(S, out, t0 + 0.02, { f: 1200, f1: 60, type: 'square', a: 0.01, d: 0.8, vol: 0.04 });
+  burst(S, out, t0 + 0.01, { type: 'lowpass', f: 1400, f1: 200, dur: 0.7, vol: 0.5, kind: 'pink', seed: v + 2 });
+  return 1.4;
+};
+R.drone_launch = (S, out, t0, v) => {
+  // three rotor buzzes spinning up one after another
+  for (let i = 0; i < 3; i++) {
+    const t = t0 + i * 0.07, o = S.osc('sawtooth', 180 + i * 30), bp = S.filt('bandpass', 900 + i * 200, 3), g = S.gain(0);
+    const am = S.osc('sine', 42 + i * 6), ag = S.gain(0.08);
+    S.env(o.frequency, t, [[0, 180 + i * 30], [0.35, 420 + i * 60]]);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.12, t + 0.08); g.gain.setTargetAtTime(0, t + 0.3, 0.08);
+    am.connect(ag); ag.connect(g.gain);
+    S.chain(o, bp, g, out); o.start(t); am.start(t); o.stop(t + 0.7); am.stop(t + 0.7);
+  }
+  sweepNoise(S, out, t0, { f0: 400, f1: 2400, dur: 0.45, Q: 1.6, vol: 0.45, attack: 0.1, seed: v });
+  return 0.9;
+};
+R.drone_heal = (S, out, t0, v) => {
+  tone(S, out, t0, { f: 1568, f1: 2093, type: 'sine', a: 0.01, d: 0.18, vol: 0.08 });
+  tone(S, out, t0 + 0.08, { f: 2349.3, type: 'sine', a: 0.01, d: 0.25, vol: 0.06 });
+  return 0.45;
+};
+R.override = (S, out, t0, v) => {
+  // the hack gathering: a climbing arpeggio of square blips, data stutter and a swelling hum, building
+  // to the wave 0.78 s in (override_wave, played on the animation's wave event)
+  const notes = [220, 277.2, 329.6, 440, 554.4, 659.3, 880, 1108.7];
+  for (let i = 0; i < 16; i++) tone(S, out, t0 + i * 0.045, { f: notes[i % 8] * (i >= 8 ? 2 : 1), type: 'square', a: 0.002, d: 0.06, vol: 0.05 });
+  const o = S.osc('sawtooth', 55), lp = S.filt('lowpass', 200, 6), g = S.gain(0);
+  S.env(o.frequency, t0, [[0, 55], [0.75, 110]]); S.env(lp.frequency, t0, [[0, 200], [0.75, 2600]]);
+  g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.28, t0 + 0.72); g.gain.setTargetAtTime(0, t0 + 0.78, 0.05);
+  S.chain(o, lp, g, out); o.start(t0); o.stop(t0 + 1.2);
+  clicks(S, out, t0 + 0.2, { n: 40, dur: 0.55, f: 2600, Q: 6, vol: 0.2, decay: false });
+  return 1.2;
+};
+R.override_wave = (S, out, t0, v) => {
+  const sh = S.shaper(2.6); sh.connect(out);
+  burst(S, sh, t0, { type: 'highpass', f: 1000, dur: 0.03, vol: 1, seed: v });
+  thump(S, sh, t0, { f0: 110, f1: 28, dur: 1.6, sweep: 0.45, vol: 1.2 });
+  sweepNoise(S, out, t0, { f0: 6000, f1: 300, dur: 1.2, Q: 0.8, vol: 0.55, attack: 0.01, kind: 'white', seed: v + 1 });
+  [880, 1318.5, 1760, 2637].forEach((f, i) => tone(S, out, t0 + 0.05 + i * 0.05, { f, type: 'sine', a: 0.01, d: 1.1, vol: 0.06, vib: 12, vibF: 9 }));
+  clicks(S, out, t0 + 0.05, { n: 50, dur: 1.2, f: 3600, Q: 4, vol: 0.18 });
+  return 2.2;
+};
+R.override_hit = (S, out, t0, v) => {
+  // a digital glitch: stuttering square bursts
+  [1200, 300, 1800, 450, 900, 2400].forEach((f, i) => tone(S, out, t0 + i * 0.028, { f, type: 'square', a: 0.001, d: 0.02, vol: 0.07 }));
+  burst(S, out, t0, { f: 1500, Q: 0.8, dur: 0.12, vol: 0.35, seed: v });
+  return 0.35;
+};
+R.overclock = (S, out, t0, v) => {
+  [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(S, out, t0 + i * 0.05, { f, type: 'triangle', a: 0.004, d: 0.45, vol: 0.09 }));
+  sweepNoise(S, out, t0, { f0: 600, f1: 4000, dur: 0.35, Q: 1.2, vol: 0.3, attack: 0.25, kind: 'white', seed: v });
+  return 0.8;
+};
+R.bike_summon = (S, out, t0, v) => {
+  // a jet streaking in, then the turbine catching
+  sweepNoise(S, out, t0, { f0: 300, f1: 3000, f2: 900, dur: 0.5, Q: 0.9, vol: 0.8, attack: 0.35, kind: 'white', seed: v });
+  const o = S.osc('sawtooth', 60), lp = S.filt('lowpass', 400, 2), g = S.gain(0);
+  S.env(o.frequency, t0, [[0, 40], [0.5, 95]]); S.env(lp.frequency, t0, [[0, 200], [0.5, 1400]]);
+  g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.25, t0 + 0.35); g.gain.setTargetAtTime(0, t0 + 0.45, 0.15);
+  S.chain(o, lp, g, out); o.start(t0); o.stop(t0 + 1.2);
+  tone(S, out, t0 + 0.1, { f: 700, f1: 1600, type: 'sine', a: 0.2, d: 0.4, vol: 0.05 });
+  thump(S, out, t0 + 0.32, { f0: 110, f1: 55, dur: 0.3, vol: 0.4 });
+  return 1.1;
+};
+R.bike_away = (S, out, t0, v) => {
+  sweepNoise(S, out, t0, { f0: 2400, f1: 500, dur: 0.8, Q: 0.9, vol: 0.6, attack: 0.05, kind: 'white', seed: v });
+  tone(S, out, t0, { f: 1500, f1: 500, type: 'sine', a: 0.02, d: 0.7, vol: 0.05 });
+  return 1.0;
+};
+R.step_metal = (S, out, t0, v) => {
+  thump(S, out, t0, { f0: 120, f1: 60, dur: 0.08, vol: 0.5 });
+  burst(S, out, t0, { f: 1500 + v * 220, Q: 6, dur: 0.05, vol: 0.18, seed: v });
+  tone(S, out, t0, { f: 2200 + v * 180, type: 'triangle', a: 0.001, d: 0.06, vol: 0.03 });
+  burst(S, out, t0 + 0.02, { f: 700, Q: 1, dur: 0.04, vol: 0.12, kind: 'pink', seed: v + 3 });
+  return 0.25;
+};
+
+const VARIANTS = { punch_light: 4, punch_heavy: 3, swing: 3, swing_heavy: 2, bolt_fire: 3, bolt_hit: 3, bubble_hit: 3, step: 4, step_heavy: 3, rock_hit: 2, zip: 2,
+  plasma_fire: 3, plasma_hit: 3, missile_launch: 2, missile_boom: 2, barrier_hit: 3, step_metal: 4 };
 
 export class AudioEngine {
   constructor() {
@@ -538,6 +698,38 @@ export class AudioEngine {
       stop: () => {
         const tt = c.currentTime; out.gain.setTargetAtTime(0, tt, 0.12);
         setTimeout(() => { [...oscs, lfo, n, whine].forEach((o) => { try { o.stop(); } catch (e) { /* stopped */ } }); out.disconnect(); }, 900);
+      },
+    };
+  }
+  /** the hoverbike's turbine: a low hum and a whine that climb with speed; returns controller */
+  engineVoice(pos) {
+    if (!this.ready) return { set() {}, stop() {} };
+    const c = this.ctx, t = c.currentTime;
+    const out = c.createGain(); out.gain.value = 0;
+    const pan = c.createPanner(); pan.panningModel = 'equalpower'; pan.refDistance = 6; pan.rolloffFactor = 1.1;
+    out.connect(pan); pan.connect(this.sfx);
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 500; lp.Q.value = 1.5; lp.connect(out);
+    const hum = [62, 93.5].map((f, i) => { const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = i ? 7 : -7; const g = c.createGain(); g.gain.value = 0.18; o.connect(g); g.connect(lp); o.start(); return o; });
+    const whine = c.createOscillator(); whine.type = 'sine'; whine.frequency.value = 900; const wg = c.createGain(); wg.gain.value = 0.035; whine.connect(wg); wg.connect(out); whine.start();
+    const n = c.createBufferSource(); n.buffer = this.pinkBuf; n.loop = true;
+    const nb = c.createBiquadFilter(); nb.type = 'bandpass'; nb.frequency.value = 1200; nb.Q.value = 0.7;
+    const ng = c.createGain(); ng.gain.value = 0.25; n.connect(nb); nb.connect(ng); ng.connect(out); n.start();
+    out.gain.setTargetAtTime(0.4, t, 0.15);
+    const setPos = (p) => { if (pan.positionX) { pan.positionX.setTargetAtTime(p.x, c.currentTime, 0.03); pan.positionY.setTargetAtTime(p.y, c.currentTime, 0.03); pan.positionZ.setTargetAtTime(p.z, c.currentTime, 0.03); } };
+    if (pos) setPos(pos);
+    return {
+      set: (p, k = 0, boost = 0) => {
+        const tt = c.currentTime;
+        if (p) setPos(p);
+        lp.frequency.setTargetAtTime(400 + k * 1400 + boost * 800, tt, 0.1);
+        whine.frequency.setTargetAtTime(800 + k * 900 + boost * 500, tt, 0.1);
+        hum[0].frequency.setTargetAtTime(62 + k * 30, tt, 0.15); hum[1].frequency.setTargetAtTime(93.5 + k * 45, tt, 0.15);
+        ng.gain.setTargetAtTime(0.2 + k * 0.5, tt, 0.1);
+        out.gain.setTargetAtTime(0.35 + k * 0.25, tt, 0.1);
+      },
+      stop: () => {
+        out.gain.setTargetAtTime(0, c.currentTime, 0.1);
+        setTimeout(() => { [...hum, whine, n].forEach((o) => { try { o.stop(); } catch (e) { /* stopped */ } }); out.disconnect(); }, 700);
       },
     };
   }

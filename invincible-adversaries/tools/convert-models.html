@@ -31,6 +31,7 @@
       <option value="invincible">Invincible: Mark_Invincible.fbx, Invincible Suit.png, Hair.png</option>
       <option value="eve">Atom Eve: Model_AtomEve.fbx, atomeve_df.png, atomeve_nm.png</option>
       <option value="omniman">Omni-Man: Nuevo Proyecto 3.gltf (plus any .bin and textures it references)</option>
+      <option value="robot">Robot: invincible_vs_robot.glb</option>
     </select>
   </label>
   <label>Source folder <input id="dir" type="file" webkitdirectory multiple></label>
@@ -143,6 +144,39 @@ function recomputeSmoothNormals(geom, creaseDeg = 70) {
   geom.setAttribute('normal', new THREE.BufferAttribute(out, 3));
 }
 
+// Share of triangles whose stored normals agree with their winding (1 = all face outward).
+function normalAgreement(geom) {
+  const pos = geom.attributes.position, nor = geom.attributes.normal, idx = geom.index;
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), n = new THREE.Vector3();
+  let ok = 0, all = 0;
+  const tris = (idx ? idx.count : pos.count) / 3;
+  for (let t = 0; t < tris; t += 3) {
+    const i = [0, 1, 2].map((k) => (idx ? idx.getX(t * 3 + k) : t * 3 + k));
+    a.fromBufferAttribute(pos, i[0]); b.fromBufferAttribute(pos, i[1]); c.fromBufferAttribute(pos, i[2]);
+    b.sub(a); c.sub(a); b.cross(c);
+    if (b.lengthSq() < 1e-14) continue;
+    n.fromBufferAttribute(nor, i[0]).add(a.fromBufferAttribute(nor, i[1])).add(c.fromBufferAttribute(nor, i[2]));
+    all++; if (b.normalize().dot(n.normalize()) > 0.5) ok++;
+  }
+  return ok / Math.max(all, 1);
+}
+
+// Bake a mesh skinned to a single bone (the hoverbike) into plain world-space geometry.
+function bakeRigid(o) {
+  o.updateMatrixWorld(true); o.skeleton.update();
+  const g = o.geometry.clone(), si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
+  const bi = sw.getX(0) >= 0.5 ? si.getX(0) : si.getY(0);
+  for (let i = 0; i < si.count; i++) {
+    const w = [sw.getX(i), sw.getY(i), sw.getZ(i), sw.getW(i)], j = [si.getX(i), si.getY(i), si.getZ(i), si.getW(i)];
+    if (w.some((x, k) => x > 1e-3 && j[k] !== bi)) throw new Error(`${o.name} is not skinned to one bone`);
+  }
+  const b = o.skeleton.bones[bi];
+  g.applyMatrix4(new THREE.Matrix4().copy(o.matrixWorld).multiply(o.bindMatrixInverse)
+    .multiply(b.matrixWorld).multiply(o.skeleton.boneInverses[bi]).multiply(o.bindMatrix));
+  g.deleteAttribute('skinIndex'); g.deleteAttribute('skinWeight');
+  return g;
+}
+
 function fitHeight(root, h) {
   root.updateMatrixWorld(true);
   const box = new THREE.Box3();
@@ -199,6 +233,44 @@ async function build(which) {
     const s = fitHeight(root, 1.74);
     wrap.scale.setScalar(s);
     wrap.add(root);
+  } else if (which === 'robot') {
+    // Sketchfab's "Invincible VS Robot" (th7915562, CC BY 4.0): Robot and his hoverbike
+    const g = await new GLTFLoader(manager).parseAsync(await need('invincible_vs_robot.glb').arrayBuffer(), '');
+    const root = g.scene;
+    root.updateMatrixWorld(true);
+    const meshes = [];
+    root.traverse((o) => { if (o.isSkinnedMesh) meshes.push(o); });
+    // The exporter baked each model node's transform into the vertex positions but not the normals,
+    // which light the model from the wrong side; turning them through that node's matrix fixes them.
+    for (const o of meshes) {
+      let n = o.parent; while (n && !/out_\d+$/.test(n.name)) n = n.parent;
+      if (!n) throw new Error('no model node above ' + o.name);
+      const before = normalAgreement(o.geometry);
+      o.geometry.attributes.normal.applyMatrix3(new THREE.Matrix3().setFromMatrix4(n.matrix)).needsUpdate = true;
+      o.geometry.normalizeNormals();
+      say(`${o.name} under ${n.name}: normals agreeing with the faces ${(before * 100).toFixed(0)}% -> ${(normalAgreement(o.geometry) * 100).toFixed(0)}%`);
+    }
+    const names = { material_1: 'Robot_Body', material_2: 'Robot_Head', material_3: 'Robot_Gear', material_0: 'Robot_Hoverbike' };
+    for (const o of meshes) { o.name = o.material.name = names[o.material.name] || o.name; o.material.roughness = 0.55; o.material.metalness = 0; }
+    // bone names without the exporter's numbering (bip_pelvis_6 -> bip_pelvis)
+    const bones = []; root.traverse((o) => { if (o.isBone) bones.push(o); });
+    const base = (b) => b.name.replace(/_\d+$/, '');
+    const count = {}; for (const b of bones) count[base(b)] = (count[base(b)] || 0) + 1;
+    for (const b of bones) if (count[base(b)] === 1) b.name = base(b);
+    // the hoverbike becomes a plain prop the kit carries around: centred, nose +z, 2.9 m long
+    const bike = meshes.find((o) => o.name === 'Robot_Hoverbike');
+    const bikeGeo = bakeRigid(bike);
+    bike.parent.remove(bike);
+    bikeGeo.computeBoundingBox();
+    const bb = bikeGeo.boundingBox, bs = 2.9 / (bb.max.z - bb.min.z);
+    bikeGeo.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2).scale(bs, bs, bs);
+    const s = fitHeight(root, 1.9);
+    wrap.scale.setScalar(s);
+    wrap.add(root);
+    const bikeMesh = new THREE.Mesh(bikeGeo.scale(1 / s, 1 / s, 1 / s), bike.material);
+    bikeMesh.name = 'Robot_Hoverbike';
+    wrap.add(bikeMesh);
+    say(`hoverbike: ${bikeGeo.attributes.position.count} verts, ${(bb.max.z - bb.min.z).toFixed(2)} long in the source, scaled to 2.9 m`);
   } else if (which === 'omniman') {
     const g = await new GLTFLoader(manager).parseAsync(await need('Nuevo Proyecto 3.gltf').text(), '');
     const root = g.scene;
