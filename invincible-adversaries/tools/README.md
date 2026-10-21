@@ -42,7 +42,7 @@ The optional last two arguments simplify the meshes whose names match the regex 
 
 ## Gameplay trailer
 
-`trailer/` renders the trailer in-engine. `director.js` stages each shot, flies the camera and draws the title cards. It also records the game's own audio on the trailer clock. `capture.mjs` runs shots headlessly in Chromium and pipes 1080p frames to ffmpeg. `score.js` synthesizes the music to fit the edit. `mix.sh` ducks the music under the sound effects, normalizes loudness to -14 LUFS and muxes the result.
+`trailer/` renders the trailer in-engine. `director.js` stages each shot, flies the camera and draws the title cards. It also records the game's own audio on the trailer clock and logs when each sound plays. `capture.mjs` runs shots headlessly in Chromium and pipes 1080p frames to ffmpeg. `score.js` synthesizes the music to fit the edit, landing its hits on the logged impact sounds. `mix.sh` ducks the music under the sound effects, normalizes loudness to -14 LUFS and muxes the result.
 
 You need ffmpeg and Python 3 with numpy. Start the game with `npm start`, then:
 

@@ -7,16 +7,18 @@ cd "$D"
 ls [0-9][0-9]_*.mp4 | sort | sed "s|^|file '$PWD/|; s|$|'|" > list.txt
 echo "clips: $(wc -l < list.txt)"
 
-# score ducks (sidechain) whenever the game SFX hit; then both buses are summed
+# score ducks (sidechain) whenever the game SFX hit; then both buses are summed (as float, so a sum over
+# full scale reaches the limiter below instead of clipping here)
 ffmpeg -hide_banner -loglevel error -y -i music.wav -i sfx.wav -filter_complex "
   [1:a]asplit=2[key][fx];
   [0:a]volume=0.82[mus];
   [mus][key]sidechaincompress=threshold=0.1:ratio=2.5:attack=8:release=240:makeup=1[duck];
   [fx]volume=1.2,highpass=f=28[fx2];
   [duck][fx2]amix=inputs=2:normalize=0:duration=longest,volume=enable='between(t,${DROP:-16.83},${DROP_END:-16.995})':volume=0.08,atrim=0:${DUR},afade=t=out:st=$(python3 -I -c "print($DUR - 0.9)"):d=0.9[mix]" \
-  -map "[mix]" -ar 48000 -c:a pcm_s24le mix_raw.wav
+  -map "[mix]" -ar 48000 -c:a pcm_f32le mix_raw.wav
 
-# two-pass loudness normalisation (linear) to -14 LUFS / -2 dBTP (headroom for AAC overshoot)
+# two-pass loudness normalisation to -14 LUFS / -2 dBTP (headroom for AAC overshoot): linear gain when the
+# peaks allow it, otherwise loudnorm limits the peaks dynamically
 J=$(ffmpeg -hide_banner -nostats -i mix_raw.wav -af loudnorm=I=-14:TP=-2.0:LRA=11:print_format=json -f null - 2>&1 | sed -n '/^{/,/^}/p')
 get() { echo "$J" | python3 -I -c "import json,sys; print(json.load(sys.stdin)['$1'])"; }
 ffmpeg -hide_banner -loglevel error -y -i mix_raw.wav -af "loudnorm=I=-14:TP=-2.0:LRA=11:measured_I=$(get input_i):measured_TP=$(get input_tp):measured_LRA=$(get input_lra):measured_thresh=$(get input_thresh):offset=$(get target_offset):linear=true:print_format=summary" -ar 48000 -c:a pcm_s16le mix.wav

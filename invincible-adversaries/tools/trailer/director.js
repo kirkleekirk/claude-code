@@ -133,8 +133,15 @@ TR.initAudio = async (total) => {
   window.AudioContext = function () { return proxy; };
   await g.audio.init();
   g.audio.maxVoices = 1e9;
+  // every sound that plays is logged as [shot, name, trailer time] so the score can hit on exact events
+  TR.cues = [];
   const play = g.audio.play.bind(g.audio);
-  g.audio.play = (name, o = {}) => (TR.muted ? null : play(name, { ...o, rate: (o.rate || 1) * TR.rateScale }));
+  g.audio.play = (name, o = {}) => {
+    if (TR.muted) return null;
+    const v = play(name, { ...o, rate: (o.rate || 1) * TR.rateScale });
+    if (v) TR.cues.push([cur.s.id, name, +(TR.clock + (o.delay || 0)).toFixed(4)]);
+    return v;
+  };
   const beamVoice = g.audio.beamVoice.bind(g.audio);
   g.audio.beamVoice = (p) => (TR.muted ? { set() {}, stop() {} } : beamVoice(p));
   TR.off = off;

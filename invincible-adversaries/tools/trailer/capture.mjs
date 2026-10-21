@@ -1,5 +1,6 @@
-// node capture.mjs <outDir> <shotIdsCsv|all> [--preview N] [--audio name]
+// node capture.mjs <outDir> <shotIdsCsv|all> [--preview N] [--audio name [--audio-only]]
 // Renders the listed shots through the game, piping 1080p frames into one H.264 file per shot.
+// --audio also writes the sound cues next to the stem (name.cues.json); --audio-only skips the frames.
 // The game must be served (npm start); GAME_URL overrides http://localhost:5173/.
 import { chromium } from 'playwright';
 import fs from 'fs';
@@ -10,6 +11,7 @@ const out = args[0], which = args[1];
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const preview = +opt('--preview', 0);
 const audioName = opt('--audio', null);
+const audioOnly = !!audioName && args.includes('--audio-only');
 fs.mkdirSync(out, { recursive: true });
 const browser = await chromium.launch({ headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: preview ? 0.75 : 1.5 });
@@ -31,15 +33,16 @@ for (const s of sel) {
   const t0 = Date.now();
   const info = await page.evaluate((i) => TR.begin(i), s.i);
   let ff = null;
-  if (!preview) {
+  if (!preview && !audioOnly) {
     ff = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'image2pipe', '-framerate', '30', '-c:v', 'mjpeg', '-i', '-',
       '-c:v', 'libx264', '-preset', 'medium', '-crf', '13', '-pix_fmt', 'yuv420p', '-r', '30', path.join(out, `${String(s.i).padStart(2, '0')}_${s.id}.mp4`)], { stdio: ['pipe', 'inherit', 'inherit'] });
   }
   for (let f = 0; f < info.frames; f++) {
-    const cap = !preview || f % preview === 0 || f === info.frames - 1;
+    const cap = !audioOnly && (!preview || f % preview === 0 || f === info.frames - 1);
     await page.evaluate(([f, cap]) => TR.frame(f, cap), [f, cap]);
+    if (!cap) continue;
     if (preview) {
-      if (f % preview === 0 || f === info.frames - 1) await page.screenshot({ path: path.join(out, `${String(s.i).padStart(2, '0')}_${s.id}_${String(f).padStart(3, '0')}.jpg`), type: 'jpeg', quality: 80 });
+      await page.screenshot({ path: path.join(out, `${String(s.i).padStart(2, '0')}_${s.id}_${String(f).padStart(3, '0')}.jpg`), type: 'jpeg', quality: 80 });
     } else {
       const buf = await page.screenshot({ type: 'jpeg', quality: 95 });
       if (!ff.stdin.write(buf)) await new Promise((r) => ff.stdin.once('drain', r));
@@ -56,7 +59,9 @@ if (audioName) {
   hdr.writeUInt32LE(16, 16); hdr.writeUInt16LE(1, 20); hdr.writeUInt16LE(2, 22); hdr.writeUInt32LE(a.sr, 24); hdr.writeUInt32LE(a.sr * 4, 28); hdr.writeUInt16LE(4, 32); hdr.writeUInt16LE(16, 34);
   hdr.write('data', 36); hdr.writeUInt32LE(pcm.length, 40);
   fs.writeFileSync(path.join(out, audioName), Buffer.concat([hdr, pcm]));
-  console.log('audio written', audioName, (pcm.length / 4 / a.sr).toFixed(2), 's');
+  const cues = await page.evaluate(() => TR.cues);
+  fs.writeFileSync(path.join(out, audioName.replace(/\.wav$/, '') + '.cues.json'), JSON.stringify(cues));
+  console.log('audio written', audioName, (pcm.length / 4 / a.sr).toFixed(2), 's,', cues.length, 'cues');
 }
 console.log(logs.slice(0, 30).join('\n') || 'no console errors');
 await browser.close();
