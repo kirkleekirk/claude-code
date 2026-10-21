@@ -20,6 +20,8 @@ import { Menus } from './ui/menus.js';
 const KITS = { invincible: InvincibleKit, eve: EveKit, omniman: OmniKit };
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _u = new THREE.Vector3();
 const PARAMS = new URLSearchParams(location.search);
+// phones and tablets without a mouse: a bot plays the player's hero so the match can be watched
+const TOUCH_ONLY = matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches;
 
 class PlayerController {
   constructor(game) { this.g = game; }
@@ -69,7 +71,7 @@ export class Game {
   async boot(onProgress) {
     window.__capture = PARAMS.has('capture');
     if (window.__capture) window.THREE = THREE;
-    this.renderer = new Renderer(this.canvas, PARAMS.get('quality') || this.saved.quality || 'medium');
+    this.renderer = new Renderer(this.canvas, PARAMS.get('quality') || this.saved.quality || (TOUCH_ONLY ? 'low' : 'medium'));
     this.scene = new THREE.Scene();
     this.camRig = new ThirdPersonCamera(innerWidth / innerHeight);
     this.camRig.sens = this.saved.sens ?? this.camRig.sens;
@@ -128,7 +130,7 @@ export class Game {
   clearWorld() {
     for (const h of [...this.world.heroes]) this.world.remove(h);
     this.bots = [];
-    this.player = null;
+    this.player = null; this.playerBot = null;
     this.world.projectiles = [];
     this.world.score = [0, 0];
     this.world.feed = [];
@@ -194,8 +196,8 @@ export class Game {
     this.camRig.yaw = 0; this.camRig.pitch = -0.12; this.camRig.initialized = false;
     if (!PARAMS.has('capture')) this.input.lock();
     this.ensureAudio();
-    this.hud.toast('Fight! ESC for menu & training options');
-    if (PARAMS.has('autobot')) this.bots.push(this.playerBot = new Bot(this.player, this.world));
+    this.hud.toast(TOUCH_ONLY ? 'A bot is playing your hero. Use a keyboard and mouse to play yourself.' : 'Fight! ESC for menu & training options');
+    if (PARAMS.has('autobot') || TOUCH_ONLY) this.bots.push(this.playerBot = new Bot(this.player, this.world));
   }
 
   changeHero(key) {
@@ -210,6 +212,10 @@ export class Game {
     this.world.add(this.player);
     this.fx.pillar(pos, { color: HEROES[key].color, height: 16, radius: 1.3, life: 1.2 });
     this.player.dissolve = 1; this.player.dissolveTarget = 0;
+    if (this.playerBot) {
+      this.bots = this.bots.filter((b) => b !== this.playerBot);
+      this.bots.push(this.playerBot = new Bot(this.player, this.world));
+    }
     // keep team composition varied: an ally bot using the same hero swaps to the old one
     const dup = this.world.heroes.find((h) => h !== this.player && h.team === 0 && h.key === key);
     if (dup) {

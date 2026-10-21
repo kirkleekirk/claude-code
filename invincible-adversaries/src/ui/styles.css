@@ -3,6 +3,7 @@
 @font-face { font-family: 'Barlow Condensed'; font-weight: 800; src: url('../../assets/fonts/barlow-condensed-800.woff2') format('woff2'); font-display: swap; }
 
 :root {
+  color-scheme: dark;
   --yellow: #ffd400; --blue: #00aeef; --ink: #07090e; --pink: #ff4fd8; --red: #e8212e;
   --ally: #3fb0ff; --enemy: #ff3b4a; --glass: rgba(8, 12, 22, 0.72); --line: rgba(255, 255, 255, 0.14);
   --display: 'Anton', Impact, 'Arial Black', sans-serif;
@@ -244,4 +245,17 @@ kbd { display: inline-block; min-width: 1.6em; padding: 0.05em 0.45em; margin-ri
   #hero-cards { width: 240px; left: 16px; } .card .name { font-size: 26px; }
   #hero-detail { width: 46vw; right: 12px; }
   #bl { left: 12px; width: 260px; } #abilities { right: 12px; } .tile { width: 56px; height: 56px; }
+}
+/* phones in portrait: stack the hero select (cards, then details, then the button) */
+@media (max-width: 640px) {
+  .sel-head { left: 16px; top: 18px; font-size: 34px; } .sel-head span { font-size: 18px; }
+  #hero-cards { top: 96px; left: 16px; right: 16px; width: auto; flex-direction: row; gap: 8px; }
+  .card { flex: 1 1 0; min-width: 0; padding: 8px 8px 8px 12px; } .card .num, .card .hp, .card .tag { display: none; }
+  .card .role { font-size: 9px; letter-spacing: .12em; } .card .name { font-size: 18px; }
+  .card.sel { transform: skewX(-10deg) scale(1.04); }
+  #hero-detail { top: 172px; left: 16px; right: 16px; bottom: 92px; width: auto; }
+  #hero-detail .hd .nm { font-size: 40px; }
+  #btn-lock { left: 16px; right: 16px; bottom: 20px; font-size: 24px; padding: 12px; text-align: center; }
+  #keyhint, .sel-hint { display: none; }
+  #bl { width: 200px; } #topbar .slot { width: 28px; height: 28px; } #topbar .score { font-size: 30px; min-width: 30px; }
 }

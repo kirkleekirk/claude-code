@@ -26,22 +26,33 @@ export class Input {
     window.addEventListener('blur', () => { this.down.clear(); this.mouse.b = [false, false, false]; });
     el.addEventListener('mousedown', (e) => {
       if (!this.enabled) return;
-      if (!this.locked && this.wantLock) { el.requestPointerLock?.(); }
+      if (!this.locked && this.wantLock) this.requestLock();
       this.mouse.b[e.button] = true; this.mouse.pb[e.button] = true;
     });
     window.addEventListener('mouseup', (e) => { this.mouse.b[e.button] = false; this.mouse.rb[e.button] = true; });
     window.addEventListener('mousemove', (e) => {
-      if (this.locked) { this.mouse.dx += e.movementX; this.mouse.dy += e.movementY; }
+      // if the browser or an embedding frame refuses pointer lock, fall back to plain mouse movement
+      if (this.locked || (this.wantLock && this.lockFailed)) { this.mouse.dx += e.movementX; this.mouse.dy += e.movementY; }
     });
     window.addEventListener('wheel', (e) => { this.mouse.wheel += Math.sign(e.deltaY); }, { passive: true });
     el.addEventListener('contextmenu', (e) => e.preventDefault());
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === el;
+      if (this.locked) this.lockFailed = false;
       this.onLockChange && this.onLockChange(this.locked);
     });
+    document.addEventListener('pointerlockerror', () => { this.lockFailed = true; });
     this.wantLock = false;
+    this.lockFailed = false;
   }
-  lock() { this.wantLock = true; this.el.requestPointerLock?.(); }
+  requestLock() {
+    try {
+      const r = this.el.requestPointerLock?.();
+      if (r && r.catch) r.catch(() => { this.lockFailed = true; });
+      if (!this.el.requestPointerLock) this.lockFailed = true;
+    } catch (e) { this.lockFailed = true; }
+  }
+  lock() { this.wantLock = true; this.requestLock(); }
   unlock() { this.wantLock = false; if (document.pointerLockElement) document.exitPointerLock(); }
   isDown(c) { return this.down.has(c); }
   wasPressed(c) { return this.pressed.has(c); }

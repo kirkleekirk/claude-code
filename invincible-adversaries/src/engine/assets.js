@@ -11,6 +11,13 @@ export const MODEL_URLS = {
 
 const loader = new GLTFLoader();
 loader.setMeshoptDecoder(MeshoptDecoder);
+// Decode embedded textures through <img> instead of fetch() + createImageBitmap: sandboxed
+// embeds (e.g. a strict CSP) often allow blob: images but not blob: fetches.
+loader.register((parser) => {
+  parser.textureLoader = new THREE.TextureLoader(parser.options.manager);
+  parser.textureLoader.setCrossOrigin(parser.options.crossOrigin);
+  return { name: 'image_element_textures' };
+});
 const cache = new Map();
 
 export async function loadModels(base = '', onProgress) {
