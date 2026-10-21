@@ -250,11 +250,22 @@ export class Animator {
     }
     this.legYaw = damp(this.legYaw, targetLegYaw, 8, dt);
 
-    // cadence (cycles per second)
-    const f = clamp(st.cadenceBase + speed * st.cadencePerSpeed, 0.6, st.cadenceMax) * (s.cadenceScale || 1);
+    // cadence (cycles per second) and duty factor beta (share of the cycle a foot is planted). The
+    // planted foot sweeps speed * beta / f of ground; where the legs can't reach that far (sprints),
+    // contact gets shorter, and then the cadence rises, so feet never skate to make up the difference
+    let f = clamp(st.cadenceBase + speed * st.cadencePerSpeed, 0.6, st.cadenceMax) * (s.cadenceScale || 1);
+    let beta = lerp(0.62, 0.34, rb);
+    const sdL = rig.side.L, legLen = (sdL.thighLen + sdL.shinLen) * 0.985;
+    const drop = sdL.thigh.pos.y - (st.crouchRun * rb + 0.012 + 0.02 * mb) - st.bob * rb * 0.5 - sdL.ankleHeight;
+    const maxStance = 2 * Math.sqrt(Math.max(0.01, legLen * legLen - drop * drop));
+    if (speed * beta > maxStance * f) {
+      beta = Math.max(0.2, maxStance * f / speed);
+      if (speed * beta > maxStance * f) f = Math.min(speed * beta / maxStance, st.cadenceMax * 1.4);
+      beta = Math.min(beta, Math.max(0.2, maxStance * f / speed));
+    }
     if (mb > 0.01) this.phase += f * dt;
-    const beta = lerp(0.62, 0.34, rb);
-    const stance = clamp(speed * beta / f, 0, 1.25 * rig.side.L.thighLen + 0.4);
+    this.gaitBeta = beta;
+    const stance = Math.min(speed * beta / f, maxStance);
     const H = lerp(0.07, st.stepHeight, rb);
     const hipH = rig.hipsHeight;
     // feet
@@ -278,14 +289,11 @@ export class Animator {
         pitch = lerp(40, -18, smoothstep(0.1, 0.95, u)) * (0.4 + 0.6 * rb);
       }
       const sx = sd.sx;
-      // stance base point in model space (rotated by legYaw)
+      // stance base point in model space: the hips turn toward the movement (legYaw), so the feet's
+      // spacing turns with them, but their travel along the ground stays exactly against the motion
       const bxw = sx * st.stanceW * (1 - rb * 0.4);
-      const bz = 0;
-      // movement along dir
       const mx = dx * along, mz = dz * along;
-      let fx = bxw + mx, fz = bz + mz;
-      // rotate the whole stance by legYaw
-      const rx = fx * legOff + fz * legOffS, rz = -fx * legOffS + fz * legOff;
+      const rx = bxw * legOff + mx, rz = -bxw * legOffS + mz;
       this._gait = this._gait || { L: new THREE.Vector3(), R: new THREE.Vector3(), P: { L: 0, R: 0 } };
       this._gait[side].set(rx, sd.ankleHeight + lift, rz);
       this._gait.P[side] = pitch;
@@ -312,7 +320,7 @@ export class Animator {
     // hips
     const ph = this.phase;
     const bob = st.bob * rb + 0.015 * (1 - rb);
-    const crouch = st.crouchRun * rb + 0.012;
+    const crouch = st.crouchRun * rb + 0.012 + 0.02 * mb; // knees soften when moving: longer reach for the planted foot
     b.v[CH.rootY] += (-bob * (0.5 + 0.5 * Math.cos(2 * TAU * (ph - beta * 0.5))) - crouch) * mb - 0.022 * (1 - mb);
     const yawA = st.yawAmp * (0.4 + 0.6 * rb) * Math.abs(dz);
     b.v[CH.rootYaw] += (-yawA * Math.cos(TAU * ph) * Math.sign(dz || 1)) * mb + (this.legYaw / DEG);

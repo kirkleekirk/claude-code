@@ -274,7 +274,13 @@ export class Hero {
       if (o.type === 'cyl') {
         if (p.y > o.h) continue;
         const dx = p.x - o.x, dz = p.z - o.z, d = Math.hypot(dx, dz), rr = o.r + r;
-        if (d < rr) { const k = (rr - d) / (d || 1); p.x += dx * k; p.z += dz * k; this.onWallHit && this.onWallHit(); }
+        if (d < rr) {
+          const k = (rr - d) / (d || 1); p.x += dx * k; p.z += dz * k;
+          // drop the velocity into the pillar (else a blocked hero keeps "running" and its feet skate)
+          const nx = dx / (d || 1), nz = dz / (d || 1), vn = this.vel.x * nx + this.vel.z * nz;
+          if (vn < 0) { this.vel.x -= nx * vn; this.vel.z -= nz * vn; }
+          this.onWallHit && this.onWallHit();
+        }
       } else {
         const mn = o.min, mx = o.max;
         const inX = p.x > mn.x - r && p.x < mx.x + r, inZ = p.z > mn.z - r && p.z < mx.z + r;
@@ -284,7 +290,10 @@ export class Hero {
         // push out along minimal axis
         const pl = p.x - (mn.x - r), pr = (mx.x + r) - p.x, pb = p.z - (mn.z - r), pf = (mx.z + r) - p.z;
         const m = Math.min(pl, pr, pb, pf);
-        if (m === pl) p.x = mn.x - r; else if (m === pr) p.x = mx.x + r; else if (m === pb) p.z = mn.z - r; else p.z = mx.z + r;
+        // push out along the minimal axis and drop the velocity going into the wall
+        const v = this.vel;
+        if (m === pl) { p.x = mn.x - r; if (v.x > 0) v.x = 0; } else if (m === pr) { p.x = mx.x + r; if (v.x < 0) v.x = 0; }
+        else if (m === pb) { p.z = mn.z - r; if (v.z > 0) v.z = 0; } else { p.z = mx.z + r; if (v.z < 0) v.z = 0; }
         this.onWallHit && this.onWallHit();
       }
     }
@@ -293,7 +302,11 @@ export class Hero {
     if (p.y < this.groundY) { p.y = this.groundY; if (this.vel.y < 0) this.vel.y = 0; }
     // bounds
     const R = Math.hypot(p.x, p.z);
-    if (R > ARENA.boundR) { p.x *= ARENA.boundR / R; p.z *= ARENA.boundR / R; }
+    if (R > ARENA.boundR) {
+      p.x *= ARENA.boundR / R; p.z *= ARENA.boundR / R;
+      const vo = (this.vel.x * p.x + this.vel.z * p.z) / ARENA.boundR;
+      if (vo > 0) { this.vel.x -= p.x / ARENA.boundR * vo; this.vel.z -= p.z / ARENA.boundR * vo; }
+    }
     if (p.y > ARENA.ceiling) { p.y = ARENA.ceiling; if (this.vel.y > 0) this.vel.y = 0; }
     // ground
     const was = this.grounded;
