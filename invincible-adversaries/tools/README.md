@@ -1,0 +1,70 @@
+# Asset pipeline
+
+The game ships ready-to-run models in `assets/models/`. You only need these tools to rebuild them, for example from a newer download of a model. Run on the original downloads, the two steps below reproduce the shipped files. In Chromium the result is byte for byte; other browsers may re-encode textures slightly differently.
+
+## 1. Convert (browser)
+
+`convert-models.html` loads the original FBX/glTF files, cleans them up and exports a single GLB:
+
+- **Invincible:** collapses the nested duplicate bones that FBXLoader creates and keeps the hand-made outline hull. The hull is hidden in game and replaced by a shader outline.
+- **Atom Eve:** applies the diffuse and normal maps and strips the helper objects left over from the source game.
+- **Omni-Man:** rebuilds smooth normals, because the source glTF's normals are broken and render him dark. It also names the meshes so the optimizer can target them.
+- **Robot:** turns the normals through each model node's matrix. The exporter baked those transforms into the vertex positions but not the normals, which lit him from the wrong side. It also names the meshes, strips the exporter's numbering from the bone names and splits the hoverbike off into a plain mesh, centred and 2.9 m long, for his kit to carry.
+- **Rex Splode:** names the meshes, strips the bone numbering and splits his coin and rod off into plain props, centred on their origins, for his kit to throw.
+- **Battle Beast:** names the meshes (mane, head, armor and so on) and strips the bone numbering, so the game can find his mane and braid bones for their hair physics.
+- **Rex Splode and Battle Beast:** each mesh's normals are checked against its faces and turned by the model node's matrix, or a quarter turn about x, when that makes them agree better (Robot's fix, generalized). The converter logs what it chose.
+- **All six:** scales each model to its in-game height (Invincible 1.85 m, Rex 1.83 m, Eve 1.74 m, Robot 1.9 m, Omni-Man 1.98 m, Battle Beast 2.25 m).
+
+Steps:
+
+1. Unpack the downloads. Two of them nest a second archive inside `source/`:
+   - `invincible.zip`: unzip `source/Mark_Invincible.zip`, which holds `Mark_Invincible.fbx`, `Invincible Suit.png` and `Hair.png`.
+   - `atom-eve.zip`: unpack `source/ATOM-EVE.rar` (7-Zip, unar, etc.). The `Model_AtomEve/` folder inside holds `Model_AtomEve.fbx`, `atomeve_df.png` and `atomeve_nm.png`.
+   - `invincible-vs-omniman.zip`: `source/Nuevo Proyecto 3.gltf` has its textures embedded.
+   - Robot, Rex Splode and Battle Beast are Sketchfab's glTF binary downloads, `invincible_vs_robot.glb`, `invincible_vs_rex_splode.glb` and `invincible_vs_battle_beast.glb`, which need no unpacking.
+2. From the game folder, run `npm start` and open <http://localhost:5173/tools/convert-models.html>. The page loads three.js r169 from jsDelivr.
+3. Pick the hero and the folder (or files) from step 1, then click **Convert and download**. The page saves `<hero>.raw.glb`.
+
+## 2. Optimize (Node 18+)
+
+`optimize.mjs` welds and dedups the geometry. It then re-encodes textures as WebP, quantizes the vertex attributes and applies meshopt compression, which `vendor/three/addons/libs/meshopt_decoder.module.js` decodes at load time.
+
+```sh
+cd tools
+npm install
+node optimize.mjs invincible.raw.glb ../assets/models/invincible.glb
+node optimize.mjs eve.raw.glb        ../assets/models/atom-eve.glb
+node optimize.mjs omniman.raw.glb    ../assets/models/omni-man.glb 0.45 "Eyes|Brows|Head"
+node optimize.mjs robot.raw.glb      ../assets/models/robot.glb    0.5 "Hoverbike"
+node optimize.mjs rex.raw.glb        ../assets/models/rex-splode.glb   0.5 "Rex_Body|Rex_Head|Rex_EyesMouth"
+node optimize.mjs battlebeast.raw.glb ../assets/models/battle-beast.glb 0.5 "Beast_Mane|Beast_Head|Beast_EyesMouth" 2048
+```
+
+The optional third and fourth arguments simplify the meshes whose names match the regex to the given triangle ratio. Omni-Man's head meshes are far denser than the rest of the model, so they are simplified to 45%. Robot's hoverbike, Rex's body and head and Battle Beast's mane and head are simplified to 50%. The optional fifth argument caps texture size in pixels: Battle Beast's one 4096 px texture is downsized to 2048.
+
+| Model | Raw GLB | Shipped GLB | Triangles |
+| --- | --- | --- | --- |
+| Invincible | 5.8 MB | 0.6 MB | 33k |
+| Atom Eve | 1.4 MB | 0.2 MB | 4k |
+| Omni-Man | 19.6 MB | 1.4 MB | 94k |
+| Robot | 6.4 MB | 1.9 MB | 87k |
+| Rex Splode | 5.6 MB | 1.3 MB | 57k |
+| Battle Beast | 8.9 MB | 2.9 MB | 106k |
+
+## Gameplay trailer
+
+`trailer/` renders the trailer in-engine. `director.js` stages each shot, flies the camera and draws the title cards. It also records the game's own audio on the trailer clock and logs when each sound plays. `capture.mjs` runs shots headlessly in Chromium and pipes 1080p frames to ffmpeg. `score.js` synthesizes the music to fit the edit, landing its hits on the logged impact sounds. `mix.sh` ducks the music under the sound effects, normalizes loudness to -14 LUFS and muxes the result.
+
+You need ffmpeg and Python 3 with numpy. Start the game with `npm start`, then:
+
+```sh
+cd tools
+npm install
+npm run trailer   # writes trailer/out/trailer.mp4
+```
+
+Rendering is slow without a GPU: about 1 hour for the 73.5-second cut on four CPU cores. For a quick look, run a low-resolution preview of chosen shots:
+
+```sh
+node trailer/capture.mjs trailer/out/preview inv_mach,eve_ult --preview 10
+```

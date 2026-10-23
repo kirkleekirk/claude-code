@@ -1,0 +1,18 @@
+{
+  "name": "invincible-adversaries-tools",
+  "private": true,
+  "description": "Asset and trailer pipeline for Invincible Adversaries (not needed to play).",
+  "type": "module",
+  "scripts": {
+    "optimize": "node optimize.mjs",
+    "trailer": "bash trailer/make-trailer.sh"
+  },
+  "dependencies": {
+    "@gltf-transform/core": "4.1.1",
+    "@gltf-transform/extensions": "4.1.1",
+    "@gltf-transform/functions": "4.1.1",
+    "meshoptimizer": "0.22.0",
+    "sharp": "0.33.5",
+    "playwright": "1.56.1"
+  }
+}

@@ -1,0 +1,151 @@
+// Balance table. Every hero is deliberately over-the-top: high damage, short
+// cooldowns and big mobility, offset against each other. Healing is weak on
+// purpose: everyone has self-sustain, so a "healer" helps through abilities
+// (shields, damage amp, burst heal, revive) rather than by healbotting.
+
+export const HEROES = {
+  invincible: {
+    key: 'invincible', name: 'INVINCIBLE', real: 'Mark Grayson',
+    role: 'DUELIST', roleTag: 'Flying Dive DPS',
+    color: '#ffd400', accent: '#00aeef',
+    hp: 425,
+    radius: 0.42, height: 1.85,
+    speed: 9.2, jump: 10.5,
+    flight: { speed: 21, accel: 46, unlimited: true },
+    regen: { delay: 3.5, rate: 35 },
+    camDist: 4.1, camHeight: 1.55,
+    ultCost: 2000,
+    passive: { name: 'Viltrumite Physiology', desc: 'Unlimited flight. Regenerates 35 HP/s after 3.5s without taking damage.' },
+    abilities: {
+      primary: { name: 'Viltrumite Barrage', key: 'LMB', icon: 'fist', desc: '4-hit combo (44/44/52/80) that lunges onto enemies near your crosshair. Finisher launches.' },
+      secondary: { name: 'Shockwave Clap', key: 'RMB', icon: 'clap', cd: 3.5, charges: 2, desc: 'Clap a 16m cone shockwave for 65 damage and knockback. 2 charges.' },
+      a1: { name: 'Sonic Boom Dash', key: 'SHIFT', icon: 'dash', cd: 6, desc: 'Break the sound barrier: dash 32m, 75 damage to everyone in the path.' },
+      a2: { name: 'Meteor Dive', key: 'E', icon: 'meteor', cd: 9, desc: 'Dive at the target point (up to 45m). 95 damage in 6m and knock-up.' },
+      a3: { name: 'Skyward Slam', key: 'F', icon: 'grab', cd: 12, desc: 'Grab an enemy, rocket upward and slam them into the ground for 110 damage + stun.' },
+      ult: { name: 'MACH BREAKER', key: 'Q', icon: 'ult_inv', desc: 'Rocket into the stratosphere, pick a target, and crash down at Mach 10: up to 420 damage in an 11m crater.' },
+    },
+  },
+  rex: {
+    key: 'rex', name: 'REX SPLODE', real: 'Rex Sloan',
+    role: 'DUELIST', roleTag: 'Explosive Skirmisher',
+    color: '#ff4f6e', accent: '#ffd23d',
+    hp: 325,
+    radius: 0.4, height: 1.83,
+    speed: 9.4, jump: 11,
+    flight: null, mobility: 'Blast jumps',
+    regen: { delay: 3.5, rate: 28 },
+    camDist: 3.9, camHeight: 1.5,
+    ultCost: 2000,
+    passive: { name: 'Self-Made Explosive', desc: "Can't fly, but his own blasts never hurt him and launch him around: rocket-jump with them. Regenerates 28 HP/s after 3.5s." },
+    abilities: {
+      primary: { name: 'Charged Coins', key: 'LMB', icon: 'coin', desc: 'Flick kinetically charged coins that blow up on impact: 30 damage plus 15 splash, 3 a second.' },
+      secondary: { name: 'Sticky Rod', key: 'RMB', icon: 'rod', cd: 6, desc: 'Throw a charged rod that sticks to whatever it hits. Press RMB again (or wait 3s) to detonate it: 110 damage in 5m.' },
+      a1: { name: 'Blast Jump', key: 'SHIFT', icon: 'blastjump', cd: 6, charges: 2, desc: 'Blow up the ground under your feet and launch about 17m where you look: 45 damage where you left. Works in mid-air. 2 charges.' },
+      a2: { name: 'Concussion Grenade', key: 'E', icon: 'grenade', cd: 10, desc: 'Lob the grenade off your belt: it bounces once and blows, 80 damage in 6m, launching enemies and slowing them 35% for 2s.' },
+      a3: { name: 'Pocket Change', key: 'F', icon: 'coins', cd: 8, desc: 'Fan out 7 short-fused charged coins at once, 24 damage each plus splash. Brutal up close.' },
+      ult: { name: 'SPLODE!', key: 'Q', icon: 'ult_rex', desc: 'Charge your own body for 2s (+30% speed, unstoppable), then detonate: up to 380 damage in 12m. Rex survives it, blown sky-high.' },
+    },
+  },
+  eve: {
+    key: 'eve', name: 'ATOM EVE', real: 'Samantha Eve Wilkins',
+    role: 'STRATEGIST', roleTag: 'Shields & Support',
+    color: '#ff4fd8', accent: '#ffd1f4',
+    hp: 300,
+    radius: 0.38, height: 1.74,
+    speed: 8.0, jump: 9.5,
+    flight: { speed: 15, accel: 34, duration: 7, regen: 1.6, unlimited: false },
+    regen: { delay: 3, rate: 20 },
+    camDist: 3.8, camHeight: 1.5,
+    ultCost: 2200,
+    passive: { name: 'Matter Reconstruction', desc: 'Flies on atomic energy (7s). Regenerates 20 HP/s after 3s. Bolts that hit near allies mend them slightly.' },
+    abilities: {
+      primary: { name: 'Particle Bolts', key: 'LMB', icon: 'bolt', desc: 'Rapid pink bolts, 21 damage each. Splash mends nearby allies for only 5 HP: shooting enemies is the real support.' },
+      secondary: { name: 'Construct Fist', key: 'RMB', icon: 'cfist', cd: 6, desc: 'Fire a giant energy fist: 90 damage and heavy knockback.' },
+      a1: { name: 'Atomic Bubble', key: 'SHIFT', icon: 'bubble', cd: 11, charges: 2, desc: 'Bubble the ally under your crosshair (or yourself): absorbs 225 damage for 4s. 2 charges.' },
+      a2: { name: 'Disassembly Field', key: 'E', icon: 'field', cd: 12, desc: 'Throw an orb that unravels matter: enemies inside take +25% damage from ALL sources and are slowed.' },
+      a3: { name: 'Restoration Pulse', key: 'F', icon: 'pulse', cd: 14, desc: 'Burst-heal allies within 15m for 80 (+40 over 2s) and cleanse slows.' },
+      ult: { name: 'UNBOUND', key: 'Q', icon: 'ult_eve', desc: 'Break the mental block. Then choose: LMB Annihilation Beam (giant beam, 420 DPS) or RMB Reconstruction (revive ALL fallen allies + team-wide bubbles and heal).' },
+    },
+  },
+  robot: {
+    key: 'robot', name: 'ROBOT', real: 'Rudy Connors',
+    role: 'STRATEGIST', roleTag: 'Tactician & Tech',
+    color: '#ff9b3d', accent: '#5ee8ff',
+    hp: 350,
+    radius: 0.4, height: 1.9,
+    speed: 8.4, jump: 9.8,
+    flight: { speed: 18, accel: 38, duration: 6.5, regen: 1.5, unlimited: false },
+    regen: { delay: 3.5, rate: 18 },
+    camDist: 3.9, camHeight: 1.55,
+    ultCost: 2200,
+    passive: { name: 'Tactical Uplink', desc: 'Flies on his hoverbike (6.5s). Self-repairs 18 HP/s after 3.5s. He and allies within 20m recharge abilities 20% faster.' },
+    abilities: {
+      primary: { name: 'Wrist Cannons', key: 'LMB', icon: 'cannon', desc: 'Alternating plasma shots, 17 damage each, 8 a second. No healing: Robot supports with tech, not his gun.' },
+      secondary: { name: 'Micro-Missiles', key: 'RMB', icon: 'missiles', cd: 7, desc: 'The back pod fires 8 homing micro-missiles: 14 damage each, plus 12 splash.' },
+      a1: { name: 'Hard-Light Barrier', key: 'SHIFT', icon: 'barrier', cd: 12, desc: 'Project a 7m hard-light wall that stops all enemy fire for 5s (700 HP). Allies shoot through it.' },
+      a2: { name: 'EMP Disruptor', key: 'E', icon: 'emp', cd: 12, desc: 'Throw an EMP charge: 40 damage in 7m. Pops bubbles and overhealth, and locks enemy abilities and flight for 2s.' },
+      a3: { name: 'Repair Drones', key: 'F', icon: 'drones', cd: 15, desc: 'Send 3 drones to the most hurt allies within 25m (Robot included): 25 HP/s for 4s and 15% less damage taken.' },
+      ult: { name: 'TACTICAL OVERRIDE', key: 'Q', icon: 'ult_robot', desc: 'Hack the battlefield: a 35m wave disrupts enemies for 3s (no abilities or flight, +20% damage taken) and overclocks allies for 6s (cooldowns reset, +20% damage and speed).' },
+    },
+  },
+  omniman: {
+    key: 'omniman', name: 'OMNI-MAN', real: 'Nolan Grayson',
+    role: 'VANGUARD', roleTag: 'Brawler Tank',
+    color: '#e8212e', accent: '#f2f2f2',
+    hp: 550,
+    radius: 0.5, height: 1.98,
+    speed: 8.8, jump: 11,
+    flight: { speed: 17, accel: 40, duration: 8, regen: 1.5, unlimited: false },
+    regen: { delay: 6, rate: 15 },
+    camDist: 4.7, camHeight: 1.75,
+    ultCost: 2400,
+    passive: { name: 'Viltrumite Conqueror', desc: 'Heals for 15% of all damage dealt. Unstoppable: immune to knockback and slows. Flies for 8s.' },
+    abilities: {
+      primary: { name: 'Brutal Strikes', key: 'LMB', icon: 'fist', desc: '3-hit cleaving combo (54/54/90). The hammer-fist finisher sends out a ground shock.' },
+      secondary: { name: 'Seismic Boulder', key: 'RMB', icon: 'boulder', cd: 5, desc: 'Rip a chunk of earth and hurl it: 105 damage + 45 splash.' },
+      a1: { name: 'Viltrumite Charge', key: 'SHIFT', icon: 'charge', cd: 7, desc: 'Charge 24m, carrying the first enemy hit and slamming them for 120 total damage.' },
+      a2: { name: 'Thunderclap', key: 'E', icon: 'clap', cd: 9, desc: 'Massive clap: 22m cone, 85 damage, huge knockback and 30% slow.' },
+      a3: { name: "Conqueror's Will", key: 'F', icon: 'roar', cd: 16, desc: 'Gain 150 overhealth, +20% damage and 20% damage reduction for 4s.' },
+      ult: { name: 'A FRACTION OF OUR POWER', key: 'Q', icon: 'ult_omni', desc: 'Blitz between up to 5 enemies within 40m, 150 damage each, ending in a thunderclap.' },
+    },
+  },
+  battlebeast: {
+    key: 'battlebeast', name: 'BATTLE BEAST', real: 'Thokk',
+    role: 'VANGUARD', roleTag: 'Feral Juggernaut',
+    color: '#efe4cc', accent: '#c4122f',
+    hp: 650,
+    radius: 0.58, height: 2.25,
+    speed: 8.6, jump: 13.5,
+    flight: null, mobility: 'Pounces',
+    regen: { delay: 5, rate: 20 },
+    camDist: 5.1, camHeight: 1.95,
+    ultCost: 2400,
+    passive: { name: 'Thirst for Battle', desc: "Can't fly, but leaps huge distances. Below 50% health he goes berserk: +25% damage and 25% less damage taken." },
+    abilities: {
+      primary: { name: 'Rending Claws', key: 'LMB', icon: 'claws', desc: '3-hit claw combo (55/55/95) that cleaves a wide arc. The double-claw finisher knocks enemies down.' },
+      secondary: { name: 'Brace', key: 'RMB', icon: 'guard', cd: 2, desc: 'Hold to guard behind your gauntlets: 65% less damage from the front while you walk slowly (4s at most). After blocking a big hit your next claw is a counter for +50%.' },
+      a1: { name: 'Pounce', key: 'SHIFT', icon: 'pounce', cd: 8, desc: 'Leap up to 30m onto a point or an enemy, even one in the air: 90 damage in 5m on landing. An enemy landed on directly is pinned for 0.8s.' },
+      a2: { name: 'Primal Roar', key: 'E', icon: 'roar', cd: 12, desc: 'Roar: enemies within 15m deal 30% less damage and are slowed 30% for 3s. Gain 150 overhealth.' },
+      a3: { name: 'Hurl', key: 'F', icon: 'hurl', cd: 11, desc: 'Grab the enemy in front of you and hurl them about 20m where you aim: 60 damage, plus 70 and a stun when they crash.' },
+      ult: { name: 'WORTHY FOE', key: 'Q', icon: 'ult_bb', desc: 'Go berserk for 8s: grow 20% bigger, become unstoppable, take 40% less damage, claw faster and Pounce every 2s.' },
+    },
+  },
+};
+
+// grouped by role on the hero select: duelists, strategists, vanguards
+export const HERO_KEYS = ['invincible', 'rex', 'eve', 'robot', 'omniman', 'battlebeast'];
+
+export const RULES = {
+  respawn: 7,
+  orbHeal: 150,
+  orbRespawn: 15,
+  ultPerDamage: 1,
+  ultPerHeal: 1,
+  ultPerShield: 0.8,
+  ultPassive: 6, // points / s
+  killUlt: 120,
+  omniLifesteal: 0.15,
+  uplinkRange: 20, // Robot's Tactical Uplink
+  uplinkCdRate: 0.2, // extra cooldown recharge rate it gives
+  beastRage: 0.5, // Battle Beast goes berserk below this share of his health
+};

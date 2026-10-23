@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Model Converter</title>
+<!-- Dev tool only (the game itself never loads this page). Same three.js release as vendor/three. -->
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+}}
+</script>
+<style>
+  :root { --bg: #11131a; --panel: #1b1f2a; --text: #e8ebf2; --muted: #9aa3b5; --accent: #ffd400; }
+  body { margin: 0; padding: 24px 16px; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p, li { color: var(--muted); }
+  code { color: var(--text); }
+  .panel { background: var(--panel); border-radius: 10px; padding: 16px; margin: 16px 0; display: grid; gap: 12px; }
+  label { display: grid; gap: 4px; }
+  select, input, button { font: inherit; color: var(--text); background: #262b39; border: 1px solid #343b4d; border-radius: 6px; padding: 6px 10px; }
+  button { background: var(--accent); color: #111; border: 0; font-weight: 700; cursor: pointer; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  pre { background: #0b0d12; border-radius: 8px; padding: 12px; overflow: auto; max-height: 320px; white-space: pre-wrap; }
+</style>
+</head><body><main>
+<h1>Invincible Adversaries: model converter</h1>
+<p>Turns the original model downloads into the <code>*.raw.glb</code> files that <code>tools/optimize.mjs</code> compresses into <code>assets/models/</code>. See <code>tools/README.md</code>.</p>
+<div class="panel">
+  <label>Hero
+    <select id="hero">
+      <option value="invincible">Invincible: Mark_Invincible.fbx, Invincible Suit.png, Hair.png</option>
+      <option value="eve">Atom Eve: Model_AtomEve.fbx, atomeve_df.png, atomeve_nm.png</option>
+      <option value="omniman">Omni-Man: Nuevo Proyecto 3.gltf (plus any .bin and textures it references)</option>
+      <option value="robot">Robot: invincible_vs_robot.glb</option>
+      <option value="rex">Rex Splode: invincible_vs_rex_splode.glb</option>
+      <option value="battlebeast">Battle Beast: invincible_vs_battle_beast.glb</option>
+      <option value="allen">Allen: scene.gltf and scene.bin (slow: it is culled, decimated and rigged here)</option>
+      <option value="immortal">The Immortal: the-immortal.glb</option>
+    </select>
+  </label>
+  <label>Source folder <input id="dir" type="file" webkitdirectory multiple></label>
+  <label>…or pick the files themselves <input id="files" type="file" multiple></label>
+  <button id="go" disabled>Convert and download</button>
+</div>
+<pre id="log">Choose the hero and its source files.</pre>
+</main>
+<script type="module">
+import * as THREE from 'three';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+const $ = (id) => document.getElementById(id);
+const files = new Map(); // lower-case basename -> File
+const log = [];
+const say = (s) => { log.push(s); $('log').textContent = log.join('\n'); };
+
+function addFiles(list) {
+  for (const f of list) files.set(f.name.toLowerCase(), f);
+  $('go').disabled = files.size === 0;
+  say(`${files.size} file(s) selected`);
+}
+$('dir').onchange = (e) => addFiles(e.target.files);
+$('files').onchange = (e) => addFiles(e.target.files);
+
+const baseName = (url) => decodeURIComponent(url.split('?')[0].split('#')[0].split('/').pop()).toLowerCase();
+function need(name) {
+  const f = files.get(name.toLowerCase());
+  if (!f) throw new Error(`missing source file: ${name}`);
+  return f;
+}
+// Every relative resource a loader asks for is looked up among the selected files by name.
+const manager = new THREE.LoadingManager();
+const urls = [];
+manager.setURLModifier((url) => {
+  if (/^(data|blob):/.test(url)) return url;
+  const f = files.get(baseName(url));
+  if (!f) return url;
+  const u = URL.createObjectURL(f); urls.push(u); return u;
+});
+const texL = new THREE.TextureLoader(manager);
+async function tex(name, srgb = true) {
+  const t = await texL.loadAsync(name);
+  if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+
+// Collapse FBXLoader's nested duplicate bones (same name, identity offset) to the outermost one.
+function collapseDuplicateBones(root) {
+  root.updateMatrixWorld(true);
+  const canon = (b) => { while (b.parent && b.parent.isBone && b.parent.name === b.name) b = b.parent; return b; };
+  root.traverse(o => {
+    if (!o.isSkinnedMesh) return;
+    const bones = o.skeleton.bones.map(canon);
+    const sk = new THREE.Skeleton(bones, o.skeleton.boneInverses.map(m => m.clone()));
+    o.bind(sk, o.bindMatrix.clone());
+  });
+  const dups = [];
+  root.traverse(o => { if (o.isBone && o.parent && o.parent.isBone && o.parent.name === o.name) dups.push(o); });
+  for (const d of dups) {
+    const p = d.parent;
+    for (const c of [...d.children]) { if (c.name !== d.name) { say('moving child ' + c.name); p.attach(c); } }
+  }
+  for (const d of dups) d.parent && d.parent.remove(d);
+  let n = 0; root.traverse(o => { if (o.isBone) n++; });
+  say('bones after collapse: ' + n + ' removed ' + dups.length);
+}
+
+// Smooth normals with a crease threshold, welding by position (fixes broken normals in the glTF).
+function recomputeSmoothNormals(geom, creaseDeg = 70) {
+  const pos = geom.attributes.position;
+  const idx = geom.index ? geom.index.array : null;
+  const triCount = (idx ? idx.length : pos.count) / 3;
+  const vi = (t, k) => idx ? idx[t * 3 + k] : t * 3 + k;
+  const fn = new Float32Array(triCount * 3);
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3();
+  const key = (i) => `${Math.round(pos.getX(i) * 1e5)},${Math.round(pos.getY(i) * 1e5)},${Math.round(pos.getZ(i) * 1e5)}`;
+  const map = new Map();
+  const vtri = new Int32Array(pos.count).fill(-1);
+  for (let t = 0; t < triCount; t++) {
+    a.fromBufferAttribute(pos, vi(t, 0)); b.fromBufferAttribute(pos, vi(t, 1)); c.fromBufferAttribute(pos, vi(t, 2));
+    e1.subVectors(b, a); e2.subVectors(c, a); e1.cross(e2); // area weighted
+    fn[t * 3] = e1.x; fn[t * 3 + 1] = e1.y; fn[t * 3 + 2] = e1.z;
+    for (let k = 0; k < 3; k++) {
+      const v = vi(t, k); vtri[v] = t;
+      const kk = key(v); let l = map.get(kk); if (!l) map.set(kk, l = []); l.push(t);
+    }
+  }
+  const cosT = Math.cos(THREE.MathUtils.degToRad(creaseDeg));
+  const out = new Float32Array(pos.count * 3);
+  const n0 = new THREE.Vector3(), nf = new THREE.Vector3(), acc = new THREE.Vector3();
+  for (let v = 0; v < pos.count; v++) {
+    const t0 = vtri[v]; if (t0 < 0) continue;
+    n0.set(fn[t0 * 3], fn[t0 * 3 + 1], fn[t0 * 3 + 2]).normalize();
+    acc.set(0, 0, 0);
+    const seen = new Set();
+    for (const t of map.get(key(v))) {
+      if (seen.has(t)) continue; seen.add(t);
+      nf.set(fn[t * 3], fn[t * 3 + 1], fn[t * 3 + 2]);
+      const len = nf.length(); if (len === 0) continue;
+      if (nf.dot(n0) / len >= cosT) acc.add(nf);
+    }
+    if (acc.lengthSq() === 0) acc.copy(n0);
+    acc.normalize();
+    out[v * 3] = acc.x; out[v * 3 + 1] = acc.y; out[v * 3 + 2] = acc.z;
+  }
+  geom.setAttribute('normal', new THREE.BufferAttribute(out, 3));
+}
+
+// Share of triangles whose stored normals agree with their winding (1 = all face outward).
+function normalAgreement(geom) {
+  const pos = geom.attributes.position, nor = geom.attributes.normal, idx = geom.index;
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), n = new THREE.Vector3();
+  let ok = 0, all = 0;
+  const tris = (idx ? idx.count : pos.count) / 3;
+  for (let t = 0; t < tris; t += 3) {
+    const i = [0, 1, 2].map((k) => (idx ? idx.getX(t * 3 + k) : t * 3 + k));
+    a.fromBufferAttribute(pos, i[0]); b.fromBufferAttribute(pos, i[1]); c.fromBufferAttribute(pos, i[2]);
+    b.sub(a); c.sub(a); b.cross(c);
+    if (b.lengthSq() < 1e-14) continue;
+    n.fromBufferAttribute(nor, i[0]).add(a.fromBufferAttribute(nor, i[1])).add(c.fromBufferAttribute(nor, i[2]));
+    all++; if (b.normalize().dot(n.normalize()) > 0.5) ok++;
+  }
+  return ok / Math.max(all, 1);
+}
+
+// Bake a mesh skinned to a single bone (the hoverbike) into plain world-space geometry.
+function bakeRigid(o) {
+  o.updateMatrixWorld(true); o.skeleton.update();
+  const g = o.geometry.clone(), si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
+  const bi = sw.getX(0) >= 0.5 ? si.getX(0) : si.getY(0);
+  for (let i = 0; i < si.count; i++) {
+    const w = [sw.getX(i), sw.getY(i), sw.getZ(i), sw.getW(i)], j = [si.getX(i), si.getY(i), si.getZ(i), si.getW(i)];
+    if (w.some((x, k) => x > 1e-3 && j[k] !== bi)) throw new Error(`${o.name} is not skinned to one bone`);
+  }
+  const b = o.skeleton.bones[bi];
+  g.applyMatrix4(new THREE.Matrix4().copy(o.matrixWorld).multiply(o.bindMatrixInverse)
+    .multiply(b.matrixWorld).multiply(o.skeleton.boneInverses[bi]).multiply(o.bindMatrix));
+  g.deleteAttribute('skinIndex'); g.deleteAttribute('skinWeight');
+  return g;
+}
+
+// Sketchfab exports can bake a node's or bone's rotation into the vertex positions but not into the
+// normals, which then light the model from the wrong side. Turn each mesh's normals by whichever of a
+// few candidate rotations (the model node's, quarter turns about x) makes them agree with the winding.
+function fixNormals(meshes) {
+  for (const o of meshes) {
+    let n = o.parent; while (n && !/out_\d+$/.test(n.name)) n = n.parent;
+    const cands = [['as stored', new THREE.Matrix3()]];
+    if (n) cands.push([n.name, new THREE.Matrix3().setFromMatrix4(n.matrix)]);
+    for (const deg of [90, -90, 180]) cands.push([`x${deg}`, new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationX(deg * Math.PI / 180))]);
+    const nor = o.geometry.attributes.normal, orig = nor.array.slice();
+    let best = null;
+    for (const [label, m] of cands) {
+      nor.array.set(orig); nor.applyMatrix3(m); o.geometry.normalizeNormals();
+      const a = normalAgreement(o.geometry);
+      if (!best || a > best.a + 1e-3) best = { label, m, a };
+    }
+    nor.array.set(orig); nor.applyMatrix3(best.m); o.geometry.normalizeNormals(); nor.needsUpdate = true;
+    say(`${o.name}: normals turned by ${best.label}, ${(best.a * 100).toFixed(0)}% agree with the faces`);
+  }
+}
+// bone names without the exporter's numbering (bip_pelvis_6 -> bip_pelvis) where that stays unique
+function stripBoneNumbers(root) {
+  const bones = []; root.traverse((o) => { if (o.isBone) bones.push(o); });
+  const base = (b) => b.name.replace(/_\d+$/, '');
+  const count = {}; for (const b of bones) count[base(b)] = (count[base(b)] || 0) + 1;
+  for (const b of bones) if (count[base(b)] === 1) b.name = base(b);
+}
+
+function fitHeight(root, h) {
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3();
+  root.traverse(o => { if (o.isSkinnedMesh) { o.skeleton.update(); } });
+  box.setFromObject(root, true);
+  const s = h / (box.max.y - box.min.y);
+  say('raw height ' + (box.max.y - box.min.y) + ' scale ' + s);
+  return s;
+}
+
+async function loadFBX(name) {
+  return new FBXLoader(manager).parse(await need(name).arrayBuffer(), '');
+}
+
+async function build(which) {
+  const wrap = new THREE.Group();
+  let animations = [];
+  if (which === 'invincible') {
+    const root = await loadFBX('Mark_Invincible.fbx');
+    collapseDuplicateBones(root);
+    const suit = await tex('Invincible Suit.png'); suit.name = 'invincible_suit';
+    const hair = await tex('Hair.png'); hair.name = 'invincible_hair';
+    root.traverse(o => {
+      if (!o.isMesh) return;
+      o.geometry.deleteAttribute('color');
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      const g = o.geometry.groups[0];
+      const m = mats[g ? g.materialIndex : 0];
+      o.geometry.clearGroups();
+      let nm;
+      if (m.name === 'Outline') nm = new THREE.MeshBasicMaterial({ color: 0x000000, name: 'Outline' });
+      else nm = new THREE.MeshStandardMaterial({ map: m.name === 'Hair' ? hair : suit, roughness: 0.85, metalness: 0, name: m.name });
+      o.material = nm;
+      say('mesh ' + o.name + ' -> ' + nm.name + ' verts ' + o.geometry.attributes.position.count);
+    });
+    animations = root.animations.filter(a => a.name.includes('IdleHover'));
+    animations.forEach(a => a.name = 'IdleHover');
+    root.animations = [];
+    const s = fitHeight(root, 1.85);
+    wrap.scale.setScalar(s);
+    wrap.add(root);
+  } else if (which === 'eve') {
+    const root = await loadFBX('Model_AtomEve.fbx');
+    const df = await tex('atomeve_df.png'); df.name = 'atomeve_df';
+    const nmT = await tex('atomeve_nm.png', false); nmT.name = 'atomeve_nm';
+    const kill = [];
+    root.traverse(o => {
+      if (o.isMesh) {
+        o.material = new THREE.MeshStandardMaterial({ map: df, normalMap: nmT, roughness: 0.6, metalness: 0, name: 'AtomEve' });
+        say('eve mesh verts ' + o.geometry.attributes.position.count);
+      } else if (!o.isBone && o !== root && o.type === 'Group' && /Pivot|PowerPos|PF_VFX|ParentBone|LifebarAnchor|Instakill|AtomEve_Energy/.test(o.name)) kill.push(o);
+    });
+    kill.forEach(k => k.parent && k.parent.remove(k));
+    const s = fitHeight(root, 1.74);
+    wrap.scale.setScalar(s);
+    wrap.add(root);
+  } else if (which === 'robot') {
+    // Sketchfab's "Invincible VS Robot" (th7915562, CC BY 4.0): Robot and his hoverbike
+    const g = await new GLTFLoader(manager).parseAsync(await need('invincible_vs_robot.glb').arrayBuffer(), '');
+    const root = g.scene;
+    root.updateMatrixWorld(true);
+    const meshes = [];
+    root.traverse((o) => { if (o.isSkinnedMesh) meshes.push(o); });
+    // The exporter baked each model node's transform into the vertex positions but not the normals,
+    // which light the model from the wrong side; turning them through that node's matrix fixes them.
+    for (const o of meshes) {
+      let n = o.parent; while (n && !/out_\d+$/.test(n.name)) n = n.parent;
+      if (!n) throw new Error('no model node above ' + o.name);
+      const before = normalAgreement(o.geometry);
+      o.geometry.attributes.normal.applyMatrix3(new THREE.Matrix3().setFromMatrix4(n.matrix)).needsUpdate = true;
+      o.geometry.normalizeNormals();
+      say(`${o.name} under ${n.name}: normals agreeing with the faces ${(before * 100).toFixed(0)}% -> ${(normalAgreement(o.geometry) * 100).toFixed(0)}%`);
+    }
+    const names = { material_1: 'Robot_Body', material_2: 'Robot_Head', material_3: 'Robot_Gear', material_0: 'Robot_Hoverbike' };
+    for (const o of meshes) { o.name = o.material.name = names[o.material.name] || o.name; o.material.roughness = 0.55; o.material.metalness = 0; }
+    // bone names without the exporter's numbering (bip_pelvis_6 -> bip_pelvis)
+    const bones = []; root.traverse((o) => { if (o.isBone) bones.push(o); });
+    const base = (b) => b.name.replace(/_\d+$/, '');
+    const count = {}; for (const b of bones) count[base(b)] = (count[base(b)] || 0) + 1;
+    for (const b of bones) if (count[base(b)] === 1) b.name = base(b);
+    // the hoverbike becomes a plain prop the kit carries around: centred, nose +z, 2.9 m long
+    const bike = meshes.find((o) => o.name === 'Robot_Hoverbike');
+    const bikeGeo = bakeRigid(bike);
+    bike.parent.remove(bike);
+    bikeGeo.computeBoundingBox();
+    const bb = bikeGeo.boundingBox, bs = 2.9 / (bb.max.z - bb.min.z);
+    bikeGeo.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2).scale(bs, bs, bs);
+    const s = fitHeight(root, 1.9);
+    wrap.scale.setScalar(s);
+    wrap.add(root);
+    const bikeMesh = new THREE.Mesh(bikeGeo.scale(1 / s, 1 / s, 1 / s), bike.material);
+    bikeMesh.name = 'Robot_Hoverbike';
+    wrap.add(bikeMesh);
+    say(`hoverbike: ${bikeGeo.attributes.position.count} verts, ${(bb.max.z - bb.min.z).toFixed(2)} long in the source, scaled to 2.9 m`);
+  } else if (which === 'rex') {
+    // Sketchfab's "Invincible VS Rex Splode" (th7915562, CC BY 4.0): Rex, and a coin and a rod for him to charge
+    const g = await new GLTFLoader(manager).parseAsync(await need('invincible_vs_rex_splode.glb').arrayBuffer(), '');
+    const root = g.scene;
+    root.updateMatrixWorld(true);
+    const meshes = [];
+    root.traverse((o) => { if (o.isSkinnedMesh) meshes.push(o); });
+    fixNormals(meshes);
+    const names = { material_0: 'Rex_Coin', material_1: 'Rex_Rod', material_2: 'Rex_Body', material_3: 'Rex_Head', material_4: 'Rex_EyesMouth', material_5: 'Rex_Brows', material_6: 'Rex_Goggles', material_7: 'Rex_Lenses' };
+    for (const o of meshes) { o.name = o.material.name = names[o.material.name] || o.name; o.material.roughness = 0.55; o.material.metalness = 0; }
+    // the coin and the rod each have a skeleton of their own: bake them into plain props centred on
+    // their origin (in the model's units, so they keep their size next to him) and drop their nodes
+    const props = [];
+    for (const n of ['Rex_Coin', 'Rex_Rod']) {
+      const m = meshes.find((o) => o.name === n);
+      const geo = bakeRigid(m);
+      geo.computeBoundingBox();
+      const c = geo.boundingBox.getCenter(new THREE.Vector3());
+      geo.translate(-c.x, -c.y, -c.z);
+      let top = m; while (top.parent && !/out_\d+$/.test(top.name)) top = top.parent;
+      top.parent.remove(top);
+      props.push(new THREE.Mesh(geo, m.material));
+      props[props.length - 1].name = n;
+      say(`${n}: ${geo.attributes.position.count} verts, ${(geo.boundingBox.max.distanceTo(geo.boundingBox.min)).toFixed(3)} across`);
+    }
+    stripBoneNumbers(root);
+    const s = fitHeight(root, 1.83);
+    wrap.scale.setScalar(s);
+    wrap.add(root);
+    for (const p of props) wrap.add(p);
+  } else if (which === 'battlebeast') {
+    // Sketchfab's "Invincible VS Battle Beast" (th7915562, CC BY 4.0)
+    const g = await new GLTFLoader(manager).parseAsync(await need('invincible_vs_battle_beast.glb').arrayBuffer(), '');
+    const root = g.scene;
+    root.updateMatrixWorld(true);
+    const meshes = [];
+    root.traverse((o) => { if (o.isSkinnedMesh) meshes.push(o); });
+    fixNormals(meshes);
+    const names = {
+      material_0: 'Beast_EyeShells', material_1: 'Beast_EyesMouth', material_2: 'Beast_Mane', material_3: 'Beast_Head', material_4: 'Beast_Gauntlets',
+      material_5: 'Beast_Armor', material_6: 'Beast_Gear', material_7: 'Beast_Skin', material_8: 'Beast_Wraps', material_9: 'Beast_Body',
+    };
+    for (const o of meshes) { o.name = o.material.name = names[o.material.name] || o.name; o.material.roughness = 0.6; o.material.metalness = 0; }
+    stripBoneNumbers(root);
+    const s = fitHeight(root, 2.25);
+    wrap.scale.setScalar(s);
+    wrap.add(root);
+  } else if (which === 'allen') {
+    // Sketchfab's "Allen the Alien - Invincible" (patmateee, CC BY 4.0): an unrigged 1.4M-triangle sculpt
+    const g = await new GLTFLoader(manager).parseAsync(await need('scene.gltf').text(), '');
+    const { buildAllen } = await import('./allen-rig.js');
+    const renderer = new THREE.WebGLRenderer({ antialias: false });
+    const root = await buildAllen(g.scene, { say, renderer });
+    renderer.dispose();
+    const s = fitHeight(root, 2.2);
+    wrap.scale.setScalar(s);
+    wrap.add(root);
+  } else if (which === 'immortal') {
+    // Sketchfab's "THE-IMMORTAL" (joaocarrascok, CC BY 4.0): a low-poly game model rigged like Atom Eve
+    const g = await new GLTFLoader(manager).parseAsync(await need('the-immortal.glb').arrayBuffer(), '');
+    const root = g.scene;
+    root.updateMatrixWorld(true);
+    const meshes = [];
+    root.traverse((o) => { if (o.isMesh) meshes.push(o); });
+    for (const o of meshes) {
+      o.name = /eye_L/.test(o.name) ? 'Immortal_EyeL' : /eye_R/.test(o.name) ? 'Immortal_EyeR' : 'Immortal_Body';
+      o.material.name = 'Immortal_Body';
+      o.material.roughness = 0.6; o.material.metalness = 0;
+    }
+    stripBoneNumbers(root);
+    // the eyeballs are loose meshes beside the skeleton: give them to the eye bones so they turn with the head
+    for (const o of meshes.filter((m) => !m.isSkinnedMesh)) {
+      let bone = null;
+      root.traverse((b) => { if (b.isBone && b.name === (o.name === 'Immortal_EyeL' ? 'Armature_l_Eyes_01SHJnt' : 'Armature_r_Eyes_01SHJnt')) bone = b; });
+      if (bone) { bone.attach(o); say(`${o.name} attached to ${bone.name}`); }
+    }
+    const s = fitHeight(root, 2.02);
+    wrap.scale.setScalar(s);
+    wrap.add(root);
+  } else if (which === 'omniman') {
+    const g = await new GLTFLoader(manager).parseAsync(await need('Nuevo Proyecto 3.gltf').text(), '');
+    const root = g.scene;
+    let i = 0;
+    const names = { 0: 'Cape_Outer', 1: 'Body', 2: 'Cape_Inner', 3: 'Eyes_Mouth', 4: 'Brows', 5: 'Head' };
+    root.traverse(o => {
+      if (!o.isMesh) return;
+      recomputeSmoothNormals(o.geometry, 70);
+      const m = o.material;
+      m.roughness = 0.6; m.metalness = 0;
+      m.map.flipY = false;
+      o.name = 'Omni_' + (names[i] || i); m.name = o.name;
+      i++;
+    });
+    const s = fitHeight(root, 1.98);
+    wrap.scale.setScalar(s);
+    wrap.add(root);
+  }
+  wrap.name = which;
+  wrap.updateMatrixWorld(true);
+  const glb = await new GLTFExporter().parseAsync(wrap, { binary: true, animations, onlyVisible: false, maxTextureSize: 4096 });
+  return new Blob([glb], { type: 'model/gltf-binary' });
+}
+
+async function convert(which) {
+  log.length = 0;
+  say(`converting ${which}…`);
+  const blob = await build(which);
+  urls.splice(0).forEach((u) => URL.revokeObjectURL(u));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${which}.raw.glb`;
+  a.click();
+  say(`done: ${which}.raw.glb (${(blob.size / 1048576).toFixed(1)} MB)`);
+  return blob;
+}
+$('go').onclick = async () => {
+  $('go').disabled = true;
+  try { await convert($('hero').value); } catch (e) { say('ERROR ' + (e.stack || e)); }
+  $('go').disabled = false;
+};
+window.__convert = async (which) => { // used by headless runs
+  const blob = await convert(which);
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let s = '';
+  for (let k = 0; k < bytes.length; k += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(k, k + 0x8000));
+  return { log: [...log], b64: btoa(s) };
+};
+</script></body></html>
