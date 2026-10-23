@@ -91,9 +91,13 @@ export class ThirdPersonCamera {
     // the arm pulls in fast but over a few frames (a one-frame jump reads as a snap), whether a wall
     // or a shorter wanted boom asks for it, and eases back out once clear
     const reach = clear * armLen;
+    // how far the clear distance came in since the last frame: backing into a pillar at flight speed,
+    // the eased pull-in alone would trail a wall that keeps coming by speed / 18 and sit inside it
+    const closing = this.lastReach == null ? 0 : Math.max(0, this.lastReach - reach);
+    this.lastReach = reach;
     if (cutNow) this.armNow = reach;
     else if (reach < this.armNow) {
-      this.armNow -= Math.min((this.armNow - reach) * dampT(18, dt), BOOM_IN * dt);
+      this.armNow -= Math.min(Math.max((this.armNow - reach) * dampT(18, dt), closing), BOOM_IN * dt, this.armNow - reach);
       this.clearT = 0;
     } else if ((this.clearT += dt) > BOOM_HOLD) this.armNow = Math.min(reach, damp(this.armNow, reach, BOOM_OUT, dt));
     this.curDist = this.armNow;

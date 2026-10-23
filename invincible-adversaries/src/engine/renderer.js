@@ -239,8 +239,12 @@ export class Renderer {
       const k = w.t / w.life;
       const dist = this.camera.position.distanceTo(w.p);
       const scale = 6 / Math.max(2, dist);
-      u.uWaves.value[i].set(v.x * 0.5 + 0.5, v.y * 0.5 + 0.5, k * w.speed * scale * 0.5, behind ? 0 : w.strength * 0.6 * (1 - k) * (1 - k) * Math.min(1.2, scale));
-      u.uWaveW.value[i] = w.width * 0.8 * Math.min(1.2, scale);
+      const r = k * w.speed * scale * 0.5, width = w.width * 0.8 * Math.min(1.2, scale);
+      // born as a point: it reaches full strength once the ring is as wide as its band, so a fresh
+      // wave never pulls pixels across its own centre (an inside-out lens)
+      const grow = Math.min(1, r / width);
+      u.uWaves.value[i].set(v.x * 0.5 + 0.5, v.y * 0.5 + 0.5, r, behind ? 0 : w.strength * 0.6 * (1 - k) * (1 - k) * Math.min(1.2, scale) * grow * grow * (3 - 2 * grow));
+      u.uWaveW.value[i] = width;
     });
     const fx = this.fx;
     u.uCA.value = fx.ca;

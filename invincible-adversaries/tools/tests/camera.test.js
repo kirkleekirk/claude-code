@@ -194,6 +194,22 @@ for (const key of HEROES) {
   });
 }
 
+T.test('camera: backing into a pillar at flight speed never leaves the camera inside it', () => {
+  // the boom's eased pull-in alone trailed a wall that keeps coming by about speed / 18 m and sat
+  // inside it (seen in a bot match). Back straight at a pillar at 15 m/s and stop 1.6 m short of it
+  const pillar = T.w.obstacles.find((o) => o.type === 'cyl' && o.h > 10);
+  const face = pillar.z + pillar.r;
+  const [h] = T.stage([{ key: 'eve', player: true, at: [pillar.x, 3, face + 14], fly: true, face: [0, 1] }, { key: 'omniman', team: 1, at: [pillar.x + 40, 0, face + 40] }]);
+  T.w.settings.godMode = true;
+  cam.yaw = 0; cam.pitch = -0.1; cam.cut();
+  const watch = cameraWatch({ view: false });
+  const { step } = driver(h, watch);
+  step('backing into a pillar', 120, (k, l) => { l.yaw = 0; l.pitch = -0.1; h.vel.set(0, 0, h.pos.z - face > 1.6 ? -15 : 0); });
+  T.expect(h.pos.z - face > 1 && h.pos.z - face < 2, `stopped ${(h.pos.z - face).toFixed(2)} m from the pillar`);
+  T.expect(cam.curDist < 1.6, `the boom is still ${cam.curDist.toFixed(2)} m long`);
+  watch.report('');
+});
+
 T.test('camera stays continuous in a bot-driven 3v3 (2 minutes)', () => {
   // every hero on the field, as the game's lineups do; the camera follows the fastest flier
   const LINEUPS = [['invincible', 'eve', 'omniman'], ['robot', 'invincible', 'omniman']];
