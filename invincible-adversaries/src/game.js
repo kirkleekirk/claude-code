@@ -14,31 +14,40 @@ import { InvincibleKit } from './heroes/kits/invincible.js';
 import { EveKit } from './heroes/kits/eve.js';
 import { OmniKit } from './heroes/kits/omniman.js';
 import { RobotKit } from './heroes/kits/robot.js';
+import { RexKit } from './heroes/kits/rex.js';
+import { BeastKit } from './heroes/kits/battlebeast.js';
 import { Bot } from './ai/bot.js';
 import { HUD } from './ui/hud.js';
 import { Menus } from './ui/menus.js';
 
-const KITS = { invincible: InvincibleKit, eve: EveKit, omniman: OmniKit, robot: RobotKit };
+const KITS = { invincible: InvincibleKit, eve: EveKit, omniman: OmniKit, robot: RobotKit, rex: RexKit, battlebeast: BeastKit };
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _u = new THREE.Vector3();
 const PARAMS = new URLSearchParams(location.search);
 // phones and tablets without a mouse: a bot plays the player's hero so the match can be watched
 const TOUCH_ONLY = matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches;
 
 /**
- * 3v3 lineups from the four heroes: nobody twice on a team, every hero on the field, and as many
- * strategists on each side (so a team never faces two strategists with one). The player's team gets
- * two of the others; the enemies get whoever was left out plus two of the player's team.
+ * 3v3 lineups: every hero on the field (with six heroes, each exactly once) and the same mix of
+ * roles on both sides (one duelist, one strategist and one vanguard each), so neither team starts
+ * a role short. The player's team is drawn at random from the splits that allow it.
  */
 export function lineups(playerKey) {
   const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-  const strats = (team) => team.filter((k) => HEROES[k].role === 'STRATEGIST').length;
-  const ally = [playerKey, ...shuffle(HERO_KEYS.filter((k) => k !== playerKey)).slice(0, 2)];
-  const out = HERO_KEYS.filter((k) => !ally.includes(k));
-  const pool = shuffle(ally.slice());
-  const pairs = [];
-  for (let i = 0; i < pool.length; i++) for (let j = i + 1; j < pool.length; j++) pairs.push([...out, pool[i], pool[j]]);
-  const enemy = pairs.find((e) => strats(e) === strats(ally)) || pairs[0];
-  return [ally, enemy];
+  const roles = (team) => team.map((k) => HEROES[k].role).sort().join();
+  const others = HERO_KEYS.filter((k) => k !== playerKey);
+  const splits = [];
+  for (let i = 0; i < others.length; i++) for (let j = i + 1; j < others.length; j++) {
+    const ally = [playerKey, others[i], others[j]];
+    const rest = HERO_KEYS.filter((k) => !ally.includes(k));
+    // with fewer than six heroes, the enemies are whoever is left out plus some of the player's team
+    const fill = shuffle(ally.slice()).filter((k) => !rest.includes(k));
+    const enemy = [...rest.slice(0, 3), ...fill].slice(0, 3);
+    splits.push([ally, enemy]);
+  }
+  const fair = splits.filter(([a, e]) => roles(a) === roles(e));
+  const pool = fair.length ? fair : splits;
+  const [ally, enemy] = pool[Math.floor(Math.random() * pool.length)];
+  return [[ally[0], ...shuffle(ally.slice(1))], shuffle(enemy.slice())];
 }
 
 class PlayerController {
@@ -396,7 +405,7 @@ export class Game {
     if (this.previewT > 2.2 && h.kit && !h.override) {
       this.previewT = -1.5;
       const k = h.key, c = h.kit.clips;
-      const seqs = { invincible: ['jab', 'cross', 'uppercut'], omniman: ['roar', 'hammer'], eve: ['pulse', 'fistCast'], robot: ['dronesCast', 'barrierCast', 'salvo'] }[k];
+      const seqs = { invincible: ['jab', 'cross', 'uppercut'], omniman: ['roar', 'hammer'], eve: ['pulse', 'fistCast'], robot: ['dronesCast', 'barrierCast', 'salvo'], rex: ['flickR', 'fan', 'flickL', 'rodThrow'], battlebeast: ['roar', 'doubleClaw', 'clawR'] }[k];
       const name = seqs[this.previewPose++ % seqs.length];
       if (c[name]) h.anim.play(c[name]);
       if (k === 'robot' && name === 'salvo') h.kit.podT = 0.9;

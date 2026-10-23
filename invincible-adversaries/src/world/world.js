@@ -170,6 +170,7 @@ export class World {
     if (src && src !== target && src.team === target.team) return 0;
     let amt = amount;
     if (src && src.status.boost > 0) amt *= 1 + src.status.boost;
+    if (src && src.status.weak > 0) amt *= 1 - src.status.weak;
     // a hard-light barrier between the attacker (or o.from, e.g. a blast centre) and the target takes
     // the hit instead; damage over time from a zone the target stands in isn't blocked
     if (this.barriers.length && src && src !== target && o.type !== 'dot') {
@@ -178,6 +179,8 @@ export class World {
     }
     if (target.status.vuln > 0) amt *= 1 + target.status.vuln;
     if (target.status.dr > 0) amt *= 1 - target.status.dr;
+    // a kit's own mitigation (Battle Beast bracing against hits from the front)
+    if (target.kit && target.kit.mitigate) amt = target.kit.mitigate(amt, src, o);
     if (target.spawnProtect > 0) amt *= 0.3;
     let hitPos = o.hitPos;
     if (!hitPos) {

@@ -24,8 +24,9 @@ export class Bot {
     this.seen = 0;
     this.stuckT = 0; this.lastPos = new THREE.Vector3();
     this.ultT = 0;
-    this.preferRange = { invincible: 2.2, omniman: 2.5, eve: 18, robot: 16 }[hero.key];
-    this.ranged = hero.key === 'eve' || hero.key === 'robot';
+    this.preferRange = { invincible: 2.2, omniman: 2.5, eve: 18, robot: 16, rex: 13, battlebeast: 2.6 }[hero.key];
+    this.ranged = hero.key === 'eve' || hero.key === 'robot' || hero.key === 'rex';
+    this.braceFor = 0;
   }
   get d() { return DIFF[this.w.settings.difficulty] || DIFF.normal; }
 
@@ -49,9 +50,10 @@ export class Bot {
     const tp = t.center || t.pos;
     const dist = h.pos.distanceTo(t.pos);
     // aim (with lead for projectile heroes)
-    const lead = h.key === 'eve' ? clamp(dist / 95, 0, 0.5) : h.key === 'robot' ? clamp(dist / 140, 0, 0.4) : (h.key === 'omniman' ? clamp(dist / 42, 0, 0.8) : 0);
+    const lead = h.key === 'eve' ? clamp(dist / 95, 0, 0.5) : h.key === 'robot' ? clamp(dist / 140, 0, 0.4) : h.key === 'rex' ? clamp(dist / 75, 0, 0.6) : (h.key === 'omniman' ? clamp(dist / 42, 0, 0.8) : 0);
     _v.copy(tp).addScaledVector(t.vel, lead);
     if (h.key === 'omniman' && dist > 8) _v.y += dist * 0.012;
+    if (h.key === 'rex' && dist > 10) _v.y += dist * 0.004;
     // error noise
     const e = this.d.aimErr * (1.2 - this.seen * 0.4);
     this.errPhase += dt * 1.3;
@@ -115,8 +117,8 @@ export class Bot {
     this.flyT -= dt;
     if (this.flyT <= 0) {
       this.flyT = rand(2.5, 6);
-      const p = k === 'invincible' ? 0.55 : k === 'eve' ? 0.35 : k === 'robot' ? 0.3 : 0.25;
-      this.flyWant = Math.random() < p || t.mode === 'fly' && t.pos.y > 4;
+      const p = !h.def.flight ? 0 : k === 'invincible' ? 0.55 : k === 'eve' ? 0.35 : k === 'robot' ? 0.3 : 0.25;
+      this.flyWant = !!h.def.flight && (Math.random() < p || t.mode === 'fly' && t.pos.y > 4);
     }
     if (this.regroup && k === 'invincible') this.flyWant = true;
     if (h.def.flight && !h.def.flight.unlimited && h.flyEnergy < 0.15) this.flyWant = false;
@@ -128,6 +130,8 @@ export class Bot {
     const low = h.hp / h.maxHp < 0.3;
     if (low && k !== 'omniman') range += 12;
     if (this.regroup) range = Math.max(range, 34);
+    // Rex charging up runs straight at them
+    if (k === 'rex' && h.kit.ultState) range = 1;
     // move toward / away
     _v.subVectors(t.pos, h.pos); _v.y = 0;
     const flat = _v.length();
@@ -195,6 +199,13 @@ export class Bot {
           const deadAlly = w.heroes.some((x) => x.team === h.team && x.dead);
           if (deadAlly || (los && dist < 45)) { it.ult = true; this.ultChoice = deadAlly ? 'revive' : 'beam'; }
         } else if (k === 'omniman') { if (dist < 30 && los) it.ult = true; }
+        else if (k === 'rex') {
+          const close = w.heroes.filter((e) => e.team !== h.team && e.targetable && e.pos.distanceTo(h.pos) < 13).length;
+          if (close >= 2 || dist < 7 || (dist < 16 && this.ultT > 5)) it.ult = true;
+        } else if (k === 'battlebeast') {
+          const close = w.heroes.filter((e) => e.team !== h.team && e.targetable && e.pos.distanceTo(h.pos) < 15).length;
+          if ((close >= 2 || h.hp / h.maxHp < 0.5 || this.ultT > 5) && dist < 15) it.ult = true;
+        }
         else if (k === 'robot') {
           // the override pays off with several heroes in the wave
           const foes = w.heroes.filter((e) => e.team !== h.team && e.targetable && e.pos.distanceTo(h.pos) < 30).length;
@@ -245,6 +256,34 @@ export class Bot {
       if (dist < 26 && los && (enemiesNear >= 2 || t.key === 'omniman') && this.can('a2', 0.35)) it.a2 = true;
       const hurt = allies.concat([h]).filter((a) => a.pos.distanceTo(h.pos) < 15 && a.hp / a.maxHp < 0.65).length;
       if (hurt >= 1 && this.can('a3', 0.6)) it.a3 = true;
+    } else if (k === 'rex') {
+      // a rod is out: set it off when someone is in its blast
+      const armed = h.kit.rods.filter((r) => r.armed);
+      if (armed.some((r) => r.stuck || w.heroes.some((e) => e.team !== h.team && e.targetable && e.pos.distanceTo(r.pos) < 4))) it.secondaryPressed = true;
+      else if (!armed.length && los && dist < 26 && aimed && this.can('secondary', 0.5)) it.secondaryPressed = true;
+      if (los && dist < 60 && it.aimDir.dot(_v.subVectors(t.center, it.aimOrigin).normalize()) > 0.95) it.primary = true;
+      const grouped = w.heroes.filter((e) => e.team !== h.team && e.targetable && e.pos.distanceTo(t.pos) < 6).length;
+      // someone diving onto him gets the grenade at their feet (it blows them up and away, and him clear)
+      // and the coin fan in the face, instead of being chased down while he backs off
+      const onHim = dist < 7;
+      if (dist < 22 && los && (t.grounded || grouped >= 2 || onHim) && this.can('a2', onHim ? 0.8 : 0.5)) it.a2 = true;
+      if (dist < 9 && los && aimed && this.can('a3', dist < 5 ? 0.9 : 0.6)) it.a3 = true;
+      // blast jumps: close in on a far target, or get out when it goes badly (the movement keys aim the jump)
+      const hurt = h.hp / h.maxHp;
+      if ((dist > 28 || (hurt < 0.5 && onHim) || (hurt < 0.35 && dist < 10) || t.pos.y - h.pos.y > 6) && this.can('a1', 0.4)) it.a1 = true;
+    } else if (k === 'battlebeast') {
+      // brace against fire while closing the gap; let go when he gets there
+      if (this.braceFor > 0) {
+        this.braceFor -= dt;
+        if (dist > 4 && this.braceFor > 0) { it.secondary = true; return; }
+        this.braceFor = 0;
+      }
+      if (dist < 4) it.primary = true;
+      if (dist < 6.5 && aimed) it.primary = true;
+      if (dist > 8 && dist < 30 && los && this.can('a1', 0.5)) { it.a1 = true; it.aimHero = t; }
+      if ((enemiesNear >= 2 || h.hp / h.maxHp < 0.6) && dist < 12 && this.can('a2', 0.5)) it.a2 = true;
+      if (dist < 3.6 && aimed && this.can('a3', 0.4)) it.a3 = true;
+      if (!h.kit.bracing && dist > 7 && w.time - h.lastHurt < 0.4 && h.hp / h.maxHp < 0.85 && this.can('secondary', 0.35)) { it.secondary = true; this.braceFor = rand(0.8, 1.6); }
     } else if (k === 'robot') {
       if (los && dist < 70 && it.aimDir.dot(_v.subVectors(t.center, it.aimOrigin).normalize()) > 0.95) it.primary = true;
       if (los && dist < 45 && aimed && this.can('secondary', 0.45)) it.secondaryPressed = true;

@@ -121,7 +121,7 @@ T.test('health orbs heal 150, ignore full-health heroes and come back after 15 s
 });
 
 T.test('passive regeneration starts after the delay at the listed rate', () => {
-  for (const key of ['invincible', 'eve', 'robot', 'omniman']) {
+  for (const key of ['invincible', 'rex', 'eve', 'robot', 'omniman', 'battlebeast']) {
     const [h] = T.stage([{ key, player: true, at: [0, 0, 0] }]);
     const rg = h.def.regen;
     h.hp = h.maxHp - 200; h.lastHurt = T.w.time;
@@ -133,10 +133,10 @@ T.test('passive regeneration starts after the delay at the listed rate', () => {
   }
 });
 
-T.test('match lineups: three each, nobody twice on a team, every hero fielded, strategists even', async () => {
+T.test('match lineups: three each, nobody twice on a team, every hero fielded, same roles on both sides', async () => {
   const { lineups } = await import(new URL('src/game.js', location.href).href);
   const { HEROES, HERO_KEYS } = await import(new URL('src/heroes/data.js', location.href).href);
-  const strats = (t) => t.filter((k) => HEROES[k].role === 'STRATEGIST').length;
+  const roles = (t) => t.map((k) => HEROES[k].role).sort().join();
   const seen = new Set();
   for (const key of HERO_KEYS) for (let n = 0; n < 40; n++) {
     const [a, b] = lineups(key);
@@ -144,7 +144,7 @@ T.test('match lineups: three each, nobody twice on a team, every hero fielded, s
     T.expect(a.length === 3 && b.length === 3 && a[0] === key, `${tag}: bad teams`);
     T.expect(new Set(a).size === 3 && new Set(b).size === 3, `${tag}: a hero twice on one team`);
     T.expect(HERO_KEYS.every((k) => a.includes(k) || b.includes(k)), `${tag}: a hero left out`);
-    T.expect(strats(a) === strats(b), `${tag}: ${strats(a)} strategists against ${strats(b)}`);
+    T.expect(roles(a) === roles(b), `${tag}: roles ${roles(a)} against ${roles(b)}`);
     seen.add(`${[...a].sort()} v ${[...b].sort()}`);
   }
   T.info(`${seen.size} distinct matchups`);
@@ -189,4 +189,23 @@ T.test("eve's bolts mend allies near the impact, not Eve herself", () => {
   T.expect(ally.hp > a0, 'ally next to the target was not mended');
   T.expect(ally.hp - a0 < 60, `ally mended ${(ally.hp - a0).toFixed(0)} in 1 s (should be weak)`);
   T.expect(eve.hp === e0, `Eve healed herself ${(eve.hp - e0).toFixed(0)}`);
+});
+
+T.test('hero select: number keys and the arrows reach every hero card', () => {
+  const g = T.g;
+  g.toSelect();
+  const press = (code) => window.dispatchEvent(new KeyboardEvent('keydown', { code }));
+  const cards = [...document.querySelectorAll('#select .card')].map((c) => c.dataset.k);
+  T.expect(cards.length === 6, `${cards.length} hero cards`);
+  for (let i = 0; i < cards.length; i++) {
+    press(`Digit${i + 1}`);
+    T.expect(g.menus.selected === cards[i], `key ${i + 1} picked ${g.menus.selected}, but card ${i + 1} is ${cards[i]}`);
+  }
+  press('Numpad2');
+  T.expect(g.menus.selected === cards[1], `numpad 2 picked ${g.menus.selected}`);
+  press('Digit1');
+  const seen = new Set();
+  for (let i = 0; i < cards.length; i++) { seen.add(g.menus.selected); press('ArrowRight'); }
+  T.expect(seen.size === cards.length && g.menus.selected === cards[0], `the arrows reached ${seen.size} of ${cards.length} heroes`);
+  g.menus.show(null);
 });

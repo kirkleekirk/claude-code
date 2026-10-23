@@ -48,8 +48,9 @@ export class Menus {
     lock.addEventListener('click', () => this.lockIn());
     window.addEventListener('keydown', (e) => {
       if (document.body.dataset.screen !== 'select') return;
-      const i = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(e.code);
-      if (i >= 0) this.pick(HERO_KEYS[i]);
+      // number keys pick by card position (1 to the number of heroes, main row or numpad)
+      const m = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
+      if (m && +m[1] <= HERO_KEYS.length) this.pick(HERO_KEYS[+m[1] - 1]);
       if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); this.lockIn(); }
       const n = HERO_KEYS.length;
       if (e.code === 'ArrowRight') this.pick(HERO_KEYS[(HERO_KEYS.indexOf(this.selected) + 1) % n]);
@@ -69,7 +70,7 @@ export class Menus {
     const row = (a) => `<div class="ab"><div class="ico">${icon(a.icon)}</div><div class="txt"><div class="t"><kbd>${a.key}</kbd>${a.name}</div><div class="d">${a.desc}</div></div></div>`;
     det.innerHTML = `
       <div class="hd"><div class="role">${d.role} · ${d.roleTag}</div><div class="nm">${d.name}</div><div class="real">${d.real}</div></div>
-      <div class="stats"><span><b>${d.hp}</b> HP</span><span><b>${d.speed}</b> m/s run</span><span><b>${d.flight.unlimited ? '∞' : d.flight.duration + 's'}</b> flight</span></div>
+      <div class="stats"><span><b>${d.hp}</b> HP</span><span><b>${d.speed}</b> m/s run</span>${d.flight ? `<span><b>${d.flight.unlimited ? '∞' : d.flight.duration + 's'}</b> flight</span>` : `<span>no flight: <b>${d.mobility}</b></span>`}</div>
       <div class="passive"><div class="t">PASSIVE · ${d.passive.name}</div><div class="d">${d.passive.desc}</div></div>
       ${row(ab.primary)}${row(ab.secondary)}${row(ab.a1)}${row(ab.a2)}${row(ab.a3)}
       <div class="ult">${row(ab.ult)}</div>`;

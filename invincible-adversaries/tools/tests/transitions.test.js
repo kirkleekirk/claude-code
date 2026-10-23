@@ -1,5 +1,5 @@
 // Mode transitions: every way a hero leaves and re-enters the ground must end in a sane pose.
-const KEYS = ['invincible', 'eve', 'robot', 'omniman'];
+const KEYS = ['invincible', 'rex', 'eve', 'robot', 'omniman', 'battlebeast'];
 const ahead = (h) => h.pos.clone().add(T.V(Math.sin(h.yaw) * 10, 1.4, Math.cos(h.yaw) * 10));
 
 for (const key of KEYS) {
@@ -19,6 +19,8 @@ for (const key of KEYS) {
     T.report('jump', r);
     r = T.watch([h], 90, (k) => { T.clr(h.intents); T.aim(h, ahead(h)); h.intents.flyToggle = k === 0; h.intents.up = k > 2 && k < 40; h.intents.mz = 1; });
     T.report('take off + fly', r);
+    // (Rex and Battle Beast can't fly: the double-tap does nothing)
+    if (!h.def.flight) { T.expect(h.mode !== 'fly', `${key} took off without flight`); return; }
     T.expect(h.mode === 'fly', `expected flying, got ${h.mode}`);
     r = T.watch([h], 200, () => { T.clr(h.intents); T.aim(h, ahead(h)); h.intents.down = true; });
     T.report('descend + land', r);

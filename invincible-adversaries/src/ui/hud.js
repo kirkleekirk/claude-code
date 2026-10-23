@@ -5,7 +5,7 @@ import { clamp, clamp01 } from '../engine/math.js';
 
 const _v = new THREE.Vector3();
 const KEYS = ['secondary', 'a1', 'a2', 'a3'];
-const HERO_ICON = { invincible: 'dash', eve: 'field', omniman: 'ult_omni', robot: 'cannon' };
+const HERO_ICON = { invincible: 'dash', eve: 'field', omniman: 'ult_omni', robot: 'cannon', rex: 'coin', battlebeast: 'claws' };
 
 export class HUD {
   constructor(game) {
@@ -51,6 +51,10 @@ export class HUD {
     const n = Math.round(hero.maxHp / 25);
     for (let i = 1; i < n; i++) { const s = document.createElement('i'); s.style.left = (i / n * 100) + '%'; segs.appendChild(s); }
     this.q('#bl .flight').classList.toggle('hidden', !d.flight || d.flight.unlimited);
+    // heroes who can't fly get their mobility move in the hint instead of take-off and descend
+    this.q('#keyhint').innerHTML = d.flight
+      ? '<kbd>WASD</kbd> move <kbd>SPACE</kbd> jump · double-tap to fly <kbd>CTRL</kbd> descend <kbd>H</kbd> swap hero <kbd>ESC</kbd> menu'
+      : `<kbd>WASD</kbd> move <kbd>SPACE</kbd> jump <kbd>SHIFT</kbd> ${d.abilities.a1.name.toLowerCase()} <kbd>H</kbd> swap hero <kbd>ESC</kbd> menu`;
     const ab = this.q('#abilities');
     ab.innerHTML = '';
     this.tiles = {};
@@ -99,11 +103,18 @@ export class HUD {
     if (p.status.slow > 0) chips.push('<span class="chip bad">SLOWED</span>');
     if (p.status.stunT > 0) chips.push('<span class="chip bad">STUNNED</span>');
     if (p.status.disruptT > 0) chips.push('<span class="chip bad">DISRUPTED</span>');
+    if (p.status.weak > 0) chips.push('<span class="chip bad">WEAKENED</span>');
     if (p.status.haste > 0) chips.push('<span class="chip good">OVERCLOCK</span>');
     if (p.status.uplinkT > 0 && p.key !== 'robot') chips.push('<span class="chip robot">UPLINK</span>');
     if (p.status.boost > 0) chips.push('<span class="chip good">+DMG</span>');
     if (p.status.dr > 0) chips.push('<span class="chip good">-DMG TAKEN</span>');
     if (p.bubble) chips.push('<span class="chip eve">BUBBLE</span>');
+    if (p.key === 'battlebeast' && p.kit) {
+      if (p.kit.rage > 0.5) chips.push('<span class="chip beast">ENRAGED</span>');
+      if (p.kit.bracing) chips.push('<span class="chip beast">BRACING</span>');
+      if (p.kit.counterReady || p.kit.counterT > p.world.time) chips.push('<span class="chip beast">COUNTER</span>');
+    }
+    if (p.key === 'rex' && p.kit && p.kit.rods.some((r) => r.armed)) chips.push('<span class="chip rex">RMB: DETONATE</span>');
     if (p.mode === 'fly') chips.push('<span class="chip fly">FLYING</span>');
     const cs = chips.join('');
     if (cs !== this._chips) { this.q('#bl .status').innerHTML = cs; this._chips = cs; }

@@ -145,6 +145,8 @@ export function dressHero(scene, key, team, opts = {}) {
     eve: { sat: 1.08, bright: 1.05, rough: 0.6 },
     omniman: { sat: 1.32, bright: 1.12, rough: 0.62 },
     robot: { sat: 0.9, bright: 1.04, rough: 0.42 },
+    rex: { sat: 1.05, bright: 1.08, rough: 0.6 },
+    battlebeast: { sat: 1.12, bright: 1.12, rough: 0.66 },
   }[key];
   U.uSat.value = tune.sat; U.uBright.value = tune.bright;
   const outlineColor = team === 0 ? 0x06080f : 0x2a0006;
@@ -168,7 +170,8 @@ export function dressHero(scene, key, team, opts = {}) {
       patchHeroMaterial(m, U, { rimMul: cloth ? 0.2 : 1 });
     }
     meshes.push(o);
-    if (opts.outline !== false) {
+    // (eyes, teeth, brows and lenses sit inside the head or on its surface: no hull of their own)
+    if (opts.outline !== false && !/EyesMouth|Brows|Lenses|EyeShells/.test(o.name)) {
       const om = makeOutlineMaterial(outlineColor, U, key === 'omniman' ? 2.2 : 2.6);
       const ol = new THREE.SkinnedMesh(o.geometry, om);
       ol.bind(o.skeleton, o.bindMatrix);

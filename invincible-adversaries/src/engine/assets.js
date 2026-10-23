@@ -8,6 +8,8 @@ export const MODEL_URLS = {
   eve: 'assets/models/atom-eve.glb',
   omniman: 'assets/models/omni-man.glb',
   robot: 'assets/models/robot.glb',
+  rex: 'assets/models/rex-splode.glb',
+  battlebeast: 'assets/models/battle-beast.glb',
 };
 
 const loader = new GLTFLoader();

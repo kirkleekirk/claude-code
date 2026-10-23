@@ -3,7 +3,7 @@ import { CH } from './pose.js';
 import { DEG, clamp, quatFrameToFrame } from '../engine/math.js';
 
 // ---------------------------------------------------------------------------
-// Skeleton definitions for the three supplied models. Every rig is normalised
+// Skeleton definitions for the supplied models. Every rig is normalised
 // to a canonical T-pose at load so one set of authored poses drives them all.
 // ---------------------------------------------------------------------------
 const fingersRigify = (s) => ({
@@ -60,6 +60,33 @@ export const RIG_DEFS = {
     L: { clav: 'bip_collar_L', upper: 'bip_upperArm_L', fore: 'bip_lowerArm_L', hand: 'bip_hand_L', thigh: 'bip_hip_L', shin: 'bip_knee_L', foot: 'bip_foot_L', toe: 'bip_toe_L', fingers: fingersBip('L') },
     R: { clav: 'bip_collar_R', upper: 'bip_upperArm_R', fore: 'bip_lowerArm_R', hand: 'bip_hand_R', thigh: 'bip_hip_R', shin: 'bip_knee_R', foot: 'bip_foot_R', toe: 'bip_toe_R', fingers: fingersBip('R') },
     chains: [],
+  },
+  rex: {
+    hips: 'bip_pelvis',
+    spine: ['bip_spine_0', 'bip_spine_1', 'bip_spine_2', 'bip_spine_3', 'bip_spine_4'], spineW: [0.18, 0.2, 0.2, 0.22, 0.2],
+    neck: 'bip_neck', head: 'bip_head',
+    jaw: 'jaw',
+    brows: { inner: ['brow_inner_L', 'brow_inner_R'] },
+    L: { clav: 'bip_collar_L', upper: 'bip_upperArm_L', fore: 'bip_lowerArm_L', hand: 'bip_hand_L', thigh: 'bip_hip_L', shin: 'bip_knee_L', foot: 'bip_foot_L', toe: 'bip_toe_L', fingers: fingersBip('L') },
+    R: { clav: 'bip_collar_R', upper: 'bip_upperArm_R', fore: 'bip_lowerArm_R', hand: 'bip_hand_R', thigh: 'bip_hip_R', shin: 'bip_knee_R', foot: 'bip_foot_R', toe: 'bip_toe_R', fingers: fingersBip('R') },
+    chains: [],
+  },
+  battlebeast: {
+    hips: 'ValveBipedBip01_Pelvis',
+    spine: ['ValveBipedBip01_Spine', 'ValveBipedBip01_Spine1', 'ValveBipedBip01_Spine2', 'ValveBipedBip01_Spine4'], spineW: [0.22, 0.24, 0.26, 0.28],
+    neck: 'ValveBipedBip01_Neck1', head: 'ValveBipedBip01_Head1',
+    jaw: 'mandible_C',
+    brows: { inner: ['brow_inner_L', 'brow_inner_R'] },
+    // the belly is skinned to a helper off the pelvis: it bends with the spine
+    follow: [['spine_01', 'ValveBipedBip01_Spine']],
+    L: { clav: 'ValveBipedBip01_L_Clavicle', upper: 'ValveBipedBip01_L_UpperArm', fore: 'ValveBipedBip01_L_Forearm', hand: 'ValveBipedBip01_L_Hand', thigh: 'ValveBipedBip01_L_Thigh', shin: 'ValveBipedBip01_L_Calf', foot: 'ValveBipedBip01_L_Foot', toe: 'ValveBipedBip01_L_Toe0', fingers: fingersValve('L') },
+    R: { clav: 'ValveBipedBip01_R_Clavicle', upper: 'ValveBipedBip01_R_UpperArm', fore: 'ValveBipedBip01_R_Forearm', hand: 'ValveBipedBip01_R_Hand', thigh: 'ValveBipedBip01_R_Thigh', shin: 'ValveBipedBip01_R_Calf', foot: 'ValveBipedBip01_R_Foot', toe: 'ValveBipedBip01_R_Toe0', fingers: fingersValve('R') },
+    // the mane: three strands down the back (coupled like cloth), the side locks and two braids
+    chains: [
+      ...['L', 'C', 'R'].map((s) => ({ name: 'mane' + s, bones: [0, 1, 2, 3].map((i) => `hairBack_${s}0_${i}_jnt`), tipExtend: 0.08, stiffness: 0.16, drag: 1.3, gravity: 0.85, radius: 0.1, group: 'mane', behind: { fwd: 0.02, up: 0.12 } })),
+      ...['L', 'R'].map((s) => ({ name: 'lock' + s, bones: [0, 1, 2].map((i) => `hairSide_${s}0_${i}_jnt`), tipExtend: 0.05, stiffness: 0.3, drag: 1.1, gravity: 0.7, radius: 0.06 })),
+      ...['L', 'R'].map((s) => ({ name: 'braid' + s, bones: [0, 1, 2, 3].map((i) => `braid_${s}0_${i}_jnt`), tipExtend: 0.05, stiffness: 0.22, drag: 1.0, gravity: 0.95, radius: 0.05 })),
+    ],
   },
   omniman: {
     hips: 'ValveBipedBip01_Pelvis',

@@ -3,7 +3,7 @@
 // continuous through walking past pillars, backing into cover, flight, every ability and ult,
 // knockback and death; respawns and hero swaps are the only cuts.
 const cam = T.g.camRig, inp = T.g.input, V = T.V, THREE = T.THREE;
-const HEROES = ['invincible', 'eve', 'robot', 'omniman'];
+const HEROES = ['invincible', 'rex', 'eve', 'robot', 'omniman', 'battlebeast'];
 // per-frame limits at 60 fps
 const LIM = {
   boom: 0.34, // m the boom length may change in one frame
@@ -212,7 +212,7 @@ T.test('camera: backing into a pillar at flight speed never leaves the camera in
 
 T.test('camera stays continuous in a bot-driven 3v3 (2 minutes)', () => {
   // every hero on the field, as the game's lineups do; the camera follows the fastest flier
-  const LINEUPS = [['invincible', 'eve', 'omniman'], ['robot', 'invincible', 'omniman']];
+  const LINEUPS = [['invincible', 'eve', 'battlebeast'], ['rex', 'robot', 'omniman']];
   const spec = [];
   for (const team of [0, 1]) for (const [i, key] of LINEUPS[team].entries()) spec.push({ key, team, bot: true, at: [(i - 1) * 6, 0, team ? 40 : -40], face: [0, team ? -1 : 1] });
   spec[0].player = true; spec[0].bot = false;

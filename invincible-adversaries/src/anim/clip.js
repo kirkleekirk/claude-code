@@ -66,6 +66,18 @@ export class Clip {
   }
 }
 
+/** the same clip for the other hand: L/R channels swapped, turns and leans flipped */
+const FLIP = new Set(['rootX', 'rootYaw', 'rootRoll', 'spineYaw', 'spineRoll', 'neckYaw', 'neckRoll', 'headYaw', 'headRoll']);
+export function mirrorClip(def) {
+  const swap = (k) => (k[0] === 'L' ? 'R' + k.slice(1) : k[0] === 'R' ? 'L' + k.slice(1) : k);
+  const keys = def.keys.map((key) => {
+    const p = {};
+    for (const k in key.p) p[FLIP.has(k) ? k : swap(k)] = FLIP.has(k) ? -key.p[k] : key.p[k];
+    return { ...key, p };
+  });
+  return { ...def, keys };
+}
+
 export function clips(defs) {
   const out = {};
   for (const k in defs) out[k] = new Clip({ name: k, ...defs[k] });

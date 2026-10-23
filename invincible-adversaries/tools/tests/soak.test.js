@@ -4,8 +4,8 @@
 const MINUTES = 10;
 
 T.test(`3v3 bots on hard for ${MINUTES} game-minutes`, () => {
-  // every hero on the field, as the game's lineups do, with both strategists mirrored
-  const LINEUPS = [['invincible', 'eve', 'robot'], ['omniman', 'robot', 'eve']];
+  // every hero on the field, as the game's lineups do: one of each role a side
+  const LINEUPS = [['invincible', 'eve', 'omniman'], ['rex', 'robot', 'battlebeast']];
   const spec = [];
   for (const team of [0, 1]) for (const [i, key] of LINEUPS[team].entries()) spec.push({ key, team, bot: true, at: [(i - 1) * 6, 0, team ? 48 : -48], face: [0, team ? -1 : 1] });
   spec[0].player = true; spec[0].bot = false;

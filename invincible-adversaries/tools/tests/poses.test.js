@@ -1,6 +1,6 @@
 // Every action clip of every hero, played on a grounded hero: the skeleton must stay sane
 // (no NaN, no stretched limbs, a supporting foot on the ground, knees bending the right way).
-const KEYS = ['invincible', 'eve', 'robot', 'omniman'];
+const KEYS = ['invincible', 'rex', 'eve', 'robot', 'omniman', 'battlebeast'];
 // clips whose whole point is leaving the ground or lying down
 const AIRBORNE = new Set(['ultRise', 'divePrep', 'carry', 'slamThrow', 'chargePose', 'blitz', 'unbound', 'beam', 'revive', 'getup', 'superland', 'land']);
 

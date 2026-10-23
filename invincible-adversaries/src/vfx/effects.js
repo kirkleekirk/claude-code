@@ -661,6 +661,37 @@ export class Effects {
     this.ring(pos, { color: new THREE.Color(color[0] / 3, color[1] / 3, color[2] / 3), intensity: 2, r0: 0.1, r1: 1.4 * size, life: 0.25, normal: _u.set(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize(), soft: 0.5 });
     this.lights.flash(pos, light, 18 * size, 6, 0.15);
   }
+  /**
+   * A fiery blast: a white-hot flash, a fireball of billowing puffs cooling from yellow to deep red,
+   * embers, smoke and a shock ring. groundY (the floor under it) adds a scorch mark and debris when
+   * the blast is close to it.
+   */
+  explosion(pos, { scale = 1, fire = [1.8, 0.62, 0.15, 0.75], groundY = null, debris = true, light = 0xff7a30 } = {}) {
+    const s = scale;
+    // a small hot core (big HDR whites bloom into a featureless blob), then the fire is the show
+    this.glow(pos, { color: [2.6, 1.8, 1.0, 1], size: 1.2 * s, life: 0.08 });
+    this.star(pos, { color: [2.6, 2.1, 1.5, 1], size: 1.0 * s, life: 0.06 });
+    this.sphere(pos, { color: 0xff7a30, intensity: 0.4, r0: 0.3 * s, r1: 2.6 * s, life: 0.22, fresnel: 2.6, noise: 0.9 });
+    // (additive puffs add up where they overlap: kept dim enough that the core reads orange, not white)
+    for (let i = 0, n = Math.round(14 * s + 5); i < n; i++) {
+      _v.set(rand(-1, 1), rand(-0.35, 1), rand(-1, 1)).normalize().multiplyScalar(rand(1.5, 6) * s);
+      this.add.spawn({ p: pos, v: _v, life: rand(0.25, 0.55), size: rand(0.45, 0.8) * s, size1: rand(1, 1.7) * s, color: fire, color1: [fire[0] * 0.35, fire[1] * 0.15, fire[2] * 0.1, 0], shape: SHAPE.SMOKE, drag: 4.5, grav: -1.5, rotV: rand(-2, 2) });
+    }
+    for (let i = 0, n = Math.round(14 * s + 4); i < n; i++) {
+      _v.set(rand(-1, 1), rand(-0.2, 1), rand(-1, 1)).normalize().multiplyScalar(rand(6, 16) * s);
+      this.add.spawn({ p: pos, v: _v, life: rand(0.35, 0.8), size: rand(0.04, 0.08) * Math.sqrt(s), size1: 0.01, color: [3.6, 1.9, 0.6, 1], color1: [2.4, 0.5, 0.1, 0], shape: SHAPE.SPARK, drag: 1.2, grav: 9 });
+    }
+    this.smoke(pos, { n: Math.round(6 * s + 2), size: 0.9 * s, size1: 3 * s, speed: 2.5 * s, life: 1.5, color: [0.16, 0.15, 0.14, 0.55], up: 1.3, spread: 0.8 });
+    this.ring(pos, { color: 0xffb070, intensity: 1.0, r0: 0.3, r1: 4.5 * s, life: 0.3, soft: 0.35, normal: _u.set(0, 1, 0) });
+    this.lights.flash(pos, light, 9 * s, 9 * s, 0.22);
+    this.renderer.addWave(pos, { strength: 0.035 * s, life: 0.45, speed: 1.6, width: 0.07 });
+    if (groundY !== null && pos.y - groundY < 1.6 * s) {
+      const g = new THREE.Vector3(pos.x, groundY, pos.z); // (dustRing and rocks use the scratch vectors)
+      this.decal(g, 2.2 * s, 'scorch', 10, 0.85);
+      if (debris) this.rocks(g, { n: Math.round(6 * s), speed: 8 * s, size: 0.14 * Math.sqrt(s) });
+      this.dustRing(g, { n: Math.round(10 * s), radius: 0.4 * s, speed: 7 * s, size: 0.7 * s, size1: 2 * s, life: 0.8 });
+    }
+  }
   bubbleBreak(pos, radius) {
     for (let i = 0; i < 40; i++) {
       _v.set(rand(-1, 1), rand(-1, 1), rand(-1, 1)).normalize();

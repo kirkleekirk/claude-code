@@ -53,6 +53,23 @@ const SPECS = {
     // with fewer than three enemies the blitz revisits one: 3 x 150 + the 80 finisher
     ['ult', 15, 420, 450, 620],
   ],
+  rex: [
+    ['primary', 12, 70, 60, 220, { hold: true }],
+    // the rod sticks to him and blows on its own 3 s later: 110 at the centre + 30 for being stuck
+    ['secondary', 10, 260, 110, 165],
+    ['a1', 2.5, 40, 25, 50],
+    ['a2', 10, 120, 40, 90, { aimAt: (h, foe) => foe.pos.clone() }],
+    ['a3', 6, 50, 60, 230],
+    ['ult', 6, 200, 150, 380],
+  ],
+  battlebeast: [
+    ['primary', 2.4, 110, 150, 380, { hold: true }],
+    ['secondary', 8, 40, 0, 0],
+    ['a1', 15, 90, 55, 100],
+    ['a2', 8, 60, 15, 30],
+    ['a3', 3, 200, 120, 145],
+    ['ult', 6, 60, 15, 30],
+  ],
   robot: [
     ['primary', 12, 70, 70, 260, { hold: true }],
     ['secondary', 12, 130, 60, 230],
@@ -86,7 +103,7 @@ for (const key of Object.keys(SPECS)) {
       T.run(30, () => { T.clr(h.intents); T.clr(foe.intents); });
       expectClean(`${slot} afterwards`, [h, foe]);
       // lingering zones (Eve's field), barriers and drones run out
-      for (let k = 0; k < 420 && (T.w.zones.length || T.w.barriers.length || (h.kit.drones && h.kit.drones.length)); k++) T.run(1);
+      for (let k = 0; k < 420 && (T.w.zones.length || T.w.barriers.length || (h.kit.drones && h.kit.drones.length) || (h.kit.rods && (h.kit.rods.length || h.kit.grenades.length))); k++) T.run(1);
       T.expect(sceneCount() <= base + 1, `scene grew by ${sceneCount() - base} objects`);
       if (slot !== 'ult' && def.cd && !def.charges) {
         // pressing again on cooldown does nothing
@@ -424,6 +441,274 @@ T.test("eve's beam stops at a robot barrier until it breaks", () => {
   T.expect(T.dmgTo(rb, t0) > 100, `the beam did not reach Robot once the barrier broke (${T.dmgTo(rb, t0).toFixed(0)})`);
 });
 
+T.test('rex secondary: the rod sticks to an enemy, RMB sets it off early, and it blows by itself after 3 s', () => {
+  let [rx, foe] = duel('rex', 'omniman', 10);
+  cast(rx, foe, 'secondary', 40);
+  const rod = rx.kit.rods[0];
+  T.expect(rod && rod.armed && rod.stuck === foe, `rod not stuck to the target (armed ${rod && rod.armed}, stuck ${rod && rod.stuck && rod.stuck.key})`);
+  // it rides along on him
+  T.teleport(foe, foe.pos.clone().add(T.V(4, 0, 0)));
+  T.run(2);
+  T.expect(rod && rod.pos.distanceTo(foe.pos) < 2.5, 'the rod did not move with its target');
+  const t0 = T.w.time;
+  T.run(1, () => { T.clr(rx.intents); T.aim(rx, T.center(foe)); rx.intents.secondaryPressed = rx.intents.secondary = true; });
+  T.expect(rx.kit.rods.length === 0, 'RMB did not detonate the rod');
+  const got = T.dmgTo(foe, t0);
+  T.expect(got > 125 && got < 145, `stuck detonation dealt ${got.toFixed(0)} (expected 110 + 30)`);
+  // a rod on the floor goes off by itself
+  [rx, foe] = duel('rex', 'omniman', 10);
+  cast(rx, foe, 'secondary', 40, { aimAt: () => T.V(0, 0, 6) });
+  T.expect(rx.kit.rods.length === 1 && !rx.kit.rods[0].stuck, 'rod not on the floor');
+  T.run(2.6 * 60);
+  T.expect(rx.kit.rods.length === 1, 'rod went off early');
+  T.run(40);
+  T.expect(rx.kit.rods.length === 0, 'rod never went off');
+});
+
+T.test("rex passive: his own blasts never hurt him and throw him around (rocket jumps)", () => {
+  const [rx, foe] = duel('rex', 'omniman', 30);
+  T.run(10);
+  const hp0 = rx.hp;
+  // a rod at his feet, set off
+  cast(rx, foe, 'secondary', 40, { aimAt: () => rx.pos.clone().add(T.V(0, 0, 1.2)) });
+  T.expect(rx.kit.rods.length === 1, 'no rod');
+  const y0 = rx.pos.y;
+  T.run(1, () => { T.clr(rx.intents); rx.intents.secondaryPressed = rx.intents.secondary = true; });
+  let top = y0;
+  T.run(60, () => { T.clr(rx.intents); top = Math.max(top, rx.pos.y); });
+  T.expect(rx.hp === hp0, `Rex took ${(hp0 - rx.hp).toFixed(0)} from his own blast`);
+  T.expect(top - y0 > 1.5, `the blast only lifted him ${(top - y0).toFixed(2)} m`);
+  T.expect(T.settle([rx], 300) >= 0, 'did not land');
+  expectClean('after a rocket jump', [rx]);
+});
+
+T.test('rex a1: blast jumps carry him ~17 m, chain in mid-air, and hurt enemies where he left', () => {
+  const [rx, foe] = duel('rex', 'omniman', 2.5);
+  const p0 = rx.pos.clone(), t0 = T.w.time;
+  // aim level along +z with no keys held: straight ahead
+  cast(rx, null, 'a1', 1, { aimAt: () => rx.pos.clone().add(T.V(0, 1.5, 20)) });
+  let air = 0;
+  T.run(150, () => { T.clr(rx.intents); T.aim(rx, rx.pos.clone().add(T.V(0, 1.5, 20))); if (!rx.grounded) air++; return rx.grounded && air > 5 ? false : undefined; });
+  const flat = Math.hypot(rx.pos.x - p0.x, rx.pos.z - p0.z);
+  T.info(`blast jump carried him ${flat.toFixed(1)} m`);
+  T.expect(flat > 14 && flat < 22, `blast jump carried him ${flat.toFixed(1)} m`);
+  T.expect(T.dmgTo(foe, t0) > 20, `the take-off blast dealt ${T.dmgTo(foe, t0).toFixed(0)} to the enemy next to him`);
+  T.expect(rx.hp === rx.maxHp, 'Rex hurt by his own blast jump');
+  // two in a row: the second one goes off in mid-air
+  T.run(60);
+  for (const k in rx.cd) rx.cd[k] = 0;
+  rx.charges.a1 = 2;
+  cast(rx, null, 'a1', 20, { aimAt: () => rx.pos.clone().add(T.V(0, 1.5, 20)) });
+  const y1 = rx.pos.y;
+  cast(rx, null, 'a1', 1, { aimAt: () => rx.pos.clone().add(T.V(0, 1.5, 20)) });
+  T.expect(rx.charges.a1 === 0, `charges left ${rx.charges.a1}`);
+  let top = y1;
+  T.run(40, () => { T.clr(rx.intents); top = Math.max(top, rx.pos.y); });
+  T.expect(top > y1 + 2, `the mid-air jump did not lift him (${(top - y1).toFixed(2)} m)`);
+  T.expect(T.settle([rx], 300) >= 0, 'did not land');
+});
+
+T.test('rex a2: the grenade bounces, launches and slows enemies, and leaves his belt until it is back', () => {
+  const [rx, foe] = T.stage([{ key: 'rex', player: true, at: [0, 0, 0], face: [0, 1] }, { key: 'invincible', team: 1, at: [0, 0, 11], face: [0, -1] }]);
+  foe.maxHp = foe.hp = BIG;
+  const bone = rx.kit.grenadeBone;
+  T.expect(!!bone && bone.scale.x > 0.5 * rx.kit.grenadeScale.x, 'no grenade on his belt');
+  const t0 = T.w.time;
+  cast(rx, foe, 'a2', 100, { aimAt: () => foe.pos.clone().add(T.V(0, 0, -2)) });
+  T.expect(rx.kit.grenades.length === 0, 'the grenade never went off');
+  T.expect(T.dmgTo(foe, t0) > 40, `grenade dealt ${T.dmgTo(foe, t0).toFixed(0)}`);
+  T.expect(foe.status.slow > 0.3, `not slowed (${foe.status.slow})`);
+  T.expect(bone.scale.x < 0.01, 'the belt grenade is still there while it recharges');
+  T.run(Math.ceil(rx.def.abilities.a2.cd * 60) + 30);
+  T.expect(bone.scale.x > 0.99 * rx.kit.grenadeScale.x, 'the belt grenade did not come back');
+});
+
+T.test('rex ult: SPLODE! charges 2 s (unstoppable), then hits 12 m around him; he survives it', () => {
+  let [rx, foe] = duel('rex', 'omniman', 5);
+  const far = T.stage.length; void far;
+  rx.ult = rx.def.ultCost;
+  cast(rx, foe, 'ult', 30);
+  T.expect(!!rx.kit.ultState && rx.unstoppable, 'not charging');
+  const hp0 = rx.hp, t0 = T.w.time;
+  // he can't be knocked about while charging
+  const p0 = rx.pos.clone();
+  T.w.damage(foe, rx, 1, { knock: T.V(15, 8, 0), noLifesteal: true });
+  T.run(5);
+  T.expect(rx.pos.distanceTo(p0) < 0.5, `knocked ${rx.pos.distanceTo(p0).toFixed(2)} m while charging`);
+  T.run(110);
+  T.expect(!rx.kit.ultState && !rx.unstoppable, 'still charging after 2 s');
+  const got = T.dmgTo(foe, t0);
+  T.expect(got > 200 && got < 380, `SPLODE dealt ${got.toFixed(0)} at 5 m`);
+  T.expect(!rx.dead && rx.hp >= hp0 - 1.5, `Rex hurt by his own ult (${(hp0 - rx.hp).toFixed(0)})`);
+  T.expect(T.settle([rx], 400) >= 0, 'did not come back down');
+  expectClean('after SPLODE', [rx]);
+  // killed while charging: it fizzles
+  [rx, foe] = duel('rex', 'omniman', 5);
+  rx.ult = rx.def.ultCost;
+  cast(rx, foe, 'ult', 30);
+  rx.invuln = 0;
+  T.w.kill(foe, rx);
+  const t1 = T.w.time;
+  T.run(150);
+  T.expect(T.dmgTo(foe, t1) === 0 && !rx.kit.ultState, 'a dead Rex still went off');
+});
+
+T.test('battlebeast secondary: bracing blocks 65% from the front only, slows him, and arms a counter', () => {
+  const [bb, foe] = duel('battlebeast', 'omniman', 8);
+  // (he keeps facing +z whatever the foe does)
+  const hold = (n, fn) => T.run(n, (k) => { T.clr(bb.intents); T.aim(bb, bb.pos.clone().add(T.V(0, 1.6, 10))); bb.intents.secondary = true; bb.intents.secondaryPressed = k === 0; fn && fn(k); });
+  hold(10);
+  T.expect(bb.kit.bracing, 'not bracing');
+  const front = T.w.damage(foe, bb, 100, { noLifesteal: true });
+  T.expect(Math.abs(front - 35) < 0.6, `100 from the front became ${front.toFixed(1)}`);
+  // walking braced is slow
+  hold(40, () => { bb.intents.mz = 1; });
+  const v = Math.hypot(bb.vel.x, bb.vel.z);
+  T.expect(v < bb.def.speed * 0.6, `braced walk at ${v.toFixed(1)} m/s`);
+  // from behind it doesn't help
+  T.teleport(foe, bb.pos.clone().add(T.V(0, 0, -5)));
+  hold(5);
+  const back = T.w.damage(foe, bb, 100, { noLifesteal: true });
+  T.expect(back > 99, `100 from behind became ${back.toFixed(1)}`);
+  T.teleport(foe, bb.pos.clone().add(T.V(0, 0, 3)));
+  hold(5);
+  T.w.damage(foe, bb, 100, { noLifesteal: true });
+  T.expect(bb.kit.counterReady, 'blocking 100 did not arm a counter');
+  // let go into a claw: +50%
+  T.run(3, () => { T.clr(bb.intents); T.aim(bb, T.center(foe)); });
+  T.expect(!bb.kit.bracing && bb.cd.secondary > 0, 'brace did not end on release');
+  const t0 = T.w.time;
+  cast(bb, foe, 'primary', 18);
+  const got = T.dmgTo(foe, t0);
+  T.expect(Math.abs(got - 82.5) < 1, `counter claw dealt ${got.toFixed(1)} (expected 55 x 1.5)`);
+  // and it lets go by itself after 4 s
+  for (const k in bb.cd) bb.cd[k] = 0;
+  hold(4.3 * 60);
+  T.expect(!bb.kit.bracing, 'braced for more than 4 s');
+});
+
+T.test('battlebeast a1: pounce lands where he aims, pins the one he lands on, and catches fliers', () => {
+  let [bb, foe] = duel('battlebeast', 'invincible', 18);
+  const t0 = T.w.time;
+  cast(bb, foe, 'a1', 90, { aimAt: () => foe.pos.clone() });
+  T.expect(bb.pos.distanceTo(foe.pos) < 4, `landed ${bb.pos.distanceTo(foe.pos).toFixed(1)} m from the target`);
+  T.expect(T.dmgTo(foe, t0) > 70, `pounce dealt ${T.dmgTo(foe, t0).toFixed(0)}`);
+  // a flier in the leap's path is caught and slammed down
+  [bb, foe] = T.stage([{ key: 'battlebeast', player: true, at: [0, 0, 0], face: [0, 1] }, { key: 'eve', team: 1, at: [0, 7, 12], fly: true, face: [0, -1] }]);
+  foe.maxHp = foe.hp = BIG;
+  const t1 = T.w.time;
+  cast(bb, foe, 'a1', 60, { extra: () => { T.clr(foe.intents); foe.intents.up = foe.pos.y < 7; } });
+  T.expect(T.dmgTo(foe, t1) >= 89, `swat dealt ${T.dmgTo(foe, t1).toFixed(0)}`);
+  T.expect(foe.mode !== 'fly', `the flier is still flying (${foe.mode})`);
+  T.expect(T.settle([bb, foe], 600) >= 0, 'did not settle');
+  expectClean('after the swat', [bb, foe]);
+});
+
+T.test('battlebeast a1: pouncing on a jumping enemy, at a point in the air or onto cover ends in a landing slam', () => {
+  const poses = [];
+  const watchPose = (bb) => {
+    const at = `[${bb.mode}${bb.anim.action ? '/' + bb.anim.action.clip.name : ''}, y ${bb.pos.y.toFixed(2)}, floor ${bb.groundY.toFixed(2)}]`;
+    for (const m of T.poseIssues(bb)) poses.push(`${m} ${at}`);
+    if (bb.mode === 'ground' && !bb.override && bb.pos.y > bb.groundY + 0.05) poses.push(`standing in mid-air ${at}`);
+  };
+  // an enemy caught mid-jump: he goes for the floor under them
+  let [bb, foe] = duel('battlebeast', 'rex', 14);
+  let t0 = T.w.time;
+  cast(bb, foe, 'a1', 80, { aimAt: () => foe.pos.clone(), extra: (k) => { watchPose(bb); if (k === 0) { foe.vel.y = 11; foe.grounded = false; foe.mode = 'air'; } } });
+  T.expect(bb.grounded && bb.pos.y < 0.01, `ended at y ${bb.pos.y.toFixed(2)} (${bb.mode})`);
+  T.expect(T.dmgTo(foe, t0) > 50, `landing on the jumper dealt ${T.dmgTo(foe, t0).toFixed(0)}`);
+  // aimed at a point a little above the floor, nobody under the crosshair: the leap ends in the air, he drops and slams
+  [bb, foe] = T.stage([{ key: 'battlebeast', player: true, at: [0, 0, 0], face: [0, 1] }, { key: 'eve', team: 1, at: [4.5, 0, 15] }]);
+  foe.maxHp = foe.hp = BIG;
+  t0 = T.w.time;
+  let slams = 0;
+  cast(bb, null, 'a1', 90, { aimAt: () => T.V(0, 0.9, 15), extra: () => { watchPose(bb); if (bb.anim.action && bb.anim.action.clip === bb.kit.clips.pounceLand) slams++; } });
+  T.expect(slams > 0, 'no landing slam after a leap that ended in the air');
+  T.expect(T.dmgTo(foe, t0) > 50, `the slam next to her dealt ${T.dmgTo(foe, t0).toFixed(0)}`);
+  T.expect(!bb.kit.landing, 'still waiting to land');
+  // onto the top of a cover block (tops count as floor)
+  const box = T.w.obstacles.find((o) => o.type !== 'cyl' && o.max.y > 1);
+  const top = T.V((box.min.x + box.max.x) / 2, box.max.y, (box.min.z + box.max.z) / 2);
+  [bb] = T.stage([{ key: 'battlebeast', player: true, at: [top.x - 14, 0, top.z], face: [1, 0] }, { key: 'eve', team: 1, at: [top.x + 20, 0, top.z + 20] }]);
+  slams = 0;
+  cast(bb, null, 'a1', 90, { aimAt: () => top.clone(), extra: () => { watchPose(bb); if (bb.anim.action && bb.anim.action.clip === bb.kit.clips.pounceLand) slams++; } });
+  T.expect(slams > 0, 'no landing slam on top of the cover');
+  T.expect(bb.grounded && Math.abs(bb.pos.y - box.max.y) < 0.02, `ended at y ${bb.pos.y.toFixed(2)} (cover top ${box.max.y})`);
+  for (const m of [...new Set(poses)].slice(0, 4)) T.fail(m);
+  expectClean('after the pounces', [bb]);
+});
+
+T.test('battlebeast a2: the roar weakens and slows enemies in 15 m and gives him overhealth', () => {
+  const [bb, near, far] = T.stage([{ key: 'battlebeast', player: true, at: [0, 0, 0], face: [0, 1] }, { key: 'invincible', team: 1, at: [0, 0, 10] }, { key: 'eve', team: 1, at: [0, 0, 24] }]);
+  near.maxHp = near.hp = far.maxHp = far.hp = BIG;
+  cast(bb, near, 'a2', 40);
+  T.expect(Math.abs(near.status.weak - 0.3) < 0.01 && near.status.slow > 0.25, `weak ${near.status.weak}, slow ${near.status.slow}`);
+  T.expect(far.status.weak === 0, 'roar reached 24 m');
+  T.expect(bb.overhealth >= 149, `overhealth ${bb.overhealth}`);
+  const got = T.w.damage(near, bb, 100, { noLifesteal: true });
+  T.expect(Math.abs(got - 70) < 0.6, `a weakened 100 became ${got.toFixed(1)}`);
+  T.run(3.2 * 60);
+  T.expect(near.status.weak === 0, 'weakness outlived 3 s');
+});
+
+T.test('battlebeast a3: hurl throws the enemy ~20 m and the crash hurts', () => {
+  const [bb, foe] = duel('battlebeast', 'eve', 2.6);
+  const p0 = foe.pos.clone(), t0 = T.w.time;
+  cast(bb, foe, 'a3', 60);
+  T.expect(!bb.override && !foe.carriedBy, 'still holding them');
+  T.expect(bb.kit.thrown.length === 1, 'nobody in flight');
+  T.run(150);
+  const flat = Math.hypot(foe.pos.x - p0.x, foe.pos.z - p0.z);
+  T.info(`thrown ${flat.toFixed(1)} m`);
+  T.expect(flat > 12 && flat < 26, `thrown ${flat.toFixed(1)} m`);
+  T.expect(Math.abs(T.dmgTo(foe, t0) - 130) < 1, `hurl dealt ${T.dmgTo(foe, t0).toFixed(0)} (60 + 70)`);
+  T.expect(T.settle([bb, foe], 600) >= 0, 'did not settle');
+  expectClean('after the hurl', [bb, foe]);
+});
+
+T.test('battlebeast passive: below half health he goes berserk', () => {
+  const [bb, foe] = duel('battlebeast', 'omniman', 6);
+  bb.lastHurt = T.w.time;
+  T.run(5);
+  T.expect(bb.status.boost === 0 && bb.status.dr === 0, 'berserk at full health');
+  bb.hp = bb.maxHp * 0.4;
+  T.run(5, () => { bb.lastHurt = T.w.time; });
+  T.expect(Math.abs(bb.status.boost - 0.25) < 0.01 && Math.abs(bb.status.dr - 0.25) < 0.01, `boost ${bb.status.boost}, dr ${bb.status.dr}`);
+  const got = T.w.damage(foe, bb, 100, { noLifesteal: true });
+  T.expect(Math.abs(got - 75) < 0.6, `100 became ${got.toFixed(1)} while berserk`);
+  bb.hp = bb.maxHp * 0.8;
+  T.run(20);
+  T.expect(bb.status.boost === 0 && bb.status.dr === 0, 'still berserk after healing up');
+});
+
+T.test('battlebeast ult: 8 s berserk, bigger, unstoppable, 40% less damage, faster claws, Pounce every 2 s', () => {
+  const [bb, foe] = duel('battlebeast', 'omniman', 6);
+  bb.ult = bb.def.ultCost;
+  cast(bb, foe, 'ult', 60);
+  T.expect(!!bb.kit.ultState && bb.unstoppable, 'not berserk');
+  T.expect(bb.visual.scale.x > 1.15, `scale ${bb.visual.scale.x.toFixed(2)}`);
+  T.expect(foe.status.weak > 0.15, 'the berserk roar did not weaken the enemy');
+  foe.status.weak = 0;
+  const got = T.w.damage(foe, bb, 100, { noLifesteal: true });
+  T.expect(Math.abs(got - 60) < 0.6, `100 became ${got.toFixed(1)} while berserk`);
+  bb.cd.a1 = 8;
+  T.run(1);
+  T.expect(bb.cd.a1 <= 2, `pounce cooldown ${bb.cd.a1.toFixed(1)} s`);
+  T.run(8 * 60);
+  T.expect(!bb.kit.ultState && !bb.unstoppable, 'berserk outlived 8 s');
+  T.run(60);
+  T.expect(Math.abs(bb.visual.scale.x - 1) < 0.01, `scale stuck at ${bb.visual.scale.x.toFixed(2)}`);
+});
+
+T.test('rex and battlebeast cannot fly; double-tapping jump just jumps', () => {
+  for (const key of ['rex', 'battlebeast']) {
+    const [h] = T.stage([{ key, player: true, at: [0, 0, 0] }]);
+    T.run(60, (k) => { T.clr(h.intents); h.intents.flyToggle = k === 0 || k === 6; h.intents.jump = k === 0 || k === 6; h.intents.up = true; });
+    T.expect(h.mode !== 'fly', `${key} is flying`);
+    T.expect(T.settle([h], 300) >= 0 && h.grounded, `${key} did not come back down`);
+  }
+});
+
 // ---------------------------------------------------------------- edge cases
 for (const [key, slot, dist] of [['invincible', 'a3', 3], ['omniman', 'a1', 7]]) {
   T.test(`${key} ${slot}: the carried target dying mid-carry ends the carry cleanly`, () => {
@@ -437,7 +722,7 @@ for (const [key, slot, dist] of [['invincible', 'a3', 3], ['omniman', 'a1', 7]])
   });
 }
 
-const CASTS = { invincible: ['a1', 'a2', 'a3', 'ult'], eve: ['a2', 'secondary', 'ult'], omniman: ['a1', 'secondary', 'ult'], robot: ['secondary', 'a1', 'a2', 'a3', 'ult'] };
+const CASTS = { invincible: ['a1', 'a2', 'a3', 'ult'], eve: ['a2', 'secondary', 'ult'], omniman: ['a1', 'secondary', 'ult'], robot: ['secondary', 'a1', 'a2', 'a3', 'ult'], rex: ['secondary', 'a2', 'a3', 'ult'], battlebeast: ['a1', 'a2', 'a3', 'ult'] };
 for (const key of Object.keys(CASTS)) {
   for (const slot of CASTS[key]) {
     T.test(`${key} ${slot}: the caster dying mid-ability leaves nothing behind`, () => {
@@ -453,7 +738,8 @@ for (const key of Object.keys(CASTS)) {
         T.run(60, () => { T.clr(foe.intents); });
         const late = T.log.damage.filter((e) => e.src === h && e.t > tDeath && e.type !== 'proj' && e.type !== 'dot').reduce((a, e) => a + e.amount, 0);
         // (projectiles already in flight may still land; abilities the caster performs may not)
-        const fired = slot === 'secondary' || (key === 'robot' && slot === 'a2'); // (an EMP already thrown still goes off)
+        // (an EMP, a rod or a grenade already thrown, or coins in the air, still go off)
+        const fired = slot === 'secondary' || (key === 'robot' && slot === 'a2') || (key === 'rex' && (slot === 'a2' || slot === 'a3'));
         T.expect(late === 0 || fired, `${at}f: the dead caster still dealt ${late.toFixed(0)} damage`);
         T.expect(!h.override && !h.carrying && !h.untargetable, `${at}f: caster state left after death (override ${!!h.override})`);
         T.expect(!(h.kit.ultState), `${at}f: ult state left after death`);
@@ -468,7 +754,7 @@ for (const key of Object.keys(CASTS)) {
   }
 }
 
-for (const [key, slot, dist] of [['invincible', 'a3', 3], ['omniman', 'a1', 7], ['invincible', 'ult', 10], ['eve', 'ult', 10], ['eve', 'a1', 5], ['robot', 'a1', 8], ['robot', 'a3', 8], ['robot', 'ult', 10]]) {
+for (const [key, slot, dist] of [['invincible', 'a3', 3], ['omniman', 'a1', 7], ['invincible', 'ult', 10], ['eve', 'ult', 10], ['eve', 'a1', 5], ['robot', 'a1', 8], ['robot', 'a3', 8], ['robot', 'ult', 10], ['rex', 'secondary', 8], ['rex', 'a2', 8], ['rex', 'ult', 6], ['battlebeast', 'a3', 3], ['battlebeast', 'a1', 12], ['battlebeast', 'ult', 6]]) {
   T.test(`${key} ${slot}: swapping hero mid-ability leaves nothing behind`, () => {
     const [h, foe] = duel(key, 'omniman', dist);
     if (slot === 'ult') h.ult = h.def.ultCost;
@@ -499,6 +785,11 @@ T.test('mirror matches: simultaneous charges, slams, dashes and ults resolve', (
     ['robot', 'eve', 'a1', 'ult', 12],
     ['robot', 'omniman', 'a2', 'a1', 10],
     ['robot', 'invincible', 'ult', 'a3', 4],
+    ['battlebeast', 'battlebeast', 'a3', 'a3', 3],
+    ['battlebeast', 'omniman', 'a1', 'a1', 14],
+    ['battlebeast', 'invincible', 'a3', 'a3', 3],
+    ['rex', 'rex', 'ult', 'ult', 5],
+    ['rex', 'battlebeast', 'a1', 'a1', 12],
   ];
   for (const [ka, kb, sa, sb, dist] of pairs) {
     const [a, b] = T.stage([{ key: ka, player: true, at: [0, 0, 0], face: [0, 1] }, { key: kb, team: 1, at: [0, 0, dist], face: [0, -1] }]);
@@ -520,7 +811,7 @@ T.test('mirror matches: simultaneous charges, slams, dashes and ults resolve', (
 
 T.test('dashes, charges, dives and ults at the arena edge stay inside it', () => {
   const R = T.ARENA.boundR - 6;
-  const cases = [['invincible', 'a1'], ['invincible', 'a2'], ['invincible', 'ult'], ['omniman', 'a1'], ['omniman', 'ult'], ['eve', 'secondary'], ['robot', 'a1'], ['robot', 'secondary']];
+  const cases = [['invincible', 'a1'], ['invincible', 'a2'], ['invincible', 'ult'], ['omniman', 'a1'], ['omniman', 'ult'], ['eve', 'secondary'], ['robot', 'a1'], ['robot', 'secondary'], ['rex', 'a1'], ['rex', 'ult'], ['battlebeast', 'a1'], ['battlebeast', 'a3']];
   for (const [key, slot] of cases) {
     const [h, foe] = T.stage([{ key, player: true, at: [R, 0, 0], face: [1, 0] }, { key: 'eve', team: 1, at: [R - 6, 0, 3] }]);
     if (slot === 'ult') h.ult = h.def.ultCost;
@@ -537,7 +828,7 @@ T.test('abilities into walls and under the ceiling end cleanly', () => {
   T.expect(!!box, 'no cover box in the arena');
   if (!box) return;
   const c = box.min.clone().add(box.max).multiplyScalar(0.5);
-  for (const [key, slot] of [['invincible', 'a1'], ['omniman', 'a1'], ['invincible', 'a2']]) {
+  for (const [key, slot] of [['invincible', 'a1'], ['omniman', 'a1'], ['invincible', 'a2'], ['rex', 'a1'], ['battlebeast', 'a1']]) {
     const [h, foe] = T.stage([{ key, player: true, at: [c.x, 0, c.z - 12], face: [0, 1] }, { key: 'eve', team: 1, at: [c.x + 30, 0, c.z + 30] }]);
     cast(h, foe, slot, 120, { aimAt: () => T.V(c.x, 0.8, c.z) });
     T.expect(T.settle([h], 600) >= 0, `${key} ${slot} into a wall: did not settle`);
@@ -545,7 +836,7 @@ T.test('abilities into walls and under the ceiling end cleanly', () => {
     const inside = h.pos.x > box.min.x + 0.05 && h.pos.x < box.max.x - 0.05 && h.pos.z > box.min.z + 0.05 && h.pos.z < box.max.z - 0.05 && h.pos.y < box.max.y - 0.3;
     T.expect(!inside, `${key} ${slot}: ended inside the cover box`);
   }
-  for (const [key, slot] of [['invincible', 'a3'], ['invincible', 'ult'], ['eve', 'ult'], ['robot', 'ult'], ['robot', 'a1']]) {
+  for (const [key, slot] of [['invincible', 'a3'], ['invincible', 'ult'], ['eve', 'ult'], ['robot', 'ult'], ['robot', 'a1'], ['rex', 'a1'], ['battlebeast', 'a1']]) {
     const top = T.ARENA.ceiling - 4;
     const [h, foe] = T.stage([{ key, player: true, at: [0, top, 0], fly: true, face: [0, 1] }, { key: 'eve', team: 1, at: [0, top, 2.5], fly: true }]);
     h.ult = h.def.ultCost;
@@ -556,7 +847,7 @@ T.test('abilities into walls and under the ceiling end cleanly', () => {
 });
 
 T.test('stunned heroes cannot start abilities', () => {
-  for (const key of ['invincible', 'eve', 'omniman', 'robot']) {
+  for (const key of ['invincible', 'rex', 'eve', 'robot', 'omniman', 'battlebeast']) {
     const [h, foe] = duel(key, 'omniman', 8);
     h.status.stunT = 1;
     const t0 = T.w.time;

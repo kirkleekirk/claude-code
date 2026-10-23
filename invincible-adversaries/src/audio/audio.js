@@ -513,8 +513,229 @@ R.step_metal = (S, out, t0, v) => {
   return 0.25;
 };
 
+// ---- Rex Splode: charged coins, the sticky rod, the grenade, blast jumps and SPLODE
+R.coin_flick = (S, out, t0, v) => {
+  const p = 1 + (v - 1) * 0.06;
+  // a thumb-flicked coin: a bright metallic ping over a little whoosh
+  tone(S, out, t0, { f: 3150 * p, type: 'sine', a: 0.001, d: 0.22, vol: 0.13 });
+  tone(S, out, t0, { f: 4720 * p, type: 'sine', a: 0.001, d: 0.14, vol: 0.07 });
+  burst(S, out, t0, { type: 'highpass', f: 2500, dur: 0.012, vol: 0.4, seed: v });
+  sweepNoise(S, out, t0 + 0.01, { f0: 900, f1: 3800, dur: 0.16, Q: 1.4, vol: 0.35, attack: 0.04, kind: 'white', seed: v + 3 });
+  return 0.32;
+};
+R.coin_pop = (S, out, t0, v) => {
+  // a small kinetic blast: a crack and a short, punchy boom
+  const sh = S.shaper(2.6); sh.connect(out);
+  burst(S, sh, t0, { type: 'highpass', f: 1500 + v * 200, dur: 0.02, vol: 1.1, seed: v });
+  thump(S, sh, t0, { f0: 150 + v * 10, f1: 48, dur: 0.32, sweep: 0.1, vol: 0.9 });
+  burst(S, sh, t0 + 0.003, { type: 'lowpass', f: 2600, f1: 280, dur: 0.28, vol: 0.75, kind: 'pink', seed: v + 2 });
+  clicks(S, out, t0 + 0.02, { n: 10, dur: 0.25, f: 3400, vol: 0.18 });
+  return 0.6;
+};
+R.rod_throw = (S, out, t0, v) => {
+  // a spinning rod: a whoosh chopped by its rotation
+  const n = S.noise('pink', 1, v), bp = S.filt('bandpass', 700, 1.3), am = S.osc('square', 16), amg = S.gain(0.35), g = S.gain(0);
+  S.env(bp.frequency, t0, [[0, 500], [0.35, 1600]]);
+  am.connect(amg); amg.connect(g.gain);
+  g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.55, t0 + 0.05); g.gain.setTargetAtTime(0, t0 + 0.2, 0.1);
+  S.chain(n, bp, g, out); n.start(t0); am.start(t0); n.stop(t0 + 0.7); am.stop(t0 + 0.7);
+  return 0.6;
+};
+R.rod_stick = (S, out, t0, v) => {
+  thump(S, out, t0, { f0: 260, f1: 120, dur: 0.12, vol: 0.7 });
+  burst(S, out, t0, { f: 1800, Q: 2, dur: 0.03, vol: 0.5, seed: v });
+  tone(S, out, t0 + 0.005, { f: 1460, type: 'triangle', a: 0.001, d: 0.25, vol: 0.12 });
+  tone(S, out, t0 + 0.005, { f: 2210, type: 'sine', a: 0.001, d: 0.18, vol: 0.07 });
+  return 0.4;
+};
+R.rod_beep = (S, out, t0, v) => { tone(S, out, t0, { f: 2350, type: 'square', a: 0.002, d: 0.05, vol: 0.09 }); tone(S, out, t0, { f: 4700, type: 'sine', a: 0.001, d: 0.04, vol: 0.04 }); return 0.12; };
+R.finger_snap = (S, out, t0, v) => {
+  burst(S, out, t0, { type: 'highpass', f: 2200, Q: 0.7, dur: 0.018, vol: 0.9, seed: v });
+  burst(S, out, t0, { f: 1100, Q: 3, dur: 0.03, vol: 0.4, seed: v + 1 });
+  return 0.15;
+};
+R.rod_boom = (S, out, t0, v) => {
+  const sh = S.shaper(3); sh.connect(out);
+  burst(S, sh, t0, { type: 'highpass', f: 1000, dur: 0.03, vol: 1.3, seed: v });
+  thump(S, sh, t0, { f0: 120, f1: 30, dur: 1.4, sweep: 0.3, vol: 1.3 });
+  burst(S, sh, t0 + 0.004, { type: 'lowpass', f: 3400, f1: 160, dur: 1.1, vol: 1.05, kind: 'pink', attack: 0.008, seed: v + 1 });
+  burst(S, out, t0 + 0.04, { type: 'lowpass', f: 180, f1: 70, dur: 1.8, vol: 0.8, kind: 'brown', attack: 0.05, seed: v + 2 });
+  clicks(S, out, t0 + 0.05, { n: 45, dur: 1.2, f: 3300, vol: 0.28 });
+  return 2.2;
+};
+R.grenade_throw = (S, out, t0, v) => {
+  tone(S, out, t0, { f: 3600, type: 'sine', a: 0.001, d: 0.12, vol: 0.06 });
+  sweepNoise(S, out, t0 + 0.02, { f0: 300, f1: 1500, dur: 0.3, Q: 1.2, vol: 0.55, attack: 0.1, seed: v });
+  return 0.4;
+};
+R.grenade_bounce = (S, out, t0, v) => {
+  thump(S, out, t0, { f0: 200, f1: 90, dur: 0.1, vol: 0.6 });
+  tone(S, out, t0, { f: 1180 + v * 60, type: 'triangle', a: 0.001, d: 0.2, vol: 0.13 });
+  tone(S, out, t0, { f: 1930 + v * 80, type: 'sine', a: 0.001, d: 0.14, vol: 0.08 });
+  burst(S, out, t0, { f: 2600, Q: 1.5, dur: 0.025, vol: 0.35, seed: v });
+  return 0.35;
+};
+R.grenade_boom = (S, out, t0, v) => {
+  // the concussion: a hard boom and the ringing it leaves in your ears
+  const sh = S.shaper(3.4); sh.connect(out);
+  burst(S, sh, t0, { type: 'highpass', f: 900, dur: 0.035, vol: 1.35, seed: v });
+  thump(S, sh, t0, { f0: 105, f1: 26, dur: 1.6, sweep: 0.35, vol: 1.35 });
+  burst(S, sh, t0 + 0.004, { type: 'lowpass', f: 3000, f1: 150, dur: 1.2, vol: 1.1, kind: 'pink', attack: 0.008, seed: v + 1 });
+  burst(S, out, t0 + 0.05, { type: 'lowpass', f: 160, f1: 60, dur: 2.2, vol: 0.85, kind: 'brown', attack: 0.06, seed: v + 2 });
+  tone(S, out, t0 + 0.06, { f: 3720, type: 'sine', a: 0.04, d: 1.8, vol: 0.05 });
+  clicks(S, out, t0 + 0.06, { n: 50, dur: 1.4, f: 3200, vol: 0.28 });
+  return 2.6;
+};
+R.blast_jump = (S, out, t0, v) => {
+  const sh = S.shaper(2.8); sh.connect(out);
+  burst(S, sh, t0, { type: 'highpass', f: 1200, dur: 0.025, vol: 1.2, seed: v });
+  thump(S, sh, t0, { f0: 130, f1: 36, dur: 0.8, sweep: 0.2, vol: 1.2 });
+  burst(S, sh, t0 + 0.003, { type: 'lowpass', f: 2800, f1: 200, dur: 0.6, vol: 0.9, kind: 'pink', seed: v + 1 });
+  // and the air rushing past as he goes up
+  sweepNoise(S, out, t0 + 0.05, { f0: 300, f1: 2400, f2: 900, dur: 0.9, Q: 0.9, vol: 0.5, attack: 0.25, seed: v + 4 });
+  return 1.4;
+};
+R.coin_fan = (S, out, t0, v) => {
+  for (let i = 0; i < 6; i++) tone(S, out, t0 + i * 0.012, { f: 2900 + i * 230, type: 'sine', a: 0.001, d: 0.16, vol: 0.08 });
+  sweepNoise(S, out, t0, { f0: 600, f1: 3400, dur: 0.25, Q: 0.9, vol: 0.6, attack: 0.05, kind: 'white', seed: v });
+  return 0.4;
+};
+R.splode_charge = (S, out, t0, v) => {
+  // 2 s of charge building in his body: a whine climbing and a buzz speeding up, crackling harder
+  const o = S.osc('sawtooth', 90), o2 = S.osc('sawtooth', 91.5), lp = S.filt('lowpass', 300, 4), g = S.gain(0), sh = S.shaper(1.8);
+  S.env(o.frequency, t0, [[0, 90], [2.0, 420]]); S.env(o2.frequency, t0, [[0, 91.5], [2.0, 428]]);
+  S.env(lp.frequency, t0, [[0, 280], [2.0, 5200]]);
+  const am = S.osc('square', 6), amg = S.gain(0.25);
+  S.env(am.frequency, t0, [[0, 6], [2.0, 38]]);
+  am.connect(amg); amg.connect(g.gain);
+  g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.32, t0 + 1.9); g.gain.linearRampToValueAtTime(0, t0 + 2.05);
+  o.connect(lp); o2.connect(lp); S.chain(lp, sh, g, out);
+  o.start(t0); o2.start(t0); am.start(t0); o.stop(t0 + 2.2); o2.stop(t0 + 2.2); am.stop(t0 + 2.2);
+  tone(S, out, t0, { f: 600, f1: 2600, type: 'sine', a: 1.9, d: 0.1, vol: 0.08 });
+  clicks(S, out, t0, { n: 70, dur: 2.0, f: 3600, vol: 0.22, decay: false });
+  return 2.2;
+};
+R.splode_boom = (S, out, t0, v) => {
+  const sh = S.shaper(3.6); sh.connect(out);
+  burst(S, sh, t0, { type: 'highpass', f: 800, dur: 0.05, vol: 1.4, seed: v });
+  thump(S, sh, t0, { f0: 95, f1: 20, dur: 3.0, sweep: 0.6, vol: 1.45 });
+  burst(S, sh, t0 + 0.005, { type: 'lowpass', f: 3600, f1: 120, dur: 2.2, vol: 1.2, kind: 'pink', attack: 0.01, seed: v + 1 });
+  burst(S, out, t0 + 0.06, { type: 'lowpass', f: 150, f1: 45, dur: 3.4, vol: 1.1, kind: 'brown', attack: 0.08, seed: v + 2 });
+  clicks(S, out, t0 + 0.08, { n: 90, dur: 2.4, f: 3000, vol: 0.32 });
+  return 3.9;
+};
+
+// ---- Battle Beast: claws, the brace, pounces and the roar
+R.claw_swipe = (S, out, t0, v) => {
+  sweepNoise(S, out, t0, { f0: 260, f1: 2100, f2: 600, dur: 0.3, Q: 1.1, vol: 1.2, attack: 0.1, seed: v + 2 });
+  // the air tearing over the claw tips
+  burst(S, out, t0 + 0.08, { type: 'highpass', f: 3000, dur: 0.12, vol: 0.25, kind: 'white', attack: 0.04, seed: v + 5 });
+  return 0.45;
+};
+R.claw_hit = (S, out, t0, v) => {
+  const p = 1 + (v - 1) * 0.06;
+  const sh = S.shaper(2.4); sh.connect(out);
+  // a slash ("shhk") on top of a meaty blow
+  burst(S, out, t0, { type: 'highpass', f: 2800 * p, Q: 0.6, dur: 0.09, vol: 0.75, attack: 0.002, seed: v });
+  burst(S, out, t0 + 0.01, { f: 1700 * p, Q: 2.5, dur: 0.07, vol: 0.45, seed: v + 3 });
+  thump(S, sh, t0, { f0: 140 * p, f1: 48, dur: 0.28, vol: 1.05 });
+  burst(S, sh, t0, { type: 'lowpass', f: 900, dur: 0.14, vol: 0.7, kind: 'pink', seed: v + 1 });
+  return 0.5;
+};
+R.guard_up = (S, out, t0, v) => {
+  thump(S, out, t0, { f0: 110, f1: 60, dur: 0.18, vol: 0.6 });
+  burst(S, out, t0, { f: 700, Q: 2, dur: 0.12, vol: 0.35, kind: 'pink', seed: v });
+  tone(S, out, t0 + 0.01, { f: 520, type: 'triangle', a: 0.002, d: 0.25, vol: 0.06 });
+  return 0.4;
+};
+R.guard_block = (S, out, t0, v) => {
+  const sh = S.shaper(2.2); sh.connect(out);
+  thump(S, sh, t0, { f0: 120 + v * 8, f1: 52, dur: 0.3, vol: 1.0 });
+  burst(S, sh, t0, { f: 1400, Q: 1.2, dur: 0.05, vol: 0.6, seed: v });
+  tone(S, out, t0, { f: 610 + v * 25, type: 'triangle', a: 0.001, d: 0.45, vol: 0.09 });
+  tone(S, out, t0, { f: 1290 + v * 40, type: 'sine', a: 0.001, d: 0.3, vol: 0.05 });
+  return 0.6;
+};
+R.counter_ready = (S, out, t0, v) => {
+  tone(S, out, t0, { f: 1900, f1: 2600, type: 'sine', a: 0.01, d: 0.3, vol: 0.08 });
+  burst(S, out, t0, { type: 'highpass', f: 4000, dur: 0.25, vol: 0.2, attack: 0.05, seed: v });
+  return 0.45;
+};
+/** a big cat's roar: a rough voice rising then falling through mouth formants, with a growl in it */
+function roarVoice(S, out, t0, { dur = 1.7, f0 = 120, peak = 210, end = 85, vol = 0.5, seed = 1 } = {}) {
+  const o1 = S.osc('sawtooth', f0), o2 = S.osc('sawtooth', f0 * 1.012), sub = S.osc('square', f0 / 2);
+  const pts = [[0, f0], [dur * 0.18, peak], [dur * 0.5, peak * 0.92], [dur, end]];
+  S.env(o1.frequency, t0, pts); S.env(o2.frequency, t0, pts.map(([t, f]) => [t, f * 1.012])); S.env(sub.frequency, t0, pts.map(([t, f]) => [t, f / 2]));
+  const mix = S.gain(1), subG = S.gain(0.35), sh = S.shaper(2.8);
+  o1.connect(mix); o2.connect(mix); sub.connect(subG); subG.connect(mix);
+  // growl: fast amplitude roughness
+  const fry = S.osc('sine', 34), fryG = S.gain(0.45), body = S.gain(1);
+  fry.connect(fryG); fryG.connect(body.gain);
+  mix.connect(sh); sh.connect(body);
+  const g = S.gain(0);
+  g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(vol, t0 + 0.12); g.gain.setValueAtTime(vol, t0 + dur * 0.55); g.gain.linearRampToValueAtTime(0, t0 + dur);
+  // breath through the same mouth
+  const n = S.noise('pink', dur + 0.5, seed), nG = S.gain(0.5);
+  n.connect(nG); nG.connect(body);
+  for (const [f, q, a, fEnd] of [[620, 4, 1, 520], [1150, 5, 0.6, 900], [2600, 6, 0.28, 2200], [240, 2, 0.5, 200]]) {
+    const bp = S.filt('bandpass', f, q), bg = S.gain(a);
+    S.env(bp.frequency, t0, [[0, f * 0.8], [dur * 0.2, f], [dur, fEnd]]);
+    body.connect(bp); bp.connect(bg); bg.connect(g);
+  }
+  g.connect(out);
+  for (const o of [o1, o2, sub, fry]) { o.start(t0); o.stop(t0 + dur + 0.2); }
+  n.start(t0); n.stop(t0 + dur + 0.2);
+}
+R.lion_roar = (S, out, t0, v) => {
+  roarVoice(S, out, t0, { dur: 1.8, f0: 115, peak: 205, end: 80, vol: 0.85, seed: v });
+  thump(S, out, t0, { f0: 85, f1: 34, dur: 1.2, vol: 0.85 });
+  burst(S, out, t0 + 0.02, { type: 'lowpass', f: 220, dur: 1.6, vol: 0.6, kind: 'brown', attack: 0.15, seed: v + 3 });
+  return 2.2;
+};
+R.berserk = (S, out, t0, v) => {
+  roarVoice(S, out, t0 + 0.05, { dur: 2.3, f0: 95, peak: 175, end: 65, vol: 0.95, seed: v + 1 });
+  // and his heart pounding under it
+  for (const t of [0, 0.42, 1.0, 1.42]) thump(S, out, t0 + t, { f0: 70, f1: 38, dur: 0.22, vol: 0.9 });
+  thump(S, out, t0, { f0: 80, f1: 28, dur: 1.6, vol: 0.8 });
+  return 2.8;
+};
+R.pounce_leap = (S, out, t0, v) => {
+  roarVoice(S, out, t0, { dur: 0.45, f0: 130, peak: 190, end: 120, vol: 0.45, seed: v });
+  thump(S, out, t0, { f0: 100, f1: 40, dur: 0.3, vol: 0.8 });
+  sweepNoise(S, out, t0 + 0.05, { f0: 250, f1: 1800, dur: 0.5, Q: 0.8, vol: 0.55, attack: 0.15, seed: v + 2 });
+  return 0.8;
+};
+R.pounce_land = (S, out, t0, v) => {
+  const sh = S.shaper(2.8); sh.connect(out);
+  burst(S, sh, t0, { type: 'highpass', f: 800, dur: 0.03, vol: 1.1, seed: v });
+  thump(S, sh, t0, { f0: 115, f1: 28, dur: 1.2, sweep: 0.28, vol: 1.3 });
+  burst(S, sh, t0, { type: 'lowpass', f: 2000, f1: 160, dur: 0.9, vol: 0.9, kind: 'pink', seed: v + 1 });
+  burst(S, out, t0 + 0.02, { f: 2400, Q: 1.5, dur: 0.06, vol: 0.4, seed: v + 4 }); // the claws biting in
+  clicks(S, out, t0 + 0.05, { n: 35, dur: 1.0, f: 2400, vol: 0.26 });
+  return 1.8;
+};
+R.hurl_grab = (S, out, t0, v) => {
+  thump(S, out, t0, { f0: 150, f1: 60, dur: 0.2, vol: 0.9 });
+  burst(S, out, t0, { f: 900, Q: 1, dur: 0.1, vol: 0.5, kind: 'pink', seed: v });
+  roarVoice(S, out, t0 + 0.02, { dur: 0.35, f0: 110, peak: 140, end: 100, vol: 0.3, seed: v + 1 });
+  return 0.5;
+};
+R.hurl_throw = (S, out, t0, v) => {
+  sweepNoise(S, out, t0, { f0: 180, f1: 1400, f2: 400, dur: 0.5, Q: 1.1, vol: 1.3, attack: 0.15, seed: v + 2 });
+  roarVoice(S, out, t0, { dur: 0.5, f0: 120, peak: 185, end: 110, vol: 0.5, seed: v + 3 });
+  return 0.7;
+};
+R.step_beast = (S, out, t0, v) => {
+  thump(S, out, t0, { f0: 78, f1: 36, dur: 0.2, vol: 0.9 });
+  burst(S, out, t0, { type: 'lowpass', f: 220, dur: 0.25, vol: 0.45, kind: 'brown', seed: v });
+  // claws on the floor
+  for (let i = 0; i < 3; i++) burst(S, out, t0 + 0.012 + i * 0.011, { type: 'highpass', f: 3400 + i * 300, dur: 0.006, vol: 0.22, seed: v + i + 2 });
+  return 0.4;
+};
+
 const VARIANTS = { punch_light: 4, punch_heavy: 3, swing: 3, swing_heavy: 2, bolt_fire: 3, bolt_hit: 3, bubble_hit: 3, step: 4, step_heavy: 3, rock_hit: 2, zip: 2,
-  plasma_fire: 3, plasma_hit: 3, missile_launch: 2, missile_boom: 2, barrier_hit: 3, step_metal: 4 };
+  plasma_fire: 3, plasma_hit: 3, missile_launch: 2, missile_boom: 2, barrier_hit: 3, step_metal: 4,
+  coin_flick: 3, coin_pop: 3, grenade_bounce: 2, claw_swipe: 3, claw_hit: 3, guard_block: 3, step_beast: 4 };
 
 export class AudioEngine {
   constructor() {

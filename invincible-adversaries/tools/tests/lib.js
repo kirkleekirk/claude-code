@@ -128,10 +128,12 @@ window.T = (() => {
     if (boneNaN(h)) { out.push('NaN in bone transforms'); return out; }
     if (![h.pos.x, h.pos.y, h.pos.z].every(Number.isFinite)) { out.push('NaN position'); return out; }
     const L0 = (lens[h.key] ||= {});
+    // (limb lengths in the hero's own scale: Battle Beast grows while berserk)
+    const sc = h.visual.scale.x || 1;
     for (const side of ['L', 'R']) {
       const b = s[side];
-      const leg = b.thigh.distanceTo(b.shin) + b.shin.distanceTo(b.foot);
-      const arm = b.upper.distanceTo(b.fore) + b.fore.distanceTo(b.hand);
+      const leg = (b.thigh.distanceTo(b.shin) + b.shin.distanceTo(b.foot)) / sc;
+      const arm = (b.upper.distanceTo(b.fore) + b.fore.distanceTo(b.hand)) / sc;
       const ref = (L0[side] ||= { leg, arm });
       if (Math.abs(leg - ref.leg) > 0.02 * ref.leg + 0.01) out.push(`${side} leg stretched ${ref.leg.toFixed(3)}->${leg.toFixed(3)}`);
       if (Math.abs(arm - ref.arm) > 0.02 * ref.arm + 0.01) out.push(`${side} arm stretched ${ref.arm.toFixed(3)}->${arm.toFixed(3)}`);
@@ -149,7 +151,8 @@ window.T = (() => {
       }
       // (while the body is still rotating upright out of flight the legs are on their way down)
       const tilt = 2 * Math.acos(Math.min(1, Math.abs(h.visual.quaternion.w)));
-      if (!allowLift && tilt < 0.45 && Math.min(fy[0], fy[1]) > gy + 0.35) out.push(`no foot on the ground (lowest ${(Math.min(...fy) - gy).toFixed(2)} m up)`);
+      // (in the hero's own scale, like the limb lengths: a berserk Battle Beast's stride floats higher)
+      if (!allowLift && tilt < 0.45 && Math.min(fy[0], fy[1]) > gy + 0.35 * sc) out.push(`no foot on the ground (lowest ${(Math.min(...fy) - gy).toFixed(2)} m up)`);
       if (s.head.y < s.hips.y + 0.25) out.push(`head not above hips`);
       // knees bend forward relative to the pelvis, never backwards
       const legYaw = (h.visYaw ?? h.yaw) + (h.anim.legYaw || 0);

@@ -38,6 +38,17 @@ export const STYLES = {
     bob: 0.035, crouchRun: 0.05, leanRun: 11, armSwing: 0.5, elbowRun: 85, yawAmp: 6, rollAmp: 3, swayAmp: 0.015,
     stepHeight: 0.26, fistRun: 0.6, heavy: 0.4, flyPose: 'ride', idle: 'tactical', chestUp: 3,
   },
+  rex: {
+    stanceW: 0.11, stanceSplit: 0.06, cadenceBase: 1.0, cadencePerSpeed: 0.17, cadenceMax: 2.5,
+    bob: 0.045, crouchRun: 0.05, leanRun: 14, armSwing: 0.7, elbowRun: 90, yawAmp: 10, rollAmp: 4, swayAmp: 0.025,
+    stepHeight: 0.28, fistRun: 0.45, heavy: 0, flyPose: 'superman', idle: 'cocky', chestUp: 1,
+  },
+  // hunched and heavy, claws open
+  battlebeast: {
+    stanceW: 0.17, stanceSplit: 0.09, cadenceBase: 0.85, cadencePerSpeed: 0.14, cadenceMax: 2.1,
+    bob: 0.07, crouchRun: 0.09, leanRun: 18, armSwing: 0.6, elbowRun: 70, yawAmp: 8, rollAmp: 7, swayAmp: 0.035,
+    stepHeight: 0.28, fistRun: 0.15, heavy: 1, flyPose: 'omni', idle: 'beast', chestUp: -8,
+  },
 };
 
 class Action {
@@ -389,6 +400,20 @@ export class Animator {
       return {
         x: lerp(0.24, 0.3, combat) + n * 0.02, y: lerp(-0.95, -0.62, combat), z: lerp(0.08, 0.5, combat),
         elbow: lerp(24, 72, combat), fist: lerp(0.5, 0.85, combat), twist: lerp(0, -30, combat), flex: lerp(-4, 10, combat),
+      };
+    }
+    if (k === 'cocky') {
+      // Rex: loose and cocky, one hand low; in combat both come up with coins between the fingers
+      return {
+        x: lerp(0.22, 0.3, combat) + n * 0.025, y: lerp(-0.95, side === 'R' ? -0.42 : -0.6, combat), z: lerp(0.08, side === 'R' ? 0.48 : 0.36, combat),
+        elbow: lerp(side === 'R' ? 28 : 20, 100, combat), fist: lerp(0.35, 0.7, combat), twist: lerp(4, -20, combat), flex: lerp(-6, 14, combat), spread: 0.15,
+      };
+    }
+    if (k === 'beast') {
+      // Battle Beast: arms hanging heavy in front of the hips, claws open; in combat they come up to strike
+      return {
+        x: lerp(0.3, 0.36, combat) + n * 0.02, y: lerp(-0.86, -0.4, combat), z: lerp(0.22, 0.5, combat),
+        elbow: lerp(34, 82, combat), fist: lerp(0.3, 0.1, combat), twist: lerp(-6, -24, combat), flex: lerp(-10, -26, combat), spread: lerp(0.5, 1, combat),
       };
     }
     if (k === 'proud') {

@@ -25,6 +25,27 @@ export const HEROES = {
       ult: { name: 'MACH BREAKER', key: 'Q', icon: 'ult_inv', desc: 'Rocket into the stratosphere, pick a target, and crash down at Mach 10: up to 420 damage in an 11m crater.' },
     },
   },
+  rex: {
+    key: 'rex', name: 'REX SPLODE', real: 'Rex Sloan',
+    role: 'DUELIST', roleTag: 'Explosive Skirmisher',
+    color: '#ff4f6e', accent: '#ffd23d',
+    hp: 325,
+    radius: 0.4, height: 1.83,
+    speed: 9.4, jump: 11,
+    flight: null, mobility: 'Blast jumps',
+    regen: { delay: 3.5, rate: 28 },
+    camDist: 3.9, camHeight: 1.5,
+    ultCost: 2000,
+    passive: { name: 'Self-Made Explosive', desc: "Can't fly, but his own blasts never hurt him and launch him around: rocket-jump with them. Regenerates 28 HP/s after 3.5s." },
+    abilities: {
+      primary: { name: 'Charged Coins', key: 'LMB', icon: 'coin', desc: 'Flick kinetically charged coins that blow up on impact: 30 damage plus 15 splash, 3 a second.' },
+      secondary: { name: 'Sticky Rod', key: 'RMB', icon: 'rod', cd: 6, desc: 'Throw a charged rod that sticks to whatever it hits. Press RMB again (or wait 3s) to detonate it: 110 damage in 5m.' },
+      a1: { name: 'Blast Jump', key: 'SHIFT', icon: 'blastjump', cd: 6, charges: 2, desc: 'Blow up the ground under your feet and launch about 17m where you look: 45 damage where you left. Works in mid-air. 2 charges.' },
+      a2: { name: 'Concussion Grenade', key: 'E', icon: 'grenade', cd: 10, desc: 'Lob the grenade off your belt: it bounces once and blows, 80 damage in 6m, launching enemies and slowing them 35% for 2s.' },
+      a3: { name: 'Pocket Change', key: 'F', icon: 'coins', cd: 8, desc: 'Fan out 7 short-fused charged coins at once, 24 damage each plus splash. Brutal up close.' },
+      ult: { name: 'SPLODE!', key: 'Q', icon: 'ult_rex', desc: 'Charge your own body for 2s (+30% speed, unstoppable), then detonate: up to 380 damage in 12m. Rex survives it, blown sky-high.' },
+    },
+  },
   eve: {
     key: 'eve', name: 'ATOM EVE', real: 'Samantha Eve Wilkins',
     role: 'STRATEGIST', roleTag: 'Shields & Support',
@@ -88,9 +109,31 @@ export const HEROES = {
       ult: { name: 'A FRACTION OF OUR POWER', key: 'Q', icon: 'ult_omni', desc: 'Blitz between up to 5 enemies within 40m, 150 damage each, ending in a thunderclap.' },
     },
   },
+  battlebeast: {
+    key: 'battlebeast', name: 'BATTLE BEAST', real: 'Thokk',
+    role: 'VANGUARD', roleTag: 'Feral Juggernaut',
+    color: '#efe4cc', accent: '#c4122f',
+    hp: 650,
+    radius: 0.58, height: 2.25,
+    speed: 8.6, jump: 13.5,
+    flight: null, mobility: 'Pounces',
+    regen: { delay: 5, rate: 20 },
+    camDist: 5.1, camHeight: 1.95,
+    ultCost: 2400,
+    passive: { name: 'Thirst for Battle', desc: "Can't fly, but leaps huge distances. Below 50% health he goes berserk: +25% damage and 25% less damage taken." },
+    abilities: {
+      primary: { name: 'Rending Claws', key: 'LMB', icon: 'claws', desc: '3-hit claw combo (55/55/95) that cleaves a wide arc. The double-claw finisher knocks enemies down.' },
+      secondary: { name: 'Brace', key: 'RMB', icon: 'guard', cd: 2, desc: 'Hold to guard behind your gauntlets: 65% less damage from the front while you walk slowly (4s at most). After blocking a big hit your next claw is a counter for +50%.' },
+      a1: { name: 'Pounce', key: 'SHIFT', icon: 'pounce', cd: 8, desc: 'Leap up to 30m onto a point or an enemy, even one in the air: 90 damage in 5m on landing. An enemy landed on directly is pinned for 0.8s.' },
+      a2: { name: 'Primal Roar', key: 'E', icon: 'roar', cd: 12, desc: 'Roar: enemies within 15m deal 30% less damage and are slowed 30% for 3s. Gain 150 overhealth.' },
+      a3: { name: 'Hurl', key: 'F', icon: 'hurl', cd: 11, desc: 'Grab the enemy in front of you and hurl them about 20m where you aim: 60 damage, plus 70 and a stun when they crash.' },
+      ult: { name: 'WORTHY FOE', key: 'Q', icon: 'ult_bb', desc: 'Go berserk for 8s: grow 20% bigger, become unstoppable, take 40% less damage, claw faster and Pounce every 2s.' },
+    },
+  },
 };
 
-export const HERO_KEYS = ['invincible', 'eve', 'robot', 'omniman'];
+// grouped by role on the hero select: duelists, strategists, vanguards
+export const HERO_KEYS = ['invincible', 'rex', 'eve', 'robot', 'omniman', 'battlebeast'];
 
 export const RULES = {
   respawn: 7,
@@ -104,4 +147,5 @@ export const RULES = {
   omniLifesteal: 0.15,
   uplinkRange: 20, // Robot's Tactical Uplink
   uplinkCdRate: 0.2, // extra cooldown recharge rate it gives
+  beastRage: 0.5, // Battle Beast goes berserk below this share of his health
 };

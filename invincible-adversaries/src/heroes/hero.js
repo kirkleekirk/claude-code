@@ -60,8 +60,9 @@ export class Hero {
     this.hp = this.maxHp;
     this.overhealth = 0; this.ohT = 0;
     this.bubble = null;
-    // disruptT: no abilities or flight (EMP); haste: extra move speed; uplinkT: faster cooldowns (Robot's passive)
-    this.status = { slow: 0, slowT: 0, vuln: 0, vulnT: 0, stunT: 0, dr: 0, drT: 0, boost: 0, boostT: 0, rootT: 0, disruptT: 0, haste: 0, hasteT: 0, uplinkT: 0 };
+    // disruptT: no abilities or flight (EMP); haste: extra move speed; uplinkT: faster cooldowns (Robot's passive);
+    // weak: share of outgoing damage lost (Battle Beast's roar)
+    this.status = { slow: 0, slowT: 0, vuln: 0, vulnT: 0, stunT: 0, dr: 0, drT: 0, boost: 0, boostT: 0, rootT: 0, disruptT: 0, haste: 0, hasteT: 0, uplinkT: 0, weak: 0, weakT: 0 };
     this.mode = 'ground';
     this.grounded = true;
     this.groundY = 0;
@@ -99,7 +100,7 @@ export class Hero {
   get ultReady() { return this.ult >= this.def.ultCost; }
   get camHeight() { return this.def.camHeight; }
   get camDist() { return this.def.camDist; }
-  get speedFactor() { return (1 - (this.unstoppable ? 0 : this.status.slow)) * (1 + this.status.haste); }
+  get speedFactor() { return (1 - (this.unstoppable ? 0 : this.status.slow)) * (1 + this.status.haste) * (this.kit && this.kit.speedMul || 1); }
   get disrupted() { return this.status.disruptT > 0; }
   get targetable() { return !this.dead && !this.untargetable && !this.hidden; }
 
@@ -112,7 +113,7 @@ export class Hero {
     this.yaw = this.visYaw = p.z < 0 ? 0 : Math.PI;
     this.aimDir.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
     this.root.rotation.set(0, this.yaw, 0);
-    this.mode = 'ground'; this.grounded = true;
+    this.mode = 'ground'; this.grounded = true; this.launched = false;
     this.anim.feet.L.init = false; this.anim.feet.R.init = false;
     // capes/hair are simulated in world space: carry them along, or they whip across the map
     this.root.updateMatrixWorld(true);
@@ -127,7 +128,7 @@ export class Hero {
     if (this.dead) { this.updateDead(dt); this.updateVisual(dt); this.kit && this.kit.tick && this.kit.tick(dt); return; }
     // timers
     const st = this.status;
-    for (const k of ['slowT', 'vulnT', 'drT', 'boostT', 'hasteT']) if (st[k] > 0) { st[k] -= dt; if (st[k] <= 0) { st[k] = 0; st[k.replace('T', '')] = 0; } }
+    for (const k of ['slowT', 'vulnT', 'drT', 'boostT', 'hasteT', 'weakT']) if (st[k] > 0) { st[k] -= dt; if (st[k] <= 0) { st[k] = 0; st[k.replace('T', '')] = 0; } }
     if (st.stunT > 0) st.stunT -= dt;
     if (st.disruptT > 0) st.disruptT = Math.max(0, st.disruptT - dt);
     if (st.uplinkT > 0) st.uplinkT = Math.max(0, st.uplinkT - dt);
@@ -196,8 +197,8 @@ export class Hero {
     const rx = -Math.cos(ay), rz = Math.sin(ay);
     const mx = it ? it.mx : 0, mz = it ? it.mz : 0;
     const canFly = !!d.flight && !this.disrupted;
-    // an EMP drops a flier out of the sky
-    if (this.mode === 'fly' && this.disrupted) this.mode = 'air';
+    // an EMP drops a flier out of the sky (and a hero who can't fly never stays in flight)
+    if (this.mode === 'fly' && !canFly) this.mode = 'air';
     // toggle flight
     if (it && canFly) {
       const tryFly = it.flyToggle || (it.jump && !this.grounded && this.mode === 'air') || (this.mode === 'air' && it.jumpHeld && this.vel.y < -2);
@@ -245,11 +246,18 @@ export class Hero {
     if (wl > 1) { wx /= wl; wz /= wl; }
     const spd = d.speed * sf;
     wx *= spd; wz *= spd;
-    const accel = this.grounded ? (wl > 0.05 ? 75 : 55) : 24;
-    const dvx = wx - this.vel.x, dvz = wz - this.vel.z;
+    let accel = this.grounded ? (wl > 0.05 ? 75 : 55) : 24;
+    let dvx = wx - this.vel.x, dvz = wz - this.vel.z;
+    if (this.launched && !this.grounded) {
+      // blown into the air (Rex's blast jumps): air control steers but never brakes the launch
+      const v2 = this.vel.x * this.vel.x + this.vel.z * this.vel.z;
+      const along = v2 > 1e-4 ? (dvx * this.vel.x + dvz * this.vel.z) / v2 : 0;
+      if (along < 0) { dvx -= along * this.vel.x; dvz -= along * this.vel.z; }
+      accel = 14;
+    }
     const dl = Math.hypot(dvx, dvz), maxDv = accel * dt;
     if (dl > maxDv) { this.vel.x += dvx / dl * maxDv; this.vel.z += dvz / dl * maxDv; }
-    else { this.vel.x = wx; this.vel.z = wz; }
+    else { this.vel.x += dvx; this.vel.z += dvz; }
     if (it && it.jump && this.grounded) {
       this.vel.y = d.jump;
       this.grounded = false; this.mode = 'air';
@@ -260,6 +268,7 @@ export class Hero {
     this.integrate(dt);
     if (this.grounded && this.mode === 'air') { this.mode = 'ground'; }
     if (!this.grounded && this.mode === 'ground') this.mode = 'air';
+    if (this.grounded) this.launched = false;
   }
 
   land(speed) {
@@ -425,9 +434,9 @@ export class Hero {
 
   onFootstep(side, k) {
     if (this.dead || !this.grounded) return;
-    const heavy = this.key === 'omniman', metal = this.key === 'robot';
-    this.world.sfx(heavy ? 'step_heavy' : metal ? 'step_metal' : 'step', this.pos, { vol: (heavy ? 0.55 : metal ? 0.42 : 0.32) * k, minGap: 0.12, key: this.id, ref: 4 });
-    if (heavy && k > 0.6) this.world.shakeAt(this.pos, 0.04);
+    const beast = this.key === 'battlebeast', heavy = this.key === 'omniman' || beast, metal = this.key === 'robot';
+    this.world.sfx(beast ? 'step_beast' : heavy ? 'step_heavy' : metal ? 'step_metal' : 'step', this.pos, { vol: (heavy ? 0.55 : metal ? 0.42 : 0.32) * k, minGap: 0.12, key: this.id, ref: 4 });
+    if (heavy && k > 0.6) this.world.shakeAt(this.pos, beast ? 0.06 : 0.04);
   }
 
   // helpers for VFX attachment
