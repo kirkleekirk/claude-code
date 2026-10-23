@@ -34,6 +34,8 @@
       <option value="robot">Robot: invincible_vs_robot.glb</option>
       <option value="rex">Rex Splode: invincible_vs_rex_splode.glb</option>
       <option value="battlebeast">Battle Beast: invincible_vs_battle_beast.glb</option>
+      <option value="allen">Allen: scene.gltf and scene.bin (slow: it is culled, decimated and rigged here)</option>
+      <option value="immortal">The Immortal: the-immortal.glb</option>
     </select>
   </label>
   <label>Source folder <input id="dir" type="file" webkitdirectory multiple></label>
@@ -346,6 +348,38 @@ async function build(which) {
     for (const o of meshes) { o.name = o.material.name = names[o.material.name] || o.name; o.material.roughness = 0.6; o.material.metalness = 0; }
     stripBoneNumbers(root);
     const s = fitHeight(root, 2.25);
+    wrap.scale.setScalar(s);
+    wrap.add(root);
+  } else if (which === 'allen') {
+    // Sketchfab's "Allen the Alien - Invincible" (patmateee, CC BY 4.0): an unrigged 1.4M-triangle sculpt
+    const g = await new GLTFLoader(manager).parseAsync(await need('scene.gltf').text(), '');
+    const { buildAllen } = await import('./allen-rig.js');
+    const renderer = new THREE.WebGLRenderer({ antialias: false });
+    const root = await buildAllen(g.scene, { say, renderer });
+    renderer.dispose();
+    const s = fitHeight(root, 2.2);
+    wrap.scale.setScalar(s);
+    wrap.add(root);
+  } else if (which === 'immortal') {
+    // Sketchfab's "THE-IMMORTAL" (joaocarrascok, CC BY 4.0): a low-poly game model rigged like Atom Eve
+    const g = await new GLTFLoader(manager).parseAsync(await need('the-immortal.glb').arrayBuffer(), '');
+    const root = g.scene;
+    root.updateMatrixWorld(true);
+    const meshes = [];
+    root.traverse((o) => { if (o.isMesh) meshes.push(o); });
+    for (const o of meshes) {
+      o.name = /eye_L/.test(o.name) ? 'Immortal_EyeL' : /eye_R/.test(o.name) ? 'Immortal_EyeR' : 'Immortal_Body';
+      o.material.name = 'Immortal_Body';
+      o.material.roughness = 0.6; o.material.metalness = 0;
+    }
+    stripBoneNumbers(root);
+    // the eyeballs are loose meshes beside the skeleton: give them to the eye bones so they turn with the head
+    for (const o of meshes.filter((m) => !m.isSkinnedMesh)) {
+      let bone = null;
+      root.traverse((b) => { if (b.isBone && b.name === (o.name === 'Immortal_EyeL' ? 'Armature_l_Eyes_01SHJnt' : 'Armature_r_Eyes_01SHJnt')) bone = b; });
+      if (bone) { bone.attach(o); say(`${o.name} attached to ${bone.name}`); }
+    }
+    const s = fitHeight(root, 2.02);
     wrap.scale.setScalar(s);
     wrap.add(root);
   } else if (which === 'omniman') {

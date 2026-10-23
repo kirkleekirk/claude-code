@@ -191,7 +191,7 @@ export class HUD {
     this._feedSig = sig;
     f.innerHTML = items.map((e) => {
       const k = e.killer, v = e.victim;
-      const kn = k ? `<span class="t${k.team}">${k.name}</span>` : '<span>The Arena</span>';
+      const kn = k ? `<span class="t${k.team}">${k.name}</span>` : `<span>${w.mode ? 'Spawn defenses' : 'The Arena'}</span>`;
       return `<div class="kf">${kn}<i>${icon(k ? HERO_ICON[k.key] : 'bolt')}</i><span class="t${v.team}">${v.name}</span></div>`;
     }).join('');
   }
@@ -326,5 +326,6 @@ export class HUD {
       a.el.style.transform = `translate(-50%,-50%) rotate(${-ang}rad)`;
       a.el.style.opacity = 1 - a.t / 1.1;
     }
+    if (g.mode && g.mode.hud) g.mode.hud.drawOverlay(c, cam, W, H);
   }
 }

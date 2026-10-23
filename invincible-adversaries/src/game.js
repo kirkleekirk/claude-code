@@ -4,7 +4,10 @@ import { Renderer } from './engine/renderer.js';
 import { ThirdPersonCamera } from './engine/camera.js';
 import { Input } from './engine/input.js';
 import { clamp, damp, rand, yawOf, dirFromYawPitch } from './engine/math.js';
-import { Arena, ARENA } from './world/arena.js';
+import { Arena, ARENA, useMap, terrainY } from './world/arena.js';
+import { ChicagoMap } from './world/city/index.js';
+import { PayloadMode } from './modes/payload.js';
+import { PayloadHUD } from './ui/payloadHud.js';
 import { World } from './world/world.js';
 import { Effects } from './vfx/effects.js';
 import { AudioEngine } from './audio/audio.js';
@@ -17,6 +20,7 @@ import { RobotKit } from './heroes/kits/robot.js';
 import { RexKit } from './heroes/kits/rex.js';
 import { BeastKit } from './heroes/kits/battlebeast.js';
 import { Bot } from './ai/bot.js';
+import { NavGrid } from './ai/nav.js';
 import { HUD } from './ui/hud.js';
 import { Menus } from './ui/menus.js';
 
@@ -48,6 +52,30 @@ export function lineups(playerKey) {
   const pool = fair.length ? fair : splits;
   const [ally, enemy] = pool[Math.floor(Math.random() * pool.length)];
   return [[ally[0], ...shuffle(ally.slice(1))], shuffle(enemy.slice())];
+}
+
+/**
+ * 6v6 lineups: two of each role per team where the roster allows (role queue), each team's six
+ * heroes all different, the player's pick on their own team.
+ */
+export function lineups6(playerKey) {
+  const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const roles = {};
+  for (const k of HERO_KEYS) (roles[HEROES[k].role] ||= []).push(k);
+  const team = (first) => {
+    const t = first ? [first] : [];
+    for (const r of Object.keys(roles)) {
+      const pool = shuffle(roles[r].filter((k) => !t.includes(k)));
+      while (t.filter((k) => HEROES[k].role === r).length < 2 && pool.length) t.push(pool.pop());
+    }
+    // a roster short of a role fills the team from whoever is left
+    const rest = shuffle(HERO_KEYS.filter((k) => !t.includes(k)));
+    while (t.length < 6 && rest.length) t.push(rest.pop());
+    while (t.length < 6) t.push(HERO_KEYS[Math.floor(Math.random() * HERO_KEYS.length)]);
+    return t.slice(0, 6);
+  };
+  const ally = team(playerKey);
+  return [[ally[0], ...shuffle(ally.slice(1))], shuffle(team(null))];
 }
 
 class PlayerController {
@@ -92,6 +120,9 @@ export class Game {
     this.bots = [];
     this.player = null;
     this.preview = null;
+    this.mode = null; this.modeKey = 'arena'; this.side = 'random';
+    this.titleMap = PARAMS.get('map') === 'chicago' ? 'chicago' : 'arena';
+    if (PARAMS.get('mode') === 'payload') this.modeKey = 'payload';
     this.loadSettings();
   }
 
@@ -112,6 +143,8 @@ export class Game {
     this.world = new World({ scene: this.scene, fx: this.fx, audio: this.audio, renderer: this.renderer, camRig: this.camRig, obstacles: this.arena.obstacles });
     // a respawn moves the player across the map: cut rather than chase
     this.world.on('respawn', (e) => { if (e.hero === this.player) this.camRig.cut(); });
+    this.map = this.arena; this.mapKey = 'arena';
+    if (PARAMS.get('map') === 'chicago') { onProgress && onProgress(0.09, 'Building Chicago'); this.setMap('chicago'); }
     this.input = new Input(this.canvas);
     this.input.onLockChange = (locked) => { if (!locked && this.state === 'playing' && !this._noPause) this.pause(); };
     this.pc = new PlayerController(this);
@@ -166,6 +199,8 @@ export class Game {
     this.world.score = [0, 0];
     this.world.feed = [];
     if (this.preview) { this.scene.remove(this.preview.root); this.preview = null; }
+    if (this.mode) { this.mode.hud && this.mode.hud.dispose(); this.mode.dispose(); this.mode = null; }
+    this.ended = false; this.world.slowmo.t = 0;
   }
   spawn(key, team, { isPlayer = false, name } = {}) {
     const h = new Hero(this.world, key, team, { isPlayer, name });
@@ -177,6 +212,7 @@ export class Game {
 
   toTitle() {
     this.clearWorld();
+    this.setMap(this.titleMap);
     this.state = 'title';
     this.input.unlock();
     this.menus.show('title');
@@ -190,13 +226,25 @@ export class Game {
     this.orbit = 0;
   }
 
+  toModes() {
+    this.state = 'modes';
+    this.input.unlock();
+    this.menus.show('modes');
+    this.hud.show(false);
+  }
+  chooseMode(key, side) {
+    this.modeKey = key === 'payload' ? 'payload' : 'arena';
+    this.side = side || 'random';
+    this.toSelect();
+  }
+
   toSelect(fromGame = false) {
     this.state = 'select';
-    this.fromGame = fromGame && !!this.player;
+    this.fromGame = fromGame && !!this.player && !this.ended;
     this.input.unlock();
     this.menus.show('select');
     this.hud.show(false);
-    if (!this.fromGame) this.clearWorld();
+    if (!this.fromGame) { this.clearWorld(); this.setMap(this.titleMap); }
     this.previewHero(this.menus.selected);
   }
 
@@ -206,7 +254,9 @@ export class Game {
     if (this.preview) { this.world.remove(this.preview); }
     const h = new Hero(this.world, k, 0, { name: HEROES[k].name });
     h.kit = new KITS[k](h);
-    h.pos.set(0, 0, -38); h.yaw = 0;
+    // (mid-match in the city the preview stands on Lake Street, under the L)
+    if (this.mapKey === 'chicago') h.pos.set(22, terrainY(22, -33), -33); else h.pos.set(0, 0, -38);
+    h.yaw = 0;
     h.combatStance = 0;
     this.preview = h;
     h.dissolve = 1; h.dissolveTarget = 0;
@@ -219,7 +269,10 @@ export class Game {
 
   startMatch(key) {
     if (this.fromGame && this.player) { this.changeHero(key); this.fromGame = false; return; }
+    this.lastKey = key;
+    if (this.modeKey === 'payload') { this.startPayload(key); return; }
     this.clearWorld();
+    this.setMap('arena');
     this.state = 'playing';
     this.menus.show(null);
     this.hud.show(true);
@@ -232,6 +285,63 @@ export class Game {
     this.ensureAudio();
     this.hud.toast(TOUCH_ONLY ? 'A bot is playing your hero. Use a keyboard and mouse to play yourself.' : 'Fight! ESC for menu & training options');
     if (PARAMS.has('autobot') || TOUCH_ONLY) this.bots.push(this.playerBot = new Bot(this.player, this.world));
+  }
+
+  /** 6v6 payload in destroyed Chicago: build the city if needed, field both teams, start setup */
+  async startPayload(key) {
+    this.clearWorld();
+    this.state = 'loading';
+    this.menus.show('loading');
+    const msg = document.getElementById('load-msg'), fill = document.getElementById('load-fill');
+    if (msg) msg.textContent = this.chicago ? 'Deploying to Chicago' : 'Building destroyed Chicago';
+    if (fill) fill.style.width = '35%';
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 30)));
+    const first = !this.chicago;
+    this.setMap('chicago');
+    const att = this.side === 'attack' ? 0 : this.side === 'defend' ? 1 : (Math.random() < 0.5 ? 0 : 1);
+    this.mode = new PayloadMode(this, this.chicago, { attackers: att });
+    if (this.world.navFor !== this.world.obstacles) { this.world.nav = new NavGrid(this.world); this.world.navFor = this.world.obstacles; }
+    this.player = this.spawn(key, 0, { isPlayer: true, name: 'YOU' });
+    const [ally, enemy] = lineups6(key);
+    for (const k of ally.slice(1)) this.spawn(k, 0);
+    for (const k of enemy) this.spawn(k, 1);
+    for (const h of this.world.heroes) { h.spawnAt(this.world.spawnPoint(h.team)); }
+    this.mode.hud = new PayloadHUD(this, this.mode);
+    const p = this.player, c = this.mode.pos;
+    this.camRig.yaw = Math.atan2(c.x - p.pos.x, c.z - p.pos.z); this.camRig.pitch = -0.1; this.camRig.cut();
+    if (fill) fill.style.width = '80%';
+    if (first) { try { await this.renderer.r.compileAsync(this.scene, this.camRig.cam); } catch (e) { /* compiles on first draw instead */ } }
+    this.state = 'playing';
+    this.menus.show(null);
+    this.hud.show(true);
+    if (!PARAMS.has('capture')) this.input.lock();
+    this.ensureAudio();
+    if (TOUCH_ONLY) this.hud.toast('A bot is playing your hero. Use a keyboard and mouse to play yourself.');
+    if (PARAMS.has('autobot') || TOUCH_ONLY) this.bots.push(this.playerBot = new Bot(this.player, this.world));
+  }
+  /** the match is decided: a beat of slow motion, then the results */
+  endMatch() {
+    if (this.ended) return;
+    this.ended = true;
+    const r = this.mode.result, mine = this.player ? this.player.team : 0, win = r.winner === mine;
+    const attacking = this.mode.att === mine;
+    this.hud.announce(win ? 'VICTORY' : 'DEFEAT', { team: win ? 0 : 1, name: '' }, r.why === 'delivered' ? 'THE PAYLOAD REACHED THE FINAL POINT' : 'TIME RAN OUT');
+    this.world.slowmo = { t: 1.6, scale: 0.35 };
+    this.audio.ready && this.audio.play(win ? 'ult_ready' : 'death', { ui: true, vol: 0.9 });
+    setTimeout(() => {
+      if (!this.ended || !this.mode) return;
+      this.state = 'over';
+      this.input.unlock();
+      this.hud.show(false);
+      const sub = r.why === 'delivered'
+        ? (attacking ? 'You delivered the payload' : 'They delivered the payload')
+        : (attacking ? 'Time ran out before the payload got through' : 'You held them off until time ran out');
+      this.menus.showResults({ win, title: win ? 'VICTORY' : 'DEFEAT', sub, heroes: this.world.heroes, player: this.player });
+    }, 3200);
+  }
+  playAgain() {
+    this.ended = false;
+    this.startMatch(this.lastKey || this.menus.selected);
   }
 
   changeHero(key) {
@@ -286,9 +396,26 @@ export class Game {
     if (e.code === 'KeyU' && this.state === 'playing' && this.player) this.player.ult = this.player.def.ultCost;
   }
 
+  /** switch the world to a map: 'arena' (the training arena) or 'chicago' (the payload map) */
+  setMap(key) {
+    if (this.mapKey === key && this.map) return;
+    if (key === 'chicago' && !this.chicago) this.chicago = new ChicagoMap(this.scene, this.renderer);
+    const m = key === 'chicago' ? this.chicago : this.arena;
+    for (const o of [this.arena, this.chicago]) if (o && o !== m) o.activate(false);
+    m.activate(true);
+    useMap(m.config);
+    this.world.setObstacles(m.obstacles);
+    this.world.makeOrbs();
+    // effects land on rooftops and in the crater; the camera keeps above the ground
+    this.fx.groundAt = key === 'chicago' ? (x, z) => this.world.groundAt(x, z) : null;
+    this.camRig.groundAt = key === 'chicago' ? terrainY : null;
+    this.map = m; this.mapKey = key;
+  }
+
   setQuality(q) {
     this.renderer.setQuality(q);
     this.arena.setShadowRes(this.renderer.q.shadow);
+    if (this.chicago) this.chicago.setShadowRes(this.renderer.q.shadow);
     this.saveSettings();
   }
   loadSettings() { try { this.saved = JSON.parse(localStorage.getItem('ia-settings') || '{}'); } catch (e) { this.saved = {}; } }
@@ -318,15 +445,22 @@ export class Game {
     if (this.playerBot && this.player) { this.camRig.yaw = damp(this.camRig.yaw, this.camRig.yaw + wrapA(yawOf(this.player.intents.aimDir) - this.camRig.yaw), 6, dt); this.camRig.pitch = damp(this.camRig.pitch, Math.asin(clamp(this.player.intents.aimDir.y, -1, 1)) * 0.6 - 0.1, 4, dt); }
     let gdt = dt;
     if (w.hitstopT > 0) { w.hitstopT -= dt; gdt = dt * 0.06; }
+    if (w.slowmo.t > 0) { w.slowmo.t -= dt; gdt *= w.slowmo.scale; }
     w.realDt = dt;
     if (this.state !== 'paused') {
       w.update(gdt);
       this.fx.update(gdt);
     }
+    // the match's objective
+    if (this.mode && (this.state === 'playing' || this.state === 'over')) {
+      this.mode.update(gdt);
+      if (this.mode.hud && this.state === 'playing') this.mode.hud.update(dt);
+      if (this.mode.result && !this.ended) this.endMatch();
+    }
     if (this.preview && this.state === 'select') this.updatePreview(dt);
     this.updateCamera(dt);
     const focus = this.player ? this.player.pos : (this.preview ? this.preview.pos : _v.set(0, 0, 0));
-    this.arena.update(dt, this.time, focus);
+    this.map.update(dt, this.time, focus, this.camRig.cam);
     if (this.audio.ready) {
       this.audio.setListener(this.camRig.cam);
       const p = this.player;

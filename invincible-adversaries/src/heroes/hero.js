@@ -4,7 +4,7 @@ import { Rig, RIG_DEFS } from '../anim/rig.js';
 import { Animator, STYLES } from '../anim/animator.js';
 import { dressHero } from './materials.js';
 import { HEROES, RULES } from './data.js';
-import { ARENA } from '../world/arena.js';
+import { ARENA, terrainY, clampToBounds } from '../world/arena.js';
 import { clamp, clamp01, damp, dampT, lerp, smoothstep, wrapAngle, yawOf, pitchOf, TAU, DEG, ease, rand } from '../engine/math.js';
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _u = new THREE.Vector3(), _q = new THREE.Quaternion();
@@ -283,12 +283,14 @@ export class Hero {
   /** move with collisions against ground, obstacles, arena bounds */
   integrate(dt) {
     const p = this.pos;
+    // walking down a slope (the crater) keeps the feet on it rather than stepping off into the air
+    const stuck = this.grounded && this.mode !== 'fly' && this.vel.y <= 0.01;
     p.addScaledVector(this.vel, dt);
     const w = this.world;
     const r = this.radius;
     // obstacles
-    this.groundY = 0;
-    for (const o of w.obstacles) {
+    this.groundY = terrainY(p.x, p.z);
+    for (const o of w.obstaclesNear(p.x, p.z, r + 0.5, this._near || (this._near = []))) {
       if (o.type === 'cyl') {
         if (p.y > o.h) continue;
         const dx = p.x - o.x, dz = p.z - o.z, d = Math.hypot(dx, dz), rr = o.r + r;
@@ -305,6 +307,9 @@ export class Hero {
         if (!inX || !inZ) continue;
         if (p.y >= mx.y - 0.35) { this.groundY = Math.max(this.groundY, mx.y); continue; }
         if (p.y + this.height < mn.y) continue;
+        // a slab overhead (a ceiling, the deck of the L): bump the head on it rather than being
+        // shoved out sideways across its whole footprint
+        if (mn.y > 0.5 && p.y + this.height - mn.y < 0.8) { p.y = mn.y - this.height; if (this.vel.y > 0) this.vel.y = 0; continue; }
         // push out along minimal axis
         const pl = p.x - (mn.x - r), pr = (mx.x + r) - p.x, pb = p.z - (mn.z - r), pf = (mx.z + r) - p.z;
         const m = Math.min(pl, pr, pb, pf);
@@ -319,14 +324,10 @@ export class Hero {
     // rather than letting forward motion carry the body into the box
     if (p.y < this.groundY) { p.y = this.groundY; if (this.vel.y < 0) this.vel.y = 0; }
     // bounds
-    const R = Math.hypot(p.x, p.z);
-    if (R > ARENA.boundR) {
-      p.x *= ARENA.boundR / R; p.z *= ARENA.boundR / R;
-      const vo = (this.vel.x * p.x + this.vel.z * p.z) / ARENA.boundR;
-      if (vo > 0) { this.vel.x -= p.x / ARENA.boundR * vo; this.vel.z -= p.z / ARENA.boundR * vo; }
-    }
+    clampToBounds(p, this.vel, r);
     if (p.y > ARENA.ceiling) { p.y = ARENA.ceiling; if (this.vel.y > 0) this.vel.y = 0; }
     // ground
+    if (stuck && p.y > this.groundY && p.y - this.groundY < 0.6) p.y = this.groundY;
     const was = this.grounded;
     if (p.y <= this.groundY + 0.001 && this.vel.y <= 0.01) {
       const impact = -this.vel.y;
@@ -475,7 +476,9 @@ export class Hero {
 
   die(killer, dir) {
     this.dead = true; this.deadT = 0;
-    this.respawnT = RULES.respawn;
+    // (a mode can set a respawn time, or one per team)
+    const rt = this.world.respawnTime;
+    this.respawnT = rt == null ? RULES.respawn : Array.isArray(rt) ? rt[this.team] : rt;
     this.killDir.copy(dir || _v.set(Math.sin(this.yaw + Math.PI), 0, Math.cos(this.yaw + Math.PI)));
     this.killDir.y = 0; if (this.killDir.lengthSq() < 0.01) this.killDir.set(0, 0, 1); this.killDir.normalize();
     this.endActions(true);

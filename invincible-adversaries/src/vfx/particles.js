@@ -33,8 +33,6 @@ const VERT = /* glsl */`
       corner = mat2(c, -s, s, c) * corner;
     }
     mv.xy += corner;
-    // soft fade into ground for smoke
-    if (vShape == 4.0) vColor.a *= smoothstep(0.0, size * 0.45, iPos.y + size * 0.1);
     // fade particles that get in the camera's face so effects never fog the screen
     float dz = -mv.z;
     vColor.a *= smoothstep(0.35, 0.35 + max(1.5, size * 1.6), dz);
@@ -174,7 +172,10 @@ export class ParticleSystem {
       const dr = Math.max(0, 1 - this.drag[i] * dt);
       v[i3] *= dr; v[i3 + 1] = v[i3 + 1] * dr - this.grav[i] * dt; v[i3 + 2] *= dr;
       p[i3] += v[i3] * dt; p[i3 + 1] += v[i3 + 1] * dt; p[i3 + 2] += v[i3 + 2] * dt;
-      if (this.floor[i] && p[i3 + 1] < 0.02) { p[i3 + 1] = 0.02; v[i3 + 1] = -v[i3 + 1] * 0.35; v[i3] *= 0.7; v[i3 + 2] *= 0.7; }
+      if (this.floor[i]) {
+        const gy = (this.ground ? this.ground(p[i3], p[i3 + 2]) : 0) + 0.02;
+        if (p[i3 + 1] < gy) { p[i3 + 1] = gy; v[i3 + 1] = -v[i3 + 1] * 0.35; v[i3] *= 0.7; v[i3 + 2] *= 0.7; }
+      }
       this.rot[i] += this.rotV[i] * dt;
     }
     this.n = n;
@@ -190,6 +191,12 @@ export class ParticleSystem {
       for (let k = 0; k < 4; k++) ac[i4 + k] = this.c0[i4 + k] + (this.c1[i4 + k] - this.c0[i4 + k]) * tc;
       ac[i4 + 3] *= fi;
       am[i4] = (this.s0[i] + (this.s1[i] - this.s0[i]) * t) * this.scale;
+      // smoke fades softly into the ground under it rather than cutting a hard line across it
+      if (this.shape[i] === 4) {
+        const gy = this.ground ? this.ground(p[i3], p[i3 + 2]) : 0, sz = am[i4];
+        const k = Math.min(1, Math.max(0, (p[i3 + 1] - gy + sz * 0.1) / (sz * 0.45 + 1e-6)));
+        ac[i4 + 3] *= k * k * (3 - 2 * k);
+      }
       am[i4 + 1] = this.rot[i]; am[i4 + 2] = this.shape[i]; am[i4 + 3] = this.seed[i];
     }
     this.geo.instanceCount = n;

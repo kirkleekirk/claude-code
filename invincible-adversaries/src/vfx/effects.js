@@ -274,8 +274,9 @@ class Debris {
         d.p.addScaledVector(d.v, dt);
         _q.setFromEuler(new THREE.Euler(d.av.x * dt, d.av.y * dt, d.av.z * dt));
         d.q.multiply(_q);
-        if (d.p.y < d.size * 0.5) {
-          d.p.y = d.size * 0.5;
+        const gy = this.ground ? this.ground(d.p.x, d.p.z) : 0;
+        if (d.p.y < gy + d.size * 0.5) {
+          d.p.y = gy + d.size * 0.5;
           if (Math.abs(d.v.y) < 2) { d.rest = d.v.lengthSq() < 4; d.v.y = 0; }
           d.v.y = Math.abs(d.v.y) * 0.32; d.v.x *= 0.6; d.v.z *= 0.6; d.av.multiplyScalar(0.6);
         }
@@ -446,6 +447,7 @@ export class Effects {
     this.alpha = new ParticleSystem(scene, { max: Math.round(3500 * quality), additive: false, order: 11 });
     this.lights = new LightPool(scene, 6);
     this.debris = new Debris(scene, 280);
+    this.debris.ground = this.add.ground = this.alpha.ground = (x, z) => this.ground(x, z);
     this.items = [];
     this.trails = [];
     this.updaters = [];
@@ -485,12 +487,14 @@ export class Effects {
   }
 
   every(fn) { this.updaters.push(fn); }
+  /** ground height for effects that sit on it (set by the game to the world's) */
+  ground(x, z) { return this.groundAt ? this.groundAt(x, z) : 0; }
   trail(opts) { const t = new Trail(this, opts); this.trails.push(t); return t; }
 
   // ---------- primitives ----------
   ring(pos, { color = 0xffffff, intensity = 1.5, r0 = 0.3, r1 = 6, life = 0.45, soft = 0.4, y = 0.05, normal = null, additive = true } = {}) {
     const m = new THREE.Mesh(this.ringGeo, ringMat(color, intensity, soft, additive));
-    m.position.copy(pos); if (y !== null && !normal) m.position.y = Math.max(m.position.y, y);
+    m.position.copy(pos); if (y !== null && !normal) m.position.y = Math.max(m.position.y, this.ground(pos.x, pos.z) + y);
     if (normal) m.quaternion.setFromUnitVectors(UP, normal);
     m.renderOrder = 7;
     this.scene.add(m);
@@ -531,7 +535,7 @@ export class Effects {
     const mat = new THREE.MeshBasicMaterial({ map: this.tex[kind], transparent: true, depthWrite: false, opacity, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
     if (kind === 'atom') { mat.blending = THREE.AdditiveBlending; mat.color.setRGB(1.5, 0.45, 1.3); }
     const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size).rotateX(-Math.PI / 2), mat);
-    m.position.set(pos.x, 0.03 + this.decals.length * 0.0005, pos.z);
+    m.position.set(pos.x, this.ground(pos.x, pos.z) + 0.03 + this.decals.length * 0.0005, pos.z);
     m.rotation.y = rot;
     m.renderOrder = 2;
     this.scene.add(m);
@@ -584,7 +588,7 @@ export class Effects {
     for (let i = 0; i < n; i++) {
       const a = (i / n) * TAU + rand(-0.1, 0.1);
       _v.set(Math.cos(a), 0.08, Math.sin(a));
-      _w.copy(pos).addScaledVector(_v, radius); _w.y = 0.3;
+      _w.copy(pos).addScaledVector(_v, radius); _w.y = this.ground(_w.x, _w.z) + 0.3;
       this.alpha.spawn({ p: _w, v: _v.clone().multiplyScalar(speed * rand(0.6, 1.1)).setY(rand(0.5, 2)), life: life * rand(0.7, 1.2), size, size1, color, color1: [color[0], color[1], color[2], 0], shape: SHAPE.SMOKE, drag: 3.2, grav: -0.3, rotV: rand(-1, 1), curve: 0.7, fadeIn: 0.04 });
     }
   }
@@ -626,16 +630,17 @@ export class Effects {
     if (power > 1.2) this.renderer.addWave(pos, { strength: 0.025 * power, life: 0.35, speed: 1.2, width: 0.05 });
   }
   groundSlam(pos, { power = 1, color = 0xffffff, crater = true, dust = true } = {}) {
-    const p = _v.copy(pos); p.y = 0.05;
-    this.ring(p, { color: 0xffffff, intensity: 1.35, r0: 0.5, r1: 7 * power, life: 0.5, soft: 0.25 });
+    const p = _v.copy(pos); p.y = this.ground(p.x, p.z) + 0.05;
+    this.ring(p, { color: 0xffffff, intensity: 1.35, r0: 0.5, r1: 7 * power, life: 0.5, soft: 0.25, y: null });
     this.ring(p, { color: 0xffe2b0, intensity: 0.7, r0: 0.3, r1: 11 * power, life: 0.8, soft: 0.5 });
-    this.sphere(_w.copy(p).setY(0.4), { color, intensity: 0.75, r0: 0.5, r1: 4.5 * power, life: 0.26, fresnel: 2.2 });
-    this.glow(_w.copy(p).setY(0.8), { color: [1.8, 1.6, 1.4, 1], size: 2.2 * power, life: 0.15 });
-    if (dust) { this.dustRing(p, { n: Math.round(26 * power), radius: 0.8, speed: 15 * power, size: 1.4 * power, size1: 4 * power }); this.smoke(_w.copy(p).setY(0.6), { n: Math.round(8 * power), size: 1.6 * power, size1: 4.5 * power, speed: 4 }); }
+    const gy = p.y - 0.05;
+    this.sphere(_w.copy(p).setY(gy + 0.4), { color, intensity: 0.75, r0: 0.5, r1: 4.5 * power, life: 0.26, fresnel: 2.2 });
+    this.glow(_w.copy(p).setY(gy + 0.8), { color: [1.8, 1.6, 1.4, 1], size: 2.2 * power, life: 0.15 });
+    if (dust) { this.dustRing(p, { n: Math.round(26 * power), radius: 0.8, speed: 15 * power, size: 1.4 * power, size1: 4 * power }); this.smoke(_w.copy(p).setY(gy + 0.6), { n: Math.round(8 * power), size: 1.6 * power, size1: 4.5 * power, speed: 4 }); }
     this.rocks(p, { n: Math.round(12 * power), speed: 10 * power, size: 0.22 * power });
-    this.sparks(_w.copy(p).setY(0.3), UP, { n: Math.round(18 * power), speed: 16 * power, spread: 1.2, life: 0.5 });
+    this.sparks(_w.copy(p).setY(gy + 0.3), UP, { n: Math.round(18 * power), speed: 16 * power, spread: 1.2, life: 0.5 });
     if (crater) this.decal(p, 5.5 * power, 'crater', 16, 0.95);
-    this.lights.flash(_w.copy(p).setY(1.8), 0xfff0dd, 24 * power, 14 * power, 0.3);
+    this.lights.flash(_w.copy(p).setY(gy + 1.8), 0xfff0dd, 24 * power, 14 * power, 0.3);
     this.renderer.addWave(p, { strength: 0.05 * power, life: 0.55, speed: 1.6, width: 0.07 });
   }
   sonicBoom(pos, dir, { scale = 1 } = {}) {

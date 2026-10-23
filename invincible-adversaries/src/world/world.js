@@ -1,17 +1,20 @@
 import * as THREE from 'three';
 import { Projectile } from '../combat/projectiles.js';
 import { RULES } from '../heroes/data.js';
-import { ARENA } from './arena.js';
+import { ARENA, terrainY } from './arena.js';
 import { clamp, clamp01, segSegDist2, rand, TAU } from '../engine/math.js';
 import { SHAPE } from '../vfx/particles.js';
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _u = new THREE.Vector3(), _q = new THREE.Quaternion();
 const UP = new THREE.Vector3(0, 1, 0);
+const CELL = 8; // m: obstacle grid cell
+const cellKey = (i, k) => (i + 32768) * 65536 + (k + 32768);
 
 export class World {
   constructor({ scene, fx, audio, renderer, camRig, obstacles }) {
     this.scene = scene; this.fx = fx; this.audio = audio; this.renderer = renderer; this.camRig = camRig;
-    this.obstacles = obstacles;
+    this.dynamic = []; // moving boxes (the payload), checked alongside the grid
+    this.setObstacles(obstacles);
     this.heroes = [];
     this.projectiles = [];
     this.zones = [];
@@ -27,7 +30,37 @@ export class World {
     this.makeOrbs();
   }
 
+  /** swap in a map's obstacles: boxes { type: 'box', min, max } and cylinders { type: 'cyl', x, z, r, h } */
+  setObstacles(list) {
+    this.obstacles = list;
+    this.grid = new Map();
+    this._stamp = 0;
+    for (const o of list) {
+      o._stamp = 0;
+      const x0 = o.type === 'cyl' ? o.x - o.r : o.min.x, x1 = o.type === 'cyl' ? o.x + o.r : o.max.x;
+      const z0 = o.type === 'cyl' ? o.z - o.r : o.min.z, z1 = o.type === 'cyl' ? o.z + o.r : o.max.z;
+      for (let i = Math.floor(x0 / CELL); i <= Math.floor(x1 / CELL); i++) for (let k = Math.floor(z0 / CELL); k <= Math.floor(z1 / CELL); k++) {
+        const key = cellKey(i, k);
+        let c = this.grid.get(key);
+        if (!c) this.grid.set(key, c = []);
+        c.push(o);
+      }
+    }
+  }
+  /** obstacles whose footprint may reach within r of (x, z), into out (cleared first) */
+  obstaclesNear(x, z, r, out = []) {
+    out.length = 0;
+    const st = ++this._stamp;
+    for (let i = Math.floor((x - r) / CELL); i <= Math.floor((x + r) / CELL); i++) for (let k = Math.floor((z - r) / CELL); k <= Math.floor((z + r) / CELL); k++) {
+      const c = this.grid.get(cellKey(i, k));
+      if (c) for (const o of c) if (o._stamp !== st) { o._stamp = st; out.push(o); }
+    }
+    for (const o of this.dynamic) if (x > o.min.x - r && x < o.max.x + r && z > o.min.z - r && z < o.max.z + r) out.push(o);
+    return out;
+  }
+
   on(ev, fn) { (this.listeners[ev] ||= []).push(fn); }
+  off(ev, fn) { const l = this.listeners[ev]; if (l) this.listeners[ev] = l.filter((f) => f !== fn); }
   emit(ev, ...a) { const l = this.listeners[ev]; if (l) for (const f of l) f(...a); }
 
   add(h) { this.heroes.push(h); return h; }
@@ -93,20 +126,91 @@ export class World {
   /** ray vs ground & obstacles; returns {dist, point, normal} */
   rayWorld(origin, dir, maxDist) {
     let bd = maxDist, n = null;
-    if (dir.y < -1e-5) {
-      const t = -origin.y / dir.y;
-      if (t >= 0 && t < bd) { bd = t; n = UP; }
-    }
-    for (const o of this.obstacles) {
-      if (o.type === 'cyl') {
-        const t = rayCyl(origin, dir, o);
-        if (t >= 0 && t < bd) { bd = t; n = _u.set(origin.x + dir.x * t - o.x, 0, origin.z + dir.z * t - o.z).normalize().clone(); }
-      } else {
-        const r = rayBox(origin, dir, o.min, o.max);
-        if (r && r.t < bd) { bd = r.t; n = r.n; }
+    const tg = this.rayGround(origin, dir, bd);
+    if (tg >= 0) { bd = tg; n = ARENA.terrain ? this.groundNormal(origin.x + dir.x * tg, origin.z + dir.z * tg) : UP; }
+    // obstacles in the grid cells the ray crosses, nearest first, until the best hit is behind us
+    const st = ++this._stamp, grid = this.grid;
+    let i = Math.floor(origin.x / CELL), k = Math.floor(origin.z / CELL);
+    const test = (i, k) => {
+      const c = grid.get(cellKey(i, k));
+      if (!c) return;
+      for (const o of c) {
+        if (o._stamp === st) continue;
+        o._stamp = st;
+        if (o.type === 'cyl') {
+          const t = rayCyl(origin, dir, o);
+          if (t >= 0 && t < bd) { bd = t; n = _u.set(origin.x + dir.x * t - o.x, 0, origin.z + dir.z * t - o.z).normalize().clone(); }
+        } else {
+          const r = rayBox(origin, dir, o.min, o.max);
+          if (r && r.t < bd) { bd = r.t; n = r.n; }
+        }
+      }
+    };
+    for (const o of this.dynamic) { const r = rayBox(origin, dir, o.min, o.max); if (r && r.t < bd) { bd = r.t; n = r.n; } }
+    const dx = dir.x, dz = dir.z;
+    if (Math.abs(dx) < 1e-9 && Math.abs(dz) < 1e-9) test(i, k);
+    else {
+      const sx = dx > 0 ? 1 : -1, sz = dz > 0 ? 1 : -1;
+      let tx = Math.abs(dx) > 1e-9 ? ((dx > 0 ? i + 1 : i) * CELL - origin.x) / dx : Infinity;
+      let tz = Math.abs(dz) > 1e-9 ? ((dz > 0 ? k + 1 : k) * CELL - origin.z) / dz : Infinity;
+      const ddx = Math.abs(dx) > 1e-9 ? CELL / Math.abs(dx) : Infinity, ddz = Math.abs(dz) > 1e-9 ? CELL / Math.abs(dz) : Infinity;
+      for (let guard = 0; guard < 4096; guard++) {
+        test(i, k);
+        const t = Math.min(tx, tz);
+        if (t > bd) break;
+        if (tx < tz) { tx += ddx; i += sx; } else { tz += ddz; k += sz; }
       }
     }
     return n ? { dist: bd, point: origin.clone().addScaledVector(dir, bd), normal: n } : null;
+  }
+  /**
+   * Ray vs the ground: the y = 0 plane, and the current map's terrain inside its terrain regions
+   * (circles { x, z, r } where the ground isn't flat), marched in steps no longer than the gap
+   * below the ray. Returns the distance, or -1.
+   */
+  rayGround(o, d, maxDist) {
+    const regions = ARENA.terrain ? ARENA.terrainRegions || [] : [];
+    const inRegion = (x, z) => { for (const R of regions) if ((x - R.x) ** 2 + (z - R.z) ** 2 < R.r * R.r) return true; return false; };
+    let best = -1;
+    if (d.y < -1e-5) {
+      const t = -o.y / d.y;
+      if (t >= 0 && t < maxDist && !inRegion(o.x + d.x * t, o.z + d.z * t)) best = t;
+    }
+    if (!regions.length) return best;
+    const T = ARENA.terrain, top = (ARENA.terrainMax || 0) + 0.05;
+    for (const R of regions) {
+      // where the ray is over the circle, and low enough to reach the terrain
+      const ox = o.x - R.x, oz = o.z - R.z, a = d.x * d.x + d.z * d.z;
+      let t0 = 0, t1 = best >= 0 ? best : maxDist;
+      if (a > 1e-12) {
+        const b = ox * d.x + oz * d.z, c = ox * ox + oz * oz - R.r * R.r, disc = b * b - a * c;
+        if (disc < 0) continue;
+        const sq = Math.sqrt(disc);
+        t0 = Math.max(t0, (-b - sq) / a); t1 = Math.min(t1, (-b + sq) / a);
+      } else if (ox * ox + oz * oz > R.r * R.r) continue;
+      if (o.y > top) { if (d.y >= -1e-6) continue; t0 = Math.max(t0, (o.y - top) / -d.y); }
+      if (d.y > 1e-6) t1 = Math.min(t1, (top - o.y) / d.y);
+      if (t0 > t1) continue;
+      let t = t0, gap = o.y + d.y * t - T(o.x + d.x * t, o.z + d.z * t);
+      if (gap <= 0) { if (best < 0 || t < best) best = t; continue; }
+      while (t < t1) {
+        const pt = t;
+        t = Math.min(t1, t + Math.max(0.15, Math.min(3, gap * 0.55)));
+        gap = o.y + d.y * t - T(o.x + d.x * t, o.z + d.z * t);
+        if (gap <= 0) {
+          let lo = pt, hi = t;
+          for (let j = 0; j < 10; j++) { const m = (lo + hi) / 2; if (o.y + d.y * m - T(o.x + d.x * m, o.z + d.z * m) > 0) lo = m; else hi = m; }
+          if (best < 0 || hi < best) best = hi;
+          break;
+        }
+      }
+    }
+    return best;
+  }
+  groundNormal(x, z) {
+    if (!ARENA.terrain) return UP;
+    const e = 0.4, T = ARENA.terrain;
+    return new THREE.Vector3(T(x - e, z) - T(x + e, z), 2 * e, T(x, z - e) - T(x, z + e)).normalize();
   }
   sweepWorld(a, b, radius) {
     _v.subVectors(b, a);
@@ -114,10 +218,12 @@ export class World {
     if (len < 1e-6) return null;
     _v.multiplyScalar(1 / len);
     // ground with radius
-    if (b.y < radius * 0.5) {
-      const t = a.y > radius * 0.5 ? (a.y - radius * 0.5) / (a.y - b.y) : 0;
-      const p = a.clone().lerp(b, t); p.y = Math.max(0.02, p.y);
-      return { point: p, normal: UP };
+    const gb = terrainY(b.x, b.z);
+    if (b.y < gb + radius * 0.5) {
+      const ga = terrainY(a.x, a.z), ha = a.y - ga - radius * 0.5, hb = b.y - gb - radius * 0.5;
+      const t = ha > 0 ? ha / (ha - hb) : 0;
+      const p = a.clone().lerp(b, t); p.y = Math.max(terrainY(p.x, p.z) + 0.02, p.y);
+      return { point: p, normal: this.groundNormal(p.x, p.z) };
     }
     const hit = this.rayWorld(a, _v, len);
     if (hit && hit.normal !== UP) return { point: hit.point.addScaledVector(_v, -radius * 0.5), normal: hit.normal };
@@ -125,15 +231,16 @@ export class World {
   }
   /** true when a hero-sized body at p would be inside a wall or cover (rather than on top of it) */
   blocked(p, r = 0.45) {
-    for (const o of this.obstacles) {
+    for (const o of this.obstaclesNear(p.x, p.z, r + 0.5, this._qa || (this._qa = []))) {
       if (o.type === 'cyl') { if (p.y < o.h && Math.hypot(p.x - o.x, p.z - o.z) < o.r + r) return true; }
       else if (p.x > o.min.x - r && p.x < o.max.x + r && p.z > o.min.z - r && p.z < o.max.z + r && p.y < o.max.y - 0.35 && p.y + 1.8 > o.min.y) return true;
     }
     return false;
   }
+  /** height of the ground or the top of whatever stands there (cover, a rooftop) */
   groundAt(x, z) {
-    let y = 0;
-    for (const o of this.obstacles) if (o.type === 'box' && x > o.min.x && x < o.max.x && z > o.min.z && z < o.max.z) y = Math.max(y, o.max.y);
+    let y = terrainY(x, z);
+    for (const o of this.obstaclesNear(x, z, 0, this._qb || (this._qb = []))) if (o.type === 'box' && x > o.min.x && x < o.max.x && z > o.min.z && z < o.max.z) y = Math.max(y, o.max.y);
     return y;
   }
   /** the first barrier not of `team` that the segment a->b crosses: { barrier, t, point } or null */
@@ -266,7 +373,7 @@ export class World {
   }
 
   respawn(h) {
-    const sp = ARENA.spawns[h.team];
+    const sp = this.spawnPoint(h.team);
     h.revive(null, 1);
     h.spawnAt(sp);
     h.ult = h.ult; // keep ult
@@ -274,6 +381,18 @@ export class World {
     this.fx.ring(h.pos, { color: h.team === 0 ? 0x4fb4ff : 0xff3b4a, r1: 5, life: 0.6, intensity: 2 });
     this.sfx('respawn', h.pos, { vol: 0.7 });
     this.emit('respawn', { hero: h });
+  }
+
+  /** somewhere free around the team's spawn point (heroes don't all appear in one spot) */
+  spawnPoint(team) {
+    const c = ARENA.spawns[team], s = (ARENA.spawnSpreads && ARENA.spawnSpreads[team]) ?? ARENA.spawnSpread ?? 3;
+    for (let k = 0; k < 12; k++) {
+      const a = Math.random() * TAU, r = Math.sqrt(Math.random()) * s;
+      const p = new THREE.Vector3(c.x + Math.cos(a) * r, 0, c.z + Math.sin(a) * r);
+      p.y = this.groundAt(p.x, p.z);
+      if (!this.blocked(p) && Math.abs(p.y - c.y) < 1.5) return p;
+    }
+    return c.clone();
   }
 
   // ------------------------------------------------------------------ fx helpers
@@ -296,27 +415,31 @@ export class World {
   }
 
   // ------------------------------------------------------------------ orbs
+  /** health orbs at the current map's spots (rebuilt when the map changes) */
   makeOrbs() {
-    const pts = [[-40, -18], [40, 18], [40, -18], [-40, 18]];
-    const geo = new THREE.IcosahedronGeometry(0.42, 2);
-    const ringGeo = new THREE.TorusGeometry(0.75, 0.04, 8, 48);
+    for (const o of this.orbs) { this.scene.remove(o.g, o.base); }
+    this.orbs = [];
+    const pts = ARENA.orbs || [];
+    const geo = this._orbGeo || (this._orbGeo = new THREE.IcosahedronGeometry(0.42, 2));
+    const ringGeo = this._orbRing || (this._orbRing = new THREE.TorusGeometry(0.75, 0.04, 8, 48));
     for (const [x, z] of pts) {
+      const gy = this.groundAt(x, z);
       const g = new THREE.Group();
-      g.position.set(x, 1.2, z);
+      g.position.set(x, gy + 1.2, z);
       const core = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: new THREE.Color(0.6, 3.2, 1.6) }));
       const r1 = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(0.8, 2.6, 1.4), transparent: true, opacity: 0.9 }));
       const r2 = r1.clone();
       g.add(core, r1, r2);
       const base = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.3, 0.25, 24), new THREE.MeshStandardMaterial({ color: 0x9aa3ad, roughness: 0.6 }));
-      base.position.set(x, 0.12, z); base.receiveShadow = true;
+      base.position.set(x, gy + 0.12, z); base.receiveShadow = true;
       this.scene.add(g, base);
-      this.orbs.push({ g, core, r1, r2, pos: new THREE.Vector3(x, 1.2, z), t: 0, active: true });
+      this.orbs.push({ g, base, core, r1, r2, pos: new THREE.Vector3(x, gy + 1.2, z), y0: gy + 1.2, t: 0, active: true });
     }
   }
   updateOrbs(dt) {
     for (const o of this.orbs) {
       o.t += dt;
-      o.g.position.y = 1.2 + Math.sin(o.t * 2) * 0.15;
+      o.g.position.y = o.y0 + Math.sin(o.t * 2) * 0.15;
       o.r1.rotation.set(o.t * 1.3, o.t * 0.7, 0); o.r2.rotation.set(-o.t * 0.9, 0, o.t * 1.1);
       if (!o.active) {
         o.respawn -= dt;
@@ -327,7 +450,7 @@ export class World {
       if (Math.random() < dt * 8) this.fx.add.spawn({ p: [o.pos.x + rand(-0.4, 0.4), o.g.position.y + rand(-0.3, 0.3), o.pos.z + rand(-0.4, 0.4)], v: [0, rand(0.6, 1.4), 0], life: 0.8, size: 0.07, size1: 0.01, color: [0.6, 3, 1.4, 1], color1: [0.6, 3, 1.4, 0], shape: SHAPE.STAR });
       for (const h of this.heroes) {
         if (h.dead || h.hp >= h.maxHp - 1) continue;
-        if (h.pos.distanceToSquared(_v.set(o.pos.x, h.pos.y, o.pos.z)) < 1.6 && Math.abs(h.pos.y - 0.5) < 2.2) {
+        if (h.pos.distanceToSquared(_v.set(o.pos.x, h.pos.y, o.pos.z)) < 1.6 && Math.abs(h.pos.y - (o.y0 - 0.7)) < 2.2) {
           this.heal(null, h, RULES.orbHeal);
           o.active = false; o.respawn = RULES.orbRespawn;
           this.fx.healBurst(h.pos);

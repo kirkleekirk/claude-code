@@ -8,8 +8,10 @@ export class Menus {
     this.g = game;
     this.selected = 'invincible';
     this.bindTitle();
+    this.bindModes();
     this.buildSelect();
     this.bindPause();
+    this.bindResults();
   }
   sfx(n) { this.g.audio && this.g.audio.ready && this.g.audio.play(n, { ui: true, vol: 0.7 }); }
   hover(el) { el.addEventListener('mouseenter', () => this.sfx('ui_hover')); }
@@ -25,11 +27,46 @@ export class Menus {
     play.addEventListener('click', async () => {
       await this.g.ensureAudio();
       this.sfx('ui_select');
-      this.g.toSelect();
+      this.g.toModes();
     });
     const ctl = $('#btn-controls');
     this.hover(ctl);
     ctl.addEventListener('click', async () => { await this.g.ensureAudio(); this.sfx('ui_click'); $('#controls-panel').classList.toggle('open'); });
+  }
+
+  bindModes() {
+    for (const card of document.querySelectorAll('#modes .mcard')) {
+      this.hover(card);
+      const go = (e) => {
+        const side = e && e.target.closest && e.target.closest('.mside span');
+        if (side) { for (const sp of card.querySelectorAll('.mside span')) sp.classList.toggle('on', sp === side); this.sfx('ui_click'); return; }
+        this.sfx('ui_select');
+        const on = card.querySelector('.mside .on');
+        this.g.chooseMode(card.dataset.mode, on ? on.dataset.side : null);
+      };
+      card.addEventListener('click', go);
+      card.addEventListener('keydown', (e) => { if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); go(); } });
+    }
+    const back = $('#btn-mode-back');
+    this.hover(back);
+    back.addEventListener('click', () => { this.sfx('ui_click'); this.g.toTitle(); });
+    window.addEventListener('keydown', (e) => { if (document.body.dataset.screen === 'modes' && e.code === 'Escape') this.g.toTitle(); });
+  }
+
+  bindResults() {
+    const bind = (id, fn) => { const el = $(id); this.hover(el); el.addEventListener('click', () => { this.sfx('ui_click'); fn(); }); };
+    bind('#btn-again', () => this.g.playAgain());
+    bind('#btn-res-hero', () => this.g.toSelect());
+    bind('#btn-res-quit', () => this.g.toTitle());
+  }
+  /** fill the results screen: who won, why, and every hero's numbers */
+  showResults({ win, title, sub, heroes, player }) {
+    const t = $('#results .res-title');
+    t.textContent = title; t.classList.toggle('lose', !win);
+    $('#results .res-sub').textContent = sub;
+    const table = (team, name) => `<table class="t${team}"><caption>${name}</caption><tr><th>HERO</th><th>ELIMS</th><th>DEATHS</th><th>DAMAGE</th><th>HEALING</th></tr>${heroes.filter((h) => h.team === team).sort((a, b) => b.damageDone - a.damageDone).map((h) => `<tr class="${h === player ? 'me' : ''}"><td>${h === player ? 'YOU · ' : ''}${HEROES[h.key].name}</td><td>${h.kills}</td><td>${h.deaths}</td><td>${Math.round(h.damageDone).toLocaleString()}</td><td>${Math.round(h.healingDone).toLocaleString()}</td></tr>`).join('')}</table>`;
+    $('#results .res-teams').innerHTML = table(0, 'YOUR TEAM') + table(1, 'ENEMY TEAM');
+    this.show('results');
   }
 
   buildSelect() {

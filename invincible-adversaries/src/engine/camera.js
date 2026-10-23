@@ -102,7 +102,9 @@ export class ThirdPersonCamera {
     } else if ((this.clearT += dt) > BOOM_HOLD) this.armNow = Math.min(reach, damp(this.armNow, reach, BOOM_OUT, dt));
     this.curDist = this.armNow;
     const camPos = this.pos.copy(this.pivotSmooth).addScaledVector(UP, this.lift).addScaledVector(arm, this.armNow);
-    if (camPos.y < 0.25) camPos.y = 0.25;
+    // never below the ground (the crater floor drops below y = 0)
+    const gy = this.groundAt ? this.groundAt(camPos.x, camPos.z) : 0;
+    if (camPos.y < gy + 0.25) camPos.y = gy + 0.25;
     // FOV
     this.fovKick = damp(this.fovKick, 0, 3, dt);
     const fovT = this.fovBase + (opts.boost ? 14 : 0) + clamp((opts.speed || 0) - 10, 0, 50) * 0.2 + this.fovKick - this.zoom * 18;

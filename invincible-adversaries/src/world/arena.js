@@ -1,11 +1,51 @@
 import * as THREE from 'three';
 
-export const ARENA = {
+/**
+ * The map being played. Gameplay code reads its bounds, ceiling, spawns and ground from here; a map
+ * swaps them in with useMap() (the training arena below is the default).
+ *  - plazaR: the open middle bots keep to; boundR: the circular wall (when rect is null)
+ *  - rect: { minX, maxX, minZ, maxZ } walls of a rectangular map
+ *  - terrain(x, z): ground height (null = flat at 0); terrainMax: its highest point
+ *  - spawns[team]: spawn point; spawnSpread: how far around it heroes appear
+ *  - orbs: [x, z] health orb spots
+ */
+export const ARENA = {};
+const TRAINING = {
+  name: 'arena',
   plazaR: 78,
   boundR: 135,
   ceiling: 130,
+  rect: null,
+  terrain: null,
+  terrainMax: 0,
   spawns: [new THREE.Vector3(0, 0, -52), new THREE.Vector3(0, 0, 52)],
+  spawnSpread: 3,
+  orbs: [[-40, -18], [40, 18], [40, -18], [-40, 18]],
 };
+/** make cfg the current map (unset fields take the training arena's values) */
+export function useMap(cfg) {
+  for (const k of Object.keys(ARENA)) delete ARENA[k];
+  Object.assign(ARENA, TRAINING, cfg);
+}
+useMap(TRAINING);
+/** ground height at x, z on the current map */
+export function terrainY(x, z) { return ARENA.terrain ? ARENA.terrain(x, z) : 0; }
+/** keep p (with radius r) inside the current map's walls, dropping velocity into them */
+export function clampToBounds(p, vel, r = 0) {
+  const b = ARENA.rect;
+  if (b) {
+    if (p.x < b.minX + r) { p.x = b.minX + r; if (vel && vel.x < 0) vel.x = 0; }
+    if (p.x > b.maxX - r) { p.x = b.maxX - r; if (vel && vel.x > 0) vel.x = 0; }
+    if (p.z < b.minZ + r) { p.z = b.minZ + r; if (vel && vel.z < 0) vel.z = 0; }
+    if (p.z > b.maxZ - r) { p.z = b.maxZ - r; if (vel && vel.z > 0) vel.z = 0; }
+    return;
+  }
+  const R = Math.hypot(p.x, p.z), B = ARENA.boundR;
+  if (R > B) {
+    p.x *= B / R; p.z *= B / R;
+    if (vel) { const vo = (vel.x * p.x + vel.z * p.z) / B; if (vo > 0) { vel.x -= p.x / B * vo; vel.z -= p.z / B * vo; } }
+  }
+}
 
 const SKY_VERT = /* glsl */`
   varying vec3 vDir;
@@ -285,25 +325,29 @@ export function makeObstacles(scene) {
 export class Arena {
   constructor(scene, renderer) {
     this.scene = scene;
+    // everything the arena adds lives under root, so another map can hide it
+    const root = this.root = new THREE.Group();
+    root.name = 'arena';
+    scene.add(root);
+    this.config = TRAINING;
     this.sunDir = new THREE.Vector3(0.45, 0.78, 0.33).normalize();
-    scene.background = null;
-    scene.fog = new THREE.Fog(0x8fb8e6, 220, 1500);
+    this.fog = new THREE.Fog(0x8fb8e6, 220, 1500);
     this.sky = makeSky(this.sunDir);
-    scene.add(this.sky);
+    root.add(this.sky);
     this.ground = makeGround();
-    scene.add(this.ground);
-    makeScenery(scene);
-    this.obstacles = makeObstacles(scene);
+    root.add(this.ground);
+    makeScenery(root);
+    this.obstacles = makeObstacles(root);
     // lights
     this.hemi = new THREE.HemisphereLight(0xbfd9ff, 0x5d5448, 0.85);
-    scene.add(this.hemi);
+    root.add(this.hemi);
     this.sun = new THREE.DirectionalLight(0xffeccc, 2.7);
     this.sun.castShadow = true;
     const sc = this.sun.shadow.camera;
     sc.left = -40; sc.right = 40; sc.top = 40; sc.bottom = -40; sc.near = 1; sc.far = 260;
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.03;
-    scene.add(this.sun, this.sun.target);
+    root.add(this.sun, this.sun.target);
     this.setShadowRes(renderer ? renderer.q.shadow : 2048);
     // environment for reflections
     if (renderer) {
@@ -317,10 +361,19 @@ export class Arena {
       const groundEnv = new THREE.Mesh(new THREE.CircleGeometry(90, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x8e979f }));
       groundEnv.position.y = -2; envScene.add(groundEnv);
       this.envRT = pm.fromScene(envScene, 0.03);
-      scene.environment = this.envRT.texture;
-      scene.environmentIntensity = 0.4;
       pm.dispose();
     }
+    this.activate(true);
+  }
+  /** show or hide the arena; when shown it also owns the scene's fog and reflections */
+  activate(on) {
+    this.root.visible = on;
+    if (!on) return;
+    const s = this.scene;
+    s.background = null;
+    s.fog = this.fog;
+    s.environment = this.envRT ? this.envRT.texture : null;
+    s.environmentIntensity = 0.4;
   }
   setShadowRes(n) {
     this.sun.shadow.mapSize.set(n, n);
