@@ -13,6 +13,7 @@ const _q2 = new THREE.Quaternion(), _e = new THREE.Euler(), _m = new THREE.Matri
 // flipping it in one, while aimDir (which every attack uses) still changes instantly
 const TURN_RATE = 18;
 const UP = new THREE.Vector3(0, 1, 0);
+const _p = new THREE.Vector3(), _wedge = [];
 const GRAVITY = 28;
 let UID = 1;
 
@@ -89,7 +90,7 @@ export class Hero {
     this.bodyUp = new THREE.Vector3(0, 1, 0);
     this.prevGrounded = true;
     this.unstoppable = key === 'omniman';
-    this.spawnAt(ARENA.spawns[team]);
+    this.spawnAt(this.world.spawnPoint(team));
   }
 
   get radius() { return this.def.radius; }
@@ -107,13 +108,14 @@ export class Hero {
   spawnAt(p) {
     this.root.updateMatrixWorld(true);
     const from = _m.copy(this.root.matrixWorld);
+    // (p is a free spot already: spawnPoint spreads the team around their spawn)
     this.pos.copy(p);
-    this.pos.x += rand(-4, 4); this.pos.z += rand(-2, 2);
     this.vel.set(0, 0, 0);
     this.yaw = this.visYaw = p.z < 0 ? 0 : Math.PI;
     this.aimDir.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
     this.root.rotation.set(0, this.yaw, 0);
     this.mode = 'ground'; this.grounded = true; this.launched = false;
+    this._last = null; // (a teleport: last step's position says nothing about this one)
     this.anim.feet.L.init = false; this.anim.feet.R.init = false;
     // capes/hair are simulated in world space: carry them along, or they whip across the map
     this.root.updateMatrixWorld(true);
@@ -123,6 +125,9 @@ export class Hero {
   // ------------------------------------------------------------------ update
   update(dt, time) {
     this.time = time;
+    // where this step starts, for integrate's tunnelling checks (taken here rather than only at the end
+    // of integrate: an override, a carry or a teleport may have moved the hero since)
+    (this._last ||= new THREE.Vector3()).copy(this.pos);
     const it = this.intents;
     // kit.tick runs every frame, even stunned, carried or dead (Robot's hoverbike and back pods)
     if (this.dead) { this.updateDead(dt); this.updateVisual(dt); this.kit && this.kit.tick && this.kit.tick(dt); return; }
@@ -158,6 +163,9 @@ export class Hero {
       // position driven by carrier
       this.mode = 'tumble'; this.tumbleFly = false;
     } else if (this.override) {
+      // an ability taking over ends a knockback tumble (the tumble only counts down while nothing
+      // else drives the hero: abilities chained one after another would hold it for good)
+      if (this.mode === 'tumble') this.endTumble();
       const keep = this.override.update(dt);
       if (keep === false) { const o = this.override; this.override = null; o.onEnd && o.onEnd(); }
     } else if (this.mode === 'tumble') {
@@ -219,7 +227,7 @@ export class Hero {
         this.flyEnergy -= dt / d.flight.duration * (hover ? 0.55 : 1);
         if (this.flyEnergy <= 0) { this.flyEnergy = 0; this.mode = 'air'; }
       }
-      const spd = d.flight.speed * sf * (1 + this.boost * 0.5);
+      const spd = d.flight.speed * sf * (this.kit && this.kit.flyMul || 1) * (1 + this.boost * 0.5);
       const ad = it ? it.aimDir : _u.set(fx, 0, fz);
       _v.set(0, 0, 0);
       _v.addScaledVector(ad, mz);
@@ -305,11 +313,15 @@ export class Hero {
         const mn = o.min, mx = o.max;
         const inX = p.x > mn.x - r && p.x < mx.x + r, inZ = p.z > mn.z - r && p.z < mx.z + r;
         if (!inX || !inZ) continue;
-        if (p.y >= mx.y - 0.35) { this.groundY = Math.max(this.groundY, mx.y); continue; }
+        // where it was last step, if over this same box: a fast drop (a dive, a slam) can carry the
+        // feet clean through a thin roof's top band in one step, a fast climb the head through a slab
+        const was = this._last && this._last.x > mn.x - r && this._last.x < mx.x + r && this._last.z > mn.z - r && this._last.z < mx.z + r ? this._last.y : null;
+        // (a building taller than the ceiling is all wall: whoever gets above one is pushed off it)
+        if ((p.y >= mx.y - 0.35 || (was != null && was >= mx.y - 0.35)) && mx.y <= ARENA.ceiling) { this.groundY = Math.max(this.groundY, mx.y); continue; }
         if (p.y + this.height < mn.y) continue;
         // a slab overhead (a ceiling, the deck of the L): bump the head on it rather than being
         // shoved out sideways across its whole footprint
-        if (mn.y > 0.5 && p.y + this.height - mn.y < 0.8) { p.y = mn.y - this.height; if (this.vel.y > 0) this.vel.y = 0; continue; }
+        if (mn.y > 0.5 && (p.y + this.height - mn.y < 0.8 || (was != null && was + this.height <= mn.y + 0.05))) { p.y = mn.y - this.height; if (this.vel.y > 0) this.vel.y = 0; continue; }
         // push out along minimal axis
         const pl = p.x - (mn.x - r), pr = (mx.x + r) - p.x, pb = p.z - (mn.z - r), pf = (mx.z + r) - p.z;
         const m = Math.min(pl, pr, pb, pf);
@@ -320,6 +332,9 @@ export class Hero {
         this.onWallHit && this.onWallHit();
       }
     }
+    // side by side, two boxes can bounce a hero from one into the other (slabs on the crater's rim,
+    // the cart's segments on a bend): still inside one, step out whichever way clears them all soonest
+    if (this.boxInside(this._near, p)) this.unwedge();
     // feet inside a box's top band (rising up a wall, stepping onto a ledge): mantle onto the top
     // rather than letting forward motion carry the body into the box
     if (p.y < this.groundY) { p.y = this.groundY; if (this.vel.y < 0) this.vel.y = 0; }
@@ -339,6 +354,42 @@ export class Hero {
     } else if (p.y > this.groundY + 0.05) {
       this.grounded = false;
     }
+    (this._last ||= new THREE.Vector3()).copy(p);
+  }
+
+  /** out of a knockback tumble: on the ground, or in the air (back in flight if knocked out of it) */
+  endTumble() {
+    const f = this.def.flight;
+    this.mode = this.grounded ? 'ground' : this.tumbleFly && f && (f.unlimited || this.flyEnergy > 0.15) && !this.disrupted ? 'fly' : 'air';
+    this.tumbleT = 0;
+  }
+  /** a box the capsule at p is inside, by integrate's rules (not one it stands on or is under) */
+  boxInside(near, p) {
+    const r = this.radius;
+    for (const o of near) {
+      if (o.type !== 'box') continue;
+      const mn = o.min, mx = o.max;
+      if (p.x <= mn.x - r + 1e-4 || p.x >= mx.x + r - 1e-4 || p.z <= mn.z - r + 1e-4 || p.z >= mx.z + r - 1e-4) continue;
+      if ((p.y >= mx.y - 0.35 && mx.y <= ARENA.ceiling) || p.y + this.height <= mn.y + 0.05) continue;
+      return o;
+    }
+    return null;
+  }
+  unwedge() {
+    const p = this.pos, r = this.radius, near = this.world.obstaclesNear(p.x, p.z, r + 8, _wedge);
+    let best = null, bestD = Infinity;
+    for (const [ax, sx] of [['x', 1], ['x', -1], ['z', 1], ['z', -1]]) {
+      _p.copy(p);
+      let o, n = 0;
+      while ((o = this.boxInside(near, _p)) && n++ < 6) _p[ax] = sx > 0 ? o.max[ax] + r + 0.01 : o.min[ax] - r - 0.01;
+      const d = Math.abs(_p[ax] - p[ax]);
+      if (!o && d < bestD) { bestD = d; best = [ax, sx, _p[ax]]; }
+    }
+    if (!best) return;
+    const [ax, sx, to] = best;
+    p[ax] = to;
+    if (this.vel[ax] * sx < 0) this.vel[ax] = 0;
+    this.onWallHit && this.onWallHit();
   }
 
   knock(v, { force = false, tumble = true } = {}) {
@@ -422,7 +473,7 @@ export class Hero {
     if (Math.abs(this.dissolve - this.dissolveTarget) < 0.003) this.dissolve = this.dissolveTarget;
     this.U.uDissolve.value = this.dissolve;
     this.U.uTime.value = this.time || 0;
-    this.root.visible = !this.hidden && this.dissolve < 0.995;
+    this.root.visible = !this.hidden && !this.camHide && this.dissolve < 0.995;
     // capsule
     const hh = this.rig.hipsHeight;
     _v.set(0, hh, 0).applyQuaternion(this.visual.quaternion).add(this.visual.position).applyQuaternion(this.root.quaternion).add(this.pos);
@@ -435,7 +486,7 @@ export class Hero {
 
   onFootstep(side, k) {
     if (this.dead || !this.grounded) return;
-    const beast = this.key === 'battlebeast', heavy = this.key === 'omniman' || beast, metal = this.key === 'robot';
+    const beast = this.key === 'battlebeast', heavy = this.key === 'omniman' || this.key === 'allen' || this.key === 'immortal' || beast, metal = this.key === 'robot';
     this.world.sfx(beast ? 'step_beast' : heavy ? 'step_heavy' : metal ? 'step_metal' : 'step', this.pos, { vol: (heavy ? 0.55 : metal ? 0.42 : 0.32) * k, minGap: 0.12, key: this.id, ref: 4 });
     if (heavy && k > 0.6) this.world.shakeAt(this.pos, beast ? 0.06 : 0.04);
   }
@@ -501,7 +552,7 @@ export class Hero {
 
   revive(at, hpFrac = 1) {
     this.dead = false; this.deadT = 0;
-    if (at) this.pos.copy(at);
+    if (at) { this.pos.copy(at); this._last = null; }
     this.vel.set(0, 0, 0);
     this.hp = this.maxHp * hpFrac;
     this.mode = this.pos.y > 0.2 ? 'air' : 'ground';

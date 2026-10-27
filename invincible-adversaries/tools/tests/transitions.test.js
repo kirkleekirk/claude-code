@@ -1,5 +1,5 @@
 // Mode transitions: every way a hero leaves and re-enters the ground must end in a sane pose.
-const KEYS = ['invincible', 'rex', 'eve', 'robot', 'omniman', 'battlebeast'];
+const KEYS = ['invincible', 'rex', 'eve', 'robot', 'omniman', 'battlebeast', 'allen', 'immortal'];
 const ahead = (h) => h.pos.clone().add(T.V(Math.sin(h.yaw) * 10, 1.4, Math.cos(h.yaw) * 10));
 
 for (const key of KEYS) {
@@ -95,4 +95,30 @@ T.test('omniman: cape stays behind the body through combat, charge, flight and l
   let yaw = 0;
   r = T.watch([h], 180, () => { T.clr(h.intents); yaw += 0.06; T.aim(h, h.pos.clone().add(T.V(Math.sin(yaw) * 10, 1.4, Math.cos(yaw) * 10))); });
   T.report('turning in place', r);
+});
+
+T.test('a hero wedged where two boxes meet steps out of both, rather than staying inside one', () => {
+  // two boxes overlapping where they meet, like slabs heaped on the crater's rim or the cart's
+  // segments on a bend: the shortest way out of either one leads into the other
+  const [h] = T.stage([{ key: 'allen', player: true, at: [0, 0, 18], face: [0, 1] }]);
+  const B = (a, b) => ({ type: 'box', min: T.V(...a), max: T.V(...b) });
+  const boxes = [B([-2.5, 0.8, 20.2], [2.5, 3.3, 26]), B([-1.5, 0, 14], [3, 2.3, 20.4])];
+  const keep = T.w.dynamic;
+  T.w.dynamic = [...keep, ...boxes];
+  const inside = () => h.boxInside(boxes, h.pos);
+  for (const [x, z] of [[0.3, 20.3], [-1, 20.35], [2.6, 20.25]]) {
+    T.teleport(h, T.V(x, 0, z)); h.vel.set(0, 0, 0);
+    T.run(3, () => T.clr(h.intents));
+    T.expect(!inside(), `from (${x}, ${z}) the hero is still inside a box at (${h.pos.x.toFixed(2)}, ${h.pos.z.toFixed(2)})`);
+  }
+  T.w.dynamic = keep;
+});
+
+T.test('an ability cast mid-tumble ends the tumble, so chained abilities cannot hold it', () => {
+  const [h] = T.stage([{ key: 'invincible', player: true, at: [0, 6, 0], fly: true, face: [0, 1] }, { key: 'omniman', team: 1, at: [30, 0, 30] }]);
+  h.knock(T.V(0, 4, -14));
+  T.expect(h.mode === 'tumble', `not tumbling after the knock (${h.mode})`);
+  T.run(2, (k) => { T.clr(h.intents); T.aim(h, T.V(0, 6, 25)); h.intents.a1 = k === 0; });
+  T.expect(!!h.override && h.mode !== 'tumble', `the dash is ${h.override ? 'under way' : 'not under way'} and the hero is in ${h.mode}`);
+  T.expect(T.settle([h], 300) >= 0 && h.mode !== 'tumble', `after the dash: ${h.mode}`);
 });

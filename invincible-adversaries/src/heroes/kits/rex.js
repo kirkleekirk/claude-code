@@ -195,7 +195,7 @@ export class RexKit extends Kit {
       w.damage(h, e, lerp(dmg, minDmg, k), { from: p, knock: kv, power: clamp(dmg / 70, 0.3, 1.4), noFlinch: dmg < 18, type, slow, slowT });
     }
     this.selfLaunch(p, r * 1.15, self);
-    this.fx.explosion(p, { scale, groundY: w.groundAt(p.x, p.z) });
+    this.fx.explosion(p, { scale, groundY: w.floorAt(p.x, p.z, p.y) });
     w.sfx(sfx, p, { vol, minGap: 0.03 });
     w.shakeAt(p, 0.08 + 0.22 * scale);
   }
@@ -455,7 +455,7 @@ export class RexKit extends Kit {
   splode() {
     const h = this.h, w = this.w, fx = this.fx;
     const p = h.center.clone();
-    const gy = w.groundAt(p.x, p.z);
+    const gy = w.floorAt(p.x, p.z, p.y);
     this.endCharge();
     h.anim.play(this.clips.splode);
     const R = 12;
@@ -478,7 +478,7 @@ export class RexKit extends Kit {
       bt += dt;
       while (made < ring.length && bt >= ring[made].t) {
         const b = ring[made++], q = new THREE.Vector3(p.x + Math.cos(b.a) * b.r, Math.max(gy + 0.6, p.y - 0.5), p.z + Math.sin(b.a) * b.r);
-        fx.explosion(q, { scale: rand(0.8, 1.1), groundY: w.groundAt(q.x, q.z) });
+        fx.explosion(q, { scale: rand(0.8, 1.1), groundY: w.floorAt(q.x, q.z, q.y) });
       }
       return made < ring.length;
     });

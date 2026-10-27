@@ -1,5 +1,6 @@
 import { GeoBuilder, rng } from './geo.js';
 import { STYLE_GRID, fac, qseed } from './facade.js';
+import { STATION } from './layout.js';
 
 // Building shells from the layout: setback tiers, cornices, piers and mullions, parapets and roof
 // gear, antennas, and damage: tops broken off floor by floor (ragged walls with their insides
@@ -298,15 +299,17 @@ function rooftop(gb, t, H, R, b) {
   }
 }
 
-/** a lobby carved into the ground floor (open on the building's edge): walls, ceiling, columns */
+/** a lobby carved into the ground floor (open on the building's edge): floor, walls, ceiling, columns */
 function lobby(gb, cav, box, F, R, boxes) {
   const [x0, z0, x1, z1, h] = cav;
-  F('bare', 0.15);
+  F('lobby', 0);
+  // (one inside the station's footprint keeps the station's marble, running on into the hall)
+  const sb = STATION.box, inStation = x0 >= sb[0] && x1 <= sb[2] && z0 >= sb[1] && z1 <= sb[3];
+  if (!inStation) gb.face(UP, [x0, 0.03, z0], [x1, 0.03, z0], [x1, 0.03, z1], [x0, 0.03, z1]);
   if (Math.abs(z0 - box[1]) > 0.01) gb.face([0, 0, 1], [x0, 0, z0], [x1, 0, z0], [x1, h, z0], [x0, h, z0], [x0, 0], [x1, 0], [x1, h], [x0, h]);
   if (Math.abs(z1 - box[3]) > 0.01) gb.face([0, 0, -1], [x0, 0, z1], [x1, 0, z1], [x1, h, z1], [x0, h, z1], [x0, 0], [x1, 0], [x1, h], [x0, h]);
   if (Math.abs(x0 - box[0]) > 0.01) gb.face([1, 0, 0], [x0, 0, z0], [x0, 0, z1], [x0, h, z1], [x0, h, z0], [z0, 0], [z1, 0], [z1, h], [z0, h]);
   if (Math.abs(x1 - box[2]) > 0.01) gb.face([-1, 0, 0], [x1, 0, z0], [x1, 0, z1], [x1, h, z1], [x1, h, z0], [z0, 0], [z1, 0], [z1, h], [z0, h]);
   gb.face(DOWN, [x0, h, z0], [x1, h, z0], [x1, h, z1], [x0, h, z1]);
-  F('stone', 0.1);
   for (let x = x0 + 4; x < x1 - 2; x += 6) for (let z = z0 + 4; z < z1 - 2; z += 6) if (R() < 0.8) { gb.box(x - 0.35, 0, z - 0.35, x + 0.35, h, z + 0.35, 'xXzZ'); boxes.push([x - 0.35, 0, z - 0.35, x + 0.35, h, z + 0.35]); }
 }

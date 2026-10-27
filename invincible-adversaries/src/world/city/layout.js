@@ -39,7 +39,7 @@ export const SPAWNS = {
   ],
 };
 
-export const ORBS = [[-87.5, 20], [-106, -22], [-63.5, 4], [-45, 36], [2, -30], [48, 68], [86, -6], [88, 70], [-80, -44]];
+export const ORBS = [[-87.5, 20], [-106, -19], [-63.5, 4], [-45, 36], [2, -30], [42, 73.5], [86, -6], [88, 55.5], [-80, -44]];
 
 // ---------------------------------------------------------------- buildings
 // footprint [x0, z0, x1, z1], height h, facade style, top: intact | broken | sheared | collapsed,
@@ -109,7 +109,7 @@ export const L_TRACK = {
 // cover and wreckage: [kind, x, z, rotation(0|1: along x / along z), extra]
 export const PROPS = [
   // State Street
-  ['bus', -101.5, 30, 1, { tipped: true }], ['car', -92, 52, 1], ['car', -90.5, 40, 1, { burnt: true }], ['taxi', -103, 10, 1],
+  ['bus', -100.65, 30, 1, { flipped: true }], ['car', -92, 52, 1], ['car', -90.5, 40, 1, { burnt: true }], ['taxi', -103, 10, 1],
   ['car', -92.4, -2, 1, { burnt: true, flipped: true }], ['car', -100.6, -16, 1], ['barrier', -102, -27, 0], ['barrier', -91, -27, 0],
   ['car', -104, 70, 1], ['police', -89.5, 78, 1], ['taxi', -98, 84, 0, { burnt: true }],
   ['rubble', -104.2, -29, 0, { w: 9.5, d: 12, h: 4.2 }],

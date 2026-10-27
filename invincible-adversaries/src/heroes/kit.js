@@ -154,7 +154,15 @@ export class Travel {
     this.prev.copy(h.pos);
     if (this.arc) return this.updateArc(dt);
     let step = this.speed * dt;
-    if (this.toPoint) { const d = h.pos.distanceTo(this.toPoint); if (d < step) step = d; this.dir.subVectors(this.toPoint, h.pos).normalize(); if (d < 0.05) return false; }
+    if (this.toPoint) {
+      const d = h.pos.distanceTo(this.toPoint);
+      // (something it doesn't count as a wall, like a slab overhead, can hold it short of the point:
+      // it gives up after half again the time the trip should take)
+      this.age = (this.age || 0) + dt;
+      if (this.maxAge == null) this.maxAge = d / this.speed * 1.5 + 0.4;
+      if (this.age > this.maxAge) { this.hitWall = true; return false; }
+      if (d < step) step = d; this.dir.subVectors(this.toPoint, h.pos).normalize(); if (d < 0.05) return false;
+    }
     else if (this.done + step > this.dist) step = this.dist - this.done;
     h.vel.copy(this.dir).multiplyScalar(this.speed);
     this.animVel.copy(h.vel);

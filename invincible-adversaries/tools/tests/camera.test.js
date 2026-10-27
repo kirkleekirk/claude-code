@@ -3,10 +3,11 @@
 // continuous through walking past pillars, backing into cover, flight, every ability and ult,
 // knockback and death; respawns and hero swaps are the only cuts.
 const cam = T.g.camRig, inp = T.g.input, V = T.V, THREE = T.THREE;
-const HEROES = ['invincible', 'rex', 'eve', 'robot', 'omniman', 'battlebeast'];
+const HEROES = ['invincible', 'rex', 'eve', 'robot', 'omniman', 'battlebeast', 'allen', 'immortal'];
 // per-frame limits at 60 fps
 const LIM = {
-  boom: 0.34, // m the boom length may change in one frame
+  boom: 0.34, // m the boom length may change in one frame...
+  escape: 1.01, // ...or while it pulls the camera out of a wall it swung into
   lift: 0.2, // m the camera may rise or sink over a low wall in one frame
   view: 0.02, // rad the view may turn by itself in one frame (no mouse input)
   inside: 8, // frames the camera may stay inside a wall or pillar
@@ -66,7 +67,7 @@ function cameraWatch({ view = true } = {}) {
       const s = { dist: cam.curDist, lift: cam.lift, gap: cam.pivot.distanceTo(cam.pivotSmooth), pivot: cam.pivot.clone(), cuts: cam.cuts };
       if (prev && prev.cuts === s.cuts && !h.dead) {
         const boom = Math.abs(s.dist - prev.dist);
-        if (boom > LIM.boom) flag('boom', boom, `${label}: boom length jumped ${prev.dist.toFixed(2)} -> ${s.dist.toFixed(2)} m in one frame`);
+        if (boom > (cam.escaping ? LIM.escape : LIM.boom)) flag('boom', boom, `${label}: boom length jumped ${prev.dist.toFixed(2)} -> ${s.dist.toFixed(2)} m in one frame`);
         const lift = Math.abs(s.lift - prev.lift);
         if (lift > LIM.lift) flag('lift', lift, `${label}: camera lift jumped ${prev.lift.toFixed(2)} -> ${s.lift.toFixed(2)} m in one frame`);
         const moved = s.pivot.distanceTo(prev.pivot);

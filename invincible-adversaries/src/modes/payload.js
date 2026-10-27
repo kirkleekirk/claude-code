@@ -322,6 +322,9 @@ export class PayloadMode {
       if (h.dead || h.mode === 'fly' || !h.grounded) continue;
       if (boxes.some((b) => h.pos.x > b.min.x && h.pos.x < b.max.x && h.pos.z > b.min.z && h.pos.z < b.max.z && Math.abs(h.pos.y - b.max.y) < 0.2)) h.pos.add(_v);
     }
+    // and whoever it runs into is pushed aside: a hero holding still in an ability (down on one
+    // knee, bracing, winding up) isn't moving themselves out of its way
+    for (const h of this.w.heroes) if (!h.dead && !h.carriedBy && h.boxInside(this.cart.boxes, h.pos)) h.integrate(0);
     void before;
   }
   finish(winner, why) {

@@ -147,13 +147,16 @@ export function dressHero(scene, key, team, opts = {}) {
     robot: { sat: 0.9, bright: 1.04, rough: 0.42 },
     rex: { sat: 1.05, bright: 1.08, rough: 0.6 },
     battlebeast: { sat: 1.12, bright: 1.12, rough: 0.66 },
+    allen: { sat: 1.0, bright: 1.0, rough: 0.6 },
+    immortal: { sat: 1.1, bright: 1.08, rough: 0.6 },
   }[key];
   U.uSat.value = tune.sat; U.uBright.value = tune.bright;
   const outlineColor = team === 0 ? 0x06080f : 0x2a0006;
   const outlineMats = [];
   const meshes = [];
   const skinned = [];
-  scene.traverse((o) => { if (o.isSkinnedMesh) skinned.push(o); });
+  // (the Immortal's eyeballs are rigid meshes riding his eye bones: they dissolve and flash with him)
+  scene.traverse((o) => { if (o.isSkinnedMesh || (o.isMesh && /^Immortal_Eye/.test(o.name))) skinned.push(o); });
   for (const o of skinned) {
     o.castShadow = true;
     o.receiveShadow = true;
@@ -171,7 +174,7 @@ export function dressHero(scene, key, team, opts = {}) {
     }
     meshes.push(o);
     // (eyes, teeth, brows and lenses sit inside the head or on its surface: no hull of their own)
-    if (opts.outline !== false && !/EyesMouth|Brows|Lenses|EyeShells/.test(o.name)) {
+    if (opts.outline !== false && o.isSkinnedMesh && !/EyesMouth|Brows|Lenses|EyeShells|Allen_Pupil/.test(o.name)) {
       const om = makeOutlineMaterial(outlineColor, U, key === 'omniman' ? 2.2 : 2.6);
       const ol = new THREE.SkinnedMesh(o.geometry, om);
       ol.bind(o.skeleton, o.bindMatrix);

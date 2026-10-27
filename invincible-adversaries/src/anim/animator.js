@@ -49,6 +49,18 @@ export const STYLES = {
     bob: 0.07, crouchRun: 0.09, leanRun: 18, armSwing: 0.6, elbowRun: 70, yawAmp: 8, rollAmp: 7, swayAmp: 0.035,
     stepHeight: 0.28, fistRun: 0.15, heavy: 1, flyPose: 'omni', idle: 'beast', chestUp: -8,
   },
+  // big and squared-up, arms carried wide off the lats
+  allen: {
+    stanceW: 0.16, stanceSplit: 0.08, cadenceBase: 0.88, cadencePerSpeed: 0.15, cadenceMax: 2.2,
+    bob: 0.06, crouchRun: 0.06, leanRun: 13, armSwing: 0.6, elbowRun: 85, yawAmp: 7, rollAmp: 6, swayAmp: 0.03,
+    stepHeight: 0.28, fistRun: 0.9, heavy: 1, flyPose: 'superman', idle: 'brute', chestUp: 4,
+  },
+  // an old soldier: upright, fists ready, nothing wasted
+  immortal: {
+    stanceW: 0.14, stanceSplit: 0.08, cadenceBase: 0.92, cadencePerSpeed: 0.16, cadenceMax: 2.3,
+    bob: 0.05, crouchRun: 0.05, leanRun: 13, armSwing: 0.6, elbowRun: 85, yawAmp: 7, rollAmp: 5, swayAmp: 0.025,
+    stepHeight: 0.27, fistRun: 0.85, heavy: 0.7, flyPose: 'superman', idle: 'soldier', chestUp: 5,
+  },
 };
 
 class Action {
@@ -414,6 +426,20 @@ export class Animator {
       return {
         x: lerp(0.3, 0.36, combat) + n * 0.02, y: lerp(-0.86, -0.4, combat), z: lerp(0.22, 0.5, combat),
         elbow: lerp(34, 82, combat), fist: lerp(0.3, 0.1, combat), twist: lerp(-6, -24, combat), flex: lerp(-10, -26, combat), spread: lerp(0.5, 1, combat),
+      };
+    }
+    if (k === 'brute') {
+      // Allen: heavy arms hanging wide off the lats; in combat a high, wide brawler's guard
+      return {
+        x: lerp(0.3, 0.36, combat) + n * 0.02, y: lerp(-0.93, -0.46, combat), z: lerp(0.1, 0.45, combat),
+        elbow: lerp(26, 105, combat), fist: 1, twist: lerp(-4, -28, combat), flex: lerp(-4, 6, combat),
+      };
+    }
+    if (k === 'soldier') {
+      // The Immortal: upright and calm, fists loosely closed; in combat a tight, old boxer's guard
+      return {
+        x: lerp(0.24, 0.3, combat) + n * 0.02, y: lerp(-0.96, -0.5, combat), z: lerp(0.05, 0.44, combat),
+        elbow: lerp(16, 112, combat), fist: lerp(0.7, 1, combat), twist: lerp(4, -26, combat), flex: lerp(-4, 4, combat),
       };
     }
     if (k === 'proud') {

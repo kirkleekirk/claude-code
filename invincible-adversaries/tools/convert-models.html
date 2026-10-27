@@ -359,6 +359,8 @@ async function build(which) {
     renderer.dispose();
     const s = fitHeight(root, 2.2);
     wrap.scale.setScalar(s);
+    // the sculpt's origin is at his pelvis: stand him on the floor like the others
+    wrap.position.y = -new THREE.Box3().setFromObject(root, true).min.y * s;
     wrap.add(root);
   } else if (which === 'immortal') {
     // Sketchfab's "THE-IMMORTAL" (joaocarrascok, CC BY 4.0): a low-poly game model rigged like Atom Eve

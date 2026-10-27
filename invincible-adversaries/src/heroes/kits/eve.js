@@ -135,7 +135,7 @@ function mergeGeos(geos) {
 class Field {
   constructor(kit, pos) {
     this.kit = kit; this.w = kit.w; this.fx = kit.fx; this.h = kit.h;
-    this.pos = pos.clone(); this.pos.y = this.w.groundAt(pos.x, pos.z);
+    this.pos = pos.clone(); this.pos.y = this.w.floorAt(pos.x, pos.z, pos.y);
     this.r = 6; this.life = 4; this.t = 0; this.tick = 0;
     this.decal = this.fx.decal(this.pos, this.r * 2.1, 'atom', this.life + 0.5, 0.95);
     const dome = new THREE.Mesh(new THREE.SphereGeometry(1, 40, 20, 0, TAU, 0, Math.PI / 2), new THREE.ShaderMaterial({
@@ -438,10 +438,11 @@ export class EveKit extends Kit {
       update(dt) {
         this.t += dt;
         const st = kit.ultState; if (!st) return false;
-        // rise to hover height
-        const ty = Math.max(start, w.groundAt(h.pos.x, h.pos.z)) + 3.2;
+        // rise to hover height over the floor under her (under a roof: up to it, never through it)
+        const ty = Math.max(start, w.floorAt(h.pos.x, h.pos.z, h.pos.y)) + 3.2;
         h.pos.y = damp(h.pos.y, ty, 3, dt);
         h.vel.set(0, 0, 0);
+        h.integrate(0);
         h.mode = 'fly';
         // swirl particles
         for (let i = 0; i < 4; i++) {
@@ -575,7 +576,7 @@ export class EveKit extends Kit {
     for (const a of w.heroes) {
       if (a.team !== h.team) continue;
       if (a.dead) {
-        const at = a.pos.clone(); at.y = Math.max(0, w.groundAt(at.x, at.z));
+        const at = a.pos.clone(); at.y = w.floorAt(at.x, at.z, at.y);
         a.revive(at, 1);
         a.overhealth = 150; a.ohT = 5;
         fx.pillar(at, { color: 0xff6be0, height: 22, radius: 1.5, life: 1.6, intensity: 1.9 });

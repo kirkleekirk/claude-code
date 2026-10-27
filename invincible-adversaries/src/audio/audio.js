@@ -733,6 +733,68 @@ R.step_beast = (S, out, t0, v) => {
   return 0.4;
 };
 
+// ---- Allen: Resilience, the brace, coming back, breaking the limit
+R.resilience_up = (S, out, t0, v) => {
+  // a level gained: a swell up into a power chord and a bell on top
+  thump(S, out, t0, { f0: 90, f1: 50, dur: 0.5, vol: 0.8 });
+  sweepNoise(S, out, t0, { f0: 300, f1: 3200, dur: 0.5, Q: 1.2, vol: 0.45, attack: 0.3, kind: 'pink', seed: v });
+  [196, 293.66, 392].forEach((f, i) => tone(S, out, t0 + 0.06 + i * 0.05, { f: f * 0.75, f1: f, type: 'sawtooth', a: 0.06, d: 0.6, vol: 0.05 }));
+  tone(S, out, t0 + 0.2, { f: 1568, type: 'sine', a: 0.01, d: 0.5, vol: 0.06 });
+  return 1.0;
+};
+R.unbreakable = (S, out, t0, v) => {
+  // skin going hard as plate: a struck, ringing body
+  const sh = S.shaper(2); sh.connect(out);
+  thump(S, sh, t0, { f0: 100, f1: 45, dur: 0.4, vol: 1 });
+  [220, 331, 467, 659].forEach((f, i) => tone(S, out, t0, { f, type: 'triangle', a: 0.002, d: 0.9 - i * 0.12, vol: 0.06 }));
+  burst(S, out, t0, { f: 1800, Q: 3, dur: 0.05, vol: 0.4, seed: v });
+  return 1.0;
+};
+R.second_wind = (S, out, t0, v) => {
+  // one huge breath in, two heartbeats, and up
+  sweepNoise(S, out, t0, { f0: 250, f1: 1400, dur: 0.45, Q: 0.7, vol: 0.5, attack: 0.35, kind: 'pink', seed: v });
+  thump(S, out, t0 + 0.38, { f0: 80, f1: 40, dur: 0.3, vol: 0.9 });
+  thump(S, out, t0 + 0.62, { f0: 80, f1: 40, dur: 0.3, vol: 0.8 });
+  [261.6, 329.6, 392, 523.3].forEach((f, i) => tone(S, out, t0 + 0.35 + i * 0.04, { f, type: 'triangle', a: 0.01, d: 0.8, vol: 0.07 }));
+  return 1.3;
+};
+R.limit_break = (S, out, t0, v) => {
+  roarVoice(S, out, t0, { dur: 1.6, f0: 80, peak: 150, end: 70, vol: 0.8, seed: v });
+  sweepNoise(S, out, t0, { f0: 120, f1: 2400, dur: 0.5, Q: 1, vol: 0.5, attack: 0.45, kind: 'pink', seed: v + 1 });
+  const sh = S.shaper(2.6); sh.connect(out);
+  thump(S, sh, t0 + 0.45, { f0: 110, f1: 26, dur: 1.6, sweep: 0.4, vol: 1.3 });
+  burst(S, out, t0 + 0.46, { type: 'lowpass', f: 2600, f1: 160, dur: 1.4, vol: 0.8, kind: 'pink', seed: v + 2 });
+  return 2.4;
+};
+// ---- The Immortal: going down, mending, getting back up, and the cry
+R.undying_fall = (S, out, t0, v) => {
+  thump(S, out, t0, { f0: 100, f1: 34, dur: 0.6, vol: 1 });
+  burst(S, out, t0, { type: 'lowpass', f: 500, dur: 0.4, vol: 0.6, kind: 'brown', seed: v });
+  tone(S, out, t0 + 0.1, { f: 110, f1: 82, type: 'sawtooth', a: 0.3, d: 2.2, vol: 0.05 });
+  tone(S, out, t0 + 0.1, { f: 165, f1: 123, type: 'sine', a: 0.3, d: 2.2, vol: 0.06 });
+  return 2.5;
+};
+R.heartbeat = (S, out, t0, v) => { thump(S, out, t0, { f0: 70, f1: 40, dur: 0.14, vol: 0.9 }); thump(S, out, t0 + 0.16, { f0: 62, f1: 36, dur: 0.16, vol: 0.7 }); return 0.4; };
+R.undying_rise = (S, out, t0, v) => {
+  const sh = S.shaper(2.4); sh.connect(out);
+  burst(S, sh, t0, { type: 'highpass', f: 900, dur: 0.03, vol: 1, seed: v });
+  thump(S, sh, t0, { f0: 120, f1: 28, dur: 1.4, sweep: 0.35, vol: 1.25 });
+  [220, 277.2, 329.6, 440].forEach((f, i) => tone(S, out, t0, { f, type: 'sawtooth', a: 0.02, d: 1.6, vol: 0.035, vib: 3, vibF: 5 + i }));
+  roarVoice(S, out, t0, { dur: 0.9, f0: 130, peak: 175, end: 120, vol: 0.45, seed: v + 1 });
+  return 2.0;
+};
+R.war_cry = (S, out, t0, v) => {
+  roarVoice(S, out, t0, { dur: 1.1, f0: 140, peak: 185, end: 125, vol: 0.55, seed: v });
+  // a war horn under the shout
+  const o = S.osc('sawtooth', 98), o2 = S.osc('sawtooth', 147), lp = S.filt('lowpass', 400, 1.2), g = S.gain(0);
+  S.env(lp.frequency, t0, [[0, 300], [0.3, 1600], [1.4, 600]]);
+  g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.09, t0 + 0.15); g.gain.setValueAtTime(0.09, t0 + 1.0); g.gain.linearRampToValueAtTime(0, t0 + 1.5);
+  o.connect(lp); o2.connect(lp); lp.connect(g); g.connect(out);
+  o.start(t0); o2.start(t0); o.stop(t0 + 1.6); o2.stop(t0 + 1.6);
+  thump(S, out, t0, { f0: 90, f1: 40, dur: 0.6, vol: 0.6 });
+  return 1.8;
+};
+
 const VARIANTS = { punch_light: 4, punch_heavy: 3, swing: 3, swing_heavy: 2, bolt_fire: 3, bolt_hit: 3, bubble_hit: 3, step: 4, step_heavy: 3, rock_hit: 2, zip: 2,
   plasma_fire: 3, plasma_hit: 3, missile_launch: 2, missile_boom: 2, barrier_hit: 3, step_metal: 4,
   coin_flick: 3, coin_pop: 3, grenade_bounce: 2, claw_swipe: 3, claw_hit: 3, guard_block: 3, step_beast: 4 };

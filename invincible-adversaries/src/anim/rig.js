@@ -25,6 +25,13 @@ const fingersValve = (s) => {
   return { thumb: f(0), index: f(1), middle: f(2), ring: f(3), pinky: f(4) };
 };
 
+// The Immortal: index, middle and thumb only
+const fingersImmortal = (s) => ({
+  thumb: [1, 2, 3].map((i) => `Armature_${s}_Thumb_01_0${i}SHJnt`),
+  index: [1, 2, 3].map((i) => `Armature_${s}_Finger_01_0${i}SHJnt`),
+  middle: [1, 2, 3].map((i) => `Armature_${s}_Finger_02_0${i}SHJnt`),
+});
+
 const fingersBip = (s) => {
   const f = (n) => [0, 1, 2].map((i) => `bip_${n}_${i}_${s}`);
   return { thumb: f('thumb'), index: f('index'), middle: f('middle'), ring: f('ring'), pinky: f('pinky') };
@@ -103,6 +110,30 @@ export const RIG_DEFS = {
       { name: 'capeR', bones: ['Bone_Cape_5_01', 'Bone_Cape_5_02', 'Bone_Cape_5_03', 'Bone_Cape_5_04', 'Bone_Cape_5_05', 'Bone_Cape_5_06', 'cape_07_r'], stiffness: 0.08, drag: 2.6, gravity: 1.0, radius: 0.12, group: 'cape', behind: { fwd: 0.04, up: 0.06 } },
     ],
   },
+  // Allen: rigged by tools/allen-rig.js. No finger bones (the hands stay as sculpted); handTip is where
+  // the fingertips are at bind, from the wrist (mirrored: x outward), so the hand can be straightened
+  allen: {
+    hips: 'pelvis',
+    spine: ['spine_01', 'spine_02', 'spine_03'], spineW: [0.3, 0.33, 0.37],
+    neck: 'neck', head: 'head',
+    // mitten: knuckle and middle joints are added across all the fingers at those shares of the
+    // hand's length (the thumb, off the hand's thumb side, stays put), so the hand can close into a fist
+    L: { clav: 'clavicle_l', upper: 'upperarm_l', fore: 'lowerarm_l', hand: 'hand_l', thigh: 'thigh_l', shin: 'calf_l', foot: 'foot_l', toe: 'toe_l', fingers: { middle: ['hand_l_knuckle', 'hand_l_mid'] }, handTip: [-0.153, -0.055, 0.074], thumbSide: [0, -1, 0], mitten: { at: [0.48, 0.7], thumb: 0.028, curl: [62, 72] } },
+    R: { clav: 'clavicle_r', upper: 'upperarm_r', fore: 'lowerarm_r', hand: 'hand_r', thigh: 'thigh_r', shin: 'calf_r', foot: 'foot_r', toe: 'toe_r', fingers: { middle: ['hand_r_knuckle', 'hand_r_mid'] }, handTip: [-0.153, -0.055, 0.074], thumbSide: [0, -1, 0], mitten: { at: [0.48, 0.7], thumb: 0.028, curl: [62, 72] } },
+    chains: [],
+  },
+  // The Immortal: Atom Eve's naming, but the forearm joint is Elbow_Curve (the wrist hangs off it)
+  immortal: {
+    hips: 'Armature_ROOTSHJnt',
+    spine: ['Armature_Spine_01SHJnt', 'Armature_Spine_02SHJnt', 'Armature_Spine_TopSHJnt'], spineW: [0.3, 0.33, 0.37],
+    neck: 'Armature_Neck_01SHJnt', head: 'Armature_Neck_TopSHJnt',
+    brows: { inner: ['Armature_l_EyeBrowdown_AuxSHJnt', 'Armature_r_EyeBrowdown_AuxSHJnt', 'Armature_l_EyeBrowup_AuxSHJnt', 'Armature_r_EyeBrowup_AuxSHJnt'], rigSpace: true },
+    // the right forearm is skinned to the elbow helper beside the forearm joint (the left one a little): both ride the forearm
+    follow: [['Armature_l_Arm_ElbowSHJnt', 'Armature_l_Arm_Elbow_CurveSHJnt'], ['Armature_r_Arm_ElbowSHJnt', 'Armature_r_Arm_Elbow_CurveSHJnt']],
+    L: { clav: 'Armature_l_Arm_ClavicleSHJnt', upper: 'Armature_l_Arm_ShoulderSHJnt', fore: 'Armature_l_Arm_Elbow_CurveSHJnt', hand: 'Armature_l_Arm_WristSHJnt', thigh: 'Armature_l_Leg_HipSHJnt', shin: 'Armature_l_Leg_KneeSHJnt', foot: 'Armature_l_Leg_AnkleSHJnt', toe: 'Armature_l_Leg_BallSHJnt', fingers: fingersImmortal('l') },
+    R: { clav: 'Armature_r_Arm_ClavicleSHJnt', upper: 'Armature_r_Arm_ShoulderSHJnt', fore: 'Armature_r_Arm_Elbow_CurveSHJnt', hand: 'Armature_r_Arm_WristSHJnt', thigh: 'Armature_r_Leg_HipSHJnt', shin: 'Armature_r_Leg_KneeSHJnt', foot: 'Armature_r_Leg_AnkleSHJnt', toe: 'Armature_r_Leg_BallSHJnt', fingers: fingersImmortal('r') },
+    chains: [],
+  },
 };
 
 const _m = new THREE.Matrix4();
@@ -148,6 +179,18 @@ export class Rig {
     this._spaceInv = new THREE.Matrix4();
     this._refreshSpace();
 
+    // a hand without finger bones gets a stand-in child where its fingertips are, to straighten it by
+    this.tips = {};
+    for (const s of ['L', 'R']) {
+      const d = def[s];
+      if (!d.handTip) continue;
+      const hb = need(d.hand), tip = new THREE.Object3D();
+      tip.name = d.hand + '_tip';
+      tip.position.copy(this.rigPos(hb, _p)).add(_a.set(d.handTip[0] * (s === 'L' ? 1 : -1), d.handTip[1], d.handTip[2])).applyMatrix4(space.matrixWorld);
+      hb.attach(tip);
+      this.tips[s] = tip;
+    }
+
     // ---- Normalise to canonical T-pose ----
     for (const s of ['L', 'R']) {
       const d = def[s], sx = s === 'L' ? 1 : -1;
@@ -155,10 +198,12 @@ export class Rig {
       this._alignBone(need(d.upper), need(d.fore), _a.set(sx, 0, 0), null);
       this._alignBone(need(d.fore), need(d.hand), _a.set(sx, 0, 0), null);
       if (fingerBase && this.bones.get(fingerBase)) this._alignBone(need(d.hand), need(fingerBase), _a.set(sx, 0, 0), null);
+      else if (this.tips[s]) this._alignBone(need(d.hand), this.tips[s], _a.set(sx, 0, 0), null);
       this._alignBone(need(d.thigh), need(d.shin), _a.set(0, -1, 0), need(d.foot));
       this._alignBone(need(d.shin), need(d.foot), _a.set(0, -1, 0), need(d.foot));
     }
     space.updateMatrixWorld(true);
+    for (const s of ['L', 'R']) if (def[s].mitten) this._mitten(s, def[s]);
 
     // ---- Record joints ----
     const J = (name) => { const b = this.bones.get(name); if (!b) return null; const j = new Joint(b); this._recordJoint(j); return j; };
@@ -169,6 +214,14 @@ export class Rig {
     this.head = J(def.head);
     this.jaw = def.jaw ? J(def.jaw) : null;
     this.brows = def.brows ? def.brows.inner.map(J).filter(Boolean) : [];
+    // (rigSpace: the brows lower 4 mm in the model, whatever their parent's axes and scale)
+    for (const b of this.brows) {
+      b.browDown = new THREE.Vector3(0, -0.004, 0);
+      if (def.brows.rigSpace) {
+        _m.multiplyMatrices(this._spaceInv, b.bone.parent.matrixWorld).invert();
+        b.browDown.applyMatrix3(new THREE.Matrix3().setFromMatrix4(_m));
+      }
+    }
     // hips position mapping from rig space to the hips' parent local space
     this.hips.parentInv3 = new THREE.Matrix3();
     {
@@ -185,6 +238,8 @@ export class Rig {
         fingers: {},
       };
       for (const f in d.fingers) sd.fingers[f] = d.fingers[f].map(J).filter(Boolean);
+      // (mitten fingers fold less than real ones: a whole hand bending at two joints)
+      if (d.mitten && d.mitten.curl) sd.fistCurl = d.mitten.curl;
       // arm frame at T-pose
       sd.upperLen = sd.upper.pos.distanceTo(sd.fore.pos);
       sd.foreLen = sd.fore.pos.distanceTo(sd.hand.pos);
@@ -203,8 +258,12 @@ export class Rig {
       // hand frame (palm normal from finger layout)
       const fb = (k) => (sd.fingers[k] && sd.fingers[k][0]) ? sd.fingers[k][0].pos : null;
       const mid = fb('middle') || fb('index');
-      const handDir = new THREE.Vector3().subVectors(mid, sd.hand.pos).normalize();
-      const sideV = new THREE.Vector3().subVectors(fb('index'), fb('pinky') || fb('ring')).normalize();
+      // no fingers: the hand carries on along the forearm
+      const handDir = mid ? new THREE.Vector3().subVectors(mid, sd.hand.pos).normalize() : sd.f0.clone();
+      // toward the thumb: given (in the T-pose, mirrored), from the index to the outer fingers, or forward
+      const outer = fb('pinky') || fb('ring') || (fb('index') && fb('middle'));
+      const sideV = d.thumbSide ? new THREE.Vector3(d.thumbSide[0] * sd.sx, d.thumbSide[1], d.thumbSide[2])
+        : fb('index') && outer ? new THREE.Vector3().subVectors(fb('index'), outer).normalize() : new THREE.Vector3(0, 0, 1);
       const palm = new THREE.Vector3().crossVectors(handDir, sideV).normalize().multiplyScalar(sd.sx);
       sd.handDir = handDir; sd.palm = palm; sd.sideV = sideV;
       sd.flexAxis = new THREE.Vector3().crossVectors(handDir, palm).normalize();
@@ -231,6 +290,90 @@ export class Rig {
     for (const c of def.chains || []) {
       const joints = c.bones.map(J).filter(Boolean);
       if (joints.length >= 2) this.chains.push({ def: c, joints });
+    }
+  }
+
+  /**
+   * Give a hand without finger bones two joints across all its fingers (knuckles and middle) and move
+   * the finger vertices onto them, in the T-pose: past the knuckles a vertex blends onto the knuckle
+   * joint, past the middle onto the middle one. The thumb, out on the hand's thumb side, stays on the
+   * hand. Geometry is shared between copies of a model: it is re-weighted once, while every copy's
+   * skeleton gets the same two bones at the same indices.
+   */
+  _mitten(s, d) {
+    const H = this.bones.get(d.hand), tip = this.tips[s];
+    if (!H || !tip) return;
+    const sx = s === 'L' ? 1 : -1;
+    const W = this.rigPos(H, new THREE.Vector3()), Tp = this.rigPos(tip, new THREE.Vector3());
+    const axis = new THREE.Vector3().subVectors(Tp, W), len = axis.length();
+    axis.multiplyScalar(1 / len);
+    const thumb = new THREE.Vector3(d.thumbSide[0] * sx, d.thumbSide[1], d.thumbSide[2]);
+    const [t1, t2] = d.mitten.at;
+    const names = d.fingers.middle;
+    const mk = (name, parent, at) => {
+      const b = new THREE.Bone(); b.name = name;
+      b.position.copy(at).applyMatrix4(this.space.matrixWorld);
+      parent.updateWorldMatrix(true, false);
+      parent.worldToLocal(b.position);
+      parent.add(b); b.updateMatrixWorld(true);
+      this.bones.set(name, b);
+      return b;
+    };
+    const K = mk(names[0], H, W.clone().addScaledVector(axis, len * t1));
+    const M = mk(names[1], K, W.clone().addScaledVector(axis, len * t2));
+    const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+    // (an outline hull shares its mesh's skeleton and geometry: each skeleton is extended once)
+    const meshes = [], skels = new Set();
+    this.space.traverse((o) => { if (o.isSkinnedMesh && o.skeleton.bones.includes(H) && !skels.has(o.skeleton)) { skels.add(o.skeleton); meshes.push(o); } });
+    const v = new THREE.Vector3(), p = new THREE.Vector3(), mtx = new THREE.Matrix4(), lk = new THREE.Matrix4();
+    for (const m of meshes) {
+      const sk = m.skeleton, hi = sk.bones.indexOf(H);
+      // (a cloned skeleton shares its inverses array with the model it was cloned from: copy it first)
+      sk.boneInverses = sk.boneInverses.slice();
+      // the new bones' inverses: they ride the hand, so their bind pose is the hand's times their local
+      for (const b of [K, M]) {
+        lk.copy(H.matrixWorld).invert().multiply(b.matrixWorld); // local to the hand
+        sk.bones.push(b);
+        sk.boneInverses.push(lk.clone().invert().multiply(sk.boneInverses[hi]));
+      }
+      sk.boneMatrices = new Float32Array(sk.bones.length * 16);
+      if (sk.boneTexture) { sk.boneTexture.dispose(); sk.boneTexture = null; }
+      const g = m.geometry, key = `mitten${s}`;
+      if (g.userData[key]) continue;
+      g.userData[key] = true;
+      const ki = sk.bones.length - 2, mi = sk.bones.length - 1;
+      const SI = g.attributes.skinIndex, SW = g.attributes.skinWeight, P = g.attributes.position;
+      for (let i = 0; i < P.count; i++) {
+        let wh = 0;
+        for (let c = 0; c < 4; c++) if (SI.getComponent(i, c) === hi) wh += SW.getComponent(i, c);
+        if (wh < 0.05) continue;
+        // where the vertex is now (T-pose), in rig space
+        v.fromBufferAttribute(P, i).applyMatrix4(m.bindMatrix);
+        p.set(0, 0, 0);
+        for (let c = 0; c < 4; c++) {
+          const w = SW.getComponent(i, c);
+          if (w <= 0) continue;
+          const bi = SI.getComponent(i, c);
+          mtx.multiplyMatrices(sk.bones[bi].matrixWorld, sk.boneInverses[bi]);
+          p.addScaledVector(_c.copy(v).applyMatrix4(mtx), w);
+        }
+        p.applyMatrix4(this._spaceInv);
+        _d.subVectors(p, W);
+        const t = _d.dot(axis) / len;
+        const lat = _d.addScaledVector(axis, -t * len);
+        if (lat.dot(thumb) > d.mitten.thumb && t < 0.8) continue; // the thumb
+        const s1 = smooth(t1 - 0.07, t1 + 0.05, t), s2 = smooth(t2 - 0.06, t2 + 0.06, t);
+        if (s1 <= 0) continue;
+        const want = [[hi, wh * (1 - s1)], [ki, wh * s1 * (1 - s2)], [mi, wh * s1 * s2]];
+        // keep the other influences, the strongest first, in the slots that are left
+        const others = [];
+        for (let c = 0; c < 4; c++) { const bi = SI.getComponent(i, c), w = SW.getComponent(i, c); if (bi !== hi && w > 0) others.push([bi, w]); }
+        others.sort((a, b) => b[1] - a[1]);
+        const slots = want.filter((x) => x[1] > 1e-4).concat(others).slice(0, 4);
+        const tot = slots.reduce((a, x) => a + x[1], 0) || 1;
+        for (let c = 0; c < 4; c++) { SI.setComponent(i, c, slots[c] ? slots[c][0] : 0); SW.setComponent(i, c, slots[c] ? slots[c][1] / tot : 0); }
+      }
+      SI.needsUpdate = true; SW.needsUpdate = true;
     }
   }
 
@@ -299,8 +442,7 @@ export class Rig {
     if (this.jaw) this.jaw.setDelta(_q.setFromAxisAngle(_a.set(1, 0, 0), v[CH.jaw] * 22 * DEG));
     for (let i = 0; i < this.brows.length; i++) {
       const b = this.brows[i];
-      b.bone.position.copy(b.restPos);
-      b.bone.position.y -= v[CH.browAnger] * 0.004;
+      b.bone.position.copy(b.restPos).addScaledVector(b.browDown, v[CH.browAnger]);
     }
     // Clavicles
     for (const s of ['L', 'R']) {
@@ -353,7 +495,7 @@ export class Rig {
       const ch = sd.fingers[f], ax = sd.fingerAxes[f];
       if (!ax) continue;
       const thumb = f === 'thumb';
-      const curls = thumb ? FIST_THUMB : FIST_CURL;
+      const curls = thumb ? FIST_THUMB : sd.fistCurl || FIST_CURL;
       const spr = thumb ? 18 : SPREAD[f] || 0;
       for (let i = 0; i < ch.length; i++) {
         const c = (curls[i] * fist + REST_CURL[i] * (1 - fist) * (thumb ? 0.3 : 1)) * DEG;

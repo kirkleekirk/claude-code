@@ -87,6 +87,19 @@ export function bus(gb, m, { burnt = false } = {}) {
   body();
   extrude(gb, [[-L, 0.35], [L, 0.35], [L + 0.05, 0.9], [L - 0.05, 2.95], [L - 0.35, 3.15], [-L + 0.2, 3.15], [-L, 2.95], [-L - 0.03, 0.9]], -W, W);
   gb.box(-L * 0.55, 3.15, -0.95, L * 0.2, 3.55, 0.95, 'xXzZY');
+  gb.box(L * 0.32, 3.15, -0.7, L * 0.58, 3.34, 0.7, 'xXzZY');
+  // the underside, in road grime: chassis rails, the engine and gearbox at the back (what a tipped
+  // bus shows the street)
+  sol(gb, 0x6a6157, { pat: 'steel', rough: 0.85, metal: 0.3, grime: 0.7 });
+  gb.box(-L + 0.2, 0.33, -W + 0.1, L - 0.2, 0.35, W - 0.1, 'y');
+  sol(gb, 0x5b4636, { pat: 'steel', rough: 0.8, metal: 0.4, grime: 0.6 });
+  for (const s of [-1, 1]) gb.box(-L + 0.4, 0.17, s * 0.55 - 0.09, L - 0.4, 0.33, s * 0.55 + 0.09, 'xXzZy');
+  sol(gb, 0x4b4a47, { pat: 'steel', rough: 0.6, metal: 0.55, grime: 0.6 });
+  gb.box(-L + 0.7, 0.08, -0.48, -L + 2.5, 0.33, 0.48, 'xXzZy');
+  for (const x of [-L + 2.3, L - 2.1]) gb.box(x - 0.08, 0.3, -W + 0.3, x + 0.08, 0.34, W - 0.3, 'xXzZy'); // axles
+  sol(gb, 0x3c3f42, { pat: 'steel', rough: 0.6, metal: 0.5, grime: 0.6 });
+  gb.box(-L * 0.85, 3.15, -0.45, -L * 0.7, 3.21, 0.45, 'xXzZY'); // roof hatch
+  body();
   sol(gb, burnt ? 0x070605 : 0x11171b, { pat: burnt ? 'plain' : 'glass', rough: 0.12, metal: 0.3, grime: 0.25 });
   for (const s of [-1, 1]) for (let x = -L + 0.5; x < L - 1.6; x += 1.62) {
     if (s > 0 && Math.abs(x - (L - 2.6)) < 1.2) continue;
@@ -354,9 +367,10 @@ export function buildProps(gb, boxes, ty, tn, road = []) {
       car(gb, m, { kind, burnt: ex.burnt, R });
       boxes.push(aabb(placeFrame(x, y, z, yaw, { normal }), 2.4, 0, 1.45, 0.92));
     } else if (kind === 'bus') {
-      const m = placeFrame(x, y, z, yaw, { tipped: ex.tipped, side: 1.3, normal });
+      // (flipped, it lies on its crushed roof units with its wheels in the air)
+      const m = placeFrame(x, y, z, yaw, { tipped: ex.tipped, flipped: ex.flipped, roof: 3.5, side: 1.3, normal });
       bus(gb, m, ex);
-      boxes.push(ex.tipped ? aabb(placeFrame(x, y, z, yaw, { normal }), 6, 0, 2.6, 0, 0, 3.55) : aabb(placeFrame(x, y, z, yaw, { normal }), 6, 0, 3.2, 1.3));
+      boxes.push(ex.tipped ? aabb(placeFrame(x, y, z, yaw, { normal }), 6, 0, 2.6, 0, 0, 3.55) : aabb(placeFrame(x, y, z, yaw, { normal }), 6, 0, ex.flipped ? 3.5 : 3.2, 1.3));
     } else if (kind === 'barrier') {
       for (const k of [-1.55, 1.55]) {
         const m = placeFrame(x + Math.cos(yaw) * k, y, z - Math.sin(yaw) * k, yaw + jit() * 0.5);

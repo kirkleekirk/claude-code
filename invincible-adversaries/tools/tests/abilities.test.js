@@ -78,6 +78,24 @@ const SPECS = {
     ['a3', 10, 60, 0, 0],
     ['ult', 12, 200, 15, 40],
   ],
+  allen: [
+    ['primary', 2.4, 110, 150, 380, { hold: true }],
+    // a tap: the punch goes at the bottom of its charge
+    ['secondary', 2.5, 60, 60, 95],
+    ['a1', 10, 60, 55, 80],
+    // the brace's shockwave at the end, 6 m out of 9 (nothing soaked up)
+    ['a2', 6, 220, 28, 55],
+    ['a3', 6, 60, 0, 0, { setup: (h) => { h.kit.strain = 150; } }],
+    ['ult', 8, 120, 110, 130],
+  ],
+  immortal: [
+    ['primary', 2.4, 110, 150, 330, { hold: true }],
+    ['secondary', 4, 50, 80, 90],
+    ['a1', 12, 120, 45, 65],
+    ['a2', 8, 60, 0, 0],
+    ['a3', 5, 70, 65, 100],
+    ['ult', 6, 120, 60, 80],
+  ],
 };
 
 for (const key of Object.keys(SPECS)) {
@@ -87,6 +105,7 @@ for (const key of Object.keys(SPECS)) {
       T.run(10, () => { T.clr(h.intents); T.aim(h, T.center(foe)); });
       const def = h.def.abilities[slot];
       if (slot === 'ult') h.ult = h.def.ultCost;
+      o.setup && o.setup(h, foe);
       const base = sceneCount(), t0 = T.w.time;
       cast(h, foe, slot, frames, { hold: o.hold, aimAt: o.aimAt && (() => o.aimAt(h, foe)), extra: o.extra && ((k) => o.extra(h, k)) });
       const dealt = T.dmgTo(foe, t0);
@@ -709,6 +728,247 @@ T.test('rex and battlebeast cannot fly; double-tapping jump just jumps', () => {
   }
 });
 
+// ---------------------------------------------------------------- Allen
+const RA = () => T.RULES.allen;
+T.test('allen passive: damage he lives through banks into Resilience once the fight is over', () => {
+  const [al, foe] = duel('allen', 'omniman', 30);
+  const R = RA(), base = al.def.hp, hit = R.strainPerLevel;
+  // (one level's worth, all of it above the near-death line)
+  al.maxHp = al.hp = Math.max(base, Math.ceil(hit / (1 - R.lowHp)) + 50);
+  const top = al.maxHp;
+  T.w.damage(foe, al, hit, { noLifesteal: true });
+  T.expect(Math.abs(al.kit.strain - hit) < 0.5 && al.kit.level === 0, `strain ${al.kit.strain.toFixed(0)}, level ${al.kit.level} right after the hit`);
+  // still in the fight: nothing banks yet
+  T.run(Math.floor((R.bankDelay - 0.5) * 60));
+  T.expect(al.kit.level === 0, 'banked before the fight was over');
+  T.run(70);
+  T.expect(al.kit.level === 1 && al.kit.strain === 0, `level ${al.kit.level}, strain ${al.kit.strain} after ${R.bankDelay} s without damage`);
+  T.expect(al.maxHp === Math.round(base * (1 + R.hp)), `max health ${al.maxHp}`);
+  // a gained level comes with its health filled (here the bigger test pool shrinks to the real one)
+  T.expect(Math.abs(al.hp - Math.min(al.maxHp, top - hit + Math.max(0, al.maxHp - top))) < 25, `health ${al.hp.toFixed(0)} after levelling (regen included)`);
+  T.expect(Math.abs(al.kit.dmgMul - (1 + R.dmg)) < 1e-6 && Math.abs(al.kit.speedMul - (1 + R.speed)) < 1e-6 && Math.abs(al.kit.flyMul - (1 + R.fly)) < 1e-6, 'level 1 bonuses');
+  // near death counts double: from 40% to 10% of his health, the part under 35% twice
+  al.hp = al.maxHp * 0.4;
+  const s0 = al.kit.strain, hit2 = al.maxHp * 0.3;
+  T.w.damage(foe, al, hit2, { noLifesteal: true });
+  const want = hit2 + al.maxHp * 0.25;
+  T.expect(Math.abs(al.kit.strain - s0 - want) < 1, `near-death strain ${(al.kit.strain - s0).toFixed(0)}, expected ${want.toFixed(0)}`);
+  const res0 = al.kit.res;
+  T.run(Math.ceil(R.bankDelay * 60) + 10);
+  T.expect(Math.abs(al.kit.res - res0 - want) < 1 && al.kit.level === Math.floor((res0 + want) / R.strainPerLevel), `resilience ${al.kit.res.toFixed(0)} (level ${al.kit.level}) after a near-death fight`);
+  // his damage really is higher
+  const lv = al.kit.level, t0 = T.w.time;
+  T.w.damage(al, foe, 100, {});
+  T.expect(Math.abs(T.dmgTo(foe, t0) - 100 * (1 + R.dmg * lv)) < 0.5, `100 dealt as ${T.dmgTo(foe, t0).toFixed(1)} at level ${lv}`);
+});
+
+T.test('allen passive: levels stop at the cap, dying loses half, the respawn keeps the rest', () => {
+  const [al, foe] = duel('allen', 'omniman', 30);
+  const R = RA();
+  al.kit.res = 7 * R.strainPerLevel + 120; al.kit.applyLevel();
+  T.expect(al.kit.level === 7, `level ${al.kit.level}`);
+  al.kit.strain = 99999; al.lastHurt = -99; T.run(2);
+  T.expect(al.kit.level === R.maxLevel && al.kit.res === R.maxLevel * R.strainPerLevel, `level ${al.kit.level} past the cap`);
+  T.expect(al.maxHp === Math.round(al.def.hp * (1 + R.hp * R.maxLevel)), `max health ${al.maxHp} at the cap`);
+  T.w.kill(foe, al);
+  T.expect(al.kit.level === R.maxLevel / 2 && al.kit.strain === 0, `level ${al.kit.level} after dying`);
+  T.run(Math.ceil(T.RULES.respawn * 60) + 30);
+  T.expect(!al.dead && al.hp === al.maxHp && al.maxHp === Math.round(al.def.hp * (1 + R.hp * R.maxLevel / 2)), `respawned with ${al.hp}/${al.maxHp}`);
+  T.expect(Math.abs(al.visual.scale.x - (1 + 0.012 * al.kit.level)) < 0.02, `scale ${al.visual.scale.x.toFixed(3)}`);
+  // strain not banked when he dies is lost
+  al.kit.strain = 300;
+  T.w.kill(foe, al);
+  T.expect(al.kit.strain === 0, 'unbanked strain survived his death');
+});
+
+T.test('allen secondary: the longer the wind-up the harder it hits, and a full one sends them flying', () => {
+  let [al, foe] = duel('allen', 'eve', 2.6);
+  let t0 = T.w.time;
+  // hold for a full second and a bit
+  T.run(110, (k) => { T.clr(al.intents); T.aim(al, T.center(foe)); al.intents.secondary = k < 75; al.intents.secondaryPressed = k === 0; });
+  const full = T.dmgTo(foe, t0);
+  T.expect(full >= 150 && full <= 165, `full charge dealt ${full.toFixed(0)}`);
+  T.expect(foe.mode === 'tumble' || foe.pos.distanceTo(al.pos) > 7, `foe not sent flying (${foe.mode}, ${foe.pos.distanceTo(al.pos).toFixed(1)} m)`);
+  T.expect(al.cd.secondary > 0, 'no cooldown after the punch');
+  T.expect(T.settle([al, foe], 600) >= 0, 'did not settle');
+  // slow while winding up
+  [al, foe] = duel('allen', 'omniman', 20);
+  t0 = T.w.time;
+  T.run(30, (k) => { T.clr(al.intents); T.aim(al, T.center(foe)); al.intents.secondary = true; al.intents.mz = 1; });
+  T.expect(al.kit.charge && al.kit.speedMul < 0.65, 'not slowed while winding up');
+  T.run(40, () => { T.clr(al.intents); });
+  T.expect(!al.kit.charge, 'charge did not release when the button went up');
+});
+
+T.test('allen a1: the bulldozer plows through everyone on its line and knocks them aside', () => {
+  const [al, a, b, off] = T.stage([{ key: 'allen', player: true, at: [0, 0, 0], face: [0, 1] }, { key: 'eve', team: 1, at: [0.6, 0, 7] }, { key: 'rex', team: 1, at: [-0.6, 0, 14] }, { key: 'robot', team: 1, at: [9, 0, 10] }]);
+  for (const e of [a, b, off]) e.maxHp = e.hp = BIG;
+  const t0 = T.w.time;
+  cast(al, null, 'a1', 60, { aimAt: () => T.V(0, 1.6, 30) });
+  T.expect(Math.abs(T.dmgTo(a, t0) - 65) < 1 && Math.abs(T.dmgTo(b, t0) - 65) < 1, `on the line: ${T.dmgTo(a, t0).toFixed(0)}, ${T.dmgTo(b, t0).toFixed(0)}`);
+  T.expect(T.dmgTo(off, t0) === 0, 'hit someone off to the side');
+  T.expect(Math.abs(a.pos.x) > 2 && Math.abs(b.pos.x) > 2, `not knocked aside (x ${a.pos.x.toFixed(1)}, ${b.pos.x.toFixed(1)})`);
+  T.expect(al.pos.z > 20, `only charged to z ${al.pos.z.toFixed(1)}`);
+});
+
+T.test('allen a2: unbreakable halves damage, banks it twice over, and lets it all out at the end', () => {
+  const [al, foe, far] = T.stage([{ key: 'allen', player: true, at: [0, 0, 0], face: [0, 1] }, { key: 'omniman', team: 1, at: [0, 0, 4] }, { key: 'eve', team: 1, at: [0, 0, 20] }]);
+  foe.maxHp = foe.hp = BIG; far.maxHp = far.hp = BIG;
+  cast(al, foe, 'a2', 30);
+  T.expect(!!al.kit.brace && al.unstoppable, 'not bracing / not unstoppable');
+  const hp0 = al.hp, s0 = al.kit.strain;
+  T.w.damage(foe, al, 200, { noLifesteal: true });
+  T.expect(Math.abs(hp0 - al.hp - 100) < 0.5, `took ${(hp0 - al.hp).toFixed(0)} of 200`);
+  T.expect(Math.abs(al.kit.strain - s0 - 200) < 0.5, `banked ${(al.kit.strain - s0).toFixed(0)} strain for 100 taken`);
+  const t0 = T.w.time;
+  T.run(170, () => { T.clr(al.intents); T.clr(foe.intents); });
+  T.expect(!al.kit.brace && !al.unstoppable, 'brace did not end after 3 s');
+  // 50 + 30% of the 200 that came at him, a little less 4 m out of 9
+  const want = 110 * (1 - 0.4 * 4 / 9);
+  T.expect(Math.abs(T.dmgTo(foe, t0) - want) < 8, `shockwave ${T.dmgTo(foe, t0).toFixed(0)}, expected ~${want.toFixed(0)}`);
+  T.expect(T.dmgTo(far, t0) === 0, 'shockwave reached 20 m');
+});
+
+T.test('allen a3: second wind banks the strain at once and heals 40% of it', () => {
+  const [al, foe] = duel('allen', 'omniman', 30);
+  const R = RA(), got = R.strainPerLevel * 1.25;
+  al.hp = al.maxHp - 300; al.kit.strain = got; al.lastHurt = T.w.time;
+  const hp0 = al.hp, max0 = al.maxHp;
+  cast(al, foe, 'a3', 40, { extra: () => { al.lastHurt = T.w.time; } });
+  T.expect(al.kit.level === 1 && al.kit.strain === 0, `level ${al.kit.level}, strain ${al.kit.strain} after second wind`);
+  // healed 40% of the strain, plus the level's health
+  const gain = al.hp - hp0;
+  T.expect(Math.abs(gain - (Math.min(300, got * 0.4) + (al.maxHp - max0))) < 3, `healed ${gain.toFixed(0)}`);
+  T.expect(al.cd.a3 > 10, 'no cooldown');
+  // nothing to come back from: refused, short cooldown
+  const [al2] = duel('allen', 'omniman', 30);
+  cast(al2, null, 'a3', 10, { aimAt: () => T.V(0, 1.5, 10) });
+  T.expect(al2.cd.a3 <= 1.01, `refused second wind took a ${al2.cd.a3.toFixed(1)} s cooldown`);
+});
+
+T.test('allen ult: full resilience for 10 s, unstoppable, then he keeps two levels', () => {
+  const [al, foe] = duel('allen', 'omniman', 6);
+  al.ult = al.def.ultCost;
+  al.hp = 200;
+  cast(al, foe, 'ult', 60);
+  const R = RA();
+  T.expect(!!al.kit.ultState && al.kit.eff === R.maxLevel && al.unstoppable, 'ult state missing');
+  T.expect(al.maxHp === Math.round(al.def.hp * (1 + R.hp * R.maxLevel)), `max health ${al.maxHp} during the ult`);
+  T.expect(al.hp > 200 + al.maxHp * 0.39, `healed only to ${al.hp.toFixed(0)}`);
+  T.run(600, () => { T.clr(al.intents); T.clr(foe.intents); });
+  T.expect(!al.kit.ultState && !al.unstoppable, 'ult did not end');
+  T.expect(al.kit.level === 2, `kept level ${al.kit.level}`);
+});
+
+// ---------------------------------------------------------------- The Immortal
+const RI = () => T.RULES.immortal;
+T.test('immortal passive: a killing blow puts him on one knee, and he rises at half health', () => {
+  const [im, foe] = duel('immortal', 'omniman', 4);
+  const U = RI();
+  T.w.damage(foe, im, 9999, { noLifesteal: true });
+  T.expect(!im.dead && !!im.kit.down && Math.abs(im.hp - U.will) < 0.5, `dead ${im.dead}, down ${!!im.kit.down}, hp ${im.hp.toFixed(0)}`);
+  T.expect(im.anchored && im.unstoppable, 'not anchored and unstoppable while down');
+  // can't act while down
+  cast(im, foe, 'a1', 10);
+  T.expect(im.cd.a1 === 0, 'used an ability while down');
+  T.run(Math.ceil(U.downT * 60) + 10, () => { T.clr(im.intents); T.clr(foe.intents); });
+  T.expect(!im.kit.down && Math.abs(im.hp - im.maxHp * U.riseHp) < 30, `rose: down ${!!im.kit.down}, hp ${im.hp.toFixed(0)}`);
+  T.expect(Math.abs(im.kit.undyingCd - U.cd) < 1, `cooldown ${im.kit.undyingCd.toFixed(1)}`);
+  const tRise = T.w.time;
+  T.run(30, () => { T.clr(im.intents); T.clr(foe.intents); });
+  T.expect(T.dmgTo(foe, tRise - 0.3) > 60, 'no shockwave when he rose');
+  // on cooldown he dies like anyone
+  T.settle([im, foe], 300);
+  T.w.damage(foe, im, 9999, { noLifesteal: true });
+  T.expect(im.dead, 'cheated death twice in a row');
+});
+
+T.test('immortal passive: enemies can finish him while he is down, and grabs cannot move him', () => {
+  let [im, foe] = duel('immortal', 'omniman', 7);
+  T.w.damage(foe, im, 9999, { noLifesteal: true });
+  T.run(20);
+  // Omni-Man's charge goes through him without carrying him off
+  const p0 = im.pos.clone();
+  cast(foe, im, 'a1', 40);
+  T.expect(!im.carriedBy && im.pos.distanceTo(p0) < 0.5, `moved ${im.pos.distanceTo(p0).toFixed(2)} m while down`);
+  T.expect(im.dead || !!im.kit.down, 'stood up early');
+  // (he takes half damage while down)
+  T.expect(im.dead || im.hp > RI().will - 85 * RI().downTaken - 1, `the charge took ${(RI().will - im.hp).toFixed(0)} of his ${RI().will} while down`);
+  if (!im.dead) T.w.damage(foe, im, RI().will / RI().downTaken + 20, { noLifesteal: true });
+  T.expect(im.dead && !im.kit.down, 'not finished off');
+  T.expect(im.kit.undyingCd > 30, 'finishing him did not spend Undying');
+  T.run(Math.ceil(T.RULES.respawn * 60) + 30);
+  T.expect(!im.dead && im.hp === im.maxHp, 'did not respawn normally');
+  // knocked out of the air: he comes down and kneels on the ground
+  [im, foe] = T.stage([{ key: 'immortal', player: true, at: [0, 15, 0], fly: true, face: [0, 1] }, { key: 'eve', team: 1, at: [0, 0, 10] }]);
+  T.w.damage(foe, im, 9999, {});
+  T.run(90, () => { T.clr(im.intents); });
+  T.expect(!!im.kit.down && im.pos.y - im.groundY < 0.1, `down in the air at ${im.pos.y.toFixed(1)} m`);
+  T.expect(T.settle([im], 400) >= 0 && !im.dead, 'never got back up');
+  expectClean('after rising', [im]);
+});
+
+T.test('immortal secondary: the uppercut launches them high', () => {
+  const [im, foe] = duel('immortal', 'invincible', 3);
+  cast(im, foe, 'secondary', 20);
+  let top = 0;
+  T.run(60, () => { top = Math.max(top, foe.pos.y); T.clr(im.intents); });
+  T.expect(top > 4, `launched only ${top.toFixed(1)} m`);
+});
+
+T.test("immortal a1: guardian's dive lands by the ally under the crosshair and shields them", () => {
+  const [im, ally, foe] = T.stage([{ key: 'immortal', player: true, at: [0, 0, 0], face: [0, 1] }, { key: 'eve', team: 0, at: [2, 0, 26] }, { key: 'omniman', team: 1, at: [2, 0, 31] }]);
+  foe.maxHp = foe.hp = BIG;
+  const t0 = T.w.time;
+  cast(im, null, 'a1', 120, { aimAt: () => T.center(ally), extra: () => { im.intents.aimHero = ally; } });
+  T.expect(im.pos.distanceTo(ally.pos) < 3.5, `landed ${im.pos.distanceTo(ally.pos).toFixed(1)} m from the ally`);
+  T.expect(ally.overhealth > 100, `ally overhealth ${ally.overhealth.toFixed(0)}`);
+  T.expect(Math.abs(T.dmgTo(foe, t0) - 55) < 1, `shockwave ${T.dmgTo(foe, t0).toFixed(0)} on the enemy next to them`);
+  // between them and the threat
+  T.expect(im.pos.z > ally.pos.z, 'landed on the wrong side of the ally');
+});
+
+T.test('immortal a2: the rallying cry buffs every ally in 18 m', () => {
+  const [im, near, far, foe] = T.stage([{ key: 'immortal', player: true, at: [0, 0, 0], face: [0, 1] }, { key: 'rex', team: 0, at: [6, 0, 6] }, { key: 'robot', team: 0, at: [0, 0, 30] }, { key: 'eve', team: 1, at: [3, 0, 3] }]);
+  cast(im, null, 'a2', 40, { aimAt: () => T.V(0, 1.5, 10) });
+  for (const a of [im, near]) T.expect(a.status.dr >= 0.2 && a.status.boost >= 0.15 && a.overhealth > 40, `${a.key} not rallied (dr ${a.status.dr}, boost ${a.status.boost}, oh ${a.overhealth.toFixed(0)})`);
+  T.expect(far.status.dr === 0 && far.overhealth === 0, 'ally 30 m away was rallied');
+  T.expect(foe.status.boost === 0, 'the enemy got the buff');
+});
+
+T.test('immortal a3: hammerfall shakes 8 m on the ground, and dives down harder from the air', () => {
+  let [im, foe] = duel('immortal', 'eve', 4);
+  let t0 = T.w.time;
+  cast(im, foe, 'a3', 60);
+  const ground = T.dmgTo(foe, t0);
+  T.expect(ground > 70 && ground < 100, `ground hammerfall ${ground.toFixed(0)}`);
+  [im, foe] = T.stage([{ key: 'immortal', player: true, at: [0, 22, 0], fly: true, face: [0, 1] }, { key: 'eve', team: 1, at: [0, 0, 3] }]);
+  foe.maxHp = foe.hp = BIG;
+  t0 = T.w.time;
+  cast(im, foe, 'a3', 90, { aimAt: () => foe.pos.clone() });
+  const air = T.dmgTo(foe, t0);
+  T.expect(air > ground + 10, `from the air ${air.toFixed(0)} vs ${ground.toFixed(0)} on the ground`);
+  T.expect(im.grounded, 'did not come down');
+});
+
+T.test('immortal ult: for 8 s nothing kills him, he steals life and Undying comes back', () => {
+  const [im, foe] = duel('immortal', 'omniman', 4);
+  im.kit.undyingCd = 30;
+  im.ult = im.def.ultCost;
+  cast(im, foe, 'ult', 40);
+  T.expect(!!im.kit.ultState && im.kit.undyingCd === 0 && im.unstoppable, 'ult state missing');
+  T.w.damage(foe, im, 99999, { noLifesteal: true });
+  T.expect(!im.dead && im.hp >= 1 && !im.kit.down, `killed during the ult (dead ${im.dead}, down ${!!im.kit.down})`);
+  const hp0 = im.hp;
+  T.w.damage(im, foe, 200, {});
+  T.expect(im.hp > hp0 + 50, `no lifesteal (${(im.hp - hp0).toFixed(0)})`);
+  T.run(480, () => { T.clr(im.intents); T.clr(foe.intents); });
+  T.expect(!im.kit.ultState && !im.unstoppable, 'ult did not end');
+  // Undying is there for the next one
+  T.w.damage(foe, im, 99999, { noLifesteal: true });
+  T.expect(!im.dead && !!im.kit.down, 'Undying was not ready after the ult');
+});
+
 // ---------------------------------------------------------------- edge cases
 for (const [key, slot, dist] of [['invincible', 'a3', 3], ['omniman', 'a1', 7]]) {
   T.test(`${key} ${slot}: the carried target dying mid-carry ends the carry cleanly`, () => {
@@ -722,7 +982,7 @@ for (const [key, slot, dist] of [['invincible', 'a3', 3], ['omniman', 'a1', 7]])
   });
 }
 
-const CASTS = { invincible: ['a1', 'a2', 'a3', 'ult'], eve: ['a2', 'secondary', 'ult'], omniman: ['a1', 'secondary', 'ult'], robot: ['secondary', 'a1', 'a2', 'a3', 'ult'], rex: ['secondary', 'a2', 'a3', 'ult'], battlebeast: ['a1', 'a2', 'a3', 'ult'] };
+const CASTS = { invincible: ['a1', 'a2', 'a3', 'ult'], eve: ['a2', 'secondary', 'ult'], omniman: ['a1', 'secondary', 'ult'], robot: ['secondary', 'a1', 'a2', 'a3', 'ult'], rex: ['secondary', 'a2', 'a3', 'ult'], battlebeast: ['a1', 'a2', 'a3', 'ult'], allen: ['secondary', 'a1', 'a2', 'ult'], immortal: ['secondary', 'a1', 'a3', 'ult'] };
 for (const key of Object.keys(CASTS)) {
   for (const slot of CASTS[key]) {
     T.test(`${key} ${slot}: the caster dying mid-ability leaves nothing behind`, () => {
@@ -754,7 +1014,7 @@ for (const key of Object.keys(CASTS)) {
   }
 }
 
-for (const [key, slot, dist] of [['invincible', 'a3', 3], ['omniman', 'a1', 7], ['invincible', 'ult', 10], ['eve', 'ult', 10], ['eve', 'a1', 5], ['robot', 'a1', 8], ['robot', 'a3', 8], ['robot', 'ult', 10], ['rex', 'secondary', 8], ['rex', 'a2', 8], ['rex', 'ult', 6], ['battlebeast', 'a3', 3], ['battlebeast', 'a1', 12], ['battlebeast', 'ult', 6]]) {
+for (const [key, slot, dist] of [['invincible', 'a3', 3], ['omniman', 'a1', 7], ['invincible', 'ult', 10], ['eve', 'ult', 10], ['eve', 'a1', 5], ['robot', 'a1', 8], ['robot', 'a3', 8], ['robot', 'ult', 10], ['rex', 'secondary', 8], ['rex', 'a2', 8], ['rex', 'ult', 6], ['battlebeast', 'a3', 3], ['battlebeast', 'a1', 12], ['battlebeast', 'ult', 6], ['allen', 'a1', 8], ['allen', 'a2', 6], ['allen', 'ult', 6], ['immortal', 'a1', 12], ['immortal', 'a3', 5], ['immortal', 'ult', 6]]) {
   T.test(`${key} ${slot}: swapping hero mid-ability leaves nothing behind`, () => {
     const [h, foe] = duel(key, 'omniman', dist);
     if (slot === 'ult') h.ult = h.def.ultCost;
@@ -790,6 +1050,12 @@ T.test('mirror matches: simultaneous charges, slams, dashes and ults resolve', (
     ['battlebeast', 'invincible', 'a3', 'a3', 3],
     ['rex', 'rex', 'ult', 'ult', 5],
     ['rex', 'battlebeast', 'a1', 'a1', 12],
+    ['allen', 'allen', 'a1', 'a1', 12],
+    ['allen', 'omniman', 'ult', 'a1', 8],
+    ['allen', 'immortal', 'a1', 'a3', 6],
+    ['immortal', 'immortal', 'a1', 'a1', 14],
+    ['immortal', 'battlebeast', 'ult', 'a3', 3],
+    ['immortal', 'invincible', 'a3', 'a3', 3],
   ];
   for (const [ka, kb, sa, sb, dist] of pairs) {
     const [a, b] = T.stage([{ key: ka, player: true, at: [0, 0, 0], face: [0, 1] }, { key: kb, team: 1, at: [0, 0, dist], face: [0, -1] }]);
@@ -811,7 +1077,7 @@ T.test('mirror matches: simultaneous charges, slams, dashes and ults resolve', (
 
 T.test('dashes, charges, dives and ults at the arena edge stay inside it', () => {
   const R = T.ARENA.boundR - 6;
-  const cases = [['invincible', 'a1'], ['invincible', 'a2'], ['invincible', 'ult'], ['omniman', 'a1'], ['omniman', 'ult'], ['eve', 'secondary'], ['robot', 'a1'], ['robot', 'secondary'], ['rex', 'a1'], ['rex', 'ult'], ['battlebeast', 'a1'], ['battlebeast', 'a3']];
+  const cases = [['invincible', 'a1'], ['invincible', 'a2'], ['invincible', 'ult'], ['omniman', 'a1'], ['omniman', 'ult'], ['eve', 'secondary'], ['robot', 'a1'], ['robot', 'secondary'], ['rex', 'a1'], ['rex', 'ult'], ['battlebeast', 'a1'], ['battlebeast', 'a3'], ['allen', 'a1'], ['immortal', 'a1']];
   for (const [key, slot] of cases) {
     const [h, foe] = T.stage([{ key, player: true, at: [R, 0, 0], face: [1, 0] }, { key: 'eve', team: 1, at: [R - 6, 0, 3] }]);
     if (slot === 'ult') h.ult = h.def.ultCost;
@@ -828,7 +1094,7 @@ T.test('abilities into walls and under the ceiling end cleanly', () => {
   T.expect(!!box, 'no cover box in the arena');
   if (!box) return;
   const c = box.min.clone().add(box.max).multiplyScalar(0.5);
-  for (const [key, slot] of [['invincible', 'a1'], ['omniman', 'a1'], ['invincible', 'a2'], ['rex', 'a1'], ['battlebeast', 'a1']]) {
+  for (const [key, slot] of [['invincible', 'a1'], ['omniman', 'a1'], ['invincible', 'a2'], ['rex', 'a1'], ['battlebeast', 'a1'], ['allen', 'a1'], ['immortal', 'a1']]) {
     const [h, foe] = T.stage([{ key, player: true, at: [c.x, 0, c.z - 12], face: [0, 1] }, { key: 'eve', team: 1, at: [c.x + 30, 0, c.z + 30] }]);
     cast(h, foe, slot, 120, { aimAt: () => T.V(c.x, 0.8, c.z) });
     T.expect(T.settle([h], 600) >= 0, `${key} ${slot} into a wall: did not settle`);
@@ -836,7 +1102,7 @@ T.test('abilities into walls and under the ceiling end cleanly', () => {
     const inside = h.pos.x > box.min.x + 0.05 && h.pos.x < box.max.x - 0.05 && h.pos.z > box.min.z + 0.05 && h.pos.z < box.max.z - 0.05 && h.pos.y < box.max.y - 0.3;
     T.expect(!inside, `${key} ${slot}: ended inside the cover box`);
   }
-  for (const [key, slot] of [['invincible', 'a3'], ['invincible', 'ult'], ['eve', 'ult'], ['robot', 'ult'], ['robot', 'a1'], ['rex', 'a1'], ['battlebeast', 'a1']]) {
+  for (const [key, slot] of [['invincible', 'a3'], ['invincible', 'ult'], ['eve', 'ult'], ['robot', 'ult'], ['robot', 'a1'], ['rex', 'a1'], ['battlebeast', 'a1'], ['allen', 'a1'], ['immortal', 'a1'], ['immortal', 'a3']]) {
     const top = T.ARENA.ceiling - 4;
     const [h, foe] = T.stage([{ key, player: true, at: [0, top, 0], fly: true, face: [0, 1] }, { key: 'eve', team: 1, at: [0, top, 2.5], fly: true }]);
     h.ult = h.def.ultCost;
@@ -847,7 +1113,7 @@ T.test('abilities into walls and under the ceiling end cleanly', () => {
 });
 
 T.test('stunned heroes cannot start abilities', () => {
-  for (const key of ['invincible', 'rex', 'eve', 'robot', 'omniman', 'battlebeast']) {
+  for (const key of ['invincible', 'rex', 'eve', 'robot', 'omniman', 'battlebeast', 'allen', 'immortal']) {
     const [h, foe] = duel(key, 'omniman', 8);
     h.status.stunT = 1;
     const t0 = T.w.time;

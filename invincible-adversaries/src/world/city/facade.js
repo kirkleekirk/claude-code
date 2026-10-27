@@ -6,10 +6,11 @@ import { FIRE_U, FIRE_GLSL } from './firelight.js';
 // draws the window grid, the glass (reflective, dark, lit, burning or smashed out), storefronts,
 // coursing, grime and soot. Roofs (faces pointing up) get tar and gravel.
 //   styles: 0 glass curtain wall, 1 black steel (Mies), 2 limestone, 3 brick, 4 terracotta,
-//           5 concrete, 6 art deco piers, 7 interior (inside a broken building), 8 bare concrete
-export const STYLE_ID = { glass: 0, black: 1, stone: 2, brick: 3, terracotta: 4, concrete: 5, deco: 6, interior: 7, bare: 8, canvas: 9 };
+//           5 concrete, 6 art deco piers, 7 interior (inside a broken building), 8 bare concrete,
+//           9 awning canvas, 10 lobby (a room carved into a ground floor)
+export const STYLE_ID = { glass: 0, black: 1, stone: 2, brick: 3, terracotta: 4, concrete: 5, deco: 6, interior: 7, bare: 8, canvas: 9, lobby: 10 };
 export const STYLE_GRID = { // floor height, bay width
-  glass: [3.9, 1.55], black: [3.9, 1.7], stone: [3.7, 3.1], brick: [3.3, 2.7], terracotta: [3.9, 3.2], concrete: [3.5, 2.3], deco: [3.7, 2.1], interior: [3.6, 3], bare: [3.6, 3], canvas: [3.6, 3],
+  glass: [3.9, 1.55], black: [3.9, 1.7], stone: [3.7, 3.1], brick: [3.3, 2.7], terracotta: [3.9, 3.2], concrete: [3.5, 2.3], deco: [3.7, 2.1], interior: [3.6, 3], bare: [3.6, 3], canvas: [3.6, 3], lobby: [3.6, 3],
 };
 
 const GLSL_COMMON = /* glsl */`
@@ -32,7 +33,41 @@ const GLSL_FACADE = /* glsl */`
     vec2 uv = vFUv;
     vec3 col; fRough = 0.85; fMetal = 0.0; fEmit = vec3(0.0);
     bool roof = vWN.y > 0.7, under = vWN.y < -0.7;
-    if (sty > 8.5) {
+    if (sty > 9.5) {
+      // a lobby carved into a ground floor (the spawn rooms): stone tiles, panelled walls over a dark
+      // marble dado, a coffered ceiling with light panels (a few dead, a few flickering), all kept
+      // down a little for being indoors, which the open-sky light doesn't know about
+      float soot = fbm2(vWP.xz * 0.35 + vec2(vWP.y * 0.2) + seed * 13.0);
+      if (roof) {
+        vec2 t = vWP.xz / 1.2, ta = fwidth(t) * 1.5 + 0.002;
+        float joint = boxm(fract(t) - 0.5, vec2(0.48), ta);
+        float chk = mod(floor(t.x) + floor(t.y), 2.0);
+        col = mix(vec3(0.37, 0.35, 0.32), vec3(0.19, 0.18, 0.165), chk) * (0.85 + 0.3 * fn(vWP.xz * 2.3));
+        // dust and grit tracked in off the street
+        col = mix(col, vec3(0.24, 0.22, 0.2), 0.55 * smoothstep(0.35, 0.75, soot));
+        col *= mix(0.5, 1.0, joint);
+        fRough = 0.4;
+      } else if (under) {
+        vec2 c = vWP.xz / 3.0, cf = fract(c), ci = floor(c);
+        col = mix(vec3(0.3, 0.29, 0.27), vec3(0.17, 0.165, 0.16), boxm(cf - 0.5, vec2(0.36), vec2(0.04)));
+        float lamp = step(0.4, fh(ci + seed * 3.1)) * boxm(cf - 0.5, vec2(0.17), vec2(0.03));
+        float dead = step(0.88, fh(ci * 7.7 + 1.3)), flick = step(0.82, fh(ci * 2.9 + 0.7));
+        float on = (1.0 - dead) * mix(1.0, step(0.45, fn(vec2(uTime * 7.0, ci.x * 3.0 + ci.y))), flick);
+        fEmit = vec3(1.0, 0.84, 0.6) * 1.8 * lamp * on;
+        fRough = 0.9;
+      } else {
+        float y = uv.y;
+        vec2 pq = vec2(uv.x / 1.5, (y - 1.25) / 1.15), pa = fwidth(pq) * 1.5 + 0.002;
+        float joint = boxm(fract(pq) - 0.5, vec2(0.485), pa);
+        vec3 panel = vec3(0.52, 0.48, 0.42) * (0.86 + 0.26 * fh(floor(pq) + seed * 5.0)) * mix(0.55, 1.0, joint);
+        vec3 dado = vec3(0.11, 0.095, 0.085) * (0.75 + 0.5 * fn(uv * vec2(2.5, 9.0) + seed * 3.0));
+        col = y < 1.1 ? dado : panel;
+        col = mix(col, vec3(0.6, 0.53, 0.38), smoothstep(1.08, 1.11, y) * (1.0 - smoothstep(1.22, 1.25, y))); // brass rail
+        col *= mix(1.0, 0.5, smoothstep(2.5, 6.0, y)) * (0.7 + 0.35 * (1.0 - soot));
+        fRough = y < 1.1 ? 0.3 : 0.75;
+      }
+      col *= 0.7;
+    } else if (sty > 8.5) {
       // shop awnings: faded canvas in one of a few colours, some striped, singed
       vec3 pal[5]; pal[0] = vec3(0.45, 0.06, 0.05); pal[1] = vec3(0.05, 0.22, 0.12); pal[2] = vec3(0.06, 0.08, 0.2); pal[3] = vec3(0.3, 0.07, 0.12); pal[4] = vec3(0.5, 0.36, 0.12);
       int ci = int(floor(seed * 4.99));

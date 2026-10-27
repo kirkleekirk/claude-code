@@ -31,7 +31,7 @@ export class NavGrid {
       const s = Math.hypot(terrainY(x + 0.7, z) - terrainY(x - 0.7, z), terrainY(x, z + 0.7) - terrainY(x, z - 0.7)) / 1.4;
       if (s > 0.35) this.cost[k * this.nx + i] = 1 + (s - 0.35) * 6;
     }
-    this.g = new Float32Array(N); this.from = new Int32Array(N); this.seen = new Uint32Array(N); this.pass = 0;
+    this.g = new Float32Array(N); this.from = new Int32Array(N); this.seen = new Uint32Array(N); this.closed = new Uint32Array(N); this.pass = 0;
     this.heap = new BinaryHeap(N * 4);
   }
   cell(x, z) { return [Math.floor((x - this.x0) / CS), Math.floor((z - this.z0) / CS)]; }
@@ -62,21 +62,30 @@ export class NavGrid {
     }
     return true;
   }
-  /** a path of waypoints from a to b (Vector3s at ground height), or null */
-  find(a, b, maxIter = 24000) {
+  /**
+   * A path of waypoints from a to b (Vector3s at ground height), or null. The heuristic is weighted
+   * a little (paths come out a few per cent longer, then get pulled tight anyway) so a trip across
+   * the whole city stays a few thousand steps; the step budget covers the whole grid regardless.
+   */
+  find(a, b, maxIter = this.nx * this.nz * 4) {
     const s = this.nearestOpen(a.x, a.z), e = this.nearestOpen(b.x, b.z, 10);
     if (!s || !e) return null;
     const nx = this.nx, si = this.idx(s[0], s[1]), ei = this.idx(e[0], e[1]);
     if (si === ei) return [this.center(e[0], e[1])];
-    const pass = ++this.pass, G = this.g, F = this.from, S = this.seen, H = this.heap;
+    const pass = ++this.pass, G = this.g, F = this.from, S = this.seen, C = this.closed, H = this.heap;
     H.clear();
-    const hx = (j) => { const i = j % nx, k = (j / nx) | 0; const di = Math.abs(i - e[0]), dk = Math.abs(k - e[1]); return (Math.max(di, dk) + 0.414 * Math.min(di, dk)); };
+    // (long trips weight the heuristic harder: they explore far less for a path a little longer)
+    const wH = Math.hypot(e[0] - s[0], e[1] - s[1]) * CS > 60 ? 1.6 : 1.2;
+    const hx = (j) => { const i = j % nx, k = (j / nx) | 0; const di = Math.abs(i - e[0]), dk = Math.abs(k - e[1]); return (Math.max(di, dk) + 0.414 * Math.min(di, dk)) * wH; };
     G[si] = 0; F[si] = -1; S[si] = pass;
     H.push(si, hx(si));
     let found = false, it = 0;
     while (H.size && it++ < maxIter) {
       const j = H.pop();
       if (j === ei) { found = true; break; }
+      // (a cell already expanded, popped again from an older, longer route to it)
+      if (C[j] === pass) continue;
+      C[j] = pass;
       const i = j % nx, k = (j / nx) | 0, gj = G[j];
       for (let dk = -1; dk <= 1; dk++) for (let di = -1; di <= 1; di++) {
         if (!di && !dk) continue;

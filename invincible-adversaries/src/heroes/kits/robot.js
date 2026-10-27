@@ -236,7 +236,7 @@ class BikeGhost {
       this.vel.y -= 28 * dt;
       m.rotateX(this.spin.x * dt); m.rotateY(this.spin.y * dt); m.rotateZ(this.spin.z * dt);
       if (Math.random() < 0.5) this.fx.alpha.spawn({ p: m.position.clone(), v: [rand(-1, 1), rand(1, 2), rand(-1, 1)], life: 0.8, size: 0.5, size1: 1.6, color: [0.25, 0.24, 0.24, 0.55], color1: [0.4, 0.38, 0.36, 0], shape: SHAPE.SMOKE });
-      const gy = this.w.groundAt(m.position.x, m.position.z);
+      const gy = this.w.floorAt(m.position.x, m.position.z, m.position.y);
       if (!this.landed && m.position.y <= gy + 0.4) {
         this.landed = true; this.landedT = this.t;
         const p = m.position.clone(); p.y = gy + 0.3;
@@ -743,7 +743,7 @@ export class RobotKit extends Kit {
         if (fwd.lengthSq() < 1e-4) fwd.set(Math.sin(h.yaw), 0, Math.cos(h.yaw));
         fwd.normalize();
         const c = h.pos.clone().addScaledVector(fwd, 4);
-        const gy = w.groundAt(c.x, c.z);
+        const gy = w.floorAt(c.x, c.z, h.pos.y);
         // on the ground, or at the flier's height when there's air under it
         c.y = h.pos.y - gy > 2.5 ? h.center.y : gy + 2.1;
         const b = new HardLight(this, c, fwd);
@@ -867,7 +867,7 @@ export class RobotKit extends Kit {
   }
   overrideWave() {
     const h = this.h, w = this.w, fx = this.fx;
-    const c = h.pos.clone(); c.y = Math.max(c.y, w.groundAt(c.x, c.z));
+    const c = h.pos.clone(); c.y = Math.max(c.y, w.floorAt(c.x, c.z, c.y));
     this.ultState.waved = true;
     w.sfx('override_wave', h.center, { vol: 1, important: true });
     w.renderer.flash(0x7fe8ff, 0.12);

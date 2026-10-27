@@ -173,7 +173,7 @@ export class ParticleSystem {
       v[i3] *= dr; v[i3 + 1] = v[i3 + 1] * dr - this.grav[i] * dt; v[i3 + 2] *= dr;
       p[i3] += v[i3] * dt; p[i3 + 1] += v[i3 + 1] * dt; p[i3 + 2] += v[i3 + 2] * dt;
       if (this.floor[i]) {
-        const gy = (this.ground ? this.ground(p[i3], p[i3 + 2]) : 0) + 0.02;
+        const gy = (this.ground ? this.ground(p[i3], p[i3 + 2], p[i3 + 1] - v[i3 + 1] * dt) : 0) + 0.02;
         if (p[i3 + 1] < gy) { p[i3 + 1] = gy; v[i3 + 1] = -v[i3 + 1] * 0.35; v[i3] *= 0.7; v[i3 + 2] *= 0.7; }
       }
       this.rot[i] += this.rotV[i] * dt;
@@ -193,7 +193,7 @@ export class ParticleSystem {
       am[i4] = (this.s0[i] + (this.s1[i] - this.s0[i]) * t) * this.scale;
       // smoke fades softly into the ground under it rather than cutting a hard line across it
       if (this.shape[i] === 4) {
-        const gy = this.ground ? this.ground(p[i3], p[i3 + 2]) : 0, sz = am[i4];
+        const gy = this.ground ? this.ground(p[i3], p[i3 + 2], p[i3 + 1]) : 0, sz = am[i4];
         const k = Math.min(1, Math.max(0, (p[i3 + 1] - gy + sz * 0.1) / (sz * 0.45 + 1e-6)));
         ac[i4 + 3] *= k * k * (3 - 2 * k);
       }

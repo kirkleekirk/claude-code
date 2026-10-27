@@ -9,11 +9,13 @@ const UP = new THREE.Vector3(0, 1, 0);
 // instead of it jumping onto the hero.
 const MAX_LAG = 3; // m the follow point may trail the hero
 const BOOM_SPEED = 12; // m/s the wanted boom length may change (speed, altitude, death)
-const BOOM_IN = 20; // m/s a collision may pull the camera in
+const BOOM_IN = 20; // m/s a collision may pull the camera in...
+const BOOM_ESCAPE = 60; // m/s ...or, once the camera is inside something (the arm swung past a corner), pull it out
 const BOOM_OUT = 3; // /s easing back out once clear...
 const BOOM_HOLD = 0.25; // ...for this long (strafing past a row of pillars)
 const PROBE = 0.3; // m: radius of the collision probe around the camera
-const MIN_ARM = 0.6; // m: closest the camera comes to the follow point
+const MIN_ARM = 0.6; // m: a boom pulled in shorter than this (+0.3) tries starting higher up, over the wall
+const NEAR_ARM = 0.18; // m: closest the camera comes to the follow point (the hero is hidden by then: see close)
 
 export class ThirdPersonCamera {
   constructor(aspect) {
@@ -86,7 +88,9 @@ export class ThirdPersonCamera {
       }
       this.lift = cutNow ? liftWant : liftWant > this.lift ? Math.min(liftWant, this.lift + 8 * dt) : damp(this.lift, liftWant, 2.5, dt);
       clear = this.lift > 0.01 ? this.clearShare(_o.copy(this.pivotSmooth).addScaledVector(UP, this.lift), arm, armLen, ray) : base;
-      clear = clamp(clear, Math.min(1, MIN_ARM / armLen), 1);
+      // with the hero's back right against a wall the camera comes in to the hero's head rather than
+      // stopping inside the wall
+      clear = clamp(clear, Math.min(1, NEAR_ARM / armLen), 1);
     } else this.lift = 0;
     // the arm pulls in fast but over a few frames (a one-frame jump reads as a snap), whether a wall
     // or a shorter wanted boom asks for it, and eases back out once clear
@@ -95,9 +99,14 @@ export class ThirdPersonCamera {
     // the eased pull-in alone would trail a wall that keeps coming by speed / 18 and sit inside it
     const closing = this.lastReach == null ? 0 : Math.max(0, this.lastReach - reach);
     this.lastReach = reach;
+    this.escaping = false;
     if (cutNow) this.armNow = reach;
     else if (reach < this.armNow) {
-      this.armNow -= Math.min(Math.max((this.armNow - reach) * dampT(18, dt), closing), BOOM_IN * dt, this.armNow - reach);
+      // swinging past a building's corner the clear distance drops by metres in a frame, leaving the
+      // camera inside the building at its current length: then it comes out at full speed, no easing
+      this.escaping = !!this.solidAt && this.solidAt(_o.copy(this.pivotSmooth).addScaledVector(UP, this.lift).addScaledVector(arm, this.armNow));
+      this.armNow -= this.escaping ? Math.min(BOOM_ESCAPE * dt, this.armNow - reach)
+        : Math.min(Math.max((this.armNow - reach) * dampT(18, dt), closing), BOOM_IN * dt, this.armNow - reach);
       this.clearT = 0;
     } else if ((this.clearT += dt) > BOOM_HOLD) this.armNow = Math.min(reach, damp(this.armNow, reach, BOOM_OUT, dt));
     this.curDist = this.armNow;
@@ -118,6 +127,8 @@ export class ThirdPersonCamera {
     const sx = fbm1(t, 2) * 0.32 * s, sy = fbm1(t + 31, 2) * 0.32 * s, sr = fbm1(t + 77, 2) * 0.08 * s;
     // cinematic override
     const ob = this.overrideBlend = damp(this.overrideBlend, this.override ? 1 : 0, this.override ? (this.override.speed || 4) : 5, dt);
+    // the camera is in the hero's head: the game hides the hero while it is (0.15 m of hysteresis)
+    this.close = ob < 0.5 && this.armNow < (this.close ? 0.72 : 0.57);
     let lookAt = _w.copy(camPos).add(fwd);
     if (ob > 0.001 && this.override) {
       camPos.lerp(this.override.pos, ob);

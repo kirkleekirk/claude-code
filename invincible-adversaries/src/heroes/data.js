@@ -130,10 +130,52 @@ export const HEROES = {
       ult: { name: 'WORTHY FOE', key: 'Q', icon: 'ult_bb', desc: 'Go berserk for 8s: grow 20% bigger, become unstoppable, take 40% less damage, claw faster and Pounce every 2s.' },
     },
   },
+  allen: {
+    key: 'allen', name: 'ALLEN', real: 'Allen the Alien',
+    role: 'VANGUARD', roleTag: 'Comeback Juggernaut',
+    color: '#39d36e', accent: '#ff7b1c',
+    hp: 525,
+    radius: 0.52, height: 2.2,
+    speed: 8.5, jump: 11,
+    flight: { speed: 16, accel: 38, duration: 7, regen: 1.5, unlimited: false },
+    regen: { delay: 5, rate: 18 },
+    camDist: 4.9, camHeight: 1.9,
+    ultCost: 2400,
+    passive: { name: 'Unopan Resilience', desc: 'Every hit he survives builds Strain (double below 35% health). After 3.5s without taking damage it turns into Resilience: each level (400 Strain) is +4.5% health, +3% damage, +2% speed and +3.5% flight speed, up to 10. Dying loses half.' },
+    abilities: {
+      primary: { name: 'Haymakers', key: 'LMB', icon: 'fist', desc: '3-hit combo (48/48/82) that lunges onto enemies near your crosshair. The overhand finisher knocks them flat.' },
+      secondary: { name: 'Planet Cracker', key: 'RMB', icon: 'bigfist', cd: 6, desc: 'Hold to wind up, release to lunge and punch: 70 to 160 damage with the charge, and the full charge sends them flying.' },
+      a1: { name: 'Bulldozer', key: 'SHIFT', icon: 'charge', cd: 7, desc: 'Shoulder-charge 24m, plowing through everyone in the way: 65 damage each, knocked aside.' },
+      a2: { name: 'Unbreakable', key: 'E', icon: 'guard', cd: 12, desc: 'Brace for 3s: 50% less damage taken, unstoppable, and the hits count double as Strain. Ends in a shockwave of 50 plus 30% of what you took (up to 220).' },
+      a3: { name: 'Second Wind', key: 'F', icon: 'secondwind', cd: 15, desc: 'Come back now: all your Strain turns into Resilience at once and heals you for 40% of it.' },
+      ult: { name: 'BEYOND THE LIMIT', key: 'Q', icon: 'ult_allen', desc: 'Blast out 120 damage in 10m and surge to full Resilience for 10s, healing 40% and unstoppable. When it ends you keep 2 extra levels.' },
+    },
+  },
+  immortal: {
+    key: 'immortal', name: 'THE IMMORTAL', real: 'Leader of the Guardians',
+    role: 'VANGUARD', roleTag: 'Undying Guardian',
+    color: '#5f8fe0', accent: '#d9b25a',
+    hp: 575,
+    radius: 0.48, height: 2.02,
+    speed: 8.7, jump: 11,
+    flight: { speed: 17, accel: 40, duration: 8, regen: 1.5, unlimited: false },
+    regen: { delay: 5, rate: 20 },
+    camDist: 4.6, camHeight: 1.75,
+    ultCost: 2400,
+    passive: { name: 'Undying', desc: 'A killing blow drops him to one knee instead: for 2.5s his body knits back together, taking half damage, then he rises at 50% health with a shockwave. Enemies can still finish him by getting through 450 health while he is down. 40s cooldown.' },
+    abilities: {
+      primary: { name: 'Centuries of War', key: 'LMB', icon: 'fist', desc: '3-hit combo (52/52/90) that lunges onto enemies near your crosshair. The double-fist finisher cracks the ground.' },
+      secondary: { name: 'Skybreaker Uppercut', key: 'RMB', icon: 'uppercut', cd: 5, desc: 'A rising uppercut: 85 damage and the enemy is launched high into the air.' },
+      a1: { name: "Guardian's Dive", key: 'SHIFT', icon: 'dive', cd: 9, desc: 'Fly to the ally (or spot) under your crosshair, up to 35m, and land in front of them with a 55 damage shockwave. The ally gets 120 overhealth.' },
+      a2: { name: 'Rallying Cry', key: 'E', icon: 'rally', cd: 14, desc: 'Allies within 18m and you: 20% less damage taken, +15% damage and 60 overhealth for 4s.' },
+      a3: { name: 'Hammerfall', key: 'F', icon: 'hammerfall', cd: 9, desc: 'Both fists into the ground: 95 damage in 8m, launching and slowing enemies. From the air he dives down first and hits harder.' },
+      ult: { name: 'I AM IMMORTAL', key: 'Q', icon: 'ult_immortal', desc: 'For 8s nothing can kill him: he is unstoppable, deals +20% damage and heals for 30% of it. Undying recharges at once.' },
+    },
+  },
 };
 
 // grouped by role on the hero select: duelists, strategists, vanguards
-export const HERO_KEYS = ['invincible', 'rex', 'eve', 'robot', 'omniman', 'battlebeast'];
+export const HERO_KEYS = ['invincible', 'rex', 'eve', 'robot', 'omniman', 'battlebeast', 'allen', 'immortal'];
 
 export const RULES = {
   respawn: 7,
@@ -148,4 +190,14 @@ export const RULES = {
   uplinkRange: 20, // Robot's Tactical Uplink
   uplinkCdRate: 0.2, // extra cooldown recharge rate it gives
   beastRage: 0.5, // Battle Beast goes berserk below this share of his health
+  // Allen's Unopan Resilience
+  allen: {
+    strainPerLevel: 400, // Strain (damage survived) for one level
+    lowHp: 0.35, lowMul: 2, // damage taken below this share of his health counts double
+    bankDelay: 3.5, // s without taking damage before Strain turns into Resilience
+    maxLevel: 10,
+    hp: 0.045, dmg: 0.03, speed: 0.02, fly: 0.035, // per level
+  },
+  // The Immortal's Undying
+  immortal: { downT: 2.5, will: 450, downTaken: 0.5, riseHp: 0.5, cd: 40 },
 };

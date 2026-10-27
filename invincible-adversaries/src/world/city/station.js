@@ -373,7 +373,9 @@ function interiorTrim(gbS) {
 /** the blown-out masonry heaped either side of the breach, the cart's way through left clear */
 function breachRubble(gbS, boxes, R, ty) {
   const br = STATION.breach, x = Hh.x1 + 0.5;
-  const piles = [[x + 2.5, br.z0 + 2.2, 4.5, 2.6, 2.4], [x + 2, br.z1 - 2, 4, 2.4, 2.1], [x - 3, br.z0 + 1.5, 3, 1.6, 1.3], [x + 7, br.z1 + 1, 3.5, 2.5, 1.2], [x - 2.5, br.z1 - 1.2, 2.6, 1.4, 1]];
+  // (the cart leaves through the middle of the breach and turns south-east for the crater: the
+  // southern heap sits in the breach's corner, clear of that turn)
+  const piles = [[x - 0.1, br.z0 - 1.1, 3.4, 1.8, 2.1], [x + 2, br.z1 - 2, 4, 2.4, 2.1], [x - 3, br.z0 + 1.5, 3, 1.6, 1.3], [x + 7, br.z1 + 1, 3.5, 2.5, 1.2], [x - 2.5, br.z1 - 1.2, 2.6, 1.4, 1]];
   for (const [cx, cz, rx, rz, h] of piles) rubblePile(gbS, boxes, cx, cz, rx, rz, h, R, 0x9a8e7a, cx < Hh.x1 ? 0 : ty(cx, cz));
 }
 

@@ -25,7 +25,8 @@ export class Bot {
     this.seen = 0;
     this.stuckT = 0; this.lastPos = new THREE.Vector3();
     this.ultT = 0;
-    this.preferRange = { invincible: 2.2, omniman: 2.5, eve: 18, robot: 16, rex: 13, battlebeast: 2.6 }[hero.key];
+    this.preferRange = { invincible: 2.2, omniman: 2.5, eve: 18, robot: 16, rex: 13, battlebeast: 2.6, allen: 2.4, immortal: 2.4 }[hero.key];
+    this.chargeWant = 0; // Allen: how long to hold the Planet Cracker
     this.ranged = hero.key === 'eve' || hero.key === 'robot' || hero.key === 'rex';
     this.braceFor = 0;
     this.paths = {}; // per purpose (the objective, a target): { path, i, repathT, goal }
@@ -43,12 +44,22 @@ export class Bot {
     if (h.dead) return;
     const mode = w.settings.bots;
     if (mode === 'idle') { this.faceDefault(it); return; }
+    this.noFlyT -= dt;
     // target selection
     this.retarget -= dt;
     const obj = w.mode ? w.mode.objective(h.team) : null;
     this.obj = obj;
     if (this.retarget <= 0 || !this.target || !this.target.targetable) { this.pickTarget(); this.retarget = rand(0.6, 1.2); }
     const t = this.target;
+    // hit and run: the squishier heroes break off a trade they are losing, recover (regen, orbs)
+    // and come back, instead of trading blows until they drop
+    // (Omni-Man never backs off; nor does the Immortal while Undying would catch a killing blow,
+    // while Allen backing off is how he banks what he has taken)
+    const hpf = h.hp / h.maxHp, thpf = t ? t.hp / t.maxHp : 1;
+    if (h.key !== 'omniman' && !(h.key === 'immortal' && h.kit.undyingReady)) {
+      if (!this.regroup && t && hpf < 0.45 && thpf > hpf + 0.1 && w.time - h.lastHurt < 2) this.regroup = true;
+      else if (this.regroup && (hpf > 0.85 || thpf < 0.2)) this.regroup = false;
+    } else this.regroup = false;
     // a match objective: travel to it along the ground paths unless a fight is right here
     if (obj && this.toObjective(dt, it, obj, t)) return;
     if (!t) { this.wander(dt, it); this.faceDefault(it); return; }
@@ -73,13 +84,6 @@ export class Bot {
     it.aimOrigin.copy(origin);
     it.aimPoint.copy(origin).addScaledVector(this.aim, Math.max(1, origin.distanceTo(_v)));
     it.aimHero = this.aim.dot(want) > 0.97 ? t : null;
-    // hit and run: the squishier heroes break off a trade they are losing, recover (regen, orbs)
-    // and come back, instead of trading blows until they drop
-    const hpf = h.hp / h.maxHp, thpf = t.hp / t.maxHp;
-    if (h.key !== 'omniman') {
-      if (!this.regroup && hpf < 0.45 && thpf > hpf + 0.1 && w.time - h.lastHurt < 2) this.regroup = true;
-      else if (this.regroup && (hpf > 0.85 || thpf < 0.2)) this.regroup = false;
-    }
     // movement & tactics
     this.navigate(dt, it, t, dist);
     if (obj) this.leash(dt, it, obj);
@@ -104,6 +108,8 @@ export class Bot {
       let s = -d - (e.hp / e.maxHp) * 15;
       // with an objective, the enemies on it matter most
       if (obj) s -= e.pos.distanceTo(obj.pos) * 0.6;
+      // an Immortal down on one knee is there to be finished
+      if (e.kit && e.kit.down) s += 10;
       if (e.isPlayer) s += 6; // favour the player a bit so testing is lively
       if (e === this.target) s += 5;
       if (s > bs) { bs = s; best = e; }
@@ -148,9 +154,13 @@ export class Bot {
     const visible = t && dT < 34 && w.lineOfSight(_u.copy(h.pos).setY(h.pos.y + h.height * 0.85), t.center || t.pos);
     const engage = t && (dT < 13 || (visible && dObj < obj.radius + 30));
     if (engage) return false;
-    // stranded up on a roof over it: get down
-    const above = h.pos.y - obj.pos.y;
-    if (above > 4 && h.grounded && dObj < 40 && this.descend(dt, it)) return true;
+    // stranded up on a roof (the ground paths start at street level): fliers take off, the rest walk
+    // off the nearest edge
+    const above = h.pos.y - obj.pos.y, onRoof = h.groundY - terrainY(h.pos.x, h.pos.z) > 3;
+    // (flying low along a street path, the L's deck or a hanging wreck can stop a flier the ground
+    // grid doesn't know about: a flier that gets stuck lands and walks for a while)
+    const canFly = h.def.flight && !h.disrupted && this.noFlyT <= 0 && (h.def.flight.unlimited || h.flyEnergy > 0.35);
+    if (h.grounded && onRoof && !canFly && this.descend(dt, it)) return true;
     // on it with nobody to fight: hold there, facing where they'll come from
     if (dObj < obj.radius && Math.abs(above) < 4) {
       if (t) { _v.subVectors(t.pos, h.pos).setY(0); if (_v.lengthSq() > 1e-4) it.aimDir.copy(_v.normalize()); it.aimOrigin.copy(h.pos); it.aimPoint.copy(h.pos).addScaledVector(it.aimDir, 10); }
@@ -160,7 +170,7 @@ export class Bot {
     }
     // on the way: aim and move along the path
     const wp = this.waypoint(dt, obj.pos);
-    const fly = h.def.flight && !h.disrupted && (h.def.flight.unlimited || h.flyEnergy > 0.35) && dObj > 35;
+    const fly = canFly && (dObj > 35 || onRoof);
     const alt = fly ? 4.5 : 0;
     _v.set(wp.x, wp.y + alt + h.height * 0.6, wp.z);
     const origin = _u.copy(h.pos); origin.y += h.height * 0.85;
@@ -176,10 +186,13 @@ export class Bot {
       const dy = wp.y + alt - h.pos.y;
       if (dy > 1) it.up = true; else if (dy < -1.5) it.down = true;
     } else if (h.mode === 'fly' && !h.override) it.down = true;
-    // stuck on something: hop, then repath
+    // stuck on something: hop (or land), then repath
     this.stuckT += dt;
     if (this.stuckT > 0.8) {
-      if (this.lastPos.distanceTo(h.pos) < 0.7) { it.jump = true; for (const k in this.paths) this.paths[k].repathT = 0; }
+      if (this.lastPos.distanceTo(h.pos) < 0.7) {
+        it.jump = true; for (const k in this.paths) this.paths[k].repathT = 0;
+        if (h.mode === 'fly') this.noFlyT = rand(4, 6);
+      }
       this.lastPos.copy(h.pos); this.stuckT = 0;
     }
     return true;
@@ -205,17 +218,22 @@ export class Bot {
   descend(dt, it) {
     const h = this.h, w = this.w;
     this.descendT -= dt;
-    if (this.descendT <= 0 || !this.descendDir) {
-      this.descendT = 1;
-      let best = null, bd = Infinity;
+    if (this.descendT <= 0 || this.descendDir == null) {
+      // (no headway since the last pick, a parapet or a step up in the way: hop, and try the next edge)
+      const stalled = this.descendAt && this.descendDir != null && h.pos.distanceTo(this.descendAt) < 0.5;
+      this.descendSkip = stalled ? (this.descendSkip || 0) + 1 : 0;
+      if (stalled) it.jump = true;
+      this.descendT = 1; this.descendAt = h.pos.clone();
+      const found = [];
       for (let a = 0; a < 16; a++) {
         const yy = (a / 16) * Math.PI * 2;
-        for (const r of [2, 4, 7, 11, 16]) {
+        for (const r of [2, 4, 7, 11, 16, 24, 34]) {
           const x = h.pos.x + Math.sin(yy) * r, z = h.pos.z + Math.cos(yy) * r;
-          if (w.groundAt(x, z) - terrainY(x, z) < 0.6) { if (r < bd) { bd = r; best = yy; } break; }
+          if (w.groundAt(x, z) - terrainY(x, z) < 0.6) { found.push([r, yy]); break; }
         }
       }
-      this.descendDir = best;
+      found.sort((a, b) => a[0] - b[0]);
+      this.descendDir = found.length ? found[this.descendSkip % found.length][1] : null;
     }
     if (this.descendDir == null) return false;
     const rel = this.descendDir - yawOf(it.aimDir);
@@ -268,7 +286,6 @@ export class Bot {
     }
     if (this.regroup && k === 'invincible') this.flyWant = true;
     if (h.def.flight && !h.def.flight.unlimited && h.flyEnergy < 0.15) this.flyWant = false;
-    this.noFlyT -= dt;
     if (this.noFlyT > 0) this.flyWant = false;
     if (this.flyWant && h.mode !== 'fly') { if (h.grounded) it.jump = true; else it.flyToggle = true; }
     if (!this.flyWant && h.mode === 'fly' && !h.override) it.down = true;
@@ -363,6 +380,13 @@ export class Bot {
         } else if (k === 'battlebeast') {
           const close = w.heroes.filter((e) => e.team !== h.team && e.targetable && e.pos.distanceTo(h.pos) < 15).length;
           if ((close >= 2 || h.hp / h.maxHp < 0.5 || this.ultT > 5) && dist < 15) it.ult = true;
+        } else if (k === 'allen') {
+          // the blast wants a crowd; the heal and the surge want him in trouble
+          if (dist < 10 && (enemiesNear >= 2 || h.hp / h.maxHp < 0.4 || this.ultT > 6)) it.ult = true;
+        } else if (k === 'immortal') {
+          // nothing can kill him for 8 s: worth it when he is about to go down with Undying spent, or in a brawl
+          const spent = !h.kit.undyingReady;
+          if (dist < 12 && ((spent && h.hp / h.maxHp < 0.4) || enemiesNear >= 3 || (enemiesNear >= 2 && this.ultT > 4) || this.ultT > 8)) it.ult = true;
         }
         else if (k === 'robot') {
           // the override pays off with several heroes in the wave
@@ -370,7 +394,7 @@ export class Bot {
           const mates = allies.filter((a) => a.pos.distanceTo(h.pos) < 30).length;
           if (foes >= 2 || (foes >= 1 && mates >= 1) || (dist < 20 && this.ultT > 4)) it.ult = true;
         }
-        else if (dist < 40) it.ult = true;
+        else if (dist < 40 && (k !== 'invincible' || h.kit.openSky())) it.ult = true;
       }
     } else this.ultT = 0;
     // during Eve's choice
@@ -442,6 +466,43 @@ export class Bot {
       if ((enemiesNear >= 2 || h.hp / h.maxHp < 0.6) && dist < 12 && this.can('a2', 0.5)) it.a2 = true;
       if (dist < 3.6 && aimed && this.can('a3', 0.4)) it.a3 = true;
       if (!h.kit.bracing && dist > 7 && w.time - h.lastHurt < 0.4 && h.hp / h.maxHp < 0.85 && this.can('secondary', 0.35)) { it.secondary = true; this.braceFor = rand(0.8, 1.6); }
+    } else if (k === 'allen') {
+      const kit = h.kit;
+      // winding up the Planet Cracker: hold it to the charge it wants, or let go when they're in reach
+      if (kit.charge) {
+        const c = kit.charge.t;
+        it.secondary = c < this.chargeWant && !(dist < 2.8 && c > 0.5) && dist < 10;
+        return;
+      }
+      if (dist < 3.8) it.primary = true;
+      if (dist < 6.5 && aimed) it.primary = true;
+      if (dist < 6 && aimed && this.can('secondary', 0.4)) { it.secondary = true; this.chargeWant = rand(0.45, 1.05); }
+      if (dist > 7 && dist < 22 && los && this.can('a1', 0.45)) it.a1 = true;
+      // under fire: brace and soak it (it banks twice over), then let it out
+      const hpf = h.hp / h.maxHp;
+      if (!kit.brace && ((w.time - h.lastHurt < 0.5 && hpf < 0.8 && enemiesNear >= 1) || (enemiesNear >= 2 && dist < 8)) && this.can('a2', 0.55)) it.a2 = true;
+      // a lot taken and badly hurt: come back now
+      if (kit.strain > 140 && hpf < 0.55 && this.can('a3', 0.8)) it.a3 = true;
+    } else if (k === 'immortal') {
+      const kit = h.kit, hpf = h.hp / h.maxHp;
+      if (dist < 3.8) it.primary = true;
+      if (dist < 6.5 && aimed) it.primary = true;
+      if (dist < 4.5 && aimed && this.can('secondary', 0.5)) it.secondaryPressed = true;
+      // dive to an ally in trouble; otherwise use the dive to close on a far target
+      if (kit.ready('a1')) {
+        let pick = null;
+        for (const a of allies) {
+          const d = a.pos.distanceTo(h.pos);
+          if (d > 8 && d < 34 && a.hp / a.maxHp < 0.5 && w.time - a.lastHurt < 1.5) { pick = a; break; }
+        }
+        if (pick && this.can('a1', 0.7)) { it.a1 = true; it.aimHero = pick; it.aimDir.copy(_w.subVectors(pick.center || pick.pos, it.aimOrigin).normalize()); }
+        else if (dist > 10 && dist < 34 && los && this.can('a1', 0.35)) { it.a1 = true; it.aimHero = t; }
+      }
+      const mates = allies.filter((a) => a.pos.distanceTo(h.pos) < 18).length;
+      if (((mates >= 1 && enemiesNear >= 1) || (hpf < 0.6 && enemiesNear >= 1)) && dist < 15 && this.can('a2', 0.5)) it.a2 = true;
+      // hammerfall into a crowd, or down onto someone from above
+      const below = h.mode === 'fly' && t.grounded && h.pos.y - t.pos.y > 4 && Math.hypot(t.pos.x - h.pos.x, t.pos.z - h.pos.z) < 12;
+      if (((dist < 6 && (enemiesNear >= 2 || Math.random() < 0.5)) || below) && this.can('a3', 0.5)) { it.a3 = true; if (below) it.aimPoint.copy(t.pos); }
     } else if (k === 'robot') {
       if (los && dist < 70 && it.aimDir.dot(_v.subVectors(t.center, it.aimOrigin).normalize()) > 0.95) it.primary = true;
       if (los && dist < 45 && aimed && this.can('secondary', 0.45)) it.secondaryPressed = true;

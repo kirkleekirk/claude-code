@@ -1,11 +1,14 @@
 // Soak: a 3v3 bot match on hard for 10 game-minutes. Nobody may go NaN, leave the arena, sink into
 // the ground, get stuck in an ability, a tumble or a carry, or break the HP/ult bounds; dead heroes
 // respawn on time; scene objects, effects and projectiles stay bounded; the bots actually fight.
-const MINUTES = 10;
+// Two matches: the first six heroes for 10 minutes, then Allen and the Immortal against each
+// other (with the vanguards they replace sitting out) for 6. One of each role a side, as in the game.
+const MATCHES = [
+  { minutes: 10, lineups: [['invincible', 'eve', 'omniman'], ['rex', 'robot', 'battlebeast']] },
+  { minutes: 6, lineups: [['rex', 'robot', 'allen'], ['invincible', 'eve', 'immortal']] },
+];
 
-T.test(`3v3 bots on hard for ${MINUTES} game-minutes`, () => {
-  // every hero on the field, as the game's lineups do: one of each role a side
-  const LINEUPS = [['invincible', 'eve', 'omniman'], ['rex', 'robot', 'battlebeast']];
+for (const { minutes: MINUTES, lineups: LINEUPS } of MATCHES) T.test(`3v3 bots on hard for ${MINUTES} game-minutes: ${LINEUPS.map((t) => t.join(' + ')).join(' v ')}`, () => {
   const spec = [];
   for (const team of [0, 1]) for (const [i, key] of LINEUPS[team].entries()) spec.push({ key, team, bot: true, at: [(i - 1) * 6, 0, team ? 48 : -48], face: [0, team ? -1 : 1] });
   spec[0].player = true; spec[0].bot = false;
@@ -24,7 +27,10 @@ T.test(`3v3 bots on hard for ${MINUTES} game-minutes`, () => {
   const issues = {};
   const flag = (h, msg) => { const k = `${h.key}/${h.team}: ${msg.replace(/[-\d.]+/g, '#')}`; if (!issues[k]) issues[k] = { n: 0, first: `${(w.time / 60).toFixed(2)} min ${h.key}/${h.team}: ${msg}` }; issues[k].n++; };
   const peak = { projectiles: 0, items: 0, updaters: 0 };
-  let early = null, stepMs = 0, worstStep = 0;
+  // resource counts sampled every second: a leak raises the floor (the quiet moments), while effects
+  // in flight only make peaks, so the second minute's floor is compared with the last minute's
+  const samples = [];
+  let stepMs = 0, worstStep = 0;
   const frames = MINUTES * 3600, dt = 1 / 60;
   for (let f = 0; f < frames; f++) {
     const t0 = performance.now();
@@ -33,7 +39,7 @@ T.test(`3v3 bots on hard for ${MINUTES} game-minutes`, () => {
     peak.projectiles = Math.max(peak.projectiles, w.projectiles.length);
     peak.items = Math.max(peak.items, fx.items.length);
     peak.updaters = Math.max(peak.updaters, fx.updaters.length);
-    if (f === 3600) early = counts();
+    if (f % 60 === 0) samples.push({ f, c: counts() });
     for (const h of hs) {
       const s = st.get(h);
       // durations of states that must end
@@ -69,11 +75,12 @@ T.test(`3v3 bots on hard for ${MINUTES} game-minutes`, () => {
       if (s.still > 25) flag(h, `has not moved for ${s.still.toFixed(0)} s`);
     }
   }
-  const late = counts();
+  const floor = (from, to) => { const out = {}; for (const s of samples) if (s.f >= from && s.f < to) for (const k in s.c) out[k] = Math.min(out[k] ?? Infinity, s.c[k]); return out; };
+  const early = floor(3600, 7200), late = floor(frames - 3600, frames);
   for (const k in issues) T.fail(`${issues[k].first} (x${issues[k].n})`);
-  // bounded resources: the end of the match must not hold far more than minute one did
+  // bounded resources: the end of the match must not hold far more than the second minute did
   for (const k of ['scene', 'items', 'trails', 'updaters', 'projectiles', 'zones', 'barriers']) {
-    if (late[k] > Math.max(early[k] * 2, early[k] + 30)) T.fail(`${k} grew from ${early[k]} (1 min) to ${late[k]} (${MINUTES} min)`);
+    if (late[k] > Math.max(early[k] * 2, early[k] + 30)) T.fail(`${k} grew from ${early[k]} (1-2 min) to ${late[k]} (last minute), counting the quietest moment of each`);
   }
   T.expect(late.decals <= 64, `${late.decals} decals alive`);
   const kills = T.log.kill.length, ults = T.log.ult.length;
@@ -85,7 +92,7 @@ T.test(`3v3 bots on hard for ${MINUTES} game-minutes`, () => {
   T.info(`${kills} kills (team 0: ${byTeam[0]}, team 1: ${byTeam[1]}), ${ults} ults ${JSON.stringify(ultBy)}, score ${w.score}`);
   T.info(`damage by hero: ${hs.map((h) => `${h.key}/${h.team} ${Math.round(T.dmgBy(h))}`).join(', ')}`);
   T.info(`step ${(stepMs / frames).toFixed(2)} ms avg, ${worstStep.toFixed(1)} ms worst; peaks: ${JSON.stringify(peak)}`);
-  T.info(`at 1 min ${JSON.stringify(early)}; at ${MINUTES} min ${JSON.stringify(late)}`);
+  T.info(`floor in minute 2 ${JSON.stringify(early)}; in the last minute ${JSON.stringify(late)}`);
   T.info(`longest override ${Math.max(...[...st.values()].map((s) => s.maxOvr)).toFixed(1)} s, tumble ${Math.max(...[...st.values()].map((s) => s.maxTumble)).toFixed(1)} s, standing still ${Math.max(...[...st.values()].map((s) => s.maxStill)).toFixed(0)} s`);
   T.expect(stepMs / frames < 20, `simulation step averages ${(stepMs / frames).toFixed(1)} ms`);
 });

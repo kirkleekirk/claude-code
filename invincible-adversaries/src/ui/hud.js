@@ -5,7 +5,7 @@ import { clamp, clamp01 } from '../engine/math.js';
 
 const _v = new THREE.Vector3();
 const KEYS = ['secondary', 'a1', 'a2', 'a3'];
-const HERO_ICON = { invincible: 'dash', eve: 'field', omniman: 'ult_omni', robot: 'cannon', rex: 'coin', battlebeast: 'claws' };
+const HERO_ICON = { invincible: 'dash', eve: 'field', omniman: 'ult_omni', robot: 'cannon', rex: 'coin', battlebeast: 'claws', allen: 'ult_allen', immortal: 'ult_immortal' };
 
 export class HUD {
   constructor(game) {
@@ -46,10 +46,8 @@ export class HUD {
     this.el.dataset.hero = hero.key;
     this.q('#bl .hname').innerHTML = `${d.name}<span class="role">${d.role}</span>`;
     this.q('#bl .passive').textContent = d.passive.name;
-    const segs = this.q('#bl .segs');
-    segs.innerHTML = '';
-    const n = Math.round(hero.maxHp / 25);
-    for (let i = 1; i < n; i++) { const s = document.createElement('i'); s.style.left = (i / n * 100) + '%'; segs.appendChild(s); }
+    this.buildSegs(hero);
+    this._passive = null;
     this.q('#bl .flight').classList.toggle('hidden', !d.flight || d.flight.unlimited);
     // heroes who can't fly get their mobility move in the hint instead of take-off and descend
     this.q('#keyhint').innerHTML = d.flight
@@ -73,10 +71,31 @@ export class HUD {
     this.lastHp = -1;
   }
 
+  /** the health bar's 25 HP ticks (rebuilt when the maximum changes: Allen's Resilience) */
+  buildSegs(hero) {
+    const segs = this.q('#bl .segs');
+    segs.innerHTML = '';
+    const n = Math.round(hero.maxHp / 25);
+    for (let i = 1; i < n; i++) { const s = document.createElement('i'); s.style.left = (i / n * 100) + '%'; segs.appendChild(s); }
+    this._segMax = hero.maxHp;
+  }
+
   update(dt) {
     const g = this.g, p = g.player, w = g.world;
     if (!p) return;
     if (this.built !== p) this.build(p);
+    if (p.maxHp !== this._segMax) { this.buildSegs(p); this.lastHp = -1; }
+    // a passive with a meter of its own (Allen's Resilience, the Immortal's Undying)
+    if (p.kit && p.kit.hudPassive) {
+      const s = p.kit.hudPassive();
+      const sig = `${s.text}|${Math.round(s.fill * 100)}|${Math.round(s.pend * 100)}|${s.hot}`;
+      if (sig !== this._passive) {
+        this._passive = sig;
+        const el = this.q('#bl .passive');
+        el.classList.add('metered'); el.classList.toggle('hot', !!s.hot);
+        el.innerHTML = `<span>${s.text}</span><i class="pm"><i class="pf" style="width:${(s.fill * 100).toFixed(1)}%"></i><i class="pp" style="left:${(s.fill * 100).toFixed(1)}%;width:${(Math.min(s.pend, 1 - s.fill) * 100).toFixed(1)}%"></i></i>`;
+      }
+    } else if (this._passive !== '') { this._passive = ''; const el = this.q('#bl .passive'); el.classList.remove('metered', 'hot'); el.textContent = p.def.passive.name; }
     // health
     const hp = Math.max(0, p.hp), max = p.maxHp;
     if (Math.abs(hp - this.lastHp) > 0.2 || p.overhealth || p.bubble) {
@@ -115,6 +134,16 @@ export class HUD {
       if (p.kit.counterReady || p.kit.counterT > p.world.time) chips.push('<span class="chip beast">COUNTER</span>');
     }
     if (p.key === 'rex' && p.kit && p.kit.rods.some((r) => r.armed)) chips.push('<span class="chip rex">RMB: DETONATE</span>');
+    if (p.key === 'allen' && p.kit) {
+      if (p.kit.ultState) chips.push('<span class="chip allen">BEYOND THE LIMIT</span>');
+      if (p.kit.brace) chips.push('<span class="chip allen">UNBREAKABLE</span>');
+      if (p.kit.charge) chips.push(`<span class="chip allen">${p.kit.charge.full ? 'FULL CHARGE' : 'CHARGING'}</span>`);
+      if (p.kit.strain > 0) chips.push(`<span class="chip allenS">STRAIN ${Math.round(p.kit.strain)}</span>`);
+    }
+    if (p.key === 'immortal' && p.kit) {
+      if (p.kit.down) chips.push('<span class="chip immortal">DOWN · RISING</span>');
+      if (p.kit.ultState) chips.push('<span class="chip immortal">IMMORTAL</span>');
+    }
     if (p.mode === 'fly') chips.push('<span class="chip fly">FLYING</span>');
     const cs = chips.join('');
     if (cs !== this._chips) { this.q('#bl .status').innerHTML = cs; this._chips = cs; }
@@ -276,7 +305,9 @@ export class HUD {
       c.textAlign = 'center';
       c.fillStyle = enemy ? '#ff5d6c' : '#7cc8ff';
       c.strokeStyle = 'rgba(0,0,0,.75)'; c.lineWidth = 3;
-      c.strokeText(h.name, x, y - bh - 4); c.fillText(h.name, x, y - bh - 4);
+      // (a kit tag after the name: Allen's Resilience level, the Immortal down)
+      const label = h.kit && h.kit.tag ? `${h.name} · ${h.kit.tag}` : h.name;
+      c.strokeText(label, x, y - bh - 4); c.fillText(label, x, y - bh - 4);
       // bar
       c.fillStyle = 'rgba(0,0,0,.55)'; c.fillRect(x - bw / 2 - 2, y - 2, bw + 4, bh + 4);
       const f = clamp01(h.hp / h.maxHp);

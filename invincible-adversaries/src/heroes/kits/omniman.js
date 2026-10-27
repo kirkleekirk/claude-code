@@ -166,7 +166,7 @@ export class OmniKit extends Kit {
         });
         if (fin) {
           const p = h.pos.clone().addScaledVector(_v.set(h.aimDir.x, 0, h.aimDir.z).normalize(), 1.6);
-          p.y = w.groundAt(p.x, p.z);
+          p.y = w.floorAt(p.x, p.z, h.pos.y);
           if (h.pos.y - p.y < 2.5) {
             this.fx.groundSlam(p, { power: 0.75 });
             w.sfx('ground_slam', p, { vol: 0.7, rate: 1.2 });
@@ -191,7 +191,7 @@ export class OmniKit extends Kit {
         if (h.dead) { if (rock) w.scene.remove(rock); return; }
         if (e === 'grab') {
           const p = h.pos.clone().addScaledVector(_v.set(h.aimDir.x, 0, h.aimDir.z).normalize(), 1.0);
-          p.y = w.groundAt(p.x, p.z);
+          p.y = w.floorAt(p.x, p.z, h.pos.y);
           this.fx.decal(p, 2.6, 'crater', 10, 0.9);
           this.fx.rocks(p, { n: 8, speed: 6, size: 0.18 });
           this.fx.smoke(p, { n: 5, size: 0.8, size1: 2.2, speed: 2 });
@@ -266,6 +266,7 @@ export class OmniKit extends Kit {
           carried.pos.copy(h.pos).addScaledVector(dir, 1.3); carried.pos.y = h.pos.y + 0.2; carried.vel.set(0, 0, 0);
           // the carried enemy reaches the wall first: that's where they get slammed, not inside it
           if (w.blocked(carried.pos, carried.radius)) { carried.pos.copy(last); travel.hitWall = true; return false; }
+          carried.integrate(0); // (uphill in the crater, held at his height they'd be in the slope)
           return;
         }
         for (const e of w.heroes) {
@@ -273,7 +274,7 @@ export class OmniKit extends Kit {
           if (segPoint(a, b, e.center) < 1.9) {
             passed.add(e);
             if (!carried) {
-              carried = e; e.carriedBy = h; h.carrying = e;
+              if (!e.anchored) { carried = e; e.carriedBy = h; h.carrying = e; }
               w.damage(h, e, 85, { power: 1.2, type: 'ability' });
               kit.fx.punchImpact(e.center, dir, { power: 1.5 });
               w.sfx('punch_heavy', e.center, { vol: 1 });
@@ -338,7 +339,7 @@ export class OmniKit extends Kit {
           const p = o.clone().addScaledVector(dir, 1 + k * 3.6);
           setTimeout(() => {
             kit.fx.ring(p, { color: 0xf2f8ff, intensity: 0.95 - k * 0.08, r0: 0.6 + k * 0.6, r1: 3 + k * 2.4, life: 0.4, normal: dir, soft: 0.3 });
-            const gp = _v.set(p.x, w.groundAt(p.x, p.z), p.z);
+            const gp = _v.set(p.x, w.floorAt(p.x, p.z, p.y), p.z);
             if (p.y - gp.y < 4) { kit.fx.dustRing(gp, { n: 10, radius: 1 + k * 0.4, speed: 7, size: 1, size1: 3, life: 0.9 }); if (k % 2 === 0) kit.fx.rocks(gp, { n: 3, speed: 7, size: 0.18 }); }
           }, k * 38);
         }
@@ -406,13 +407,22 @@ export class OmniKit extends Kit {
         if (phase === 'zip') {
           // approach to a point next to the target, from an alternating angle
           if (!s.approach) {
+            // (the chain is picked by distance: a target round a building's corner from here is
+            // skipped rather than zipped to through the building)
+            if (!w.lineOfSight(h.center, t.center)) { idx++; pt = 0; return idx < strikes.length; }
             // strike from a random side, but never from inside the cover the target stands next to
             s.approach = new THREE.Vector3();
-            for (let i = 0; i < 8; i++) {
+            let free = false;
+            for (let i = 0; i < 8 && !free; i++) {
               const ang = rand(0, TAU);
               s.approach.set(Math.cos(ang) * 1.6, 0.2, Math.sin(ang) * 1.6);
-              if (!w.blocked(_u.copy(t.pos).add(s.approach))) break;
+              free = !w.blocked(_u.copy(t.pos).add(s.approach));
             }
+            // (backed into a corner, every side tried was a wall: he comes at them from where he is)
+            if (!free) { const dx = h.pos.x - t.pos.x, dz = h.pos.z - t.pos.z, l = Math.hypot(dx, dz) || 1; s.approach.set(dx / l * 1.2, 0.2, dz / l * 1.2); }
+            // (on a slope, the spot beside them can be higher than their feet: not inside the hill)
+            const ap = _u.copy(t.pos).add(s.approach);
+            s.approach.y = Math.max(0.2, w.floorAt(ap.x, ap.z, t.pos.y + 1) - t.pos.y + 0.05);
             w.sfx('zip', h.pos, { vol: 0.9 });
           }
           _v.copy(t.pos).add(s.approach);
@@ -421,8 +431,9 @@ export class OmniKit extends Kit {
           const sp = 95;
           const step = Math.min(d, sp * dt);
           if (d > 1e-3) h.pos.addScaledVector(_w.normalize(), step);
-          // hop over cover in the way instead of zipping through it
+          // hop over cover in the way instead of zipping through it; walls and the ground stop him
           if (w.blocked(h.pos)) h.pos.y = Math.max(h.pos.y, w.groundAt(h.pos.x, h.pos.z) + 0.05);
+          h.integrate(0);
           this.animVel.copy(_w).multiplyScalar(sp);
           h.yaw = yawOf(_u.subVectors(t.pos, h.pos));
           tr.push(h.center);

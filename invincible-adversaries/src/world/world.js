@@ -230,6 +230,13 @@ export class World {
     return null;
   }
   /** true when a hero-sized body at p would be inside a wall or cover (rather than on top of it) */
+  /** the point is inside an obstacle (a building, a pillar, the payload) */
+  inside(p) {
+    for (const o of this.obstaclesNear(p.x, p.z, 0, this._qa || (this._qa = []))) {
+      if (o.type === 'cyl' ? p.y < o.h && Math.hypot(p.x - o.x, p.z - o.z) < o.r : p.x > o.min.x && p.x < o.max.x && p.z > o.min.z && p.z < o.max.z && p.y > o.min.y && p.y < o.max.y) return true;
+    }
+    return false;
+  }
   blocked(p, r = 0.45) {
     for (const o of this.obstaclesNear(p.x, p.z, r + 0.5, this._qa || (this._qa = []))) {
       if (o.type === 'cyl') { if (p.y < o.h && Math.hypot(p.x - o.x, p.z - o.z) < o.r + r) return true; }
@@ -238,10 +245,21 @@ export class World {
     return false;
   }
   /** height of the ground or the top of whatever stands there (cover, a rooftop) */
+  /** the highest surface at (x, z): the ground, or the top of the box over it (a building taller
+   * than the ceiling is a wall, never a floor: nobody may stand on it) */
   groundAt(x, z) {
     let y = terrainY(x, z);
-    for (const o of this.obstaclesNear(x, z, 0, this._qb || (this._qb = []))) if (o.type === 'box' && x > o.min.x && x < o.max.x && z > o.min.z && z < o.max.z) y = Math.max(y, o.max.y);
+    const top = ARENA.ceiling;
+    for (const o of this.obstaclesNear(x, z, 0, this._qb || (this._qb = []))) if (o.type === 'box' && x > o.min.x && x < o.max.x && z > o.min.z && z < o.max.z && o.max.y <= top) y = Math.max(y, o.max.y);
     return y;
+  }
+  /** the floor under a point at height y: the highest surface at (x, z) no higher than it (so
+   * something dropped beside a tall building lands at its foot, not up on its roof) */
+  floorAt(x, z, y) {
+    let f = terrainY(x, z);
+    const top = Math.min(ARENA.ceiling, y + 0.5);
+    for (const o of this.obstaclesNear(x, z, 0, this._qb || (this._qb = []))) if (o.type === 'box' && x > o.min.x && x < o.max.x && z > o.min.z && z < o.max.z && o.max.y <= top) f = Math.max(f, o.max.y);
+    return f;
   }
   /** the first barrier not of `team` that the segment a->b crosses: { barrier, t, point } or null */
   barrierHit(a, b, team) {
@@ -278,6 +296,8 @@ export class World {
     let amt = amount;
     if (src && src.status.boost > 0) amt *= 1 + src.status.boost;
     if (src && src.status.weak > 0) amt *= 1 - src.status.weak;
+    // a kit's own damage scaling (Allen's Resilience)
+    if (src && src.kit && src.kit.dmgMul) amt *= src.kit.dmgMul;
     // a hard-light barrier between the attacker (or o.from, e.g. a blast centre) and the target takes
     // the hit instead; damage over time from a zone the target stands in isn't blocked
     if (this.barriers.length && src && src !== target && o.type !== 'dot') {
@@ -308,10 +328,11 @@ export class World {
       if (b.amt <= 0.5) { b.fx && b.fx.pop(true); target.bubble = null; this.sfx('bubble_break', hitPos, { vol: 0.8 }); }
     }
     if (amt > 0 && target.overhealth > 0) { const a = Math.min(target.overhealth, amt); target.overhealth -= a; amt -= a; dealt += a; }
+    let hpLoss = 0;
     if (amt > 0) {
       let a = Math.min(target.hp, amt);
       if (this.settings.godMode && target.team === 0 && target.isPlayer) a = Math.min(a, Math.max(0, target.hp - 1));
-      target.hp -= a; dealt += a;
+      target.hp -= a; dealt += a; hpLoss = a;
     }
     const total = dealt + absorbed;
     const now = this.time;
@@ -322,6 +343,9 @@ export class World {
       // an ultimate's own damage doesn't charge the next one
       if (src !== target && o.type !== 'ult') src.ult = Math.min(src.def.ultCost, src.ult + total * RULES.ultPerDamage);
       if (src.key === 'omniman' && !o.noLifesteal && total > 0) this.heal(src, src, total * RULES.omniLifesteal, { silent: true, noUlt: true });
+      // (a kit's own, like the Immortal's ult)
+      const ls = src.kit && src.kit.lifesteal;
+      if (ls && src !== target && total > 0 && !o.noLifesteal) this.heal(src, src, total * ls, { silent: true, noUlt: true });
     }
     // reactions
     const power = o.power ?? clamp(amount / 60, 0.3, 1.5);
@@ -343,7 +367,10 @@ export class World {
     else if (o.stun && target.unstoppable) target.status.stunT = Math.max(target.status.stunT, o.stun * 0.5);
     if (o.slow && !target.unstoppable) { target.status.slow = Math.max(target.status.slow, o.slow); target.status.slowT = Math.max(target.status.slowT, o.slowT || 1.5); }
     this.emit('damage', { src, target, amount: total, absorbed, hitPos: hitPos.clone(), crit: o.crit, type: o.type });
-    if (target.hp <= 0.01 && !target.dead) this.kill(src, target, dir);
+    // what got through to the body (Allen banks it as Strain)
+    if (dealt > 0 && target.kit && target.kit.onHurt) target.kit.onHurt(dealt, hpLoss, src, o);
+    // a kit can refuse a killing blow (the Immortal's Undying)
+    if (target.hp <= 0.01 && !target.dead && !(target.kit && target.kit.cheatDeath && target.kit.cheatDeath(src, dir, o))) this.kill(src, target, dir);
     return total;
   }
 
@@ -389,7 +416,8 @@ export class World {
     for (let k = 0; k < 12; k++) {
       const a = Math.random() * TAU, r = Math.sqrt(Math.random()) * s;
       const p = new THREE.Vector3(c.x + Math.cos(a) * r, 0, c.z + Math.sin(a) * r);
-      p.y = this.groundAt(p.x, p.z);
+      // (the room's floor: a spawn room carved into a building has the building over it)
+      p.y = this.floorAt(p.x, p.z, c.y + 0.3);
       if (!this.blocked(p) && Math.abs(p.y - c.y) < 1.5) return p;
     }
     return c.clone();
@@ -423,7 +451,10 @@ export class World {
     const geo = this._orbGeo || (this._orbGeo = new THREE.IcosahedronGeometry(0.42, 2));
     const ringGeo = this._orbRing || (this._orbRing = new THREE.TorusGeometry(0.75, 0.04, 8, 48));
     for (const [x, z] of pts) {
-      const gy = this.groundAt(x, z);
+      // on the street (under the L's deck or a roof, not on top of it), unless rubble fills the spot:
+      // then on the rubble
+      let gy = this.floorAt(x, z, terrainY(x, z) + 0.3);
+      if (this.inside(_v.set(x, gy + 1.2, z))) gy = this.groundAt(x, z);
       const g = new THREE.Group();
       g.position.set(x, gy + 1.2, z);
       const core = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: new THREE.Color(0.6, 3.2, 1.6) }));

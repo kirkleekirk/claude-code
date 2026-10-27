@@ -278,13 +278,13 @@ export class InvincibleKit extends Kit {
     let target = (it.aimHero && it.aimHero.team !== h.team) ? it.aimHero.pos.clone() : it.aimPoint.clone();
     _v.subVectors(target, h.pos);
     if (_v.length() > 45) target = h.pos.clone().addScaledVector(_v.normalize(), 45);
-    if (target.y < 0.3) target.y = w.groundAt(target.x, target.z);
+    if (target.y < 0.3) target.y = w.floorAt(target.x, target.z, target.y);
     if (target.distanceTo(h.pos) < 3) { w.sfx('denied', null, { ui: true }); return; }
     // diving at a hero: touch down just in front of them (still deep inside the blast), not inside them
     if (it.aimHero && it.aimHero.team !== h.team) {
       _v.set(h.pos.x - target.x, 0, h.pos.z - target.z);
       if (_v.lengthSq() > 1e-4) target.addScaledVector(_v.normalize(), Math.min(it.aimHero.radius + h.radius + 0.25, 1.4));
-      target.y = Math.max(target.y, w.groundAt(target.x, target.z));
+      target.y = Math.max(target.y, w.floorAt(target.x, target.z, target.y));
     }
     this.use('a2');
     w.sfx('whistle', h.pos, { vol: 0.6, rate: 1.6 });
@@ -300,7 +300,7 @@ export class InvincibleKit extends Kit {
       tr.stop();
       if (died) return; // a dive cut short by death doesn't land
       const p = h.pos.clone();
-      const onGround = p.y < w.groundAt(p.x, p.z) + 1.2;
+      const onGround = p.y < w.floorAt(p.x, p.z, p.y) + 1.2;
       if (onGround) { this.fx.groundSlam(p, { power: 1.25 }); h.mode = 'ground'; h.vel.set(0, 0, 0); h.anim.play(this.clips.superland); h.status.rootT = 0.38; this.busyT = 0.38; }
       else { this.fx.sphere(p, { color: 0xfff0d0, r1: 6, life: 0.35 }); this.fx.glow(p, { size: 4, life: 0.2 }); h.mode = 'fly'; h.vel.set(0, 3, 0); }
       w.sfx('ground_slam', p, { vol: 1, important: true });
@@ -319,7 +319,9 @@ export class InvincibleKit extends Kit {
   // ---------------- F: Skyward Slam ----------------
   slam(it) {
     const h = this.h, w = this.w;
-    const tgt = this.aimTarget(7, 0.7);
+    // (a hero anchored to the spot, like the Immortal down on one knee, can't be picked up)
+    let tgt = this.aimTarget(7, 0.7);
+    if (tgt && tgt.anchored) tgt = null;
     h.anim.play(this.clips.grab);
     if (!tgt) { this.use('a3', 1.5); w.sfx('swing', h.pos); return; }
     this.use('a3');
@@ -340,7 +342,7 @@ export class InvincibleKit extends Kit {
             h.anim.play(kit.clips.carry, { hold: true });
             w.sfx('takeoff', h.pos, { vol: 0.9 });
             this.dir = new THREE.Vector3(h.aimDir.x, 0, h.aimDir.z).normalize();
-          } else { _v.normalize(); h.pos.addScaledVector(_v, Math.min(d, 34 * dt)); h.yaw = yawOf(_v); this.animVel.copy(_v).multiplyScalar(10); }
+          } else { _v.normalize(); h.pos.addScaledVector(_v, Math.min(d, 34 * dt)); h.integrate(0); h.yaw = yawOf(_v); this.animVel.copy(_v).multiplyScalar(10); }
           return true;
         }
         if (this.phase === 'rise') {
@@ -349,22 +351,28 @@ export class InvincibleKit extends Kit {
           h.pos.addScaledVector(this.dir, 2 * dt);
           h.integrate(0);
           hold(0.95, 0.75);
+          // (under a roof, the one held up over his head reaches it first: the climb stops there)
+          const over = overRoof();
+          if (over > 0) { h.pos.y -= over; hold(0.95, 0.75); this.t = Math.max(this.t, 0.42); }
           this.animVel.set(0, 18, 0);
           if (this.t > 0.42) { this.phase = 'throw'; this.t = 0; h.anim.play(kit.clips.slamThrow); w.sfx('swing_heavy', h.pos); }
           return true;
         }
         if (this.phase === 'throw') {
           hold(0.9, 1.1 - this.t * 8);
+          tgt.pos.y -= Math.max(0, overRoof());
           if (this.t > 0.13) { this.phase = 'fall'; this.t = 0; }
           return true;
         }
         if (this.phase === 'fall') {
-          const sp = 58;
+          const sp = 58, y0 = tgt.pos.y;
           _v.set(this.dir.x * 0.18, -1, this.dir.z * 0.18).normalize();
           h.pos.addScaledVector(_v, sp * dt);
+          h.integrate(0); // (the forward drift slides him down a wall in front, not into it)
           this.animVel.copy(_v).multiplyScalar(sp);
           hold(0.4, -1.3);
-          const gy = w.groundAt(tgt.pos.x, tgt.pos.z);
+          // (the floor under them: beside a tall building that's its foot, not its roof)
+          const gy = w.floorAt(tgt.pos.x, tgt.pos.z, Math.max(tgt.pos.y, y0));
           if (tgt.pos.y <= gy + 0.05) {
             tgt.pos.y = gy;
             release();
@@ -390,6 +398,12 @@ export class InvincibleKit extends Kit {
       tgt.pos.copy(h.pos).addScaledVector(seq.dir || h.aimDir, fwd); tgt.pos.y += up + 0.4;
       tgt.vel.set(0, 0, 0);
       tgt.yaw = h.yaw + Math.PI;
+      tgt.integrate(0); // (held against a wall, they're pushed clear of it, not into it)
+    }
+    /** how far the one held up would stick into a roof over them (negative: room to spare) */
+    function overRoof() {
+      const roof = w.rayWorld(_u.set(tgt.pos.x, h.pos.y + 1, tgt.pos.z), UP, tgt.height + 3);
+      return roof ? tgt.pos.y + tgt.height + 0.05 - (h.pos.y + 1 + roof.dist) : -1;
     }
     function release() {
       if (tgt.carriedBy === h) { tgt.carriedBy = null; tgt.mode = 'air'; tgt.tumbleT = 0.3; }
@@ -399,8 +413,11 @@ export class InvincibleKit extends Kit {
   }
 
   // ---------------- Q: Mach Breaker ----------------
+  /** nothing overhead between him and the sky (not under the station's roofs or the L) */
+  openSky() { return !this.w.rayWorld(this.h.center, UP, 110); }
   machBreaker(it) {
     const h = this.h, w = this.w, kit = this;
+    if (!this.openSky()) { if (h.isPlayer) { this.msg('Mach Breaker needs open sky'); w.sfx('denied', null, { ui: true }); } return; }
     h.ult = 0;
     this.w.emit('ult', { hero: h, name: 'MACH BREAKER' });
     const startXZ = h.pos.clone();
@@ -439,6 +456,11 @@ export class InvincibleKit extends Kit {
           this.target.copy(ap); this.target.y = w.groundAt(ap.x, ap.z);
           _v.subVectors(this.target, startXZ); _v.y = 0;
           if (_v.length() > 60) { _v.setLength(60); this.target.set(startXZ.x + _v.x, 0, startXZ.z + _v.z); this.target.y = w.groundAt(this.target.x, this.target.z); }
+          // the fall is a straight line from up here: behind a skyscraper, it ends at the foot of its
+          // near face instead of going through it
+          _v.subVectors(this.target, h.pos);
+          const len = _v.length(), hit = len > 1 && w.rayWorld(h.pos, _v.normalize(), len - 0.5);
+          if (hit) { this.target.copy(hit.point).addScaledVector(_v, -0.8); this.target.y = w.floorAt(this.target.x, this.target.z, this.target.y); }
           if (kit.marker) { kit.marker.position.set(this.target.x, this.target.y + 0.06, this.target.z); kit.marker.rotation.y += dt * 1.5; kit.marker.material.opacity = 0.6 + Math.sin(this.t * 14) * 0.3; }
           if ((i.primaryPressed || i.ult) && this.t > 0.25 || this.t > 3.2) {
             this.phase = 'fall'; this.t = 0;

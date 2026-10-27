@@ -19,39 +19,35 @@ import { OmniKit } from './heroes/kits/omniman.js';
 import { RobotKit } from './heroes/kits/robot.js';
 import { RexKit } from './heroes/kits/rex.js';
 import { BeastKit } from './heroes/kits/battlebeast.js';
+import { AllenKit } from './heroes/kits/allen.js';
+import { ImmortalKit } from './heroes/kits/immortal.js';
 import { Bot } from './ai/bot.js';
 import { NavGrid } from './ai/nav.js';
 import { HUD } from './ui/hud.js';
 import { Menus } from './ui/menus.js';
 
-const KITS = { invincible: InvincibleKit, eve: EveKit, omniman: OmniKit, robot: RobotKit, rex: RexKit, battlebeast: BeastKit };
+const KITS = { invincible: InvincibleKit, eve: EveKit, omniman: OmniKit, robot: RobotKit, rex: RexKit, battlebeast: BeastKit, allen: AllenKit, immortal: ImmortalKit };
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _u = new THREE.Vector3();
 const PARAMS = new URLSearchParams(location.search);
 // phones and tablets without a mouse: a bot plays the player's hero so the match can be watched
 const TOUCH_ONLY = matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches;
 
 /**
- * 3v3 lineups: every hero on the field (with six heroes, each exactly once) and the same mix of
- * roles on both sides (one duelist, one strategist and one vanguard each), so neither team starts
- * a role short. The player's team is drawn at random from the splits that allow it.
+ * 3v3 lineups: one duelist, one strategist and one vanguard a side (the same roles on both teams),
+ * nobody twice in a match while the roster allows it, the player's pick on their own team. With
+ * more heroes than places, who sits out is drawn at random.
  */
 export function lineups(playerKey) {
   const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-  const roles = (team) => team.map((k) => HEROES[k].role).sort().join();
-  const others = HERO_KEYS.filter((k) => k !== playerKey);
-  const splits = [];
-  for (let i = 0; i < others.length; i++) for (let j = i + 1; j < others.length; j++) {
-    const ally = [playerKey, others[i], others[j]];
-    const rest = HERO_KEYS.filter((k) => !ally.includes(k));
-    // with fewer than six heroes, the enemies are whoever is left out plus some of the player's team
-    const fill = shuffle(ally.slice()).filter((k) => !rest.includes(k));
-    const enemy = [...rest.slice(0, 3), ...fill].slice(0, 3);
-    splits.push([ally, enemy]);
-  }
-  const fair = splits.filter(([a, e]) => roles(a) === roles(e));
-  const pool = fair.length ? fair : splits;
-  const [ally, enemy] = pool[Math.floor(Math.random() * pool.length)];
-  return [[ally[0], ...shuffle(ally.slice(1))], shuffle(enemy.slice())];
+  const roles = {};
+  for (const k of HERO_KEYS) (roles[HEROES[k].role] ||= []).push(k);
+  const used = new Set([playerKey]);
+  // (a role with nobody left to give fields a hero twice rather than leave a side a role short)
+  const pick = (r) => { const pool = roles[r].filter((k) => !used.has(k)); const k = shuffle(pool.length ? pool : roles[r].slice())[0]; used.add(k); return k; };
+  const own = HEROES[playerKey].role, order = Object.keys(roles);
+  const ally = [playerKey, ...order.filter((r) => r !== own).map(pick)];
+  const enemy = order.map(pick);
+  return [[ally[0], ...shuffle(ally.slice(1))], shuffle(enemy)];
 }
 
 /**
@@ -407,8 +403,10 @@ export class Game {
     this.world.setObstacles(m.obstacles);
     this.world.makeOrbs();
     // effects land on rooftops and in the crater; the camera keeps above the ground
-    this.fx.groundAt = key === 'chicago' ? (x, z) => this.world.groundAt(x, z) : null;
+    // (effects ask for the floor under them: inside the station that's its floor, not its roof)
+    this.fx.groundAt = key === 'chicago' ? (x, z, y) => (y == null ? this.world.groundAt(x, z) : this.world.floorAt(x, z, y)) : null;
     this.camRig.groundAt = key === 'chicago' ? terrainY : null;
+    this.camRig.solidAt = (p) => this.world.inside(p);
     this.map = m; this.mapKey = key;
   }
 
@@ -526,6 +524,9 @@ export class Game {
     cr.zoom = damp(cr.zoom, 0, 6, dt);
     const tgt = { root: p.root, camHeight: p.camHeight, camDist: p.camDist * (highAlt ? 2.6 : 1) * (p.dead ? 1.6 : 1) };
     cr.update(dt, tgt, this.camRay, { speed, flying: p.mode === 'fly', boost: !!(p.override && p.override.boost) });
+    // backed into a wall the camera comes in to the hero's head: don't draw the hero from inside
+    p.camHide = cr.close;
+    p.root.visible = !p.hidden && !p.camHide && p.dissolve < 0.995;
   }
 
   updatePreview(dt) {
@@ -539,7 +540,7 @@ export class Game {
     if (this.previewT > 2.2 && h.kit && !h.override) {
       this.previewT = -1.5;
       const k = h.key, c = h.kit.clips;
-      const seqs = { invincible: ['jab', 'cross', 'uppercut'], omniman: ['roar', 'hammer'], eve: ['pulse', 'fistCast'], robot: ['dronesCast', 'barrierCast', 'salvo'], rex: ['flickR', 'fan', 'flickL', 'rodThrow'], battlebeast: ['roar', 'doubleClaw', 'clawR'] }[k];
+      const seqs = { invincible: ['jab', 'cross', 'uppercut'], omniman: ['roar', 'hammer'], eve: ['pulse', 'fistCast'], robot: ['dronesCast', 'barrierCast', 'salvo'], rex: ['flickR', 'fan', 'flickL', 'rodThrow'], battlebeast: ['roar', 'doubleClaw', 'clawR'], allen: ['harden', 'hayR', 'overhand'], immortal: ['rally', 'straightR', 'uppercut'] }[k];
       const name = seqs[this.previewPose++ % seqs.length];
       if (c[name]) h.anim.play(c[name]);
       if (k === 'robot' && name === 'salvo') h.kit.podT = 0.9;

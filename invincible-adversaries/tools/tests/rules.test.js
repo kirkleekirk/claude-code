@@ -133,22 +133,28 @@ T.test('passive regeneration starts after the delay at the listed rate', () => {
   }
 });
 
-T.test('match lineups: three each, nobody twice on a team, every hero fielded, same roles on both sides', async () => {
+T.test('match lineups: three each, nobody twice in a match, same roles on both sides, every hero gets games', async () => {
   const { lineups } = await import(new URL('src/game.js', location.href).href);
   const { HEROES, HERO_KEYS } = await import(new URL('src/heroes/data.js', location.href).href);
   const roles = (t) => t.map((k) => HEROES[k].role).sort().join();
-  const seen = new Set();
+  const seen = new Set(), games = Object.fromEntries(HERO_KEYS.map((k) => [k, 0]));
   for (const key of HERO_KEYS) for (let n = 0; n < 40; n++) {
     const [a, b] = lineups(key);
     const tag = `${key}: ${a} v ${b}`;
     T.expect(a.length === 3 && b.length === 3 && a[0] === key, `${tag}: bad teams`);
-    T.expect(new Set(a).size === 3 && new Set(b).size === 3, `${tag}: a hero twice on one team`);
-    T.expect(HERO_KEYS.every((k) => a.includes(k) || b.includes(k)), `${tag}: a hero left out`);
+    T.expect(new Set([...a, ...b]).size === 6, `${tag}: a hero twice in the match`);
     T.expect(roles(a) === roles(b), `${tag}: roles ${roles(a)} against ${roles(b)}`);
+    for (const k of [...a, ...b]) games[k]++;
     seen.add(`${[...a].sort()} v ${[...b].sort()}`);
   }
-  T.info(`${seen.size} distinct matchups`);
+  T.info(`${seen.size} distinct matchups; games each: ${Object.entries(games).map(([k, n]) => `${k} ${n}`).join(', ')}`);
   T.expect(seen.size >= 4, `only ${seen.size} distinct matchups`);
+  // the heroes who sit out are drawn fairly: nobody plays far less than the others of their role
+  for (const k of HERO_KEYS) {
+    const mates = HERO_KEYS.filter((m) => HEROES[m].role === HEROES[k].role);
+    const avg = mates.reduce((s, m) => s + games[m], 0) / mates.length;
+    T.expect(games[k] > avg * 0.6, `${k} fielded ${games[k]} times against ${avg.toFixed(0)} for its role`);
+  }
 });
 
 T.test('training toggles: god mode, no cooldowns, fast ult', () => {
@@ -196,7 +202,7 @@ T.test('hero select: number keys and the arrows reach every hero card', () => {
   g.toSelect();
   const press = (code) => window.dispatchEvent(new KeyboardEvent('keydown', { code }));
   const cards = [...document.querySelectorAll('#select .card')].map((c) => c.dataset.k);
-  T.expect(cards.length === 6, `${cards.length} hero cards`);
+  T.expect(cards.length === 8, `${cards.length} hero cards`);
   for (let i = 0; i < cards.length; i++) {
     press(`Digit${i + 1}`);
     T.expect(g.menus.selected === cards[i], `key ${i + 1} picked ${g.menus.selected}, but card ${i + 1} is ${cards[i]}`);

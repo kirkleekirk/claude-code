@@ -10,6 +10,8 @@ export const MODEL_URLS = {
   robot: 'assets/models/robot.glb',
   rex: 'assets/models/rex-splode.glb',
   battlebeast: 'assets/models/battle-beast.glb',
+  allen: 'assets/models/allen.glb',
+  immortal: 'assets/models/the-immortal.glb',
 };
 
 const loader = new GLTFLoader();

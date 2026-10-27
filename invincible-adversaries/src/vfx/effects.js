@@ -274,7 +274,8 @@ class Debris {
         d.p.addScaledVector(d.v, dt);
         _q.setFromEuler(new THREE.Euler(d.av.x * dt, d.av.y * dt, d.av.z * dt));
         d.q.multiply(_q);
-        const gy = this.ground ? this.ground(d.p.x, d.p.z) : 0;
+        // (the floor under where it was before this step: a fast chunk can't drop through a roof)
+        const gy = this.ground ? this.ground(d.p.x, d.p.z, d.p.y - d.v.y * dt) : 0;
         if (d.p.y < gy + d.size * 0.5) {
           d.p.y = gy + d.size * 0.5;
           if (Math.abs(d.v.y) < 2) { d.rest = d.v.lengthSq() < 4; d.v.y = 0; }
@@ -447,7 +448,7 @@ export class Effects {
     this.alpha = new ParticleSystem(scene, { max: Math.round(3500 * quality), additive: false, order: 11 });
     this.lights = new LightPool(scene, 6);
     this.debris = new Debris(scene, 280);
-    this.debris.ground = this.add.ground = this.alpha.ground = (x, z) => this.ground(x, z);
+    this.debris.ground = this.add.ground = this.alpha.ground = (x, z, y) => this.ground(x, z, y);
     this.items = [];
     this.trails = [];
     this.updaters = [];
@@ -487,14 +488,14 @@ export class Effects {
   }
 
   every(fn) { this.updaters.push(fn); }
-  /** ground height for effects that sit on it (set by the game to the world's) */
-  ground(x, z) { return this.groundAt ? this.groundAt(x, z) : 0; }
+  /** ground height for effects that sit on it: the floor under height y (set by the game to the world's) */
+  ground(x, z, y) { return this.groundAt ? this.groundAt(x, z, y) : 0; }
   trail(opts) { const t = new Trail(this, opts); this.trails.push(t); return t; }
 
   // ---------- primitives ----------
   ring(pos, { color = 0xffffff, intensity = 1.5, r0 = 0.3, r1 = 6, life = 0.45, soft = 0.4, y = 0.05, normal = null, additive = true } = {}) {
     const m = new THREE.Mesh(this.ringGeo, ringMat(color, intensity, soft, additive));
-    m.position.copy(pos); if (y !== null && !normal) m.position.y = Math.max(m.position.y, this.ground(pos.x, pos.z) + y);
+    m.position.copy(pos); if (y !== null && !normal) m.position.y = Math.max(m.position.y, this.ground(pos.x, pos.z, pos.y) + y);
     if (normal) m.quaternion.setFromUnitVectors(UP, normal);
     m.renderOrder = 7;
     this.scene.add(m);
@@ -535,7 +536,7 @@ export class Effects {
     const mat = new THREE.MeshBasicMaterial({ map: this.tex[kind], transparent: true, depthWrite: false, opacity, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
     if (kind === 'atom') { mat.blending = THREE.AdditiveBlending; mat.color.setRGB(1.5, 0.45, 1.3); }
     const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size).rotateX(-Math.PI / 2), mat);
-    m.position.set(pos.x, this.ground(pos.x, pos.z) + 0.03 + this.decals.length * 0.0005, pos.z);
+    m.position.set(pos.x, this.ground(pos.x, pos.z, pos.y) + 0.03 + this.decals.length * 0.0005, pos.z);
     m.rotation.y = rot;
     m.renderOrder = 2;
     this.scene.add(m);
@@ -588,7 +589,7 @@ export class Effects {
     for (let i = 0; i < n; i++) {
       const a = (i / n) * TAU + rand(-0.1, 0.1);
       _v.set(Math.cos(a), 0.08, Math.sin(a));
-      _w.copy(pos).addScaledVector(_v, radius); _w.y = this.ground(_w.x, _w.z) + 0.3;
+      _w.copy(pos).addScaledVector(_v, radius); _w.y = this.ground(_w.x, _w.z, pos.y) + 0.3;
       this.alpha.spawn({ p: _w, v: _v.clone().multiplyScalar(speed * rand(0.6, 1.1)).setY(rand(0.5, 2)), life: life * rand(0.7, 1.2), size, size1, color, color1: [color[0], color[1], color[2], 0], shape: SHAPE.SMOKE, drag: 3.2, grav: -0.3, rotV: rand(-1, 1), curve: 0.7, fadeIn: 0.04 });
     }
   }
@@ -630,7 +631,7 @@ export class Effects {
     if (power > 1.2) this.renderer.addWave(pos, { strength: 0.025 * power, life: 0.35, speed: 1.2, width: 0.05 });
   }
   groundSlam(pos, { power = 1, color = 0xffffff, crater = true, dust = true } = {}) {
-    const p = _v.copy(pos); p.y = this.ground(p.x, p.z) + 0.05;
+    const p = _v.copy(pos); p.y = this.ground(p.x, p.z, pos.y) + 0.05;
     this.ring(p, { color: 0xffffff, intensity: 1.35, r0: 0.5, r1: 7 * power, life: 0.5, soft: 0.25, y: null });
     this.ring(p, { color: 0xffe2b0, intensity: 0.7, r0: 0.3, r1: 11 * power, life: 0.8, soft: 0.5 });
     const gy = p.y - 0.05;

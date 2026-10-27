@@ -324,7 +324,7 @@ export class BeastKit extends Kit {
     } else target = it.aimPoint.clone();
     _v.subVectors(target, h.pos);
     if (_v.length() > 30) target = h.pos.clone().addScaledVector(_v.normalize(), 30);
-    if (!foe || foe.grounded) target.y = Math.max(target.y, w.groundAt(target.x, target.z));
+    if (!foe || foe.grounded) target.y = Math.max(target.y, w.floorAt(target.x, target.z, target.y));
     if (target.distanceTo(h.pos) < 3) { w.sfx('denied', null, { ui: true }); return; }
     // never into the ceiling
     target.y = Math.min(target.y, 120);
@@ -420,7 +420,7 @@ export class BeastKit extends Kit {
     for (let k = 0; k < 4; k++) {
       setTimeout(() => { if (!h.dead) fx.ring(mouth.clone().addScaledVector(h.aimDir, 0.4 + k * 0.7), { color: 0xffe8d8, intensity: 0.9 - k * 0.15, r0: 0.4 + k * 0.5, r1: 4 + k * 3, life: 0.45, normal: h.aimDir, soft: 0.45 }); }, k * 70);
     }
-    fx.ring(_w.set(c.x, w.groundAt(c.x, c.z) + 0.05, c.z), { color: 0xff6040, intensity: 1.2, r0: 0.5, r1: R, life: 0.6, soft: 0.3 });
+    fx.ring(_w.set(c.x, w.floorAt(c.x, c.z, c.y) + 0.05, c.z), { color: 0xff6040, intensity: 1.2, r0: 0.5, r1: R, life: 0.6, soft: 0.3 });
     fx.dustRing(h.pos, { n: 30, radius: 1, speed: 15, size: 1.2, size1: 3.4, life: 1.1 });
     w.renderer.addWave(mouth.clone().addScaledVector(h.aimDir, 0.6), { strength: 0.07, life: 0.75, speed: 1.6, width: 0.1 });
     w.renderer.fx.ca = Math.max(w.renderer.fx.ca, 0.012);
@@ -431,7 +431,8 @@ export class BeastKit extends Kit {
   // ---------------- F: hurl ----------------
   hurl(it) {
     const h = this.h, w = this.w, kit = this;
-    const tgt = this.aimTarget(4.4, 0.75);
+    let tgt = this.aimTarget(4.4, 0.75);
+    if (tgt && tgt.anchored) tgt = null;
     h.anim.play(this.clips.grab);
     if (!tgt) { this.use('a3', 1.5); w.sfx('swing_heavy', h.pos, { vol: 0.6 }); return; }
     this.use('a3');
@@ -479,6 +480,7 @@ export class BeastKit extends Kit {
       tgt.pos.copy(h.pos).addScaledVector(_v, fwd); tgt.pos.y += up;
       tgt.vel.set(0, 0, 0);
       tgt.yaw = h.yaw + Math.PI;
+      tgt.integrate(0); // (held against cover or a wall, they're pushed clear of it, not into it)
     }
     function release() {
       if (tgt.carriedBy === h) { tgt.carriedBy = null; tgt.mode = 'air'; tgt.tumbleT = 0.3; }
