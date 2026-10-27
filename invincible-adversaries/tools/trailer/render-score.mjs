@@ -1,0 +1,24 @@
+// node render-score.mjs <out.wav> [hitsJson]
+import { chromium } from 'playwright';
+import fs from 'fs';
+import path from 'path';
+const [,, out, hitsJson] = process.argv;
+const hits = hitsJson ? JSON.parse(fs.readFileSync(hitsJson, 'utf8')) : {};
+const browser = await chromium.launch({ headless: true, args: ['--autoplay-policy=no-user-gesture-required'] });
+const page = await browser.newPage();
+const logs = [];
+page.on('console', (m) => logs.push(m.type() + ': ' + m.text()));
+page.on('pageerror', (e) => logs.push('pageerror: ' + e.message));
+await page.goto('about:blank');
+await page.addScriptTag({ path: path.join(path.dirname(new URL(import.meta.url).pathname), 'score.js') });
+const t0 = Date.now();
+const a = await page.evaluate((hits) => window.renderScore({ dur: 75, hits }), hits);
+const pcm = Buffer.from(a.b64, 'base64');
+const hdr = Buffer.alloc(44);
+hdr.write('RIFF', 0); hdr.writeUInt32LE(36 + pcm.length, 4); hdr.write('WAVE', 8); hdr.write('fmt ', 12);
+hdr.writeUInt32LE(16, 16); hdr.writeUInt16LE(1, 20); hdr.writeUInt16LE(2, 22); hdr.writeUInt32LE(a.sr, 24); hdr.writeUInt32LE(a.sr * 4, 28); hdr.writeUInt16LE(4, 32); hdr.writeUInt16LE(16, 34);
+hdr.write('data', 36); hdr.writeUInt32LE(pcm.length, 40);
+fs.writeFileSync(out, Buffer.concat([hdr, pcm]));
+console.log('score rendered in', ((Date.now() - t0) / 1000).toFixed(1), 's; peak', a.peak.toFixed(3));
+console.log(logs.slice(0, 20).join('\n'));
+await browser.close();
