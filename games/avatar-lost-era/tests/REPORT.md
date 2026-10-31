@@ -1,0 +1,777 @@
+# Automated test report
+
+Ran 749 tests in 124s — **749 passed, 0 failed**.
+Average simulation tick in a busy scene: 0.71 ms.
+
+| Area | Passed | Failed |
+|---|---|---|
+| World | 82 | 0 |
+| Creation | 113 | 0 |
+| Rules | 209 | 0 |
+| Techniques | 35 | 0 |
+| Trials | 40 | 0 |
+| Survival | 30 | 0 |
+| Creatures | 48 | 0 |
+| People | 21 | 0 |
+| Quests | 11 | 0 |
+| UI | 64 | 0 |
+| Save | 3 | 0 |
+| Animation | 52 | 0 |
+| Render | 12 | 0 |
+| Performance | 3 | 0 |
+| Console | 2 | 0 |
+| Mobile | 24 | 0 |
+
+
+
+## All tests
+
+- ✅ [World] height field is finite everywhere
+- ✅ [World] geometry finite: terrain
+- ✅ [World] geometry finite: water
+- ✅ [World] geometry finite: cabbages
+- ✅ [World] geometry finite: village
+- ✅ [World] geometry finite: bridge
+- ✅ [World] geometry finite: pagoda
+- ✅ [World] geometry finite: banyan
+- ✅ [World] geometry finite: moonpool
+- ✅ [World] geometry finite: Mesh
+- ✅ [World] geometry finite: Mesh
+- ✅ [World] geometry finite: Mesh
+- ✅ [World] geometry finite: sunruins
+- ✅ [World] geometry finite: airshrine
+- ✅ [World] geometry finite: Mesh
+- ✅ [World] geometry finite: cave
+- ✅ [World] geometry finite: daofeicamp
+- ✅ [World] geometry finite: Mesh
+- ✅ [World] geometry finite: pillars
+- ✅ [World] geometry finite: broad
+- ✅ [World] geometry finite: pine
+- ✅ [World] geometry finite: peach
+- ✅ [World] geometry finite: ash
+- ✅ [World] geometry finite: bamboo
+- ✅ [World] geometry finite: bush
+- ✅ [World] geometry finite: reed
+- ✅ [World] geometry finite: rock
+- ✅ [World] geometry finite: redrock
+- ✅ [World] geometry finite: Mesh
+- ✅ [World] geometry finite: Mesh
+- ✅ [World] instance matrices finite: broad
+- ✅ [World] instance matrices finite: pine
+- ✅ [World] instance matrices finite: peach
+- ✅ [World] instance matrices finite: ash
+- ✅ [World] instance matrices finite: bamboo
+- ✅ [World] instance matrices finite: bush
+- ✅ [World] instance matrices finite: reed
+- ✅ [World] instance matrices finite: rock
+- ✅ [World] instance matrices finite: redrock
+- ✅ [World] instance matrices finite: 
+- ✅ [World] instance matrices finite: 
+- ✅ [World] landmark above water: Tienhai Village
+- ✅ [World] landmark above water: The Elder Banyan
+- ✅ [World] landmark above water: Lookout Pagoda
+- ✅ [World] landmark above water: Moon Pool Shrine
+- ✅ [World] landmark above water: Sun Warrior Ruins
+- ✅ [World] landmark above water: Sky Bison Peak
+- ✅ [World] landmark above water: Badgermole Cave
+- ✅ [World] landmark above water: Daofei Camp
+- ✅ [World] landmark above water: Misty Pillars
+- ✅ [World] landmark above water: Eastern Shore
+- ✅ [World] landmark above water: Ember Crags
+- ✅ [World] Lake Yue is water
+- ✅ [World] river point 0 is under water
+- ✅ [World] river point 1 is under water
+- ✅ [World] river point 2 is under water
+- ✅ [World] river point 3 is under water
+- ✅ [World] river point 4 is under water
+- ✅ [World] river point 5 is under water
+- ✅ [World] river point 6 is under water
+- ✅ [World] road 0 stays dry (except the bridge)
+- ✅ [World] road 1 stays dry (except the bridge)
+- ✅ [World] road 2 stays dry (except the bridge)
+- ✅ [World] road 3 stays dry (except the bridge)
+- ✅ [World] road 4 stays dry (except the bridge)
+- ✅ [World] road 5 stays dry (except the bridge)
+- ✅ [World] road 6 stays dry (except the bridge)
+- ✅ [World] village plateau is flat (<2.5m range)
+- ✅ [World] minimap image baked with varied colour
+- ✅ [World] vegetation populated
+- ✅ [World] spawn zone has room: shore
+- ✅ [World] spawn zone has room: meadow
+- ✅ [World] spawn zone has room: forest
+- ✅ [World] spawn zone has room: plains
+- ✅ [World] spawn zone has room: river
+- ✅ [World] spawn zone has room: highforest
+- ✅ [World] spawn zone has room: crags
+- ✅ [World] bridge deck is walkable over the river
+- ✅ [World] houses block the player
+- ✅ [World] Sun Warrior stair climbs to the top platform
+- ✅ [World] world edge holds the player in
+- ✅ [World] swimming in deep water
+- ✅ [Creation] new life: water/north/hunter
+- ✅ [Creation] new life: water/north/monk
+- ✅ [Creation] new life: water/north/fisher
+- ✅ [Creation] new life: water/north/noble
+- ✅ [Creation] new life: water/south/hunter
+- ✅ [Creation] new life: water/south/monk
+- ✅ [Creation] new life: water/south/fisher
+- ✅ [Creation] new life: water/south/noble
+- ✅ [Creation] new life: earth/basingse/hunter
+- ✅ [Creation] new life: earth/basingse/monk
+- ✅ [Creation] new life: earth/basingse/fisher
+- ✅ [Creation] new life: earth/basingse/noble
+- ✅ [Creation] new life: earth/omashu/hunter
+- ✅ [Creation] new life: earth/omashu/monk
+- ✅ [Creation] new life: earth/omashu/fisher
+- ✅ [Creation] new life: earth/omashu/noble
+- ✅ [Creation] new life: earth/rural/hunter
+- ✅ [Creation] new life: earth/rural/monk
+- ✅ [Creation] new life: earth/rural/fisher
+- ✅ [Creation] new life: earth/rural/noble
+- ✅ [Creation] new life: fire/capital/hunter
+- ✅ [Creation] new life: fire/capital/monk
+- ✅ [Creation] new life: fire/capital/fisher
+- ✅ [Creation] new life: fire/capital/noble
+- ✅ [Creation] new life: fire/ember/hunter
+- ✅ [Creation] new life: fire/ember/monk
+- ✅ [Creation] new life: fire/ember/fisher
+- ✅ [Creation] new life: fire/ember/noble
+- ✅ [Creation] new life: air/southern/hunter
+- ✅ [Creation] new life: air/southern/monk
+- ✅ [Creation] new life: air/southern/fisher
+- ✅ [Creation] new life: air/southern/noble
+- ✅ [Creation] new life: air/western/hunter
+- ✅ [Creation] new life: air/western/monk
+- ✅ [Creation] new life: air/western/fisher
+- ✅ [Creation] new life: air/western/noble
+- ✅ [Creation] new life: air/eastern/hunter
+- ✅ [Creation] new life: air/eastern/monk
+- ✅ [Creation] new life: air/eastern/fisher
+- ✅ [Creation] new life: air/eastern/noble
+- ✅ [Creation] new life: air/northern/hunter
+- ✅ [Creation] new life: air/northern/monk
+- ✅ [Creation] new life: air/northern/fisher
+- ✅ [Creation] new life: air/northern/noble
+- ✅ [Creation] creator UI flow: water
+- ✅ [Creation] creator UI flow: earth
+- ✅ [Creation] creator UI flow: fire
+- ✅ [Creation] creator UI flow: air
+- ✅ [Creation] creator refuses an empty name
+- ✅ [Creation] model water / wolftail / frame A
+- ✅ [Creation] model water / wolftail / frame B
+- ✅ [Creation] model water / braids / frame A
+- ✅ [Creation] model water / braids / frame B
+- ✅ [Creation] model water / loopies / frame A
+- ✅ [Creation] model water / loopies / frame B
+- ✅ [Creation] model water / long / frame A
+- ✅ [Creation] model water / long / frame B
+- ✅ [Creation] model water / short / frame A
+- ✅ [Creation] model water / short / frame B
+- ✅ [Creation] model water / bun / frame A
+- ✅ [Creation] model water / bun / frame B
+- ✅ [Creation] model water / topknot / frame A
+- ✅ [Creation] model water / topknot / frame B
+- ✅ [Creation] model water / shaved / frame A
+- ✅ [Creation] model water / shaved / frame B
+- ✅ [Creation] model earth / wolftail / frame A
+- ✅ [Creation] model earth / wolftail / frame B
+- ✅ [Creation] model earth / braids / frame A
+- ✅ [Creation] model earth / braids / frame B
+- ✅ [Creation] model earth / loopies / frame A
+- ✅ [Creation] model earth / loopies / frame B
+- ✅ [Creation] model earth / long / frame A
+- ✅ [Creation] model earth / long / frame B
+- ✅ [Creation] model earth / short / frame A
+- ✅ [Creation] model earth / short / frame B
+- ✅ [Creation] model earth / bun / frame A
+- ✅ [Creation] model earth / bun / frame B
+- ✅ [Creation] model earth / topknot / frame A
+- ✅ [Creation] model earth / topknot / frame B
+- ✅ [Creation] model earth / shaved / frame A
+- ✅ [Creation] model earth / shaved / frame B
+- ✅ [Creation] model fire / wolftail / frame A
+- ✅ [Creation] model fire / wolftail / frame B
+- ✅ [Creation] model fire / braids / frame A
+- ✅ [Creation] model fire / braids / frame B
+- ✅ [Creation] model fire / loopies / frame A
+- ✅ [Creation] model fire / loopies / frame B
+- ✅ [Creation] model fire / long / frame A
+- ✅ [Creation] model fire / long / frame B
+- ✅ [Creation] model fire / short / frame A
+- ✅ [Creation] model fire / short / frame B
+- ✅ [Creation] model fire / bun / frame A
+- ✅ [Creation] model fire / bun / frame B
+- ✅ [Creation] model fire / topknot / frame A
+- ✅ [Creation] model fire / topknot / frame B
+- ✅ [Creation] model fire / shaved / frame A
+- ✅ [Creation] model fire / shaved / frame B
+- ✅ [Creation] model air / wolftail / frame A
+- ✅ [Creation] model air / wolftail / frame B
+- ✅ [Creation] model air / braids / frame A
+- ✅ [Creation] model air / braids / frame B
+- ✅ [Creation] model air / loopies / frame A
+- ✅ [Creation] model air / loopies / frame B
+- ✅ [Creation] model air / long / frame A
+- ✅ [Creation] model air / long / frame B
+- ✅ [Creation] model air / short / frame A
+- ✅ [Creation] model air / short / frame B
+- ✅ [Creation] model air / bun / frame A
+- ✅ [Creation] model air / bun / frame B
+- ✅ [Creation] model air / topknot / frame A
+- ✅ [Creation] model air / topknot / frame B
+- ✅ [Creation] model air / shaved / frame A
+- ✅ [Creation] model air / shaved / frame B
+- ✅ [Rules] chi cost fire_jab for a fire Avatar
+- ✅ [Rules] chi cost spark for a fire Avatar
+- ✅ [Rules] chi cost fire_blast for a fire Avatar
+- ✅ [Rules] chi cost fire_arc for a fire Avatar
+- ✅ [Rules] chi cost breath_fire for a fire Avatar
+- ✅ [Rules] chi cost rock_toss for a fire Avatar
+- ✅ [Rules] chi cost earth_wall for a fire Avatar
+- ✅ [Rules] chi cost earth_pillar for a fire Avatar
+- ✅ [Rules] chi cost rock_shelter for a fire Avatar
+- ✅ [Rules] chi cost shockwave for a fire Avatar
+- ✅ [Rules] chi cost water_whip for a fire Avatar
+- ✅ [Rules] chi cost water_draw for a fire Avatar
+- ✅ [Rules] chi cost ice_darts for a fire Avatar
+- ✅ [Rules] chi cost healing for a fire Avatar
+- ✅ [Rules] chi cost tidal_push for a fire Avatar
+- ✅ [Rules] chi cost ice_prison for a fire Avatar
+- ✅ [Rules] chi cost air_palm for a fire Avatar
+- ✅ [Rules] chi cost air_jump for a fire Avatar
+- ✅ [Rules] chi cost wind_step for a fire Avatar
+- ✅ [Rules] chi cost air_sweep for a fire Avatar
+- ✅ [Rules] chi cost air_shield for a fire Avatar
+- ✅ [Rules] trial & SP scaling fire_jab for a fire Avatar
+- ✅ [Rules] trial & SP scaling spark for a fire Avatar
+- ✅ [Rules] trial & SP scaling fire_blast for a fire Avatar
+- ✅ [Rules] trial & SP scaling fire_arc for a fire Avatar
+- ✅ [Rules] trial & SP scaling breath_fire for a fire Avatar
+- ✅ [Rules] trial & SP scaling inner_fire for a fire Avatar
+- ✅ [Rules] trial & SP scaling rock_toss for a fire Avatar
+- ✅ [Rules] trial & SP scaling earth_wall for a fire Avatar
+- ✅ [Rules] trial & SP scaling earth_pillar for a fire Avatar
+- ✅ [Rules] trial & SP scaling rock_shelter for a fire Avatar
+- ✅ [Rules] trial & SP scaling shockwave for a fire Avatar
+- ✅ [Rules] trial & SP scaling badger_stance for a fire Avatar
+- ✅ [Rules] trial & SP scaling water_whip for a fire Avatar
+- ✅ [Rules] trial & SP scaling water_draw for a fire Avatar
+- ✅ [Rules] trial & SP scaling ice_darts for a fire Avatar
+- ✅ [Rules] trial & SP scaling healing for a fire Avatar
+- ✅ [Rules] trial & SP scaling tidal_push for a fire Avatar
+- ✅ [Rules] trial & SP scaling ice_prison for a fire Avatar
+- ✅ [Rules] trial & SP scaling air_palm for a fire Avatar
+- ✅ [Rules] trial & SP scaling air_jump for a fire Avatar
+- ✅ [Rules] trial & SP scaling wind_step for a fire Avatar
+- ✅ [Rules] trial & SP scaling air_sweep for a fire Avatar
+- ✅ [Rules] trial & SP scaling air_shield for a fire Avatar
+- ✅ [Rules] trial & SP scaling awaken_fire for a fire Avatar
+- ✅ [Rules] trial & SP scaling awaken_air for a fire Avatar
+- ✅ [Rules] trial & SP scaling awaken_water for a fire Avatar
+- ✅ [Rules] trial & SP scaling awaken_earth for a fire Avatar
+- ✅ [Rules] trial & SP scaling spirit_sense for a fire Avatar
+- ✅ [Rules] opposite element is sealed until another awakens (fire)
+- ✅ [Rules] native element cannot be "awakened" (fire)
+- ✅ [Rules] chi cost fire_jab for a air Avatar
+- ✅ [Rules] chi cost spark for a air Avatar
+- ✅ [Rules] chi cost fire_blast for a air Avatar
+- ✅ [Rules] chi cost fire_arc for a air Avatar
+- ✅ [Rules] chi cost breath_fire for a air Avatar
+- ✅ [Rules] chi cost rock_toss for a air Avatar
+- ✅ [Rules] chi cost earth_wall for a air Avatar
+- ✅ [Rules] chi cost earth_pillar for a air Avatar
+- ✅ [Rules] chi cost rock_shelter for a air Avatar
+- ✅ [Rules] chi cost shockwave for a air Avatar
+- ✅ [Rules] chi cost water_whip for a air Avatar
+- ✅ [Rules] chi cost water_draw for a air Avatar
+- ✅ [Rules] chi cost ice_darts for a air Avatar
+- ✅ [Rules] chi cost healing for a air Avatar
+- ✅ [Rules] chi cost tidal_push for a air Avatar
+- ✅ [Rules] chi cost ice_prison for a air Avatar
+- ✅ [Rules] chi cost air_palm for a air Avatar
+- ✅ [Rules] chi cost air_jump for a air Avatar
+- ✅ [Rules] chi cost wind_step for a air Avatar
+- ✅ [Rules] chi cost air_sweep for a air Avatar
+- ✅ [Rules] chi cost air_shield for a air Avatar
+- ✅ [Rules] trial & SP scaling fire_jab for a air Avatar
+- ✅ [Rules] trial & SP scaling spark for a air Avatar
+- ✅ [Rules] trial & SP scaling fire_blast for a air Avatar
+- ✅ [Rules] trial & SP scaling fire_arc for a air Avatar
+- ✅ [Rules] trial & SP scaling breath_fire for a air Avatar
+- ✅ [Rules] trial & SP scaling inner_fire for a air Avatar
+- ✅ [Rules] trial & SP scaling rock_toss for a air Avatar
+- ✅ [Rules] trial & SP scaling earth_wall for a air Avatar
+- ✅ [Rules] trial & SP scaling earth_pillar for a air Avatar
+- ✅ [Rules] trial & SP scaling rock_shelter for a air Avatar
+- ✅ [Rules] trial & SP scaling shockwave for a air Avatar
+- ✅ [Rules] trial & SP scaling badger_stance for a air Avatar
+- ✅ [Rules] trial & SP scaling water_whip for a air Avatar
+- ✅ [Rules] trial & SP scaling water_draw for a air Avatar
+- ✅ [Rules] trial & SP scaling ice_darts for a air Avatar
+- ✅ [Rules] trial & SP scaling healing for a air Avatar
+- ✅ [Rules] trial & SP scaling tidal_push for a air Avatar
+- ✅ [Rules] trial & SP scaling ice_prison for a air Avatar
+- ✅ [Rules] trial & SP scaling air_palm for a air Avatar
+- ✅ [Rules] trial & SP scaling air_jump for a air Avatar
+- ✅ [Rules] trial & SP scaling wind_step for a air Avatar
+- ✅ [Rules] trial & SP scaling air_sweep for a air Avatar
+- ✅ [Rules] trial & SP scaling air_shield for a air Avatar
+- ✅ [Rules] trial & SP scaling awaken_fire for a air Avatar
+- ✅ [Rules] trial & SP scaling awaken_air for a air Avatar
+- ✅ [Rules] trial & SP scaling awaken_water for a air Avatar
+- ✅ [Rules] trial & SP scaling awaken_earth for a air Avatar
+- ✅ [Rules] trial & SP scaling spirit_sense for a air Avatar
+- ✅ [Rules] opposite element is sealed until another awakens (air)
+- ✅ [Rules] native element cannot be "awakened" (air)
+- ✅ [Rules] chi cost fire_jab for a water Avatar
+- ✅ [Rules] chi cost spark for a water Avatar
+- ✅ [Rules] chi cost fire_blast for a water Avatar
+- ✅ [Rules] chi cost fire_arc for a water Avatar
+- ✅ [Rules] chi cost breath_fire for a water Avatar
+- ✅ [Rules] chi cost rock_toss for a water Avatar
+- ✅ [Rules] chi cost earth_wall for a water Avatar
+- ✅ [Rules] chi cost earth_pillar for a water Avatar
+- ✅ [Rules] chi cost rock_shelter for a water Avatar
+- ✅ [Rules] chi cost shockwave for a water Avatar
+- ✅ [Rules] chi cost water_whip for a water Avatar
+- ✅ [Rules] chi cost water_draw for a water Avatar
+- ✅ [Rules] chi cost ice_darts for a water Avatar
+- ✅ [Rules] chi cost healing for a water Avatar
+- ✅ [Rules] chi cost tidal_push for a water Avatar
+- ✅ [Rules] chi cost ice_prison for a water Avatar
+- ✅ [Rules] chi cost air_palm for a water Avatar
+- ✅ [Rules] chi cost air_jump for a water Avatar
+- ✅ [Rules] chi cost wind_step for a water Avatar
+- ✅ [Rules] chi cost air_sweep for a water Avatar
+- ✅ [Rules] chi cost air_shield for a water Avatar
+- ✅ [Rules] trial & SP scaling fire_jab for a water Avatar
+- ✅ [Rules] trial & SP scaling spark for a water Avatar
+- ✅ [Rules] trial & SP scaling fire_blast for a water Avatar
+- ✅ [Rules] trial & SP scaling fire_arc for a water Avatar
+- ✅ [Rules] trial & SP scaling breath_fire for a water Avatar
+- ✅ [Rules] trial & SP scaling inner_fire for a water Avatar
+- ✅ [Rules] trial & SP scaling rock_toss for a water Avatar
+- ✅ [Rules] trial & SP scaling earth_wall for a water Avatar
+- ✅ [Rules] trial & SP scaling earth_pillar for a water Avatar
+- ✅ [Rules] trial & SP scaling rock_shelter for a water Avatar
+- ✅ [Rules] trial & SP scaling shockwave for a water Avatar
+- ✅ [Rules] trial & SP scaling badger_stance for a water Avatar
+- ✅ [Rules] trial & SP scaling water_whip for a water Avatar
+- ✅ [Rules] trial & SP scaling water_draw for a water Avatar
+- ✅ [Rules] trial & SP scaling ice_darts for a water Avatar
+- ✅ [Rules] trial & SP scaling healing for a water Avatar
+- ✅ [Rules] trial & SP scaling tidal_push for a water Avatar
+- ✅ [Rules] trial & SP scaling ice_prison for a water Avatar
+- ✅ [Rules] trial & SP scaling air_palm for a water Avatar
+- ✅ [Rules] trial & SP scaling air_jump for a water Avatar
+- ✅ [Rules] trial & SP scaling wind_step for a water Avatar
+- ✅ [Rules] trial & SP scaling air_sweep for a water Avatar
+- ✅ [Rules] trial & SP scaling air_shield for a water Avatar
+- ✅ [Rules] trial & SP scaling awaken_fire for a water Avatar
+- ✅ [Rules] trial & SP scaling awaken_air for a water Avatar
+- ✅ [Rules] trial & SP scaling awaken_water for a water Avatar
+- ✅ [Rules] trial & SP scaling awaken_earth for a water Avatar
+- ✅ [Rules] trial & SP scaling spirit_sense for a water Avatar
+- ✅ [Rules] opposite element is sealed until another awakens (water)
+- ✅ [Rules] native element cannot be "awakened" (water)
+- ✅ [Rules] chi cost fire_jab for a earth Avatar
+- ✅ [Rules] chi cost spark for a earth Avatar
+- ✅ [Rules] chi cost fire_blast for a earth Avatar
+- ✅ [Rules] chi cost fire_arc for a earth Avatar
+- ✅ [Rules] chi cost breath_fire for a earth Avatar
+- ✅ [Rules] chi cost rock_toss for a earth Avatar
+- ✅ [Rules] chi cost earth_wall for a earth Avatar
+- ✅ [Rules] chi cost earth_pillar for a earth Avatar
+- ✅ [Rules] chi cost rock_shelter for a earth Avatar
+- ✅ [Rules] chi cost shockwave for a earth Avatar
+- ✅ [Rules] chi cost water_whip for a earth Avatar
+- ✅ [Rules] chi cost water_draw for a earth Avatar
+- ✅ [Rules] chi cost ice_darts for a earth Avatar
+- ✅ [Rules] chi cost healing for a earth Avatar
+- ✅ [Rules] chi cost tidal_push for a earth Avatar
+- ✅ [Rules] chi cost ice_prison for a earth Avatar
+- ✅ [Rules] chi cost air_palm for a earth Avatar
+- ✅ [Rules] chi cost air_jump for a earth Avatar
+- ✅ [Rules] chi cost wind_step for a earth Avatar
+- ✅ [Rules] chi cost air_sweep for a earth Avatar
+- ✅ [Rules] chi cost air_shield for a earth Avatar
+- ✅ [Rules] trial & SP scaling fire_jab for a earth Avatar
+- ✅ [Rules] trial & SP scaling spark for a earth Avatar
+- ✅ [Rules] trial & SP scaling fire_blast for a earth Avatar
+- ✅ [Rules] trial & SP scaling fire_arc for a earth Avatar
+- ✅ [Rules] trial & SP scaling breath_fire for a earth Avatar
+- ✅ [Rules] trial & SP scaling inner_fire for a earth Avatar
+- ✅ [Rules] trial & SP scaling rock_toss for a earth Avatar
+- ✅ [Rules] trial & SP scaling earth_wall for a earth Avatar
+- ✅ [Rules] trial & SP scaling earth_pillar for a earth Avatar
+- ✅ [Rules] trial & SP scaling rock_shelter for a earth Avatar
+- ✅ [Rules] trial & SP scaling shockwave for a earth Avatar
+- ✅ [Rules] trial & SP scaling badger_stance for a earth Avatar
+- ✅ [Rules] trial & SP scaling water_whip for a earth Avatar
+- ✅ [Rules] trial & SP scaling water_draw for a earth Avatar
+- ✅ [Rules] trial & SP scaling ice_darts for a earth Avatar
+- ✅ [Rules] trial & SP scaling healing for a earth Avatar
+- ✅ [Rules] trial & SP scaling tidal_push for a earth Avatar
+- ✅ [Rules] trial & SP scaling ice_prison for a earth Avatar
+- ✅ [Rules] trial & SP scaling air_palm for a earth Avatar
+- ✅ [Rules] trial & SP scaling air_jump for a earth Avatar
+- ✅ [Rules] trial & SP scaling wind_step for a earth Avatar
+- ✅ [Rules] trial & SP scaling air_sweep for a earth Avatar
+- ✅ [Rules] trial & SP scaling air_shield for a earth Avatar
+- ✅ [Rules] trial & SP scaling awaken_fire for a earth Avatar
+- ✅ [Rules] trial & SP scaling awaken_air for a earth Avatar
+- ✅ [Rules] trial & SP scaling awaken_water for a earth Avatar
+- ✅ [Rules] trial & SP scaling awaken_earth for a earth Avatar
+- ✅ [Rules] trial & SP scaling spirit_sense for a earth Avatar
+- ✅ [Rules] opposite element is sealed until another awakens (earth)
+- ✅ [Rules] native element cannot be "awakened" (earth)
+- ✅ [Rules] firebending is stronger by day
+- ✅ [Rules] waterbending is stronger at night
+- ✅ [Rules] full moon empowers waterbending further
+- ✅ [Rules] native element gets a mastery bonus
+- ✅ [Rules] levels raise bending power
+- ✅ [Techniques] Fire Jab hits its target
+- ✅ [Techniques] Twin Fire Blast hits its target
+- ✅ [Techniques] Flame Arc Kick hits its target
+- ✅ [Techniques] Breath of Fire hits its target
+- ✅ [Techniques] Rock Toss hits its target
+- ✅ [Techniques] Earth Shockwave hits its target
+- ✅ [Techniques] Water Whip hits its target
+- ✅ [Techniques] Ice Darts hits its target
+- ✅ [Techniques] Tidal Push hits its target
+- ✅ [Techniques] Ice Prison hits its target
+- ✅ [Techniques] Air Palm hits its target
+- ✅ [Techniques] Air Sweep hits its target
+- ✅ [Techniques] Pillar Launch hurls an aimed enemy skyward
+- ✅ [Techniques] Pillar Launch vaults you up when nothing is targeted
+- ✅ [Techniques] Earth Wall rises and blocks a thrown knife
+- ✅ [Techniques] Earth Tent shelters you and keeps predators out
+- ✅ [Techniques] Earth Tent: interact leaves the shelter
+- ✅ [Techniques] earthbending is impossible mid-air
+- ✅ [Techniques] Air Leap launches you and works once mid-air
+- ✅ [Techniques] airbenders take no fall damage
+- ✅ [Techniques] Wind Step dashes and grants invulnerability
+- ✅ [Techniques] Air Swirl deflects projectiles
+- ✅ [Techniques] Healing Waters restores health over time
+- ✅ [Techniques] Draw Water refills the skin by a river
+- ✅ [Techniques] Draw Water fails far from water
+- ✅ [Techniques] waterbending spends a skin charge away from water
+- ✅ [Techniques] waterbending is free next to a river
+- ✅ [Techniques] waterbending fails with no water and an empty skin
+- ✅ [Techniques] techniques fail without enough chi
+- ✅ [Techniques] cooldown prevents an instant recast
+- ✅ [Techniques] unlearned techniques cannot be cast
+- ✅ [Techniques] Hearth Flame lights a campfire
+- ✅ [Techniques] Hearth Flame cooks raw meat in your hands
+- ✅ [Techniques] Hearth Flame makes a hand-light when nothing needs fire
+- ✅ [Techniques] burning damages over time
+- ✅ [Trials] trial gate & ceremony: Fire Jab
+- ✅ [Trials] trial gate & ceremony: Hearth Flame
+- ✅ [Trials] trial gate & ceremony: Twin Fire Blast
+- ✅ [Trials] trial gate & ceremony: Flame Arc Kick
+- ✅ [Trials] trial gate & ceremony: Breath of Fire
+- ✅ [Trials] trial gate & ceremony: Inner Fire
+- ✅ [Trials] trial gate & ceremony: Rock Toss
+- ✅ [Trials] trial gate & ceremony: Earth Wall
+- ✅ [Trials] trial gate & ceremony: Pillar Launch
+- ✅ [Trials] trial gate & ceremony: Earth Tent
+- ✅ [Trials] trial gate & ceremony: Earth Shockwave
+- ✅ [Trials] trial gate & ceremony: Badgermole Stance
+- ✅ [Trials] trial gate & ceremony: Water Whip
+- ✅ [Trials] trial gate & ceremony: Draw Water
+- ✅ [Trials] trial gate & ceremony: Ice Darts
+- ✅ [Trials] trial gate & ceremony: Healing Waters
+- ✅ [Trials] trial gate & ceremony: Tidal Push
+- ✅ [Trials] trial gate & ceremony: Ice Prison
+- ✅ [Trials] trial gate & ceremony: Air Palm
+- ✅ [Trials] trial gate & ceremony: Air Leap
+- ✅ [Trials] trial gate & ceremony: Wind Step
+- ✅ [Trials] trial gate & ceremony: Air Sweep
+- ✅ [Trials] trial gate & ceremony: Air Swirl
+- ✅ [Trials] trial gate & ceremony: Awaken Fire
+- ✅ [Trials] trial gate & ceremony: Awaken Air
+- ✅ [Trials] trial gate & ceremony: Awaken Water
+- ✅ [Trials] trial gate & ceremony: Awaken Earth
+- ✅ [Trials] trial gate & ceremony: Spirit Sense
+- ✅ [Trials] learning needs enough skill points
+- ✅ [Trials] later-journey techniques cannot be learned
+- ✅ [Trials] prerequisites are enforced
+- ✅ [Trials] completed trial produces a notification
+- ✅ [Trials] meditation trial counts: sunrise_med
+- ✅ [Trials] meditation trial counts: flame_med
+- ✅ [Trials] meditation trial counts: moon_med
+- ✅ [Trials] meditation trial counts: cave_med
+- ✅ [Trials] meditation trial counts: peak_med
+- ✅ [Trials] moon meditation does not count by day
+- ✅ [Trials] meditation restores chi quickly
+- ✅ [Trials] moving breaks meditation
+- ✅ [Survival] hunger and thirst fall over time
+- ✅ [Survival] starvation and thirst hurt
+- ✅ [Survival] a warm fire restores warmth at night
+- ✅ [Survival] cold night saps warmth away from fire
+- ✅ [Survival] high peaks are colder than valleys
+- ✅ [Survival] Southern Water Tribe resists cold
+- ✅ [Survival] freezing hurts
+- ✅ [Survival] eating cooked meat restores hunger
+- ✅ [Survival] raw meat can make you sick
+- ✅ [Survival] Air Nomads feel uneasy eating meat
+- ✅ [Survival] Air Nomads prefer fruit when eating
+- ✅ [Survival] drinking at the river
+- ✅ [Survival] waterskin drinking uses a charge
+- ✅ [Survival] campfire needs 4 firewood
+- ✅ [Survival] flint lighting eventually lights the fire
+- ✅ [Survival] cooking at a campfire
+- ✅ [Survival] campfires burn out
+- ✅ [Survival] gathering firewood from a tree
+- ✅ [Survival] trees need time to recover
+- ✅ [Survival] picking berries
+- ✅ [Survival] moon peaches from the orchard
+- ✅ [Survival] earthbenders pull more stone
+- ✅ [Survival] sleep is refused during the day
+- ✅ [Survival] sleep needs shelter or fire
+- ✅ [Survival] sleeping by a fire passes the night
+- ✅ [Survival] cannot sleep with a predator hunting you
+- ✅ [Survival] a long fall hurts non-airbenders
+- ✅ [Survival] swimming chills you
+- ✅ [Survival] death and respawn
+- ✅ [Survival] the village is warm at night
+- ✅ [Creatures] Turtle-Duck: animates through every state without NaN
+- ✅ [Creatures] Rabbaroo: animates through every state without NaN
+- ✅ [Creatures] Possum-Chicken: animates through every state without NaN
+- ✅ [Creatures] Hog-Monkey: animates through every state without NaN
+- ✅ [Creatures] Ostrich-Horse: animates through every state without NaN
+- ✅ [Creatures] Platypus-Bear: animates through every state without NaN
+- ✅ [Creatures] Saber-Tooth Moose-Lion: animates through every state without NaN
+- ✅ [Creatures] Canyon Crawler: animates through every state without NaN
+- ✅ [Creatures] Sky Bison: animates through every state without NaN
+- ✅ [Creatures] Badgermole: animates through every state without NaN
+- ✅ [Creatures] Turtle-Duck: lives in its zone and wanders
+- ✅ [Creatures] Rabbaroo: lives in its zone and wanders
+- ✅ [Creatures] Possum-Chicken: lives in its zone and wanders
+- ✅ [Creatures] Hog-Monkey: lives in its zone and wanders
+- ✅ [Creatures] Ostrich-Horse: lives in its zone and wanders
+- ✅ [Creatures] Platypus-Bear: lives in its zone and wanders
+- ✅ [Creatures] Saber-Tooth Moose-Lion: lives in its zone and wanders
+- ✅ [Creatures] Canyon Crawler: lives in its zone and wanders
+- ✅ [Creatures] Turtle-Duck: flees from you
+- ✅ [Creatures] Rabbaroo: flees from you
+- ✅ [Creatures] Possum-Chicken: flees from you
+- ✅ [Creatures] Hog-Monkey: flees from you
+- ✅ [Creatures] Ostrich-Horse: flees from you
+- ✅ [Creatures] Platypus-Bear: hunts you down and attacks
+- ✅ [Creatures] Platypus-Bear: will not follow you into the village
+- ✅ [Creatures] Platypus-Bear: fears a lit campfire
+- ✅ [Creatures] Saber-Tooth Moose-Lion: hunts you down and attacks
+- ✅ [Creatures] Saber-Tooth Moose-Lion: will not follow you into the village
+- ✅ [Creatures] Saber-Tooth Moose-Lion: fears a lit campfire
+- ✅ [Creatures] Canyon Crawler: hunts you down and attacks
+- ✅ [Creatures] Canyon Crawler: will not follow you into the village
+- ✅ [Creatures] Canyon Crawler: fears a lit campfire
+- ✅ [Creatures] Turtle-Duck: can be defeated and harvested
+- ✅ [Creatures] Rabbaroo: can be defeated and harvested
+- ✅ [Creatures] Possum-Chicken: can be defeated and harvested
+- ✅ [Creatures] Hog-Monkey: can be defeated and harvested
+- ✅ [Creatures] Ostrich-Horse: can be defeated and harvested
+- ✅ [Creatures] Platypus-Bear: can be defeated and harvested
+- ✅ [Creatures] Saber-Tooth Moose-Lion: can be defeated and harvested
+- ✅ [Creatures] Canyon Crawler: can be defeated and harvested
+- ✅ [Creatures] passive giants ignore damage
+- ✅ [Creatures] sky bison stay airborne
+- ✅ [Creatures] the badgermole stays in its cave
+- ✅ [Creatures] a turtle-duck in deep water floats where bending can hit it
+- ✅ [Creatures] turtle-ducks float on the water
+- ✅ [Creatures] predators hunt prey on their own
+- ✅ [Creatures] wildlife repopulates over time
+- ✅ [Creatures] more predators roam at night
+- ✅ [People] five daofei hold the camp
+- ✅ [People] daofei raise the alarm when you approach
+- ✅ [People] daofei fight back (ranged and melee)
+- ✅ [People] defeating every daofei: yields, copper, and the map fragment
+- ✅ [People] defeated daofei leave and do not return
+- ✅ [People] eight villagers live in the valley
+- ✅ [People] dialogue tree fully walkable: Elder Bao
+- ✅ [People] dialogue tree fully walkable: Merchant Mei
+- ✅ [People] dialogue tree fully walkable: Cabbage Merchant
+- ✅ [People] dialogue tree fully walkable: Innkeeper Lin
+- ✅ [People] dialogue tree fully walkable: Farmer Ru
+- ✅ [People] dialogue tree fully walkable: Watchman Tam
+- ✅ [People] dialogue tree fully walkable: Little Shu
+- ✅ [People] dialogue tree fully walkable: Monk Dorje
+- ✅ [People] merchant: buying roast meat costs copper
+- ✅ [People] merchant: selling hides pays 6 each
+- ✅ [People] merchant: larger waterskin is a one-time upgrade
+- ✅ [People] merchant refuses when you are broke
+- ✅ [People] the inn gives a free first night
+- ✅ [People] the cabbage merchant protests
+- ✅ [People] villagers turn to face you
+- ✅ [Quests] full early-story playthrough
+- ✅ [Quests] quest steps have text: arrival
+- ✅ [Quests] quest steps have text: eat
+- ✅ [Quests] quest steps have text: night
+- ✅ [Quests] quest steps have text: path
+- ✅ [Quests] quest steps have text: daofei
+- ✅ [Quests] quest steps have text: teachers
+- ✅ [Quests] quest tracker shows the current objective
+- ✅ [Quests] quest marker points toward the objective
+- ✅ [Quests] location discovery grants XP and a banner
+- ✅ [Quests] levelling up grants skill points
+- ✅ [UI] panel renders: skills
+- ✅ [UI] panel renders: inv
+- ✅ [UI] panel renders: map
+- ✅ [UI] panel renders: journal
+- ✅ [UI] panel renders: char
+- ✅ [UI] skill tree tab renders all nodes: avatar
+- ✅ [UI] skill tree tab renders all nodes: fire
+- ✅ [UI] skill tree tab renders all nodes: air
+- ✅ [UI] skill tree tab renders all nodes: water
+- ✅ [UI] skill tree tab renders all nodes: earth
+- ✅ [UI] technique info card: Fire Jab
+- ✅ [UI] technique info card: Hearth Flame
+- ✅ [UI] technique info card: Twin Fire Blast
+- ✅ [UI] technique info card: Flame Arc Kick
+- ✅ [UI] technique info card: Breath of Fire
+- ✅ [UI] technique info card: Inner Fire
+- ✅ [UI] technique info card: Lightning Generation
+- ✅ [UI] technique info card: Dancing Dragon
+- ✅ [UI] technique info card: Rock Toss
+- ✅ [UI] technique info card: Earth Wall
+- ✅ [UI] technique info card: Pillar Launch
+- ✅ [UI] technique info card: Earth Tent
+- ✅ [UI] technique info card: Earth Shockwave
+- ✅ [UI] technique info card: Badgermole Stance
+- ✅ [UI] technique info card: Seismic Sense
+- ✅ [UI] technique info card: ??? (Unknown to this Era)
+- ✅ [UI] technique info card: Water Whip
+- ✅ [UI] technique info card: Draw Water
+- ✅ [UI] technique info card: Ice Darts
+- ✅ [UI] technique info card: Healing Waters
+- ✅ [UI] technique info card: Tidal Push
+- ✅ [UI] technique info card: Ice Prison
+- ✅ [UI] technique info card: Octopus Form
+- ✅ [UI] technique info card: Forbidden
+- ✅ [UI] technique info card: Air Palm
+- ✅ [UI] technique info card: Air Leap
+- ✅ [UI] technique info card: Wind Step
+- ✅ [UI] technique info card: Air Sweep
+- ✅ [UI] technique info card: Air Swirl
+- ✅ [UI] technique info card: Glider Flight
+- ✅ [UI] technique info card: ??? (Unknown to this Era)
+- ✅ [UI] technique info card: Meditation
+- ✅ [UI] technique info card: Awaken Fire
+- ✅ [UI] technique info card: Awaken Air
+- ✅ [UI] technique info card: Awaken Earth
+- ✅ [UI] technique info card: Spirit Sense
+- ✅ [UI] technique info card: Avatar State
+- ✅ [UI] technique info card: Energybending
+- ✅ [UI] skill tree node positions stay inside the view
+- ✅ [UI] hotbar lists the element's techniques
+- ✅ [UI] element switching cycles awakened elements
+- ✅ [UI] compass shows N ahead when facing north
+- ✅ [UI] camera aim points where the camera looks
+- ✅ [UI] auto-aim locks onto a creature in front
+- ✅ [UI] damage numbers and health bars appear
+- ✅ [UI] interaction prompt appears near a villager
+- ✅ [UI] pause and resume
+- ✅ [UI] settings panel toggles options
+- ✅ [UI] first-person camera sits at the eyes
+- ✅ [UI] keyboard: K opens the bending scroll, Esc closes it
+- ✅ [UI] keyboard: WASD moves the Avatar
+- ✅ [UI] keyboard: C meditates, B builds a fire
+- ✅ [UI] minimap draws every frame without error
+- ✅ [UI] ceremony overlay shows and fades
+- ✅ [Save] save → load round-trip restores the journey
+- ✅ [Save] corrupt saves do not crash the title screen
+- ✅ [Save] test mode never overwrites real saves
+- ✅ [Animation] humanoid action plays and returns to rest: punchR (frame A)
+- ✅ [Animation] humanoid action plays and returns to rest: punchR (frame B)
+- ✅ [Animation] humanoid action plays and returns to rest: punchL (frame A)
+- ✅ [Animation] humanoid action plays and returns to rest: punchL (frame B)
+- ✅ [Animation] humanoid action plays and returns to rest: kick (frame A)
+- ✅ [Animation] humanoid action plays and returns to rest: kick (frame B)
+- ✅ [Animation] humanoid action plays and returns to rest: breath (frame A)
+- ✅ [Animation] humanoid action plays and returns to rest: breath (frame B)
+- ✅ [Animation] humanoid action plays and returns to rest: earthLift (frame A)
+- ✅ [Animation] humanoid action plays and returns to rest: earthLift (frame B)
+- ✅ [Animation] humanoid action plays and returns to rest: stomp (frame A)
+- ✅ [Animation] humanoid action plays and returns to rest: stomp (frame B)
+- ✅ [Animation] humanoid action plays and returns to rest: whip (frame A)
+- ✅ [Animation] humanoid action plays and returns to rest: whip (frame B)
+- ✅ [Animation] humanoid action plays and returns to rest: push (frame A)
+- ✅ [Animation] humanoid action plays and returns to rest: push (frame B)
+- ✅ [Animation] humanoid action plays and returns to rest: heal (frame A)
+- ✅ [Animation] humanoid action plays and returns to rest: heal (frame B)
+- ✅ [Animation] humanoid action plays and returns to rest: palm (frame A)
+- ✅ [Animation] humanoid action plays and returns to rest: palm (frame B)
+- ✅ [Animation] humanoid action plays and returns to rest: sweep (frame A)
+- ✅ [Animation] humanoid action plays and returns to rest: sweep (frame B)
+- ✅ [Animation] humanoid action plays and returns to rest: leap (frame A)
+- ✅ [Animation] humanoid action plays and returns to rest: leap (frame B)
+- ✅ [Animation] humanoid action plays and returns to rest: dash (frame A)
+- ✅ [Animation] humanoid action plays and returns to rest: dash (frame B)
+- ✅ [Animation] humanoid action plays and returns to rest: swirl (frame A)
+- ✅ [Animation] humanoid action plays and returns to rest: swirl (frame B)
+- ✅ [Animation] humanoid action plays and returns to rest: gather (frame A)
+- ✅ [Animation] humanoid action plays and returns to rest: gather (frame B)
+- ✅ [Animation] humanoid action plays and returns to rest: eat (frame A)
+- ✅ [Animation] humanoid action plays and returns to rest: eat (frame B)
+- ✅ [Animation] humanoid action plays and returns to rest: hit (frame A)
+- ✅ [Animation] humanoid action plays and returns to rest: hit (frame B)
+- ✅ [Animation] humanoid action plays and returns to rest: swing (frame A)
+- ✅ [Animation] humanoid action plays and returns to rest: swing (frame B)
+- ✅ [Animation] humanoid action plays and returns to rest: bow (frame A)
+- ✅ [Animation] humanoid action plays and returns to rest: bow (frame B)
+- ✅ [Animation] humanoid action plays and returns to rest: ceremony (frame A)
+- ✅ [Animation] humanoid action plays and returns to rest: ceremony (frame B)
+- ✅ [Animation] humanoid pose: meditate
+- ✅ [Animation] humanoid pose: swim
+- ✅ [Animation] humanoid pose: sleep
+- ✅ [Animation] humanoid pose: dead
+- ✅ [Animation] meditation pose lowers the hips
+- ✅ [Animation] knocked-out pose lies down
+- ✅ [Animation] combat stance: fire
+- ✅ [Animation] combat stance: earth
+- ✅ [Animation] combat stance: water
+- ✅ [Animation] combat stance: air
+- ✅ [Animation] walk cycle swings the legs
+- ✅ [Animation] hit flash fades
+- ✅ [Render] frame renders with real content: village at noon
+- ✅ [Render] frame renders with real content: village at sunset
+- ✅ [Render] frame renders with real content: village at night
+- ✅ [Render] frame renders with real content: Sun Warrior Ruins
+- ✅ [Render] frame renders with real content: Sky Bison Peak
+- ✅ [Render] frame renders with real content: Misty Pillars
+- ✅ [Render] frame renders with real content: Moon Pool at night
+- ✅ [Render] frame renders with real content: Badgermole Cave
+- ✅ [Render] frame renders with real content: Daofei Camp
+- ✅ [Render] frame renders with real content: Eastern Shore
+- ✅ [Render] frame renders with real content: Ember Crags
+- ✅ [Render] frame renders with real content: Lookout Pagoda
+- ✅ [Performance] simulation tick stays fast in a busy scene
+- ✅ [Performance] two minutes of combat leak nothing
+- ✅ [Performance] a full in-game day passes without errors
+- ✅ [Console] no page errors or console errors
+- ✅ [Mobile] touch controls enabled
+- ✅ [Mobile] touch overlay visible in play
+- ✅ [Mobile] touch control on screen: joy
+- ✅ [Mobile] touch control on screen: tA
+- ✅ [Mobile] touch control on screen: tB
+- ✅ [Mobile] touch control on screen: tC
+- ✅ [Mobile] touch control on screen: tD
+- ✅ [Mobile] touch control on screen: tJ
+- ✅ [Mobile] touch control on screen: tF
+- ✅ [Mobile] touch control on screen: tE
+- ✅ [Mobile] touch control on screen: tRun
+- ✅ [Mobile] touch control on screen: tMed
+- ✅ [Mobile] touch control on screen: tEat
+- ✅ [Mobile] touch control on screen: tMenu
+- ✅ [Mobile] touch control on screen: tBag
+- ✅ [Mobile] touch controls do not overlap
+- ✅ [Mobile] JUMP button jumps
+- ✅ [Mobile] technique button casts
+- ✅ [Mobile] CALM button meditates
+- ✅ [Mobile] BAG button opens the scroll
+- ✅ [Mobile] MENU button pauses
+- ✅ [Mobile] technique buttons show glyphs
+- ✅ [Mobile] HUD fits the phone screen
+- ✅ [Mobile] skill tree visible on phone
+- ✅ [Console] no errors on mobile
