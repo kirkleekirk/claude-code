@@ -13,6 +13,7 @@ the show's lore, and uncover why something is crossing over from the spirit worl
 > Progress saves in your browser automatically (and from the pause menu).
 
 ## What's in Chapter One
+- **Characters**: every person is one smooth-shaded skinned mesh with a 26-bone skeleton. They have sculpted faces (eyelids that blink, glossy eyes, lips, ears, brows), jointed fingers that close into fists for fire and earth strikes and open for air and water, layered nation clothing (fur-trimmed parkas, crossed-collar tunics, pauldrons and bracers, Air Nomad mantles), swaying braids and ponytails, foot roll, breathing, and heads that turn toward whoever they're watching.
 - **Character creation**: four nations, eleven homelands (each with its own perk and reveal story), four upbringings, two body frames, height, build, skin, eight hair styles, hair and eye colour, and three attire sets per nation.
 - **A hand-built valley**: Tienhai Village, the Elder Banyan, the Lookout Pagoda with its spiral stair, Lake Yue and the Moon Pool Shrine, the Sun Warrior Ruins with their Eternal Flame, Sky Bison Peak, the Badgermole Cave, the daofei camp, the Misty Pillars, the Ember Crags and the Eastern Shore. Full day/night cycle with sun, moon phases and stars.
 - **Survival**: hunger, thirst, warmth, stamina, cooking, campfires, sleeping, sickness from raw meat, fall damage and swimming. Every element has its own survival tools: firebenders cook in their hands, earthbenders raise stone tents, waterbenders pull water (and fish) from rivers, airbenders leap and fall softly.
@@ -41,7 +42,8 @@ build.sh          ← concatenates src/ into index.html
 src/00_head.html  ← page, styles, UI markup
 src/10_core.js    ← math, noise, all lore data (nations, techniques, creatures, places)
 src/20_world.js   ← terrain, water, sky, vegetation, landmarks, colliders
-src/30_models.js  ← humanoid and creature models and procedural animation
+src/30_models.js  ← creature models, the action/pose library, creature animation
+src/31_humanoid.js← skinned humanoid builder (skeleton, anatomy, clothing, hair) and humanoid animation
 src/40_entities.js← particles, sound, creature/daofei/villager AI, projectiles, earth structures
 src/50_game.js    ← player, techniques, environment, survival, progression, quests, saving
 src/60_ui.js      ← dialogue, HUD, menus, creator, input (keyboard/touch/VR), main loop, boot
@@ -57,13 +59,32 @@ mkdir -p tests/.cache && npm pack aframe@1.6.0 && tar xzf aframe-1.6.0.tgz \
   && cp package/dist/aframe-master.min.js tests/.cache/   # offline copy of A-Frame for tests
 node tests/run-tests.js             # full automated suite → tests/REPORT.md
 node tests/run-tests.js techniques  # one group
+node tests/run-sweep.js "" views   # large sweep (~10,000 checks) → tests/SWEEP_REPORT.md, viewpoint screenshots in views/
 node tests/tour.js shots            # screenshots of every place, creature, technique and menu
+node tests/models.js shots-models   # character close-ups: lineups, faces, fists, poses
 node tests/mobile.js shots-mobile   # phone layout screenshots
 ```
 The suite drives the real game in headless Chromium: it walks the stairs and bridges, casts every
 technique at targets, lets predators hunt, sleeps through nights, plays through the story, walks
 every dialogue tree, checks every model and animation for invalid values, and checks that rendered
 frames contain real content. See `tests/REPORT.md` for the latest run.
+
+The sweep (`tests/run-sweep.js`) checks the whole world object by object:
+- every tree, rock, bush, reed and bamboo clump, for floating, water, roads, buildings, stairs and overlap;
+- every collider, against every road;
+- every road, walked end to end in both directions;
+- every landmark, reached on foot;
+- 1,200 random walks across the map;
+- every tree, bush and rock, harvested;
+- every animation on every nation/frame/hair combination, for anatomical joint limits and foot-ground contact;
+- every creature state, on real terrain;
+- every technique, for every native element, by day and night;
+- every dialogue line at every story stage;
+- randomised save/load round-trips;
+- a grid of rendered viewpoints;
+- HUD/menu layout at 14 desktop and phone screen sizes.
+
+See `tests/SWEEP_REPORT.md`.
 
 ## Notes
 - Fan project, not affiliated with or endorsed by the creators or rights holders of *Avatar: The Last Airbender*. All world details beyond the show are original inventions for this era.

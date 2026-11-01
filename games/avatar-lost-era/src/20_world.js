@@ -55,7 +55,7 @@ function windify(mat, strength, heightScale) {
 
 /* ---------- height field ---------- */
 const PADS = [
-  { x: -205, z: -25, r: 27, b: 14 }, { x: 25, z: -225, r: 14, b: 12 }, { x: 168, z: -119, r: 13, b: 10 },
+  { x: -205, z: -25, r: 27, b: 14 }, { x: 25, z: -225, r: 14, b: 12 }, { x: 168, z: -119, r: 13, b: 10, at: [168, -99] },
   { x: 145, z: 32, r: 20, b: 12 }, { x: -40, z: 102, r: 9, b: 8 }, { x: -46, z: 52, r: 14, b: 10 },
 ];
 function baseHeight(x, z) {
@@ -88,7 +88,7 @@ function baseHeight(x, z) {
   h = U.lerp(h, 4.2 + Noise.fbm(x * 0.03, z * 0.03, 1) * 0.3, U.smooth(60, 38, rc));
   return h;
 }
-const PAD_H = PADS.map(p => baseHeight(p.x, p.z));
+const PAD_H = PADS.map(p => p.at ? baseHeight(p.at[0], p.at[1]) : baseHeight(p.x, p.z)); // 'at': level a pad to its approach ground (the cave sits at the foot of its ridge)
 function rawHeight(x, z) {
   let h = baseHeight(x, z);
   for (let i = 0; i < PADS.length; i++) { const p = PADS[i]; const d = Math.hypot(x - p.x, z - p.z); if (d < p.r + p.b) h = U.lerp(h, PAD_H[i], U.smooth(p.r + p.b, p.r, d)); }
@@ -321,8 +321,8 @@ const World = {
       const fol = [[0, 5.2, 0, 2.3], [1.3, 4.6, 0.6, 1.7], [-1.2, 4.7, -0.5, 1.8], [0.2, 6.3, -0.3, 1.6]];
       fol.forEach(([x, y, z, r], i) => b.add(new THREE.IcosahedronGeometry(r, 1), '#5f9a3a', x, y, z, i, i * 2, 0, 1, 0.85, 1, { ao: 0.45, topTint: hexc('#a8c95a'), jitter: 0.18, seed: i + 3 }));
     } else if (type === 'pine') {
-      b.add(new THREE.CylinderGeometry(0.16, 0.32, 3.2, 6), '#5a3e28', 0, 1.6, 0, 0, 0, 0, 1, 1, 1, { ao: 0.4 });
-      [[2.4, 2.6, 2.2], [2.0, 2.4, 3.6], [1.5, 2.2, 4.9], [0.9, 1.8, 6.1]].forEach(([r, h, y], i) => b.add(new THREE.ConeGeometry(r, h, 8, 1), '#2f5a32', 0, y, 0, 0, i * 0.7, 0, 1, 1, 1, { ao: 0.5, topTint: hexc('#5a8a4a') }));
+      b.add(new THREE.CylinderGeometry(0.16, 0.32, 4.2, 6), '#5a3e28', 0, 2.1, 0, 0, 0, 0, 1, 1, 1, { ao: 0.4 });
+      [[2.4, 2.6, 3.1], [2.0, 2.4, 4.4], [1.5, 2.2, 5.6], [0.9, 1.8, 6.7]].forEach(([r, h, y], i) => b.add(new THREE.ConeGeometry(r, h, 8, 1), '#2f5a32', 0, y, 0, 0, i * 0.7, 0, 1, 1, 1, { ao: 0.5, topTint: hexc('#5a8a4a') }));
     } else if (type === 'peach') {
       b.add(new THREE.CylinderGeometry(0.15, 0.28, 2.6, 6), '#5a3a2a', 0, 1.3, 0, 0, 0, 0.08, 1, 1, 1, { ao: 0.4 });
       [[0, 3.2, 0, 1.6], [0.9, 2.9, 0.4, 1.1], [-0.8, 3.0, -0.3, 1.2]].forEach(([x, y, z, r], i) => b.add(new THREE.IcosahedronGeometry(r, 1), '#f2b8c8', x, y, z, 0, i, 0, 1, 0.8, 1, { ao: 0.35, topTint: hexc('#fff0f4'), jitter: 0.15, seed: i + 9 }));
@@ -360,38 +360,67 @@ const World = {
   buildVegetation() {
     const r = U.rng(2024); const recs = { broad: [], pine: [], peach: [], ash: [], bamboo: [], bush: [], reed: [], rock: [], redrock: [] };
     const roadD = (x, z) => { let d = 1e9; for (const rd of ROADS) d = Math.min(d, U.polyDist(x, z, rd)); return d; };
+    // seat objects on the LOWEST ground under their footprint so nothing hovers on hillsides
+    const minUnder = (x, z, rad) => { let m = terrainH(x, z); for (let a = 0; a < 6.28; a += 0.785) { m = Math.min(m, terrainH(x + Math.cos(a) * rad, z + Math.sin(a) * rad), terrainH(x + Math.cos(a) * rad * 0.5, z + Math.sin(a) * rad * 0.5)); } return m; };
+    // occupancy grid of placed vegetation: nothing spawns inside something else (rocks may still cluster and touch)
+    const occ = new Map(); const ok8 = (x, z) => Math.floor(x / 8) * 1000 + Math.floor(z / 8);
+    const occupy = (x, z, rad, kind) => { const k = ok8(x, z); if (!occ.has(k)) occ.set(k, []); occ.get(k).push({ x, z, rad, kind }); };
+    const crowded = (x, z, rad, kind) => { for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const l = occ.get(ok8(x + i * 8, z + j * 8)); if (!l) continue;
+        for (const o of l) { const d = Math.hypot(x - o.x, z - o.z); if (kind === 'rock' && o.kind === 'rock') { if (d < Math.max(rad, o.rad) * 0.6) return true; } else if (d < (rad + o.rad) * 0.9) return true; } } return false; };
+    const onStair = (x, z, pad) => (this.stairPts || []).some(p => Math.hypot(x - p[0], z - p[1]) < 2.2 + pad);
     const nearLandmark = (x, z, pad = 0) => { for (const k in LOC) { const L = LOC[k]; if (k === 'lake' || k === 'crags' || k === 'pillars' || k === 'shore') continue; if (Math.hypot(x - L.x, z - L.z) < L.r + pad) return true; } return false; };
     const blocked = (x, z, rr) => { const l = collidersNear(x, z); for (const c of l) { if (c.type === 'circle' && Math.hypot(x - c.x, z - c.z) < c.r + rr) return true; if (c.type === 'box' && Math.hypot(x - c.x, z - c.z) < Math.hypot(c.hw, c.hd) + rr) return true; } return false; };
     for (let i = 0; i < 9000; i++) {
       const x = (r() - 0.5) * 600, z = (r() - 0.5) * 600; const h = terrainH(x, z); if (h < 1.0) continue;
       const sl = slopeAt(x, z); const ri = regionInfo(x, z, h); const rd = roadD(x, z);
-      if (rd < 4 || nearLandmark(x, z, 4) || farmAt(x, z)) continue;
+      if (rd < 4 || nearLandmark(x, z, 4) || farmAt(x, z) || onStair(x, z, 1.5)) continue;
       if (ri.rc < 50 && r() < 0.85) continue;
       const tint = 0.85 + r() * 0.3;
-      if (ri.crag > 0.6) { if (r() < 0.08 && sl < 0.8 && recs.ash.length < 90 && !blocked(x, z, 1)) recs.ash.push({ x, y: h - 0.2, z, rot: r() * 6.3, s: 0.8 + r() * 0.6, tint }); continue; }
+      if (ri.crag > 0.6) { if (r() < 0.08 && sl < 0.8 && recs.ash.length < 90 && !blocked(x, z, 1) && !crowded(x, z, 0.6, 'tree')) occupy(x, z, 0.5, 'tree'), recs.ash.push({ x, y: NaN, z, rot: r() * 6.3, s: 0.8 + r() * 0.6, tint }); continue; }
       if (ri.snow > 0.3) continue;
-      if (ri.marsh > 0.5) { if (r() < 0.25 && recs.bamboo.length < 140 && sl < 0.7) recs.bamboo.push({ x, y: h - 0.1, z, rot: r() * 6.3, s: 0.8 + r() * 0.5, tint }); continue; }
+      if (ri.marsh > 0.5) { if (r() < 0.25 && recs.bamboo.length < 140 && sl < 0.7 && !crowded(x, z, 1.0, 'tree') && !blocked(x, z, 1.2)) occupy(x, z, 0.9, 'tree'), recs.bamboo.push({ x, y: NaN, z, rot: r() * 6.3, s: 0.8 + r() * 0.5, tint }); continue; }
       if (sl > 0.9) continue;
       const forest = ri.forest > 0.05 && ri.rc > 55;
       const pineZone = z < -70 || h > 26;
       if (forest || r() < 0.05) {
-        if (blocked(x, z, 1.4)) continue;
-        if (pineZone && recs.pine.length < 650) recs.pine.push({ x, y: h - 0.2, z, rot: r() * 6.3, s: 0.8 + r() * 0.7, tint });
-        else if (!pineZone && recs.broad.length < 720) recs.broad.push({ x, y: h - 0.2, z, rot: r() * 6.3, s: 0.75 + r() * 0.65, tint, tb: 0.85 + r() * 0.2 });
+        if (blocked(x, z, 1.4) || crowded(x, z, 1.0, 'tree')) continue;
+        if (pineZone && recs.pine.length < 650) occupy(x, z, 0.5, 'tree'), recs.pine.push({ x, y: NaN, z, rot: r() * 6.3, s: 0.8 + r() * 0.7, tint });
+        else if (!pineZone && recs.broad.length < 720) occupy(x, z, 0.6, 'tree'), recs.broad.push({ x, y: NaN, z, rot: r() * 6.3, s: 0.75 + r() * 0.65, tint, tb: 0.85 + r() * 0.2 });
       }
     }
     // orchard of moon peaches near the village
-    for (let i = 0; i < 26; i++) { const a = -0.9 + (i % 13) * 0.11, rr = 54 + Math.floor(i / 13) * 7; const x = Math.cos(a) * rr, z = Math.sin(a) * rr; const h = terrainH(x, z); if (h > 1 && roadD(x, z) > 4) recs.peach.push({ x, y: h - 0.1, z, rot: r() * 6.3, s: 0.9 + r() * 0.3, tint: 1 }); }
+    for (let i = 0; i < 26; i++) { const a = -0.9 + (i % 13) * 0.11, rr = 54 + Math.floor(i / 13) * 7; const x = Math.cos(a) * rr, z = Math.sin(a) * rr; const h = terrainH(x, z); if (h > 1 && roadD(x, z) > 4) occupy(x, z, 0.5, 'tree'), recs.peach.push({ x, y: NaN, z, rot: r() * 6.3, s: 0.9 + r() * 0.3, tint: 1 }); }
     // berry bushes, reeds, rocks
     for (let i = 0; i < 5000; i++) {
       const x = (r() - 0.5) * 600, z = (r() - 0.5) * 600; const h = terrainH(x, z); const sl = slopeAt(x, z); const ri = regionInfo(x, z, h); const rd = roadD(x, z);
-      if (nearLandmark(x, z, 2) || farmAt(x, z)) continue;
-      if (h > -0.4 && h < 0.9 && recs.reed.length < 320 && ri.crag < 0.3) { recs.reed.push({ x, y: h - 0.1, z, rot: r() * 6.3, s: 0.8 + r() * 0.5, tint: 0.9 + r() * 0.2 }); continue; }
+      if (nearLandmark(x, z, 2) || farmAt(x, z) || onStair(x, z, 1)) continue;
+      if (h > -0.4 && h < 0.9 && recs.reed.length < 320 && ri.crag < 0.3) { if (blocked(x, z, 0.5) || crowded(x, z, 0.4, 'reed')) continue; recs.reed.push({ x, y: h - 0.1, z, rot: r() * 6.3, s: 0.8 + r() * 0.5, tint: 0.9 + r() * 0.2 }); continue; }
       if (h < 1) continue;
-      if (ri.crag > 0.5) { if (recs.redrock.length < 260 && r() < 0.5) { const s = 0.5 + Math.pow(r(), 2.5) * 4.5; recs.redrock.push({ x, y: h - s * 0.15, z, rot: r() * 6.3, s, sy: 0.7 + r() * 0.8, tint: 0.85 + r() * 0.3 }); } continue; }
-      if (rd > 3 && ri.rc > 40 && ri.snow < 0.5 && sl < 0.6 && recs.bush.length < 170 && r() < 0.18 && (ri.forest > -0.1)) { if (!blocked(x, z, 0.8)) recs.bush.push({ x, y: h - 0.05, z, rot: r() * 6.3, s: 0.8 + r() * 0.4, tint: 0.9 + r() * 0.2 }); continue; }
-      if (rd > 3 && ri.rc > 42 && recs.rock.length < 520 && r() < 0.35 + U.smooth(0.4, 1.0, sl)) { const s = 0.3 + Math.pow(r(), 3) * 4.2; recs.rock.push({ x, y: h - s * 0.15, z, rot: r() * 6.3, s, sy: 0.6 + r() * 0.7, sx: 1, tint: 0.85 + r() * 0.3 }); }
+      if (ri.crag > 0.5) { if (recs.redrock.length < 260 && r() < 0.5) { const s = 0.5 + Math.pow(r(), 2.5) * 4.5; if (blocked(x, z, s * 0.8) || crowded(x, z, s * 0.8, 'rock')) continue; occupy(x, z, s * 0.8, 'rock'); recs.redrock.push({ x, y: NaN, z, rot: r() * 6.3, s, sy: 0.7 + r() * 0.8, tint: 0.85 + r() * 0.3 }); } continue; }
+      if (rd > 3 && ri.rc > 40 && ri.snow < 0.5 && sl < 0.6 && recs.bush.length < 170 && r() < 0.18 && (ri.forest > -0.1)) { if (!blocked(x, z, 0.8) && !crowded(x, z, 1.0, 'bush')) occupy(x, z, 1.0, 'bush'), recs.bush.push({ x, y: NaN, z, rot: r() * 6.3, s: 0.8 + r() * 0.4, tint: 0.9 + r() * 0.2 }); continue; }
+      if (ri.rc > 42 && recs.rock.length < 520 && r() < 0.35 + U.smooth(0.4, 1.0, sl)) { const s = 0.3 + Math.pow(r(), 3) * 4.2; if (rd < 2.2 + s || blocked(x, z, s * 0.8) || crowded(x, z, s * 0.8, 'rock')) continue; occupy(x, z, s * 0.8, 'rock'); recs.rock.push({ x, y: NaN, z, rot: r() * 6.3, s, sy: 0.6 + r() * 0.7, sx: 1, tint: 0.85 + r() * 0.3 }); }
     }
+    // targeted passes: reeds along river banks, the lake and the coast; bamboo groves through the misty marsh
+    for (let i = 0; i < 6000 && recs.reed.length < 320; i++) {
+      let x, z; const m = r();
+      if (m < 0.55) { const k = Math.floor(r() * (RIVER.length - 1)); const u = r(); const a = RIVER[k], b = RIVER[k + 1]; const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz); const off = (r() < 0.5 ? -1 : 1) * (4 + r() * 6); x = a[0] + dx * u - dz / L * off; z = a[1] + dz * u + dx / L * off; }
+      else if (m < 0.85) { const a = r() * 6.28, rr = 28 + r() * 16; x = -80 + Math.cos(a) * rr * 1.15; z = 140 + Math.sin(a) * rr; }
+      else { x = 190 + r() * 60; z = (r() - 0.5) * 400; }
+      const h = terrainH(x, z); if (h < -0.5 || h > 0.8 || regionInfo(x, z, h).crag > 0.3 || blocked(x, z, 0.5) || crowded(x, z, 0.4, 'reed') || nearLandmark(x, z, 2) || roadD(x, z) < 2.5) continue;
+      recs.reed.push({ x, y: h - 0.1, z, rot: r() * 6.3, s: 0.8 + r() * 0.5, tint: 0.9 + r() * 0.2 });
+    }
+    for (let i = 0; i < 3000 && recs.bamboo.length < 140; i++) {
+      const a = r() * 6.28, rr = Math.sqrt(r()) * 72; const x = LOC.pillars.x + Math.cos(a) * rr, z = LOC.pillars.z + Math.sin(a) * rr; const h = terrainH(x, z);
+      if (h < 0.9 || slopeAt(x, z) > 0.7 || regionInfo(x, z, h).marsh < 0.4 || blocked(x, z, 1.2) || crowded(x, z, 1.0, 'tree') || roadD(x, z) < 3) continue;
+      occupy(x, z, 0.9, 'tree'); recs.bamboo.push({ x, y: NaN, z, rot: r() * 6.3, s: 0.8 + r() * 0.5, tint: 0.85 + r() * 0.3 });
+    }
+    // final seating (trunk/rock/bush footprints measured against the lowest terrain beneath them)
+    for (const [k, list] of Object.entries(recs)) for (const o of list) { const h = terrainH(o.x, o.z); const s = o.s, sy = o.sy || 1;
+      if (k === 'rock') o.y = Math.min(h - 0.15 * s, minUnder(o.x, o.z, 0.8 * s) + 0.07 * s * sy);
+      else if (k === 'redrock') o.y = Math.min(h - 0.15 * s, minUnder(o.x, o.z, 0.8 * s) + 0.13 * s * sy);
+      else if (k === 'bush') o.y = Math.min(h - 0.05, minUnder(o.x, o.z, 0.86 * s) - 0.17 * s);
+      else if (k === 'reed') o.y = h - 0.1;
+      else o.y = minUnder(o.x, o.z, (k === 'bamboo' ? 0.9 : 0.45) * s) - 0.12; }
     this.instanced('broad', recs.broad, { wind: 0.12, windH: 7 }); this.instanced('pine', recs.pine, { wind: 0.08, windH: 7 }); this.instanced('peach', recs.peach, { wind: 0.08, windH: 4 });
     this.instanced('ash', recs.ash); this.instanced('bamboo', recs.bamboo, { wind: 0.25, windH: 8 }); this.instanced('bush', recs.bush, { wind: 0.04, windH: 1.5 });
     this.instanced('reed', recs.reed, { wind: 0.15, windH: 2 }); this.instanced('rock', recs.rock); this.instanced('redrock', recs.redrock);
@@ -404,6 +433,11 @@ const World = {
     for (const t of recs.bush) this.bushRecs.push(Object.assign(t, { kind: 'bush', berries: 3 }));
     for (const t of recs.rock.concat(recs.redrock)) { if (t.s > 0.9) addCollider({ type: 'circle', x: t.x, z: t.z, r: t.s * 0.85, top: t.y + t.s * (t.sy || 1) * 1.1 }); this.rockRecs.push(Object.assign(t, { kind: 'rock' })); }
     this.vegCounts = Object.fromEntries(Object.entries(recs).map(([k, v]) => [k, v.length]));
+    this.vegRecs = recs;
+    // canopy grid for the camera: it must never end up inside a tree
+    this.canopy = new Map(); const ck = (x, z) => Math.floor(x / 12) * 1000 + Math.floor(z / 12);
+    for (const [type, list] of [['broad', recs.broad], ['pine', recs.pine], ['peach', recs.peach]]) for (const t of list) { const k = ck(t.x, t.z); if (!this.canopy.has(k)) this.canopy.set(k, []); this.canopy.get(k).push({ type, x: t.x, y: t.y, z: t.z, s: t.s }); }
+    this.canopyKey = ck;
   },
   /* grass patch that follows the player */
   buildGrass() {
@@ -509,7 +543,7 @@ const World = {
     vb.add(new THREE.ConeGeometry(1.7, 0.9, 4), '#3f6e3a', 12, terrainH(12, 9) + 3.1, 9, 0, Math.PI / 4, 0); addCollider({ type: 'circle', x: 12, z: 9, r: 1.3 });
     this.well = { x: 12, z: 9 };
     // market stalls
-    const stalls = [{ x: -11, z: 8, rot: 0.9, c: '#c0392b' }, { x: -13, z: -4, rot: 1.6, c: '#d9a441' }, { x: 9, z: -12, rot: -0.6, c: '#2f6e8a' }];
+    const stalls = [{ x: -11, z: 8, rot: 0.9, c: '#c0392b' }, { x: -12.5, z: -9, rot: 2.2, c: '#d9a441' }, { x: 13, z: -6, rot: -1.1, c: '#2f6e8a' }];
     for (const st of stalls) { const y = terrainH(st.x, st.z); const c = Math.cos(st.rot), s = Math.sin(st.rot);
       for (const [ux, uz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) vb.add(new THREE.CylinderGeometry(0.07, 0.07, 2.4, 5), '#5a3a22', st.x + (ux * 1.4 * c + uz * 0.9 * s), y + 1.2, st.z + (-ux * 1.4 * s + uz * 0.9 * c));
       vb.add(new THREE.BoxGeometry(3.2, 0.12, 2.2), st.c, st.x, y + 2.45, st.z, 0.12, st.rot, 0); vb.add(new THREE.BoxGeometry(2.8, 0.9, 1.0), '#7a5a3a', st.x, y + 0.45, st.z, 0, st.rot, 0, 1, 1, 1, { ao: 0.3 });
@@ -517,7 +551,7 @@ const World = {
       addCollider({ type: 'box', x: st.x, z: st.z, hw: 1.5, hd: 0.6, rot: st.rot, top: y + 1.0 }); }
     this.stalls = stalls;
     // the cabbage cart
-    const cc = { x: 15, z: 3, rot: -1.2 }; const cy = terrainH(cc.x, cc.z); this.cabbageCart = cc;
+    const cc = { x: 17, z: 0.2, rot: -1.2 }; /* beside (not on) the east road */ const cy = terrainH(cc.x, cc.z); this.cabbageCart = cc;
     vb.add(new THREE.BoxGeometry(2.6, 0.5, 1.5), '#8a5a2a', cc.x, cy + 0.9, cc.z, 0, cc.rot, 0, 1, 1, 1, { ao: 0.3 });
     for (const sd of [-1, 1]) vb.add(new THREE.CylinderGeometry(0.55, 0.55, 0.12, 12), '#5a3a1a', cc.x + Math.sin(cc.rot) * sd * 0.85, cy + 0.55, cc.z + Math.cos(cc.rot) * sd * 0.85, Math.PI / 2, cc.rot + Math.PI / 2, 0);
     for (let k = 0; k < 9; k++) vb.add(new THREE.IcosahedronGeometry(0.3, 1), k % 2 ? '#8fc45a' : '#a8d470', cc.x + ((k % 3) - 1) * 0.6 * Math.cos(cc.rot) + ((Math.floor(k / 3)) - 1) * 0.4 * Math.sin(cc.rot), cy + 1.35 + (k % 2) * 0.12, cc.z - ((k % 3) - 1) * 0.6 * Math.sin(cc.rot) + ((Math.floor(k / 3)) - 1) * 0.4 * Math.cos(cc.rot), 0, 0, 0, 1, 0.85, 1, { topTint: hexc('#d8f0a0') });
@@ -545,12 +579,13 @@ const World = {
     // signposts at junctions
     const sign = (x, z, labels) => { const y = terrainH(x, z); vb.add(new THREE.CylinderGeometry(0.08, 0.1, 2.6, 5), '#5a3a22', x, y + 1.3, z);
       labels.forEach((ang, i) => vb.add(new THREE.BoxGeometry(1.4, 0.28, 0.06), '#b08a5a', x + Math.cos(ang) * 0.6, y + 2.2 - i * 0.36, z + Math.sin(ang) * 0.6, 0, -ang, 0)); addCollider({ type: 'circle', x, z, r: 0.2 }); };
-    sign(-16, 45, [Math.atan2(-45, 16), Math.atan2(55, -25)]); sign(60, 21, [Math.atan2(11, 85), Math.atan2(-80, 60), Math.atan2(-21, -60)]); sign(-62, -6, [Math.atan2(-19, -125), Math.atan2(6, 62)]);
+    sign(-12.2, 46, [Math.atan2(-45, 16), Math.atan2(55, -25)]); sign(60, 21, [Math.atan2(11, 85), Math.atan2(-80, 60), Math.atan2(-21, -60)]); sign(-62, -6, [Math.atan2(-19, -125), Math.atan2(6, 62)]);
     this.addMesh(vb, 'village');
 
     /* --- Bridge over the river on the south road --- */
-    const bb = new GeoBuilder(); const brx = -19, brz = 148, brot = Math.atan2(150 - 80, -20 + 30) ; // road direction
-    const roadAng = Math.atan2(-(150 - 80), -20 - (-30)); const bc = Math.cos(roadAng), bs = Math.sin(roadAng);
+    // the deck runs along the road segment (-30,80)→(-20,150), centred where that road meets the river
+    const bb = new GeoBuilder(); const ul = Math.hypot(10, 70), bc = 10 / ul, bs = 70 / ul; const brz = 148.3, brx = -30 + (brz - 80) / 70 * 10;
+    const roadAng = -Math.atan2(-bs, bc); /* mesh/platform rotation is -roadAng, whose local +x axis is (bc, bs) */
     const bl = 24; const endA = [brx - bc * bl / 2, brz - bs * bl / 2], endB = [brx + bc * bl / 2, brz + bs * bl / 2];
     const deckY = Math.max(1.25, Math.min(terrainH(...endA), terrainH(...endB)) + 0.1); // level with the banks
     bb.add(new THREE.BoxGeometry(bl, 0.3, 3.4), '#7a5a36', brx, deckY - 0.15, brz, 0, -roadAng, 0, 1, 1, 1, { vary: 0.1 });
@@ -559,7 +594,6 @@ const World = {
     for (const sd of [-1, 1]) bb.add(new THREE.BoxGeometry(bl, 0.1, 0.1), '#6a4a2a', brx - sd * 1.6 * bs, deckY + 1.0, brz + sd * 1.6 * bc, 0, -roadAng, 0);
     this.addMesh(bb, 'bridge'); addPlatform(brx, brz, bl / 2, 1.7, -roadAng, deckY);
     for (const sd of [-1, 1]) addCollider({ type: 'box', x: brx - sd * 1.75 * bs, z: brz + sd * 1.75 * bc, hw: bl / 2 - 1, hd: 0.1, rot: -roadAng, bottom: deckY - 0.5 });
-    void brot;
 
     /* --- Lookout Pagoda on its hill, with a spiral stair --- */
     const pb = new GeoBuilder(); const px = 82, pz = -78; const ptop = terrainH(px, pz) - 0.1;
@@ -577,7 +611,7 @@ const World = {
     // spiral stair slabs
     const steps = 70; let prevA = 0;
     for (let i = 0; i < steps; i++) { const t = i / (steps - 1); const a = 2.53 - t * Math.PI * 2.1; const rr = 44 - t * 34; const x = px + Math.cos(a) * rr, z = pz + Math.sin(a) * rr; const h = terrainH(x, z);
-      pb.add(new THREE.BoxGeometry(1.4, 0.35, 3.0), '#a39b8c', x, h + 0.05, z, 0, -a, 0, 1, 1, 1, { vary: 0.12 }); prevA = a;
+      pb.add(new THREE.BoxGeometry(1.4, 0.35, 3.0), '#a39b8c', x, h + 0.05, z, 0, -a, 0, 1, 1, 1, { vary: 0.12 }); prevA = a; (this.stairPts = this.stairPts || []).push([x, z]);
       if (i % 9 === 4) { const lx = px + Math.cos(a) * (rr + 2.2), lz = pz + Math.sin(a) * (rr + 2.2), ly = terrainH(lx, lz); pb.add(new THREE.BoxGeometry(0.5, 1.1, 0.5), '#8f877a', lx, ly + 0.55, lz); pb.add(new THREE.BoxGeometry(0.7, 0.2, 0.7), '#6a645a', lx, ly + 1.2, lz); this.glow(0xffa04a, lx, ly + 0.9, lz, 1.4); } }
     void prevA;
     this.addMesh(pb, 'pagoda');
@@ -631,7 +665,7 @@ const World = {
     this.eternalFlame = V3(sx, ly + 1.2, sz);
     sb.add(new THREE.CylinderGeometry(1.2, 0.7, 1.0, 10), '#7a5a3a', sx, ly + 0.5, sz); addCollider({ type: 'circle', x: sx, z: sz, r: 1.25, top: ly + 1.0 }); sb.add(new THREE.TorusGeometry(1.2, 0.15, 6, 16), '#d9a441', sx, ly + 1.0, sz, Math.PI / 2);
     // ring of pillars, some broken
-    for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2; const rr = 19; const x = sx + Math.cos(a) * rr, z = sz + Math.sin(a) * rr; const h = (i % 4 === 1) ? 2 + r() * 2 : 6.5; const gy = terrainH(x, z) - 0.2;
+    for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2; if (i === 0) continue; /* the eastern gap is the entrance from the road */ const rr = 19; const x = sx + Math.cos(a) * rr, z = sz + Math.sin(a) * rr; const h = (i % 4 === 1) ? 2 + r() * 2 : 6.5; const gy = terrainH(x, z) - 0.2;
       sb.add(new THREE.BoxGeometry(1.3, 0.6, 1.3), dark, x, gy + 0.3, z); sb.add(new THREE.CylinderGeometry(0.55, 0.6, h, 8), stone, x, gy + h / 2 + 0.6, z, 0, 0, 0, 1, 1, 1, { ao: 0.3, vary: 0.1 });
       if (h > 6) { sb.add(new THREE.BoxGeometry(1.5, 0.5, 1.5), dark, x, gy + h + 0.85, z); }
       else sb.add(new THREE.CylinderGeometry(0.55, 0.55, 1.6, 8), stone, x + 1.5, gy + 0.55, z + 0.4, Math.PI / 2, a, 0);
@@ -679,14 +713,14 @@ const World = {
     // crystal material glow tweak
     /* --- Daofei Camp --- */
     const db = new GeoBuilder(); const fx = LOC.daofei.x, fz = LOC.daofei.z, fy = terrainH(fx, fz) - 0.2;
-    for (let i = 0; i < 34; i++) { const a = i / 34 * Math.PI * 2; if (Math.abs(U.angDiff(a, Math.PI + 0.15)) < 0.35) continue; const rr = 17; const x = fx + Math.cos(a) * rr, z = fz + Math.sin(a) * rr; const gy = terrainH(x, z);
+    for (let i = 0; i < 34; i++) { const a = i / 34 * Math.PI * 2; if (Math.abs(U.angDiff(a, Math.PI + 0.15)) < 0.35 || Math.abs(U.angDiff(a, 0.34)) < 0.3) continue; /* gates where the road passes through */ const rr = 17; const x = fx + Math.cos(a) * rr, z = fz + Math.sin(a) * rr; const gy = terrainH(x, z);
       db.add(new THREE.CylinderGeometry(0.28, 0.32, 4, 6), '#6a4a2e', x, gy + 1.8, z, (r() - 0.5) * 0.1, 0, (r() - 0.5) * 0.1, 1, 1, 1, { ao: 0.3 }); db.add(new THREE.ConeGeometry(0.3, 0.8, 6), '#7a5a3a', x, gy + 4.2, z);
       addCollider({ type: 'circle', x, z, r: 0.6 }); }
     const tents = [[6, 6, '#7a3a2a'], [-6, 7, '#6a5a3a'], [7, -6, '#5a4a3a'], [-5, -7, '#7a3a2a']];
     for (const [ox, oz, c] of tents) { const x = fx + ox, z = fz + oz, gy = terrainH(x, z); db.add(new THREE.ConeGeometry(3, 3.4, 7), c, x, gy + 1.6, z, 0, r() * 3, 0, 1, 1, 1, { ao: 0.35 }); db.add(new THREE.CylinderGeometry(0.06, 0.06, 4, 4), '#3a2a1a', x, gy + 2, z); addCollider({ type: 'circle', x, z, r: 2.6 }); }
     // banner
     db.add(new THREE.CylinderGeometry(0.1, 0.12, 7, 6), '#3a2a1a', fx + 2, fy + 3.5, fz - 1); this.daofeiBanner = V3(fx + 2, fy + 5.8, fz - 1);
-    for (let k = 0; k < 6; k++) { const x = fx + (r() - 0.5) * 18, z = fz + (r() - 0.5) * 18; if (Math.hypot(x - fx, z - fz) < 4) continue; db.add(new THREE.BoxGeometry(1, 0.9, 1), '#7a5a36', x, terrainH(x, z) + 0.45, z, 0, r() * 3, 0, 1, 1, 1, { ao: 0.3 }); addCollider({ type: 'circle', x, z, r: 0.7 }); }
+    for (let k = 0; k < 6; k++) { const x = fx + (r() - 0.5) * 18, z = fz + (r() - 0.5) * 18; if (Math.hypot(x - fx, z - fz) < 4 || U.polyDist(x, z, ROADS[1]) < 3) continue; db.add(new THREE.BoxGeometry(1, 0.9, 1), '#7a5a36', x, terrainH(x, z) + 0.45, z, 0, r() * 3, 0, 1, 1, 1, { ao: 0.3 }); addCollider({ type: 'circle', x, z, r: 0.7 }); }
     db.add(new THREE.TorusGeometry(1.0, 0.25, 6, 10), '#5a5248', fx, fy + 0.3, fz, Math.PI / 2);
     this.addMesh(db, 'daofeicamp');
     const flag = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.5, 8, 1), new THREE.MeshLambertMaterial({ map: canvasTex(128, 80, (g) => { g.fillStyle = '#8a1a12'; g.fillRect(0, 0, 128, 80); g.fillStyle = '#111'; g.font = 'bold 56px serif'; g.textAlign = 'center'; g.fillText('匪', 64, 62); }), side: THREE.DoubleSide }));

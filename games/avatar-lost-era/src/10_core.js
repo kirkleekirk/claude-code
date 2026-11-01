@@ -329,9 +329,9 @@ const LOC = {
 const ROADS = [
   [[-14, 260], [-20, 150], [-30, 80], [-10, 30], [0, 0]],          // south road (arrival)
   [[0, 0], [60, 18], [145, 32], [229, 62]],                         // east road past the daofei, down to the beach
-  [[0, 0], [-60, -10], [-130, -20], [-185, -25]],                   // west road to the ruins
+  [[0, 0], [-60, -10], [-130, -20], [-181, -25]],                   // west road to the ruins (ends at the pillar ring's gap)
   [[0, 0], [30, -40], [46, -53]],                                   // to the pagoda hill
-  [[0, 0], [-25, 60], [-40, 95]],                                   // to the moon pool shrine
+  [[-16, 45], [-28, 72], [-40, 95]],                                 // to the moon pool shrine, branching off the south road past the gate
   [[60, 18], [120, -60], [165, -105]],                              // to the badgermole cave
   [[30, -40], [20, -120], [25, -170]],                              // north toward the peak trail
 ];

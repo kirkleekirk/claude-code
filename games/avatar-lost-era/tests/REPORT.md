@@ -1,7 +1,7 @@
 # Automated test report
 
-Ran 749 tests in 124s — **749 passed, 0 failed**.
-Average simulation tick in a busy scene: 0.71 ms.
+Ran 749 tests in 159s — **749 passed, 0 failed**.
+Average simulation tick in a busy scene: 0.67 ms.
 
 | Area | Passed | Failed |
 |---|---|---|

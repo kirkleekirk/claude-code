@@ -17,107 +17,6 @@ function defaultLook(nation) {
   const N = NATIONS[nation];
   return { nation, body: 'A', height: 1.0, build: 1.0, skin: N.skins[0], hair: N.hairStyles[0], hairColor: N.hairColors[0], eyes: N.eyes[0], outfit: 0 };
 }
-function buildHumanoid(look, opts = {}) {
-  const N = NATIONS[look.nation] || NATIONS.earth; const pal = opts.palette || N.outfits[look.outfit % N.outfits.length];
-  const [c1, c2, c3] = pal; const skin = opts.stone ? '#9a9286' : look.skin; const hairC = opts.stone ? '#8a8276' : look.hairColor;
-  const isB = look.body === 'B'; const bw = look.build || 1; const mat = opts.mat || charMat();
-  const stoneAll = opts.stone; const C = (c) => stoneAll ? '#a39b8c' : c;
-  const root = new THREE.Group(); const J = {};
-  const hips = new THREE.Group(); hips.position.y = 0.92; root.add(hips); J.hips = hips;
-  // pelvis
-  let b = new GeoBuilder();
-  b.add(new THREE.SphereGeometry(0.15, 10, 8), C(look.nation === 'air' ? c2 : c3 === '#d9a441' ? c2 : c3), 0, 0, 0, 0, 0, 0, (isB ? 1.25 : 1.12) * bw, 0.7, 0.85);
-  hips.add(partMesh(b, mat));
-  // spine / torso
-  const spine = new THREE.Group(); spine.position.y = 0.03; hips.add(spine); J.spine = spine;
-  b = new GeoBuilder(); const sw = (isB ? 0.88 : 1.0) * bw;
-  const torso = new THREE.CylinderGeometry(0.19, 0.155, 0.48, 12, 3);
-  b.add(torso, C(c1), 0, 0.25, 0, 0, 0, 0, sw, 1, 0.72, { ao: 0.2 });
-  if (isB) b.add(new THREE.SphereGeometry(0.1, 8, 6), C(c1), 0, 0.33, 0.06, 0, 0, 0, 1.6 * sw, 0.75, 0.8);
-  b.add(new THREE.SphereGeometry(0.19, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), C(c1), 0, 0.47, 0, 0, 0, 0, sw * 1.05, 0.42, 0.75);
-  // belt / sash
-  b.add(new THREE.CylinderGeometry(0.162, 0.16, 0.08, 12), C(c3), 0, 0.04, 0, 0, 0, 0, sw, 1, 0.75);
-  if (look.nation === 'water') { // fur trim parka
-    b.add(new THREE.TorusGeometry(0.16, 0.035, 6, 14), C('#f2f2ea'), 0, -0.02, 0, Math.PI / 2, 0, 0, sw * 1.05, 0.75, 1);
-    b.add(new THREE.TorusGeometry(0.09, 0.03, 6, 14), C('#f2f2ea'), 0, 0.5, 0, Math.PI / 2, 0, 0, 1.1, 0.9, 1);
-    b.add(new THREE.BoxGeometry(0.03, 0.4, 0.02), C(c3), 0.0, 0.26, 0.142, 0, 0, 0);
-  } else if (look.nation === 'earth') { // crossed collar and undershirt
-    b.add(new THREE.BoxGeometry(0.1, 0.2, 0.02), C(c2), 0, 0.37, 0.135, 0, 0, 0.0);
-    b.add(new THREE.BoxGeometry(0.04, 0.32, 0.02), C(c3), 0.05, 0.3, 0.14, 0, 0, 0.35); b.add(new THREE.BoxGeometry(0.04, 0.32, 0.02), C(c3), -0.05, 0.3, 0.14, 0, 0, -0.35);
-  } else if (look.nation === 'fire') { // shoulder guards and gold trim
-    b.add(new THREE.BoxGeometry(0.03, 0.42, 0.02), C(c3), 0.03, 0.26, 0.142, 0, 0, 0.12);
-    for (const sd of [-1, 1]) b.add(new THREE.SphereGeometry(0.1, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2), C(c2), sd * 0.19 * sw, 0.44, 0, 0, 0, -sd * 0.5, 1.1, 0.8, 1.1);
-  } else if (look.nation === 'air') { // diagonal sash over the shoulder + shawl
-    b.add(new THREE.BoxGeometry(0.07, 0.6, 0.03), C(c1 === '#e0912e' ? '#d06a1e' : c1), 0.0, 0.26, 0.142, 0, 0, 0.6);
-    b.add(new THREE.CylinderGeometry(0.22, 0.26, 0.2, 12, 1, true, -Math.PI * 0.9, Math.PI * 1.8), C('#d9772a'), 0, 0.4, -0.01, 0, Math.PI, 0, sw, 1, 0.8);
-    b.add(new THREE.BoxGeometry(0.18, 0.42, 0.02), C(c2), 0, 0.25, 0.138);
-  }
-  const torsoMesh = partMesh(b, mat); spine.add(torsoMesh);
-  // robe skirt for air nomads and B-bodies of earth/fire (hangs from the hips; follows hips)
-  if (look.nation === 'air' || (isB && look.nation !== 'water')) { const rb = new GeoBuilder(); rb.add(new THREE.CylinderGeometry(0.17, 0.25, 0.42, 12, 1, true), C(look.nation === 'air' ? '#d9772a' : c1), 0, -0.2, 0, 0, 0, 0, bw, 1, 0.82); const sk = partMesh(rb, mat); sk.material.side = THREE.DoubleSide; hips.add(sk); J.skirt = sk; }
-  // neck & head
-  const neck = new THREE.Group(); neck.position.y = 0.5; spine.add(neck); J.neck = neck;
-  b = new GeoBuilder(); b.add(new THREE.CylinderGeometry(0.05, 0.058, 0.1, 8), skin, 0, 0.03, 0); neck.add(partMesh(b, mat));
-  const head = new THREE.Group(); head.position.y = 0.09; neck.add(head); J.head = head;
-  b = new GeoBuilder();
-  b.add(new THREE.SphereGeometry(0.115, 16, 12), skin, 0, 0.1, 0, 0, 0, 0, 0.92, 1.1, 1.0);
-  b.add(new THREE.SphereGeometry(0.07, 10, 8), skin, 0, 0.04, 0.035, 0, 0, 0, 1.15, 0.9, 1.1); // jaw
-  b.add(new THREE.ConeGeometry(0.016, 0.04, 5), skin, 0, 0.085, 0.112, Math.PI / 2 + 0.3, 0, 0); // nose
-  for (const sd of [-1, 1]) {
-    b.add(new THREE.SphereGeometry(0.024, 8, 6), stoneAll ? '#a39b8c' : '#f6f2ea', sd * 0.042, 0.115, 0.093, 0, 0, 0, 1.15, 0.8, 0.5);
-    b.add(new THREE.SphereGeometry(0.014, 8, 6), stoneAll ? '#8a8276' : look.eyes, sd * 0.042, 0.114, 0.103, 0, 0, 0, 1, 1, 0.45);
-    b.add(new THREE.SphereGeometry(0.0065, 6, 4), stoneAll ? '#8a8276' : '#0a0806', sd * 0.042, 0.114, 0.108);
-    b.add(new THREE.BoxGeometry(0.045, 0.009, 0.012), hairC, sd * 0.043, 0.145, 0.104, 0, 0, sd * -0.12);
-    b.add(new THREE.SphereGeometry(0.022, 6, 5), skin, sd * 0.108, 0.1, 0.0, 0, 0, 0, 0.5, 1, 0.8); // ears
-  }
-  b.add(new THREE.BoxGeometry(0.036, 0.007, 0.01), stoneAll ? '#8a8276' : '#7a3a2a', 0, 0.045, 0.108); // mouth
-  // hair
-  const hs = look.hair; const hc = hairC;
-  if (hs !== 'shaved') b.add(new THREE.SphereGeometry(0.123, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.58), hc, 0, 0.11, -0.01, -0.5, 0, 0, 0.97, 1.12, 1.06); // hairline above the brows, covering the nape
-  if (hs === 'long' || hs === 'loopies') b.add(new THREE.BoxGeometry(0.2, 0.3, 0.05), hc, 0, -0.03, -0.09, 0.15, 0, 0, 1, 1, 1);
-  if (hs === 'loopies') for (const sd of [-1, 1]) b.add(new THREE.TorusGeometry(0.03, 0.009, 5, 10), hc, sd * 0.085, 0.07, 0.07, 0, sd * 0.4, 0);
-  if (hs === 'bun') b.add(new THREE.SphereGeometry(0.055, 8, 6), hc, 0, 0.23, -0.03);
-  if (hs === 'topknot') { b.add(new THREE.CylinderGeometry(0.03, 0.035, 0.07, 8), hc, 0, 0.24, -0.01); if (look.nation === 'fire' && !stoneAll) b.add(new THREE.ConeGeometry(0.025, 0.06, 5), '#e0b050', 0, 0.29, 0.0); }
-  if (hs === 'wolftail') b.add(new THREE.ConeGeometry(0.035, 0.12, 6), hc, 0, 0.2, -0.1, -2.4, 0, 0);
-  if (hs === 'braids') for (const sd of [-1, 1]) for (let k = 0; k < 6; k++) b.add(new THREE.SphereGeometry(0.022, 6, 5), hc, sd * 0.09, 0.04 - k * 0.04, 0.03 - k * 0.003);
-  if (hs === 'short') b.add(new THREE.SphereGeometry(0.05, 6, 5), hc, 0, 0.17, 0.08, 0, 0, 0, 1.6, 0.5, 0.8);
-  if (look.beard) { b.add(new THREE.ConeGeometry(0.06, 0.2, 7), hairC, 0, -0.04, 0.07, Math.PI + 0.25, 0, 0); b.add(new THREE.BoxGeometry(0.08, 0.012, 0.02), hairC, 0, 0.062, 0.108); }
-  if (look.arrows && !stoneAll) { b.add(new THREE.ConeGeometry(0.03, 0.06, 3), '#3aa0e0', 0, 0.19, 0.095, -1.4, 0, 0); b.add(new THREE.BoxGeometry(0.018, 0.012, 0.18), '#3aa0e0', 0, 0.215, 0.0, 0, 0, 0); }
-  const headMesh = partMesh(b, mat); head.add(headMesh); J.headMesh = headMesh;
-  // arms
-  const sleeve = look.nation === 'air' ? c2 : c1; const cuff = look.nation === 'water' ? '#f2f2ea' : c3; const shX = (isB ? 0.17 : 0.2) * bw;
-  for (const sd of [1, -1]) {
-    const side = sd > 0 ? 'L' : 'R';
-    const sh = new THREE.Group(); sh.position.set(sd * shX, 0.44, 0); spine.add(sh); J['sh' + side] = sh;
-    b = new GeoBuilder(); b.add(new THREE.CapsuleGeometry(0.052 * bw, 0.2, 4, 8), C(sleeve), 0, -0.13, 0); sh.add(partMesh(b, mat));
-    const el = new THREE.Group(); el.position.y = -0.27; sh.add(el); J['el' + side] = el;
-    b = new GeoBuilder(); const foreC = (look.nation === 'fire' || look.nation === 'earth') ? sleeve : sleeve;
-    b.add(new THREE.CapsuleGeometry(0.045 * bw, 0.18, 4, 8), C(foreC), 0, -0.11, 0);
-    b.add(new THREE.CylinderGeometry(0.05 * bw, 0.05 * bw, 0.05, 8), C(cuff), 0, -0.2, 0);
-    b.add(new THREE.SphereGeometry(0.045, 8, 6), skin, 0, -0.27, 0.005, 0, 0, 0, 0.8, 1.15, 0.6);
-    b.add(new THREE.CapsuleGeometry(0.012, 0.04, 2, 4), skin, sd * -0.03, -0.25, 0.02, 0, 0, sd * 0.6);
-    el.add(partMesh(b, mat));
-    const hand = new THREE.Object3D(); hand.position.set(0, -0.28, 0.02); el.add(hand); J['hand' + side] = hand;
-    // legs
-    const hp = new THREE.Group(); hp.position.set(sd * 0.095 * bw * (isB ? 1.1 : 1), -0.03, 0); hips.add(hp); J['hip' + side] = hp;
-    b = new GeoBuilder(); b.add(new THREE.CapsuleGeometry(0.068 * bw, 0.3, 4, 8), C(c2 === '#2a1a14' || c2 === '#3a2a22' || c2 === '#1e1410' ? c2 : (look.nation === 'water' ? '#1f3d66' : look.nation === 'air' ? c2 : '#cdbd90')), 0, -0.21, 0); hp.add(partMesh(b, mat));
-    const kn = new THREE.Group(); kn.position.y = -0.43; hp.add(kn); J['kn' + side] = kn;
-    b = new GeoBuilder();
-    const pantC = look.nation === 'water' ? '#1f3d66' : look.nation === 'air' ? c2 : look.nation === 'fire' ? c2 : '#cdbd90';
-    b.add(new THREE.CapsuleGeometry(0.055 * bw, 0.28, 4, 8), C(pantC), 0, -0.19, 0);
-    const boot = look.nation === 'water' ? '#4a3424' : look.nation === 'fire' ? '#1a1210' : look.nation === 'air' ? '#8a5a2a' : '#5a3a22';
-    b.add(new THREE.CylinderGeometry(0.062, 0.058, 0.16, 8), C(boot), 0, -0.33, 0);
-    b.add(new THREE.BoxGeometry(0.1, 0.07, 0.22), C(boot), 0, -0.43, 0.045, 0, 0, 0, 1, 1, 1, { ao: 0.2 });
-    if (look.nation === 'water') b.add(new THREE.TorusGeometry(0.06, 0.02, 5, 10), C('#f2f2ea'), 0, -0.26, 0, Math.PI / 2);
-    kn.add(partMesh(b, mat));
-  }
-  const shadow = blobShadow(0.45); root.add(shadow); shadow.position.y = 0.03;
-  root.scale.setScalar(look.height || 1);
-  const H = { root, J, mat, look, shadow, phase: 0, action: null, actionT: 0, stance: 0, element: opts.element || look.nation, prev: {}, emissiveT: 0 };
-  root.traverse(o => { if (o.isMesh && o !== shadow) o.castShadow = false; });
-  return H;
-}
-
 /* ---------------- humanoid animation ---------------- */
 const POSES = {
   // [shL, elL, shR, elR, hipL, knL, hipR, knR, spine, head, hipsY]  — each rotation [x,y,z]
@@ -168,62 +67,6 @@ function samplePose(act, u) {
   const k0 = keys[i], k1 = keys[Math.min(i + 1, keys.length - 1)]; const span = (k1[0] - k0[0]) || 1; let t = U.clamp((u - k0[0]) / span, 0, 1); t = t * t * (3 - 2 * t);
   return { a: k0[1], b: k1[1], t };
 }
-function animateHumanoid(H, dt, st) {
-  const J = H.J; H.phase += dt * (st.speed || 0) * 1.55;
-  const sp = U.clamp((st.speed || 0) / 4.5, 0, 1.7); const run = U.clamp(((st.speed || 0) - 4.5) / 3, 0, 1);
-  const ph = H.phase; const s = Math.sin(ph), c = Math.cos(ph);
-  const amp = Math.min(sp, 1) * (0.55 + run * 0.35);
-  // locomotion pose
-  const L = {
-    hipL: [-s * 0.75 * amp, 0, 0.02], hipR: [s * 0.75 * amp, 0, -0.02],
-    knL: [Math.max(0, c) * 1.1 * amp + 0.05, 0, 0], knR: [Math.max(0, -c) * 1.1 * amp + 0.05, 0, 0],
-    shL: [s * 0.65 * amp, 0, 0.08 + run * 0.05], shR: [-s * 0.65 * amp, 0, -0.08 - run * 0.05],
-    elL: [-0.25 - run * 0.9 - amp * 0.2, 0, 0], elR: [-0.25 - run * 0.9 - amp * 0.2, 0, 0],
-    spine: [0.04 + run * 0.18, s * 0.08 * amp, 0], head: [-run * 0.1, 0, 0], hipsY: Math.abs(c) * 0.045 * amp - run * 0.02,
-  };
-  // idle breathing + combat stance
-  const breath = Math.sin(performance.now() * 0.0018 * (st.id ? 1 : 1)) * 0.012;
-  H.stance = U.damp(H.stance, (st.combat && sp < 1.2) ? 1 : 0, 6, dt);
-  const ST = STANCE[st.element] || STANCE.none;
-  for (const j of JOINTS.concat(['hipsY'])) {
-    const lv = L[j]; const sv = ST[j];
-    if (j === 'hipsY') { L.hipsY = U.lerp(L.hipsY, sv || 0, H.stance * (1 - sp * 0.6)); continue; }
-    if (sv) for (let k = 0; k < 3; k++) lv[k] = U.lerp(lv[k], sv[k], H.stance * (1 - Math.min(sp, 1) * 0.55));
-  }
-  if (sp < 0.05) { L.shL[2] += 0.04 + breath; L.shR[2] -= 0.04 + breath; L.spine[0] += breath; }
-  // airborne
-  if (!st.grounded && !st.swim) { const up = U.clamp((st.vy || 0) / 8, -1, 1); L.hipL = [-0.6, 0, 0.1]; L.knL = [0.9, 0, 0]; L.hipR = [0.1, 0, -0.1]; L.knR = [0.4 + up * 0.2, 0, 0]; L.shL = [-0.3 - up * 0.6, 0, 0.6]; L.shR = [-0.3 - up * 0.6, 0, -0.6]; L.hipsY = 0; }
-  if (st.swim) { const ss = Math.sin(performance.now() * 0.006); Object.assign(L, { spine: [1.2, 0, 0], head: [-1.0, 0, 0], shL: [-2.4 + ss * 0.8, 0, 0.4], shR: [-2.4 - ss * 0.8, 0, -0.4], elL: [-0.3, 0, 0], elR: [-0.3, 0, 0], hipL: [ss * 0.4, 0, 0], hipR: [-ss * 0.4, 0, 0], knL: [0.3, 0, 0], knR: [0.3, 0, 0], hipsY: 0.0 }); }
-  if (st.meditate) { const m = MEDITATE; for (const j of JOINTS) if (m[j]) L[j] = m[j].slice(); L.hipsY = m.hipsY; L.spine[0] += breath * 2; }
-  if (st.sleep) { for (const j of JOINTS) L[j] = [0, 0, 0]; L.shL = [0, 0, 0.1]; L.shR = [0, 0, -0.1]; L.knL = [0.3, 0, 0]; L.hipL = [-0.3, 0, 0]; L.hipsY = 0; }
-  // action overlay
-  let spin = 0;
-  if (H.action) {
-    H.actionT += dt; const act = H.action; const u = H.actionT / (act.dur * (H.actionSpeed || 1));
-    if (u >= 1) { H.action = null; }
-    else {
-      const { a, b, t } = samplePose(act, u); const fade = Math.min(1, u / 0.06, (1 - u) / 0.12);
-      for (const j of JOINTS) {
-        const va = a && a[j], vb = b && b[j]; if (!va && !vb) continue;
-        const from = va || L[j], to = vb || L[j]; const tgt = [U.lerp(from[0], to[0], t), U.lerp(from[1], to[1], t), U.lerp(from[2], to[2], t)];
-        for (let k = 0; k < 3; k++) L[j][k] = U.lerp(L[j][k], tgt[k], fade);
-      }
-      const ya = (a && a.hipsY !== undefined) ? a.hipsY : L.hipsY, yb = (b && b.hipsY !== undefined) ? b.hipsY : L.hipsY; L.hipsY = U.lerp(L.hipsY, U.lerp(ya, yb, t), fade);
-      if (act.spin) spin = act.spin * U.smooth(0.05, 0.75, u);
-    }
-  }
-  // apply with smoothing (critically damped towards targets)
-  const k = 22;
-  for (const j of JOINTS) { const o = J[j]; const v = L[j]; o.rotation.x = U.damp(o.rotation.x, v[0], k, dt); o.rotation.y = U.damp(o.rotation.y, v[1], k, dt); o.rotation.z = U.damp(o.rotation.z, v[2], k, dt); }
-  // KO / sleep: lie down on the back
-  const fall = (st.dead || st.sleep) ? 1 : 0; H.fall = U.damp(H.fall || 0, fall, 4, dt);
-  J.hips.position.y = U.damp(J.hips.position.y, 0.92 + L.hipsY - H.fall * 0.74, k, dt);
-  J.hips.position.z = -H.fall * 0.2; J.hips.rotation.x = -H.fall * 1.5;
-  J.hips.rotation.y = spin;
-  if (J.skirt) J.skirt.rotation.x = (J.hipL.rotation.x + J.hipR.rotation.x) * 0.25;
-  // hit flash
-  if (H.emissiveT > 0) { H.emissiveT -= dt; H.mat.emissive.setRGB(0.9, 0.25, 0.1).multiplyScalar(Math.max(0, H.emissiveT / 0.18)); } else H.mat.emissive.setRGB(st.glow || 0, (st.glow || 0) * 0.8, (st.glow || 0) * 0.5);
-}
 function playAction(H, name, speed = 1) { if (!ACTIONS[name]) return; H.action = ACTIONS[name]; H.actionT = 0; H.actionSpeed = speed; }
 
 /* ---------------- creatures ---------------- */
@@ -237,7 +80,7 @@ function buildCreature(species) {
   const mat = charMat(); const root = new THREE.Group(); const body = new THREE.Group(); root.add(body);
   const C = { root, body, mat, legs: [], species, head: null, tail: null, wings: [], phase: Math.random() * 10, emissiveT: 0, extra: [] };
   let b = new GeoBuilder(); let shadowR = 0.6;
-  const addLeg = (x, y, z, len, thick, off, color, foot, footColor) => { const l = leg(mat, color, len, thick, foot, footColor); l.position.set(x, y, z); body.add(l); C.legs.push({ g: l, off }); return l; };
+  const addLeg = (x, y, z, len, thick, off, color, foot, footColor) => { const l = leg(mat, color, len, thick, foot, footColor); l.position.set(x, y, z); body.add(l); C.legs.push({ g: l, off, len: len + thick }); return l; };
   const headGroup = (x, y, z) => { const h = new THREE.Group(); h.position.set(x, y, z); body.add(h); C.head = h; return h; };
   const tailGroup = (x, y, z) => { const t = new THREE.Group(); t.position.set(x, y, z); body.add(t); C.tail = t; return t; };
   const meshTo = (grp, bb) => { grp.add(new THREE.Mesh(bb.build(), mat)); };
@@ -392,6 +235,9 @@ function animateCreature(C, dt, st) {
     if (C.tail) { C.tail.rotation.y = Math.sin(ph * 0.8) * 0.35; C.tail.rotation.x = st.alert ? -0.3 : 0; }
     if (C.head) { const graze = st.graze ? 1 : 0; C.headGraze = U.damp(C.headGraze || 0, graze, 4, dt); C.head.rotation.x = C.headGraze * 0.75 + Math.sin(ph * 2) * 0.04 * amp; C.head.rotation.y = st.look || 0; }
     if (C.species === 'turtleduck') C.body.rotation.z = Math.sin(ph * 2) * 0.12 * amp;
+    // keep a foot planted: drop the body by however much the most vertical leg has lifted
+    let drop = 1e9; for (const l of C.legs) if (l.len && !l.claw) drop = Math.min(drop, l.len * (1 - Math.cos(l.g.rotation.x)));
+    if (drop < 1e9) C.body.position.y -= drop;
   }
   // rear up (platypus-bear roar / attack)
   C.rearT = U.damp(C.rearT || 0, st.rear ? 1 : 0, 7, dt); if (C.rear || st.rear) { C.body.rotation.x = -C.rearT * 0.7; C.body.position.y += C.rearT * 0.5; }

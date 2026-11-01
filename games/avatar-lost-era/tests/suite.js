@@ -31,6 +31,7 @@
   const AFF = AFF_MULT;
   const CASTABLE = Object.keys(TECH).filter(id => !TECH[id].late && TECH[id].kind && TECH[id].kind !== 'passive' && TECH[id].el !== 'avatar');
 
+  window.TH = { tick, sleep, fresh, isolate, grantAll, place, dummy, clearAll, finiteObj, finiteGeo, closeOverlays, walk, CASTABLE };
   window.SUITE = { results: R, async run(only) {
     const want = (g) => !only || !only.length || only.includes(g);
 
@@ -45,7 +46,7 @@
       for (const [ri, rd] of ROADS.entries()) await t(`road ${ri} stays dry (except the bridge)`, () => { let wet = 0; for (let i = 0; i < rd.length - 1; i++) { const L = Math.hypot(rd[i + 1][0] - rd[i][0], rd[i + 1][1] - rd[i][1]); for (let s = 0; s <= L; s += 4) { const u = s / L; const x = rd[i][0] + (rd[i + 1][0] - rd[i][0]) * u, z = rd[i][1] + (rd[i + 1][1] - rd[i][1]) * u; if (groundH(x, z) < 0 && Math.hypot(x + 19, z - 148) > 14 && Math.hypot(x, z) < 290) wet++; } } return wet === 0 || `${wet} wet samples`; });
       await t('village plateau is flat (<2.5m range)', () => { let mn = 1e9, mx = -1e9; for (let a = 0; a < 6.28; a += 0.3) for (let r = 0; r < 30; r += 3) { const h = terrainH(Math.cos(a) * r, Math.sin(a) * r); mn = Math.min(mn, h); mx = Math.max(mx, h); } return mx - mn < 2.5 || `range ${(mx - mn).toFixed(2)}`; });
       await t('minimap image baked with varied colour', () => { const c = World.minimapImg; const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let s = new Set(); for (let i = 0; i < d.length; i += 4000) s.add(d[i] >> 4 << 8 | d[i + 1] >> 4); return c.width === 768 && s.size > 20 || `colours ${s.size}`; });
-      await t('vegetation populated', () => { const v = World.vegCounts; return v.broad > 300 && v.pine > 200 && v.rock > 200 && v.bush > 60 && v.bamboo > 40 || JSON.stringify(v); });
+      await t('vegetation populated', () => { const v = World.vegCounts; return v.broad > 300 && v.pine > 200 && v.rock > 200 && v.bush > 60 && v.bamboo > 100 && v.reed > 200 || JSON.stringify(v); });
       for (const z of ['shore', 'meadow', 'forest', 'plains', 'river', 'highforest', 'crags']) await t(`spawn zone has room: ${z}`, () => { let n = 0; for (let i = 0; i < 40; i++) if (Spawner.point(z)) n++; return n >= 35 || `${n}/40`; });
 
       fresh('fire'); isolate();

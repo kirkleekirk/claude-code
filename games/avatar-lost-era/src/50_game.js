@@ -375,7 +375,8 @@ const Game = {
   /* ---------------- interaction ---------------- */
   findInteract() {
     const P = G.player; const fwd = V3(Math.sin(P.yaw), 0, Math.cos(P.yaw)); let best = null, bestScore = 1e9;
-    const consider = (pos, r, label, action, prio = 0) => { const d = Math.hypot(pos.x - P.pos.x, pos.z - P.pos.z); if (d > r) return; if (Math.abs((pos.y ?? P.pos.y) - P.pos.y) > 3.5) return; const s = d - prio; if (s < bestScore) { bestScore = s; best = { label, action, pos }; } };
+    const consider = (pos, r, label, action, prio = 0) => { const dx = pos.x - P.pos.x, dz = pos.z - P.pos.z; const d = Math.hypot(dx, dz); if (d > r) return; if (Math.abs((pos.y ?? P.pos.y) - P.pos.y) > 3.5) return;
+      const facing = d > 0.3 ? (dx * fwd.x + dz * fwd.z) / d : 1; const s = d - prio - Math.max(0, facing) * 0.9; /* what you face wins ties */ if (s < bestScore) { bestScore = s; best = { label, action, pos }; } };
     if (P.sheltered && P.shelter) consider(P.pos, 3, 'Leave the shelter', () => { P.shelter.collapse(); P.shelter = null; }, 5);
     for (const e of G.ents) { if (e.kind === 'villager') consider(e.pos, 3.2, `Talk to ${e.name}`, () => Dialog.open(e), 2);
       else if (!e.alive && !e.harvested && e.kind === 'animal') consider(e.pos, 2.4 + e.radius, `Harvest ${e.name}`, () => this.harvest(e), 3); }

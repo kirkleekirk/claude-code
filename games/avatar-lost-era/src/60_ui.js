@@ -4,7 +4,7 @@
 const VILLAGERS = [
   { id: 'bao', name: 'Elder Bao', x: 5, z: -29, yaw: 3.0, wander: 4, look: { nation: 'earth', body: 'A', height: 0.95, build: 0.95, skin: '#d9ad84', hair: 'long', hairColor: '#d8d4cc', eyes: '#2f2416', outfit: 0, beard: true }, palette: ['#6b5a3e', '#d8c79a', '#3b3222'] },
   { id: 'mei', name: 'Merchant Mei', x: -9.6, z: 6.6, yaw: 0.9 + Math.PI, look: { nation: 'earth', body: 'B', height: 0.96, build: 1, skin: '#e1b892', hair: 'bun', hairColor: '#1b120c', eyes: '#5a3a22', outfit: 1 }, palette: ['#8a3a2a', '#e5d6ad', '#5a2a1a'] },
-  { id: 'cabbage', name: 'Cabbage Merchant', x: 13.4, z: 4.4, yaw: 2.2, hat: '#d8c080', look: { nation: 'earth', body: 'A', height: 0.94, build: 0.9, skin: '#c99a72', hair: 'short', hairColor: '#2b1d12', eyes: '#2f2416', outfit: 1 }, palette: ['#5a7a3a', '#cfc08f', '#3b4a22'] },
+  { id: 'cabbage', name: 'Cabbage Merchant', x: 15.2, z: -1.6, yaw: 2.6, hat: '#d8c080', look: { nation: 'earth', body: 'A', height: 0.94, build: 0.9, skin: '#c99a72', hair: 'short', hairColor: '#2b1d12', eyes: '#2f2416', outfit: 1 }, palette: ['#5a7a3a', '#cfc08f', '#3b4a22'] },
   { id: 'lin', name: 'Innkeeper Lin', x: -25, z: -14, yaw: 0.9, look: { nation: 'earth', body: 'B', height: 0.98, build: 1.05, skin: '#f0cba6', hair: 'braids', hairColor: '#3a2618', eyes: '#3d7a3a', outfit: 2 }, palette: ['#2f5e3a', '#e5d6ad', '#1f3a22'] },
   { id: 'ru', name: 'Farmer Ru', x: 44, z: 22, wander: 9, hat: '#c8b070', look: { nation: 'earth', body: 'A', height: 1.0, build: 1.15, skin: '#b5835c', hair: 'bun', hairColor: '#2b1d12', eyes: '#2f2416', outfit: 2 }, palette: ['#7a6a3a', '#cfc08f', '#4a3f1f'] },
   { id: 'tam', name: 'Watchman Tam', x: -11, z: 33, yaw: 2.7, look: { nation: 'earth', body: 'A', height: 1.04, build: 1.1, skin: '#c99a72', hair: 'topknot', hairColor: '#1b120c', eyes: '#2f2416', outfit: 0 }, palette: ['#3f5a2a', '#8a7a52', '#2a2a1a'] },
@@ -86,7 +86,7 @@ const UI = {
     $('#bHelp').onclick = () => { $('#pauseExtra').innerHTML = CONTROLS_HTML; }; $('#bSettings').onclick = () => this.settings();
     $('#bRespawn').onclick = () => Game.respawn(); this.mm = $('#minimap').getContext('2d');
   },
-  note(text, cls = '') { if (!this.feed) return; const d = document.createElement('div'); d.className = 'note ' + cls; d.innerHTML = text; this.feed.appendChild(d); while (this.feed.children.length > 5) this.feed.firstChild.remove(); setTimeout(() => { d.style.transition = 'opacity .6s'; d.style.opacity = 0; setTimeout(() => d.remove(), 650); }, 4200 + text.length * 25); G.lastNote = text; },
+  note(text, cls = '') { if (!this.feed) return; const d = document.createElement('div'); d.className = 'note ' + cls; d.innerHTML = text; this.feed.appendChild(d); while (this.feed.children.length > (IS_TOUCH ? 3 : 5)) this.feed.firstChild.remove(); setTimeout(() => { d.style.transition = 'opacity .6s'; d.style.opacity = 0; setTimeout(() => d.remove(), 650); }, 4200 + text.length * 25); G.lastNote = text; },
   banner(a, b) { const el = $('#banner'); el.querySelector('.a').textContent = a; el.querySelector('.b').textContent = b || ''; el.classList.add('show'); clearTimeout(this._bt); this._bt = setTimeout(() => el.classList.remove('show'), 3200); },
   floater(pos, n, el) { if (G.vr) return; const d = document.createElement('div'); d.className = 'dmg'; d.textContent = n; d.style.color = { fire: '#ffb070', water: '#9fe0ff', ice: '#c8f0ff', iceprison: '#c8f0ff', earth: '#d8c890', air: '#ffffff', hurt: '#ff6a55' }[el] || '#fff';
     this.floaters.appendChild(d); const p = pos.clone(); p.y += 1.8; const t0 = performance.now(); const jitter = (Math.random() - 0.5) * 30;
@@ -141,6 +141,8 @@ const UI = {
     const ids = this.slotsFor(P.element); const keys = IS_TOUCH ? ['A', 'B', 'C', 'D', ''] : ['LMB', 'RMB', '3', '4', '5'];
     const html = ids.slice(0, 5).map((id, i) => { const t = TECH[id]; const cd = P.cds[id] || 0; const can = P.chi >= chiCost(id); return `<div class="slot ${can ? '' : 'nochi'} ${G.vr && i === (G.vrSlot || 0) ? 'sel' : ''}" data-i="${i}"><div class="k">${keys[i]}</div><div class="c">${chiCost(id) || ''}</div><div class="g" style="color:${EL[t.el] ? EL[t.el].color : '#fff'}">${t.glyph}</div><div class="n">${t.name}</div><div class="cd" style="height:${U.clamp(cd / (t.cd || 1), 0, 1) * 100}%"></div></div>`; }).join('');
     if (html !== this._sh) { $('#slots').innerHTML = html; this._sh = html; $('#slots').querySelectorAll('.slot').forEach(d => d.onpointerdown = (ev) => { ev.stopPropagation(); G.input.castSlot(+d.dataset.i); }); }
+    // touch: the ELEM button shows the current element (the desktop hotbar is hidden on phones)
+    if (IS_TOUCH) { const te = document.getElementById('tE'); const g2 = `${EL[P.element].glyph}<small>ELEM</small>`; if (te.dataset.g !== P.element) { te.dataset.g = P.element; te.innerHTML = g2; te.style.color = EL[P.element].color; te.style.fontFamily = 'var(--brush)'; te.style.fontSize = '20px'; } }
     // touch button glyphs
     if (IS_TOUCH) ['tA', 'tB', 'tC', 'tD'].forEach((b, i) => { const id = ids[i]; const el = document.getElementById(b); const g = id ? TECH[id].glyph : '·'; if (el.dataset.g !== g) { el.dataset.g = g; el.innerHTML = id ? `<div class="cdr"></div>${g}<small>${TECH[id].name.split(' ')[0].toUpperCase()}</small>` : '·'; el.style.color = id ? EL[TECH[id].el].color : '#888'; }
       if (id) { const cd = U.clamp((P.cds[id] || 0) / (TECH[id].cd || 1), 0, 1); const r = el.querySelector('.cdr'); if (r) r.style.background = cd > 0 ? `conic-gradient(rgba(0,0,0,.6) ${cd * 360}deg, transparent 0)` : 'none'; el.style.opacity = P.chi >= chiCost(id) ? 1 : 0.45; } });
@@ -450,7 +452,17 @@ G.camYaw = 0; G.camPitch = -0.15; G.camDist = 4.6; G.aim = { point: V3(), target
 // point the camera entity's -Z (where the THREE.Camera child looks) at a target.
 // Object3D.lookAt on a non-camera aims +Z instead, which would face the camera away.
 function aimCam(obj, tx, ty, tz) { const dx = tx - obj.position.x, dy = ty - obj.position.y, dz = tz - obj.position.z; obj.rotation.order = 'YXZ'; obj.rotation.set(Math.atan2(dy, Math.hypot(dx, dz)), Math.atan2(-dx, -dz), 0); }
-function cameraBlocked(p) {
+function insideCanopy(p) {
+  if (!World.canopy) return false; const k0 = World.canopyKey;
+  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const l = World.canopy.get(k0(p.x + i * 12, p.z + j * 12)); if (!l) continue;
+    for (const t of l) { const dx = p.x - t.x, dz = p.z - t.z, d = Math.hypot(dx, dz); if (d > 3.2 * t.s) continue; const h = p.y - t.y;
+      if (h > 0 && h < 4 * t.s && d < 0.55 * t.s) return true; // trunk
+      if (t.type === 'pine') { const u = (h - 1.8 * t.s) / (5.8 * t.s); if (u > 0 && u < 1 && d < 2.5 * t.s * (1 - u) + 0.3) return true; }
+      else { const cy = t.type === 'peach' ? 3.0 : 5.2, cr = t.type === 'peach' ? 1.8 : 2.5; const dy = (h - cy * t.s) / 0.8; if (Math.hypot(d, dy) < cr * t.s) return true; } } }
+  return false;
+}
+function cameraBlocked(p) { return insideCanopy(p) || cameraBlockedSolid(p); }
+function cameraBlockedSolid(p) {
   for (const c of collidersNear(p.x, p.z)) { if (c.top !== undefined && p.y > c.top) continue; if (c.type === 'circle') { if (c.r > 0.8 && Math.hypot(p.x - c.x, p.z - c.z) < c.r + 0.25) return true; continue; }
     const dx = p.x - c.x, dz = p.z - c.z; const lx = dx * c.cs - dz * c.sn, lz = dx * c.sn + dz * c.cs; if (Math.abs(lx) < c.hw + 0.25 && Math.abs(lz) < c.hd + 0.25) return true; }
   return false;
@@ -555,7 +567,7 @@ const Main = {
     // animate
     P.H.root.position.copy(P.pos); P.H.root.rotation.y = P.yaw; if (P.swimming) P.H.root.position.y = P.pos.y + 0.35;
     const hs = Math.hypot(P.hv.x, P.hv.z);
-    animateHumanoid(P.H, dt, { speed: P.dash ? 9 : hs, grounded: P.grounded, vy: P.vy, swim: P.swimming, meditate: P.meditating, combat: P.combatT > 0, element: P.element, glow: P.meditating ? 0.06 + Math.sin(G.t * 2) * 0.03 : P.healT > 0 ? 0.12 : 0 });
+    animateHumanoid(P.H, dt, { lookAt: P.combatT > 0 && !P.meditating ? G.aim.point : null, speed: P.dash ? 9 : hs, grounded: P.grounded, vy: P.vy, swim: P.swimming, meditate: P.meditating, combat: P.combatT > 0, element: P.element, glow: P.meditating ? 0.06 + Math.sin(G.t * 2) * 0.03 : P.healT > 0 ? 0.12 : 0 });
     P.H.shadow.visible = P.grounded; P.H.shadow.position.y = 0.03 + Math.max(0, groundH(P.pos.x, P.pos.z) - P.pos.y);
     const fp = G.settings.firstPerson || G.vr; P.H.J.headMesh.visible = !fp; if (G.vr) P.H.root.visible = false;
     // healing waters over time
@@ -615,12 +627,12 @@ const Main = {
       const back = V3(Math.sin(G.camYaw) * Math.cos(G.camPitch), -Math.sin(G.camPitch), Math.cos(G.camYaw) * Math.cos(G.camPitch)); const right = V3(Math.cos(G.camYaw), 0, -Math.sin(G.camYaw));
       const shoulder = P.sheltered ? 0 : 0.55;
       // pull the camera in if terrain blocks the view
-      for (let t = 0.5; t <= dist; t += 0.35) { const p = target.clone().addScaledVector(back, t).addScaledVector(right, shoulder * t / dist); if (p.y < groundH(p.x, p.z) + 0.3 || cameraBlocked(p)) { dist = Math.max(0.6, t - 0.4); break; } }
-      const want = target.clone().addScaledVector(back, dist).addScaledVector(right, shoulder);
+      for (let t = 0.5; t <= dist; t += 0.3) { const p = target.clone().addScaledVector(back, t).addScaledVector(right, shoulder * t / dist); if (p.y < groundH(p.x, p.z) + 0.3 || cameraBlocked(p)) { dist = Math.max(1.0, t - 0.35); break; } }
+      const want = target.clone().addScaledVector(back, dist).addScaledVector(right, shoulder * Math.min(1, dist / 2));
       cam.position.lerp(want, 1 - Math.exp(-18 * dt)); if (cam.position.distanceTo(want) > 6) cam.position.copy(want);
       const gy = groundH(cam.position.x, cam.position.z) + 0.3; if (cam.position.y < gy) cam.position.y = gy;
       cam.rotation.set(G.camPitch, G.camYaw, 0);
-      P.H.root.visible = cam.position.distanceTo(target) > 0.9; // never fill the screen with the back of your own head
+      P.H.root.visible = cam.position.distanceTo(target) > 0.7; // never fill the screen with the back of your own head
     }
     if (shake > 0) { cam.position.x += (Math.random() - 0.5) * shake * 0.4; cam.position.y += (Math.random() - 0.5) * shake * 0.4; }
   },
@@ -699,7 +711,7 @@ const Boot = {
       `<p>Seven thousand years had passed since Avatar Wan closed the doors between the human world and the spirit world. People had nearly forgotten that spirits once walked among them.</p><p>When Avatar ${prev.name} — ${prev.desc} — died, the cycle turned, and the world waited sixteen years.</p>`,
       `<p>${home.reveal}</p><p>You are <b>${profile.name}</b> of the ${home.name}. You are the Avatar.</p>`,
       `<p>Now you travel to <b>Tienhai</b>, the Valley of Four Winds — a frontier on the western edge of the Earth Kingdom where all four peoples trade. The valley's elders say the first teachers of bending — the dragons, the badgermoles, the Moon and the sky bison — still leave their traces here.</p><p>Survive. Learn. Become the bridge between worlds.</p><p class="sig">${EL[P.native].glyph}</p>`,
-    ], () => { G.mode = 'play'; UI.banner('Tienhai Valley', 'Western Earth Kingdom · Day 1'); UI.note('Follow the road north to the village. (WASD to move, mouse to look — K opens your Bending Scroll)', 'lore'); Game.save(); }, { last: 'Begin' });
+    ], () => { G.mode = 'play'; UI.banner('Tienhai Valley', 'Western Earth Kingdom · Day 1'); UI.note(IS_TOUCH ? 'Follow the road north to the village. (Left stick to move, drag to look — BAG opens your Bending Scroll)' : 'Follow the road north to the village. (WASD to move, mouse to look — K opens your Bending Scroll)', 'lore'); Game.save(); }, { last: 'Begin' });
   },
   load(d) {
     try {

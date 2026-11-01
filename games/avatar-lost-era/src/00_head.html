@@ -81,7 +81,7 @@ input[type=range]{width:100%;accent-color:#8a2b1b}
 
 /* ---------- HUD ---------- */
 #hud{position:fixed;inset:0;pointer-events:none}
-#bars{position:absolute;left:14px;top:12px;width:min(270px,42vw)}
+#bars{position:absolute;left:14px;top:12px;width:min(270px,28vw)}
 .bar{height:13px;border:1px solid rgba(0,0,0,.6);background:rgba(20,12,6,.6);border-radius:7px;overflow:hidden;margin-bottom:5px;position:relative;box-shadow:0 1px 3px rgba(0,0,0,.5)}
 .bar i{display:block;height:100%;border-radius:7px;transition:width .12s}
 .bar span{position:absolute;inset:0;font-size:10px;line-height:13px;text-align:center;font-family:var(--title);color:#fff;text-shadow:0 1px 2px #000}
@@ -98,7 +98,7 @@ input[type=range]{width:100%;accent-color:#8a2b1b}
 #xpbar{height:4px;margin-top:2px}#xpbar i{background:linear-gradient(90deg,#ffd27a,#ff9b52)}
 #status{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap}
 #status b{font-family:var(--title);font-weight:500;font-size:10px;padding:2px 6px;border-radius:8px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.2)}
-#compass{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:min(420px,46vw);height:26px;overflow:hidden;background:linear-gradient(90deg,transparent,rgba(15,9,4,.65) 15%,rgba(15,9,4,.65) 85%,transparent);border-top:1px solid rgba(217,164,65,.6);border-bottom:1px solid rgba(217,164,65,.6)}
+#compass{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:min(420px,36vw);height:26px;overflow:hidden;background:linear-gradient(90deg,transparent,rgba(15,9,4,.65) 15%,rgba(15,9,4,.65) 85%,transparent);border-top:1px solid rgba(217,164,65,.6);border-bottom:1px solid rgba(217,164,65,.6)}
 #compass .c{position:absolute;top:0;height:26px;line-height:26px;font-family:var(--title);font-size:12px;color:#ffe2a8;transform:translateX(-50%);white-space:nowrap;text-shadow:0 1px 2px #000}
 #compass .c.m{color:#ffd27a;font-size:15px}
 #compass .c.q{color:#ff6a3a;font-size:15px}
@@ -247,11 +247,14 @@ input[type=range]{width:100%;accent-color:#8a2b1b}
 #touch .tb.big{width:76px;height:76px;font-size:32px}
 #touch .tb.sm{width:44px;height:44px;font-size:13px;font-family:var(--title)}
 #touch .tb:active,#touch .tb.on{background:rgba(184,50,31,.6)}
-body.touch #hotbar{bottom:auto;top:58px;transform:translateX(-50%) scale(.72);transform-origin:top center}
-body.touch #quest{bottom:auto;top:150px;max-width:44vw}
+body.touch #hotbar{display:none}
+body.touch #quest{bottom:auto;top:150px;max-width:40vw;max-height:66px;overflow:hidden}
 body.touch #quest .o{font-size:13px}
-body.touch #feed{top:auto;bottom:220px}
-body.touch #compass{top:6px}
+body.touch #feed{top:60px;bottom:auto;right:auto;left:50%;transform:translateX(-50%);width:40vw;align-items:center}
+body.touch .note{font-size:13px;text-align:center;border-right:none;border-bottom:2px solid var(--gold);padding:3px 8px}
+body.touch .note.good{border-color:#9fd68a}body.touch .note.bad{border-color:#ff6a55}body.touch .note.lore{border-color:#bfe7ff}
+body.touch #compass{top:6px;width:30vw}
+@media (max-height:400px){body.touch #touch .joy{width:108px;height:108px;bottom:22px;left:20px}body.touch #touch .joy i{width:46px;height:46px;margin:-23px 0 0 -23px}}
 body.touch #minimap{width:110px;height:110px}
 body.touch #region{top:128px;width:110px}
 body.touch #clock{top:34px}
@@ -374,7 +377,7 @@ body.touch #hotbar #slots{display:none}
   <div class="tb sm" id="tRun" style="left:168px;bottom:40px">RUN</div>
   <div class="tb sm" id="tMed" style="left:168px;bottom:96px">CALM</div>
   <div class="tb sm" id="tEat" style="left:220px;bottom:40px">EAT</div>
-  <div class="tb sm" id="tMenu" style="left:14px;top:auto;bottom:178px">MENU</div>
-  <div class="tb sm" id="tBag" style="left:66px;bottom:178px">BAG</div>
+  <div class="tb sm" id="tMenu" style="right:130px;top:12px">MENU</div>
+  <div class="tb sm" id="tBag" style="right:180px;top:12px">BAG</div>
 </div>
 <div id="rotate"><div><div style="font-size:60px">⟳</div>Turn your device sideways<br>to walk the four nations.</div></div>

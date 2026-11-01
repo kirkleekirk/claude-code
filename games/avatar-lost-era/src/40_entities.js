@@ -306,7 +306,7 @@ class Human {
   constructor(def, x, z, kind) {
     this.id = ENT_ID++; this.kind = kind; this.def = def; this.name = def.name; this.hp = this.maxHp = def.hp || 100; this.pos = V3(x, groundH(x, z), z); this.home = V3(x, 0, z);
     this.yaw = def.yaw ?? Math.random() * 6.28; this.vel = V3(); this.vy = 0; this.radius = 0.4; this.height = 1.8; this.alive = true; this.state = 'idle'; this.timer = Math.random() * 3; this.status = { burn: 0, slow: 0, frozen: 0, stun: 0 };
-    this.H = buildHumanoid(def.look, { palette: def.palette, hat: def.hat }); G.scene.add(this.H.root); this.attackCd = 1 + Math.random(); this.sp = { size: 1, prey: false };
+    this.H = buildHumanoid(def.look, { palette: def.palette, hat: def.hat, grip: kind === 'daofei' && def.role === 'melee' }); G.scene.add(this.H.root); this.attackCd = 1 + Math.random(); this.sp = { size: 1, prey: false };
     if (def.weapon !== false && kind === 'daofei') this.addWeapon(def.role);
     if (def.hat) { const b = new GeoBuilder(); b.add(new THREE.ConeGeometry(0.3, 0.14, 12), def.hat, 0, 0.24, 0); b.add(new THREE.CylinderGeometry(0.3, 0.3, 0.01, 12), def.hat, 0, 0.17, 0); this.H.J.head.add(new THREE.Mesh(b.build(), this.H.mat)); }
   }
@@ -356,7 +356,8 @@ class Human {
     const g = groundH(this.pos.x, this.pos.z, this.pos.y); this.vy -= 20 * dt; this.pos.y += this.vy * dt; if (this.pos.y <= g) { this.pos.y = g; this.vy = 0; }
     const sm = Math.hypot(vx, vz); if (sm > 0.1 && !combat) this.yaw = U.dampAng(this.yaw, Math.atan2(vx, vz), 6, dt); else if (sm > 0.1 && this.def.role !== 'ranged' && this.def.role !== 'leader') this.yaw = U.dampAng(this.yaw, Math.atan2(vx, vz), 8, dt);
     this.H.root.position.copy(this.pos); this.H.root.rotation.y = this.yaw;
-    animateHumanoid(this.H, dt, { speed: sm, grounded: true, combat, element: this.def.bender || 'none', id: this.id, frozen: this.status.frozen > 0 });
+    const look = (combat || (this.kind === 'villager' && dp < 7)) && G.player ? V3(P.pos.x, P.pos.y + 1.6, P.pos.z) : null;
+    animateHumanoid(this.H, dt, { speed: sm, grounded: true, combat, element: this.def.bender || 'none', id: this.id, frozen: this.status.frozen > 0, lookAt: look });
     if (this.status.frozen > 0 && !this.iceMesh) { this.iceMesh = makeIce(0.6, 1.0); this.H.root.add(this.iceMesh); } else if (this.status.frozen <= 0 && this.iceMesh) { this.H.root.remove(this.iceMesh); this.iceMesh = null; FX.burst(V3(this.pos.x, this.pos.y + 0.5, this.pos.z), PAL.iceA, PAL.iceB, 14, 4, 0.2, 0.5, { grav: -10 }); }
   }
   strike(dp) {
@@ -399,7 +400,10 @@ const Spawner = {
   },
   point(zone, minPlayerDist = 0) {
     for (let tries = 0; tries < 900; tries++) {
-      const x = (this.rng() - 0.5) * 560, z = (this.rng() - 0.5) * 560;
+      let x = (this.rng() - 0.5) * 560, z = (this.rng() - 0.5) * 560;
+      if (zone === 'shore' && tries % 2 === 0) { // the shoreline is a thin band: sample along the river and the lake ring directly
+        if (this.rng() < 0.5) { const k = Math.floor(this.rng() * (RIVER.length - 1)); const a = RIVER[k], b = RIVER[k + 1], u = this.rng(); const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz), off = (this.rng() < 0.5 ? -1 : 1) * (3 + this.rng() * 6); x = a[0] + dx * u - dz / L * off; z = a[1] + dz * u + dx / L * off; }
+        else { const an = this.rng() * 6.28, rr = 26 + this.rng() * 16; x = -80 + Math.cos(an) * rr * 1.15; z = 140 + Math.sin(an) * rr; } }
       if (!this.zoneOk(zone, x, z)) continue;
       if (G.player && Math.hypot(x - G.player.pos.x, z - G.player.pos.z) < minPlayerDist) continue;
       return [x, z];
