@@ -313,6 +313,35 @@
       await t('hit flash fades', () => { const H = buildHumanoid(defaultLook('water')); H.emissiveT = 0.18; animateHumanoid(H, 0.01, {}); const a = H.mat.emissive.r; for (let i = 0; i < 20; i++) animateHumanoid(H, 0.02, {}); return a > 0.3 && H.mat.emissive.r < 0.01; });
     }
 
+    /* ================= RIG & ANIMATION FIT (base-mesh bodies) ================= */
+    if (want('rig')) { group = 'Rig & fit';
+      const wp = (o) => { const v = V3(); o.getWorldPosition(v); return v; };
+      const run = (H, n, st, dt = 1 / 60) => { for (let i = 0; i < n; i++) animateHumanoid(H, dt, Object.assign({ grounded: true }, st)); H.root.updateMatrixWorld(true); };
+      await t('both base meshes decode with the 30-bone skeleton', () => BODY_DATA.bones.length === 30 && BODIES.A.nTri > 500 && BODIES.B.nTri > 900 && ['clavL', 'toeR'].every((b) => BODY_DATA.bones.includes(b)) || 'bad body data');
+      for (const body of ['A', 'B']) {
+        const mk = (n = 'earth', extra = {}) => { const H = buildHumanoid(Object.assign(defaultLook(n), { body }, extra)); G.scene.add(H.root); H.root.position.set(0, 0, 0); return H; };
+        const done = (H) => G.scene.remove(H.root);
+        await t(`frame ${body}: every vertex is fully weighted to real bones`, () => { const H = mk(); const sw = H.mesh.geometry.attributes.skinWeight, si = H.mesh.geometry.attributes.skinIndex; let bad = 0;
+          for (let i = 0; i < sw.count; i++) { const sum = sw.getX(i) + sw.getY(i) + sw.getZ(i) + sw.getW(i); if (Math.abs(sum - 1) > 0.01) bad++; for (const k of [si.getX(i), si.getY(i), si.getZ(i), si.getW(i)]) if (k >= H.mesh.skeleton.bones.length) bad++; } done(H); return bad === 0 || `${bad} bad weights`; });
+        await t(`frame ${body}: standing soles rest on the ground`, () => { const H = mk(); run(H, 60, {}); const a = wp(H.J.footL).y, b = wp(H.J.footR).y; done(H); return Math.abs(a) < 0.03 && Math.abs(b) < 0.03 || `${a.toFixed(3)} ${b.toFixed(3)}`; });
+        for (const v of [1.4, 2.6]) await t(`frame ${body}: walking at ${v} m/s keeps the planted foot from sliding`, () => { const H = mk('water'); let slip = 0, dist = 0, prev = null;
+          let planted = 0; for (let i = 0; i < 240; i++) { H.root.position.z += v / 60; if (i > 60) dist += v / 60; run(H, 1, { speed: v }); const now = { L: wp(H.J.footL), R: wp(H.J.footR) };
+            /* a sole on the ground should not move: sum how far each planted sole drifts */
+            if (i > 60 && prev) for (const sd of ['L', 'R']) if (now[sd].y < 0.02 && prev[sd].y < 0.02) { slip += Math.hypot(now[sd].x - prev[sd].x, now[sd].z - prev[sd].z); planted++; } prev = now; }
+          done(H); const r = slip / dist; return planted > 60 && r < 0.12 || `slip ${(r * 100).toFixed(0)}% of distance over ${planted} planted frames`; });
+        await t(`frame ${body}: toes bend and heels lift at push-off`, () => { const H = mk(); let toe = 0; for (let i = 0; i < 120; i++) { run(H, 1, { speed: 2 }); toe = Math.min(toe, H.J.toeL.rotation.x); } done(H); return toe < -0.2 || `toe ${toe.toFixed(2)}`; });
+        await t(`frame ${body}: clavicles shrug with the arms overhead`, () => { const H = mk(); playAction(H, 'ceremony'); run(H, 90, {}); const z = H.J.clavL.rotation.z, z2 = H.J.clavR.rotation.z; done(H); return z > 0.12 && z2 < -0.12 || `${z.toFixed(2)} ${z2.toFixed(2)}`; });
+        await t(`frame ${body}: meditation sits on the ground, hands on the thighs`, () => { const H = mk('air'); run(H, 120, { meditate: true }, 1 / 30); const hy = H.J.hips.position.y; let worst = 0;
+          for (const s of ['L', 'R']) { const hp = wp(H.J['hand' + s]), a = wp(H.J['hip' + s]), k = wp(H.J['kn' + s]); const ab = k.clone().sub(a); const tt = U.clamp(hp.clone().sub(a).dot(ab) / ab.lengthSq(), 0, 1); worst = Math.max(worst, hp.distanceTo(a.clone().addScaledVector(ab, tt))); }
+          const lowFoot = Math.min(wp(H.J.footL).y, wp(H.J.footR).y); done(H); return hy < 0.4 && worst < 0.13 && lowFoot > -0.03 || `hips ${hy.toFixed(2)} hand-thigh ${worst.toFixed(3)} foot ${lowFoot.toFixed(3)}`; });
+        await t(`frame ${body}: the bow brings fist and palm together before the chest`, () => { const H = mk(); playAction(H, 'bow'); run(H, 50, {}); const d = wp(H.J.handL).distanceTo(wp(H.J.handR)); done(H); return d < 0.09 || `hands ${d.toFixed(3)} m apart`; });
+        await t(`frame ${body}: eating brings the hand to the mouth`, () => { const H = mk(); playAction(H, 'eat'); let best = 9; const R = H.rest;
+          for (let i = 0; i < 60; i++) { run(H, 1, {}); const mouth = H.B.head.localToWorld(V3(0, R.mouthY - H.restJ.head.y, R.mouthZ - H.restJ.head.z)); best = Math.min(best, wp(H.J.handR).distanceTo(mouth)); } done(H); return best < 0.09 || `closest ${best.toFixed(3)} m`; });
+        await t(`frame ${body}: every IK pose resolves to finite joint angles`, () => { const H = mk(); const keys = [MEDITATE]; for (const a of Object.values(ACTIONS)) for (const k of a.keys) if (k[1] && k[1].ik) keys.push(k[1]);
+          const bad = keys.filter((k) => { const r = resolvePose(H, k); return !['shL', 'shR', 'elL', 'elR', 'hipL', 'hipR', 'knL', 'knR'].every((j) => !r[j] || r[j].every(Number.isFinite)); }); done(H); return keys.length > 8 && bad.length === 0 || `${bad.length} bad of ${keys.length}`; });
+      }
+    }
+
     /* ================= RENDERING ================= */
     if (want('render')) { group = 'Render';
       const shots = [['village at noon', 0, 30, Math.PI, 12], ['village at sunset', 0, 30, Math.PI, 18.3], ['village at night', 0, 30, Math.PI, 23], ['Sun Warrior Ruins', LOC.sunruins.x + 30, LOC.sunruins.z, -Math.PI / 2, 10], ['Sky Bison Peak', LOC.bisonpeak.x, LOC.bisonpeak.z + 25, Math.PI, 12], ['Misty Pillars', LOC.pillars.x + 35, LOC.pillars.z - 20, -2.2, 8], ['Moon Pool at night', LOC.moonpool.x, LOC.moonpool.z + 14, Math.PI, 22], ['Badgermole Cave', LOC.badgercave.x, LOC.badgercave.z + 18, Math.PI, 13], ['Daofei Camp', LOC.daofei.x - 30, LOC.daofei.z, Math.PI / 2, 15], ['Eastern Shore', 225, 70, Math.PI / 2, 17], ['Ember Crags', -150, -100, -Math.PI / 2, 12], ['Lookout Pagoda', 50, -40, 2.3, 16]];

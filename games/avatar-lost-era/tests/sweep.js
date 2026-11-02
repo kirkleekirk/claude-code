@@ -123,6 +123,18 @@
     if (want('anatomy')) { group = 'Anatomy';
       const lim = { knL: [-0.12, 2.75], knR: [-0.12, 2.75], elL: [-2.75, 0.12], elR: [-2.75, 0.12] };
       const footY = (Hm, side) => { const v = V3(); (Hm.J['foot' + side] || Hm.J['kn' + side]).getWorldPosition(v); return v.y - Hm.root.position.y; };
+      const wpos = (o) => { const v = V3(); o.getWorldPosition(v); return v; };
+      /* how deep a world point sits inside the torso (0 outside … 1 on the axis), from rest cross-sections carried by the hips / spine / chest bones */
+      const torsoDepth = (Hm, p) => { const R = Hm.restJ; let worst = 0;
+        for (const [bn, y0, y1] of [['hips', R.hips.y - 0.08, R.spine.y], ['spine', R.spine.y, R.chest.y], ['chest', R.chest.y, R.neck.y - 0.02]]) {
+          const lp = Hm.B[bn].worldToLocal(p.clone()).add(R[bn]); if (lp.y < y0 || lp.y > y1) continue; let sec = Hm.fit[0]; for (const f of Hm.fit) if (Math.abs(f.y - lp.y) < Math.abs(sec.y - lp.y)) sec = f;
+          worst = Math.max(worst, 1 - Math.hypot((lp.x - sec.cx) / sec.rx, (lp.z - sec.cz) / sec.rz)); }
+        return worst; };
+      const headDepth = (Hm, p) => { const R = Hm.rest, lp = Hm.B.head.worldToLocal(p.clone()).add(Hm.restJ.head);
+        return 1 - Math.hypot(lp.x / R.headHalfW, (lp.y - (R.chin + R.headTop) / 2) / ((R.headTop - R.chin) / 2), (lp.z - R.headZc) / ((R.headFront - R.headBack) / 2)); };
+      const clip = (Hm, probs) => { for (const sd of ['L', 'R']) { const hp = wpos(Hm.J['hand' + sd]), ep = wpos(Hm.J['el' + sd]); const th = torsoDepth(Hm, hp), te = torsoDepth(Hm, ep), hh = headDepth(Hm, hp);
+        if (th > 0.3) probs.add(`hand${sd} ${(th * 100) | 0}% inside the torso`); if (te > 0.35) probs.add(`elbow${sd} ${(te * 100) | 0}% inside the torso`); if (hh > 0.3) probs.add(`hand${sd} ${(hh * 100) | 0}% inside the head`);
+        if (hp.y - Hm.root.position.y < -0.03) probs.add(`hand${sd} ${(hp.y - Hm.root.position.y).toFixed(2)}m under the ground`); } };
       for (const n of Object.keys(NATIONS)) for (const body of ['A', 'B']) for (const hs of Object.keys(HAIR_STYLES)) {
         const Hm = buildHumanoid(Object.assign(defaultLook(n), { body, hair: hs })); G.scene.add(Hm.root); Hm.root.position.set(0, 0, 0);
         for (const a of Object.keys(ACTIONS)) await t(`${n} · frame ${body} · ${HAIR_STYLES[hs]} · "${a}" stays anatomical`, () => {
@@ -130,16 +142,19 @@
           while (Hm.action && frames < 500) { animateHumanoid(Hm, 1 / 60, { grounded: true, element: NATIONS[n].element }); frames++;
             if (frames % 4) continue; for (const j in lim) { const v = Hm.J[j].rotation.x; if (v < lim[j][0] || v > lim[j][1]) probs.add(`${j} ${v.toFixed(2)} out of [${lim[j]}]`); }
             for (const j of ['shL', 'shR', 'hipL', 'hipR', 'spine', 'head']) for (const ax of ['x', 'y', 'z']) if (!fin(Hm.J[j].rotation[ax]) || Math.abs(Hm.J[j].rotation[ax]) > 3.3) probs.add(`${j}.${ax}=${Hm.J[j].rotation[ax]}`);
-            Hm.root.updateMatrixWorld(true); const fl = Math.min(footY(Hm, 'L'), footY(Hm, 'R')); if (fl < -0.22 && a !== 'leap') probs.add(`foot sinks ${fl.toFixed(2)}m into the ground`); }
+            Hm.root.updateMatrixWorld(true); const fl = Math.min(footY(Hm, 'L'), footY(Hm, 'R')); if (fl < -0.04) probs.add(`foot sinks ${fl.toFixed(2)}m into the ground`); clip(Hm, probs); }
           for (let i = 0; i < 40; i++) animateHumanoid(Hm, 1 / 60, { grounded: true });
           if (Hm.action) probs.add('action never ended'); if (!finiteObj(Hm.root)) probs.add('non-finite matrices');
           return probs.size ? [...probs].slice(0, 3).join('; ') : true; });
-        for (const st of ['idle', 'walk', 'run', 'combat', 'meditate', 'swim', 'air', 'sleep', 'dead']) await t(`${n} · frame ${body} · ${HAIR_STYLES[hs]} · ${st} pose`, () => {
-          const flags = { idle: { speed: 0 }, walk: { speed: 4.6 }, run: { speed: 7.8 }, combat: { combat: true, element: 'fire' }, meditate: { meditate: true }, swim: { swim: true, speed: 2.9 }, air: { grounded: false, vy: 4 }, sleep: { sleep: true }, dead: { dead: true } }[st];
-          const probs = new Set(); for (let i = 0; i < 90; i++) { animateHumanoid(Hm, 1 / 60, Object.assign({ grounded: true }, flags)); for (const j in lim) { const v = Hm.J[j].rotation.x; if (v < lim[j][0] || v > lim[j][1]) probs.add(`${j} ${v.toFixed(2)}`); } }
-          Hm.root.updateMatrixWorld(true); const fl = Math.min(footY(Hm, 'L'), footY(Hm, 'R'));
-          if ((st === 'idle' || st === 'combat') && Math.abs(fl) > 0.18) probs.add(`standing feet ${fl.toFixed(2)}m off the ground`);
-          if ((st === 'walk' || st === 'run') && fl < -0.2) probs.add(`foot sinks ${fl.toFixed(2)}m`);
+        for (const st of ['idle', 'stroll', 'walk', 'run', 'combat', 'meditate', 'swim', 'air', 'sleep', 'dead']) await t(`${n} · frame ${body} · ${HAIR_STYLES[hs]} · ${st} pose`, () => {
+          const flags = { idle: { speed: 0 }, stroll: { speed: 1.4 }, walk: { speed: 4.6 }, run: { speed: 7.8 }, combat: { combat: true, element: 'fire' }, meditate: { meditate: true }, swim: { swim: true, speed: 2.9 }, air: { grounded: false, vy: 4 }, sleep: { sleep: true }, dead: { dead: true } }[st];
+          const probs = new Set(); for (let i = 0; i < 90; i++) { animateHumanoid(Hm, 1 / 60, Object.assign({ grounded: true }, flags)); for (const j in lim) { const v = Hm.J[j].rotation.x; if (v < lim[j][0] || v > lim[j][1]) probs.add(`${j} ${v.toFixed(2)}`); }
+            if (i % 6 === 5) { Hm.root.updateMatrixWorld(true); const fl = Math.min(footY(Hm, 'L'), footY(Hm, 'R')); if (st !== 'swim' && st !== 'air' && fl < -0.04) probs.add(`foot ${fl.toFixed(2)}m into the ground`); const sole = (sd) => Math.min(footY(Hm, sd), wpos(Hm.J['toe' + sd]).y - Hm.root.position.y - Hm.restJ['toe' + sd].y); const down = Math.min(sole('L'), sole('R'));
+              if (st === 'stroll' && down > 0.035) probs.add(`walking with both feet ${down.toFixed(2)}m off the ground`); if ((st === 'walk' || st === 'run') && fl > 0.16) probs.add(`running flight ${fl.toFixed(2)}m high`); clip(Hm, probs); } }
+          Hm.root.updateMatrixWorld(true); const fl = Math.min(footY(Hm, 'L'), footY(Hm, 'R')), fh = Math.max(footY(Hm, 'L'), footY(Hm, 'R'));
+          if ((st === 'idle' || st === 'combat') && (Math.abs(fl) > 0.03 || fh > 0.06)) probs.add(`standing feet ${fl.toFixed(3)} / ${fh.toFixed(3)}m off the ground`);
+          if ((st === 'sleep' || st === 'dead') && Hm.J.hips.position.y > 0.3) probs.add(`lying hips ${Hm.J.hips.position.y.toFixed(2)}m up`);
+          if (st === 'meditate' && Hm.J.hips.position.y > 0.4) probs.add(`meditating hips ${Hm.J.hips.position.y.toFixed(2)}m up`);
           for (let i = 0; i < 90; i++) animateHumanoid(Hm, 1 / 60, { grounded: true });
           return probs.size ? [...probs].slice(0, 3).join('; ') : true; });
         G.scene.remove(Hm.root);
@@ -148,7 +163,7 @@
 
     /* ---------- creatures: every species, every state, standing on real terrain ---------- */
     if (want('creatures')) { group = 'Creature anim';
-      const lowest = (root) => { root.updateMatrixWorld(true); const b = new THREE.Box3(); let mn = 1e9; root.traverse(o => { if (o.isMesh && o.geometry && o.material && !o.material.map) { b.setFromObject(o); mn = Math.min(mn, b.min.y); } }); return mn; };
+      const lowest = (root) => { root.updateMatrixWorld(true); const b = new THREE.Box3(); let mn = 1e9; root.traverse(o => { if (o.isMesh && o.geometry && o.material && !o.material.map) { b.setFromObject(o, true); mn = Math.min(mn, b.min.y); } }); return mn; }; /* precise: real vertices, not rotated bounding boxes */
       for (const sp of Object.keys(SPECIES)) for (const st of ['idle', 'walk', 'run', 'graze', 'alert', 'rear', 'lunge', 'frozen', 'dead']) await t(`${SPECIES[sp].name} · ${st}`, () => {
         const C = buildCreature(sp); const flags = { idle: { speed: 0 }, walk: { speed: 2 }, run: { speed: SPECIES[sp].speed }, graze: { graze: true }, alert: { alert: true, speed: 5 }, rear: { rear: true }, lunge: { lunge: 0.5 }, frozen: { frozen: true }, dead: { dead: true } }[st];
         for (let i = 0; i < 80; i++) animateCreature(C, 1 / 60, flags); if (!finiteObj(C.root)) return 'non-finite';

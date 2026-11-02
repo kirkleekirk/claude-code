@@ -308,7 +308,7 @@ class Human {
     this.yaw = def.yaw ?? Math.random() * 6.28; this.vel = V3(); this.vy = 0; this.radius = 0.4; this.height = 1.8; this.alive = true; this.state = 'idle'; this.timer = Math.random() * 3; this.status = { burn: 0, slow: 0, frozen: 0, stun: 0 };
     this.H = buildHumanoid(def.look, { palette: def.palette, hat: def.hat, grip: kind === 'daofei' && def.role === 'melee' }); G.scene.add(this.H.root); this.attackCd = 1 + Math.random(); this.sp = { size: 1, prey: false };
     if (def.weapon !== false && kind === 'daofei') this.addWeapon(def.role);
-    if (def.hat) { const b = new GeoBuilder(); b.add(new THREE.ConeGeometry(0.3, 0.14, 12), def.hat, 0, 0.24, 0); b.add(new THREE.CylinderGeometry(0.3, 0.3, 0.01, 12), def.hat, 0, 0.17, 0); this.H.J.head.add(new THREE.Mesh(b.build(), this.H.mat)); }
+    if (def.hat) { const R = this.H.rest, brim = R ? R.headTop - R.headY - 0.052 : 0.17; const b = new GeoBuilder(); b.add(new THREE.ConeGeometry(0.3, 0.14, 12), def.hat, 0, brim + 0.07, 0); b.add(new THREE.CylinderGeometry(0.3, 0.3, 0.01, 12), def.hat, 0, brim, 0); this.H.J.head.add(new THREE.Mesh(b.build(), this.H.mat)); }
   }
   addWeapon(role) { const b = new GeoBuilder();
     if (this.def.role === 'melee' && this.name.includes('Spear')) { b.add(new THREE.CylinderGeometry(0.02, 0.02, 2.0, 5), '#6a4a2a', 0, 0, 0.3, Math.PI / 2, 0, 0); b.add(new THREE.ConeGeometry(0.05, 0.25, 5), '#c8c8c8', 0, 0, 1.4, Math.PI / 2, 0, 0); }

@@ -2,3 +2,4 @@ tests/.cache/
 shots/
 shots-mobile/
 node_modules/
+__pycache__/

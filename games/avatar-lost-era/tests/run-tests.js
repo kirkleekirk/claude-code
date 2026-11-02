@@ -1,7 +1,7 @@
 // Automated test runner: boots the real game in headless Chromium and runs tests/suite.js inside it.
-// usage: node tests/run-tests.js [group,group]   (groups: world creation rules techniques trials survival creatures people quests ui save animation render perf mobile)
+// usage: node tests/run-tests.js [group,group]   (groups: world creation rules techniques trials survival creatures people quests ui save animation rig render perf mobile)
 const { launch } = require('./harness.js'); const path = require('path'); const fs = require('fs');
-const GROUPS = ['world', 'creation', 'rules', 'techniques', 'trials', 'survival', 'creatures', 'people', 'quests', 'ui', 'save', 'animation', 'render', 'perf'];
+const GROUPS = ['world', 'creation', 'rules', 'techniques', 'trials', 'survival', 'creatures', 'people', 'quests', 'ui', 'save', 'animation', 'rig', 'render', 'perf'];
 (async () => {
   const only = (process.argv[2] || '').split(',').filter(Boolean); const t0 = Date.now(); const all = [];
   const g = await launch({ viewport: { width: 1280, height: 720 } }); const { page, errors } = g;

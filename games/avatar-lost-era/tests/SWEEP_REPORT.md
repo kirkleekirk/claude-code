@@ -1,6 +1,6 @@
 # Sweep report
 
-Ran 9982 checks in 295s — **9982 passed, 0 failed**.
+Ran 10046 checks in 254s — **10046 passed, 0 failed**.
 
 | Area | Passed | Failed |
 |---|---|---|
@@ -9,7 +9,7 @@ Ran 9982 checks in 295s — **9982 passed, 0 failed**.
 | Roads | 25 | 0 |
 | Roam | 1200 | 0 |
 | Interact | 1776 | 0 |
-| Anatomy | 1856 | 0 |
+| Anatomy | 1920 | 0 |
 | Creature anim | 250 | 0 |
 | Technique matrix | 168 | 0 |
 | Dialogue | 112 | 0 |

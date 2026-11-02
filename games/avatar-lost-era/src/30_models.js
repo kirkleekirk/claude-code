@@ -22,6 +22,12 @@ const POSES = {
   // [shL, elL, shR, elR, hipL, knL, hipR, knR, spine, head, hipsY]  — each rotation [x,y,z]
 };
 const A = (o) => o;
+/* keys that touch the body are reach targets (solved per body by resolvePose in 31_humanoid.js) */
+const BOW = A({ spine: [0.45, 0, 0], head: [0.25, 0, 0], ik: { R: ['sternum', [-0.012, -0.03, 0.2], [-0.9, -1, -0.2]], L: ['sternum', [0.022, -0.02, 0.215], [0.9, -1, -0.2]] } });
+const EAT_BITE = A({ head: [0.1, 0, 0], ik: { R: ['mouth', [-0.012, -0.012, 0.055], [-0.7, -1, -0.2]] } });
+const HEAL1 = A({ head: [0.35, 0, 0], spine: [0.12, 0, 0], ik: { L: ['navel', [0.09, 0.08, 0.32], [1, -1, -0.3]], R: ['navel', [-0.09, 0.08, 0.32], [-1, -1, -0.3]] } });
+const GATHER_HI = A({ spine: [0.1, 0.2, 0], ik: { R: ['sternum', [-0.16, 0.5, 0.26]] } });
+const GATHER_LO = A({ spine: [0.35, -0.1, 0], hipsY: -0.08, hipL: [-0.5, 0, 0.1], hipR: [-0.5, 0, -0.1], knL: [0.85, 0, 0], knR: [0.85, 0, 0], ik: { R: ['navel', [-0.12, -0.42, 0.34]] } });
 const ACTIONS = {
   punchR: { dur: 0.42, keys: [[0, A({ shR: [-0.7, 0, -0.4], elR: [-1.9, 0, 0], shL: [-1.1, 0, 0.3], elL: [-1.6, 0, 0], spine: [0, 0.45, 0] })], [0.3, A({ shR: [-1.62, 0, 0.05], elR: [-0.05, 0, 0], shL: [-0.5, 0, 0.35], elL: [-2.0, 0, 0], spine: [0.08, -0.4, 0], hipL: [-0.45, 0, 0], knL: [0.35, 0, 0], hipR: [0.2, 0, 0] })], [1, null]] },
   punchL: { dur: 0.42, keys: [[0, A({ shL: [-0.7, 0, 0.4], elL: [-1.9, 0, 0], shR: [-1.1, 0, -0.3], elR: [-1.6, 0, 0], spine: [0, -0.45, 0] })], [0.3, A({ shL: [-1.62, 0, -0.05], elL: [-0.05, 0, 0], shR: [-0.5, 0, -0.35], elR: [-2.0, 0, 0], spine: [0.08, 0.4, 0], hipR: [-0.45, 0, 0], knR: [0.35, 0, 0], hipL: [0.2, 0, 0] })], [1, null]] },
@@ -29,37 +35,39 @@ const ACTIONS = {
   breath: { dur: 1.3, keys: [[0, A({ spine: [-0.25, 0, 0], head: [-0.3, 0, 0], shL: [0.3, 0, 0.5], shR: [0.3, 0, -0.5], elL: [-1.4, 0, 0], elR: [-1.4, 0, 0] })], [0.25, A({ spine: [0.3, 0, 0], head: [0.15, 0, 0], shL: [0.55, 0, 0.35], shR: [0.55, 0, -0.35], elL: [-1.2, 0, 0], elR: [-1.2, 0, 0], hipL: [-0.4, 0, 0.15], knL: [0.4, 0, 0], hipR: [0.25, 0, -0.1], hipsY: -0.06 })], [0.85, A({ spine: [0.3, 0, 0], head: [0.15, 0, 0], shL: [0.55, 0, 0.35], shR: [0.55, 0, -0.35], elL: [-1.2, 0, 0], elR: [-1.2, 0, 0], hipL: [-0.4, 0, 0.15], knL: [0.4, 0, 0], hipR: [0.25, 0, -0.1], hipsY: -0.06 })], [1, null]] },
   earthLift: { dur: 0.75, keys: [[0, A({ hipsY: -0.12, hipL: [-0.4, 0, 0.35], hipR: [-0.4, 0, -0.35], knL: [0.8, 0, 0], knR: [0.8, 0, 0], shL: [-0.5, 0, 0.3], shR: [-0.5, 0, -0.3], elL: [-0.5, 0, 0], elR: [-0.5, 0, 0], spine: [0.2, 0, 0] })],
     [0.35, A({ hipsY: -0.06, hipL: [-0.3, 0, 0.3], hipR: [-0.3, 0, -0.3], knL: [0.5, 0, 0], knR: [0.5, 0, 0], shL: [-1.7, 0, 0.3], shR: [-1.7, 0, -0.3], elL: [-0.9, 0, 0], elR: [-0.9, 0, 0], spine: [-0.05, 0, 0] })],
-    [0.6, A({ hipsY: -0.08, hipL: [-0.55, 0, 0.3], knL: [0.5, 0, 0], hipR: [0.3, 0, -0.3], shR: [-1.65, 0, 0], elR: [0, 0, 0], shL: [-0.6, 0, 0.5], elL: [-1.5, 0, 0], spine: [0.15, -0.4, 0] })], [1, null]] },
+    [0.6, A({ hipsY: -0.08, hipL: [-0.55, 0, 0.3], knL: [0.5, 0, 0], hipR: [0.3, 0, -0.3], shR: [-1.65, 0, 0], elR: [0, 0, 0], shL: [-0.6, 0, 0.5], elL: [-1.5, 0, 0], spine: [0.15, -0.4, 0], ik: { L: ['sternum', [0.2, -0.15, -0.07], [0.4, -0.4, -1]] } })], [1, null]] },
   stomp: { dur: 0.8, keys: [[0, A({ hipR: [-1.3, 0, -0.2], knR: [1.5, 0, 0], shL: [-2.4, 0, 0.5], shR: [-2.4, 0, -0.5], elL: [-0.4, 0, 0], elR: [-0.4, 0, 0], spine: [-0.1, 0, 0] })],
     [0.35, A({ hipR: [-1.4, 0, -0.25], knR: [1.6, 0, 0], shL: [-2.7, 0, 0.6], shR: [-2.7, 0, -0.6], elL: [-0.3, 0, 0], elR: [-0.3, 0, 0], spine: [-0.15, 0, 0] })],
     [0.5, A({ hipsY: -0.16, hipR: [-0.2, 0, -0.45], knR: [0.5, 0, 0], hipL: [-0.2, 0, 0.45], knL: [0.6, 0, 0], shL: [-1.3, 0, 0.3], shR: [-1.3, 0, -0.3], elL: [-0.2, 0, 0], elR: [-0.2, 0, 0], spine: [0.25, 0, 0] })],
     [0.8, A({ hipsY: -0.16, hipR: [-0.2, 0, -0.45], knR: [0.5, 0, 0], hipL: [-0.2, 0, 0.45], knL: [0.6, 0, 0], shL: [-1.3, 0, 0.3], shR: [-1.3, 0, -0.3], elL: [-0.2, 0, 0], elR: [-0.2, 0, 0], spine: [0.25, 0, 0] })], [1, null]] },
   whip: { dur: 0.6, keys: [[0, A({ shR: [-0.4, 0, -1.3], elR: [-0.8, 0, 0], shL: [-0.9, 0, 0.6], elL: [-1.0, 0, 0], spine: [0, 0.5, 0], hipsY: -0.04 })],
     [0.35, A({ shR: [-1.8, 0, 0.5], elR: [-0.25, 0, 0], shL: [-0.5, 0, 0.9], elL: [-0.6, 0, 0], spine: [0.05, -0.4, 0], hipL: [-0.4, 0, 0.1], knL: [0.3, 0, 0] })], [1, null]] },
-  push: { dur: 0.6, keys: [[0, A({ shL: [-0.3, 0, 0.2], shR: [-0.3, 0, -0.2], elL: [-1.8, 0, 0], elR: [-1.8, 0, 0], hipsY: -0.08, knL: [0.4, 0, 0], knR: [0.4, 0, 0], spine: [-0.1, 0, 0] })],
+  push: { dur: 0.6, keys: [[0, A({ shL: [-0.3, 0, 0.2], shR: [-0.3, 0, -0.2], elL: [-1.8, 0, 0], elR: [-1.8, 0, 0], hipsY: -0.08, hipL: [-0.22, 0, 0.05], hipR: [-0.22, 0, -0.05], knL: [0.42, 0, 0], knR: [0.42, 0, 0], spine: [-0.1, 0, 0] })],
     [0.35, A({ shL: [-1.55, 0, -0.15], shR: [-1.55, 0, 0.15], elL: [-0.1, 0, 0], elR: [-0.1, 0, 0], hipsY: -0.1, hipL: [-0.5, 0, 0.1], knL: [0.5, 0, 0], hipR: [0.3, 0, -0.1], spine: [0.15, 0, 0] })], [1, null]] },
-  heal: { dur: 2.6, keys: [[0, A({ shL: [-1.1, 0, -0.35], shR: [-1.1, 0, 0.35], elL: [-1.5, 0, 0], elR: [-1.5, 0, 0], head: [0.35, 0, 0] })], [0.5, A({ shL: [-1.0, 0, -0.45], shR: [-1.0, 0, 0.45], elL: [-1.6, 0, 0], elR: [-1.6, 0, 0], head: [0.4, 0, 0], spine: [0.1, 0, 0] })], [0.9, A({ shL: [-1.1, 0, -0.35], shR: [-1.1, 0, 0.35], elL: [-1.5, 0, 0], elR: [-1.5, 0, 0], head: [0.35, 0, 0] })], [1, null]] },
+  heal: { dur: 2.6, keys: [[0, HEAL1], [0.5, A({ head: [0.4, 0, 0], spine: [0.18, 0, 0], ik: { L: ['navel', [0.12, 0.03, 0.36], [1, -1, -0.3]], R: ['navel', [-0.12, 0.03, 0.36], [-1, -1, -0.3]] } })], [0.9, HEAL1], [1, null]] },
   palm: { dur: 0.38, keys: [[0, A({ shR: [-0.7, 0, -0.3], elR: [-1.6, 0, 0], shL: [-1.0, 0, 0.4], elL: [-1.2, 0, 0], spine: [0, 0.35, 0] })], [0.3, A({ shR: [-1.55, 0, 0], elR: [0, 0, 0], shL: [-0.2, 0, 0.8], elL: [-0.4, 0, 0], spine: [0.05, -0.35, 0], hipL: [-0.4, 0, 0], knL: [0.25, 0, 0] })], [1, null]] },
-  sweep: { dur: 0.7, spin: Math.PI * 0.5, keys: [[0, A({ shL: [-1.4, 0, 1.2], shR: [-1.4, 0, -0.3], elL: [-0.2, 0, 0], elR: [-1.2, 0, 0], spine: [0, 0.9, 0], hipsY: -0.08, knL: [0.4, 0, 0], knR: [0.4, 0, 0] })],
+  sweep: { dur: 0.7, spin: Math.PI * 0.5, keys: [[0, A({ shL: [-1.4, 0, 1.2], shR: [-1.4, 0, -0.3], elL: [-0.2, 0, 0], elR: [-1.2, 0, 0], spine: [0, 0.9, 0], hipsY: -0.08, hipL: [-0.22, 0, 0.05], hipR: [-0.22, 0, -0.05], knL: [0.42, 0, 0], knR: [0.42, 0, 0] })],
     [0.5, A({ shL: [-1.5, 0, -0.5], shR: [-1.5, 0, -1.3], elL: [-0.4, 0, 0], elR: [-0.1, 0, 0], spine: [0.1, -0.8, 0], hipsY: -0.1, hipL: [-0.5, 0, 0.2], knL: [0.5, 0, 0] })], [1, null]] },
   leap: { dur: 0.6, keys: [[0, A({ shL: [0.4, 0, 0.7], shR: [0.4, 0, -0.7], elL: [-0.2, 0, 0], elR: [-0.2, 0, 0], hipsY: -0.1, knL: [0.7, 0, 0], knR: [0.7, 0, 0], hipL: [-0.5, 0, 0], hipR: [-0.5, 0, 0] })], [0.4, A({ shL: [-2.6, 0, 0.5], shR: [-2.6, 0, -0.5], hipL: [-0.9, 0, 0], knL: [1.4, 0, 0], hipR: [-0.2, 0, 0], knR: [0.6, 0, 0] })], [1, null]] },
   dash: { dur: 0.35, keys: [[0, A({ spine: [0.5, 0, 0], shL: [0.9, 0, 0.3], shR: [0.9, 0, -0.3], hipL: [-0.8, 0, 0], knL: [1.0, 0, 0], hipR: [0.5, 0, 0], knR: [0.4, 0, 0] })], [0.7, A({ spine: [0.5, 0, 0], shL: [0.9, 0, 0.3], shR: [0.9, 0, -0.3], hipL: [-0.8, 0, 0], knL: [1.0, 0, 0], hipR: [0.5, 0, 0], knR: [0.4, 0, 0] })], [1, null]] },
   swirl: { dur: 0.9, spin: Math.PI * 2, keys: [[0, A({ shL: [-0.5, 0, 1.4], shR: [-0.5, 0, -1.4], elL: [-0.6, 0, 0], elR: [-0.6, 0, 0] })], [0.5, A({ shL: [-2.2, 0, 1.0], shR: [-2.2, 0, -1.0], elL: [-0.4, 0, 0], elR: [-0.4, 0, 0], spine: [-0.1, 0, 0] })], [1, null]] },
-  gather: { dur: 0.9, keys: [[0, A({ shR: [-2.4, 0, -0.2], elR: [-0.6, 0, 0], spine: [0.1, 0.2, 0] })], [0.4, A({ shR: [-0.9, 0, -0.1], elR: [-0.2, 0, 0], spine: [0.35, -0.1, 0], hipsY: -0.08, knL: [0.5, 0, 0], knR: [0.5, 0, 0] })], [0.6, A({ shR: [-2.2, 0, -0.2], elR: [-0.6, 0, 0], spine: [0.1, 0.2, 0] })], [0.85, A({ shR: [-0.9, 0, -0.1], spine: [0.35, -0.1, 0], hipsY: -0.08, knL: [0.5, 0, 0], knR: [0.5, 0, 0] })], [1, null]] },
-  eat: { dur: 1.1, keys: [[0, A({ shR: [-1.0, 0, 0.3], elR: [-1.8, 0, 0] })], [0.3, A({ shR: [-1.25, 0, 0.55], elR: [-2.4, 0, 0], head: [0.1, 0, 0] })], [0.5, A({ shR: [-1.1, 0, 0.4], elR: [-2.1, 0, 0] })], [0.7, A({ shR: [-1.25, 0, 0.55], elR: [-2.4, 0, 0], head: [0.1, 0, 0] })], [1, null]] },
+  gather: { dur: 0.9, keys: [[0, GATHER_HI], [0.4, GATHER_LO], [0.6, GATHER_HI], [0.85, GATHER_LO], [1, null]] },
+  eat: { dur: 1.1, keys: [[0, A({ ik: { R: ['mouth', [-0.03, -0.13, 0.17]] } })], [0.3, EAT_BITE], [0.5, A({ ik: { R: ['mouth', [-0.03, -0.08, 0.12]] } })], [0.7, EAT_BITE], [1, null]] },
   hit: { dur: 0.35, keys: [[0, A({ spine: [-0.35, 0, 0.1], head: [-0.3, 0, 0], shL: [-0.4, 0, 0.6], shR: [-0.4, 0, -0.6] })], [1, null]] },
   swing: { dur: 0.7, keys: [[0, A({ shR: [-2.6, 0, -0.3], elR: [-0.8, 0, 0], spine: [-0.1, 0.4, 0] })], [0.45, A({ shR: [-0.9, 0, 0.5], elR: [-0.1, 0, 0], spine: [0.25, -0.5, 0], hipL: [-0.5, 0, 0], knL: [0.4, 0, 0] })], [1, null]] },
-  bow: { dur: 1.6, keys: [[0, A({ spine: [0.5, 0, 0], head: [0.3, 0, 0], shL: [-1.2, 0, -0.5], shR: [-1.2, 0, 0.5], elL: [-1.6, 0, 0], elR: [-1.6, 0, 0] })], [0.7, A({ spine: [0.5, 0, 0], head: [0.3, 0, 0], shL: [-1.2, 0, -0.5], shR: [-1.2, 0, 0.5], elL: [-1.6, 0, 0], elR: [-1.6, 0, 0] })], [1, null]] },
+  bow: { dur: 1.6, keys: [[0, BOW], [0.7, BOW], [1, null]] },
   ceremony: { dur: 3.6, keys: [[0, A({ shL: [-1.2, 0, -0.4], shR: [-1.2, 0, 0.4], elL: [-1.6, 0, 0], elR: [-1.6, 0, 0], head: [0.4, 0, 0] })], [0.4, A({ shL: [-3.0, 0, 0.5], shR: [-3.0, 0, -0.5], elL: [-0.2, 0, 0], elR: [-0.2, 0, 0], head: [-0.4, 0, 0], spine: [-0.15, 0, 0] })], [0.8, A({ shL: [-3.0, 0, 0.5], shR: [-3.0, 0, -0.5], elL: [-0.2, 0, 0], elR: [-0.2, 0, 0], head: [-0.4, 0, 0], spine: [-0.15, 0, 0] })], [1, null]] },
 };
 const STANCE = {
   fire:  { shL: [-1.0, 0, 0.25], elL: [-1.6, 0, 0], shR: [-0.5, 0, -0.3], elR: [-1.9, 0, 0], hipL: [-0.3, 0, 0.12], knL: [0.3, 0, 0], hipR: [0.2, 0, -0.12], knR: [0.2, 0, 0], hipsY: -0.05, spine: [0.05, 0.2, 0] },
-  earth: { shL: [-0.9, 0, 0.35], elL: [-1.2, 0, 0], shR: [-0.9, 0, -0.35], elR: [-1.2, 0, 0], hipL: [-0.15, 0, 0.4], knL: [0.55, 0, 0], hipR: [-0.15, 0, -0.4], knR: [0.55, 0, 0], hipsY: -0.11, spine: [0.08, 0, 0] },
+  earth: { shL: [-0.9, 0, 0.35], elL: [-1.2, 0, 0], shR: [-0.9, 0, -0.35], elR: [-1.2, 0, 0], hipL: [-0.3, 0, 0.4], knL: [0.55, 0, 0], hipR: [-0.3, 0, -0.4], knR: [0.55, 0, 0], hipsY: -0.11, spine: [0.08, 0, 0] },
   water: { shL: [-0.8, 0, 0.5], elL: [-0.7, 0, 0], shR: [-0.6, 0, -0.5], elR: [-0.9, 0, 0], hipL: [-0.25, 0, 0.15], knL: [0.35, 0, 0], hipR: [0.1, 0, -0.15], knR: [0.3, 0, 0], hipsY: -0.06, spine: [0, 0.15, 0] },
   air:   { shL: [-0.7, 0, 0.3], elL: [-1.3, 0, 0], shR: [-0.4, 0, -0.4], elR: [-1.0, 0, 0], hipL: [-0.15, 0, 0.05], knL: [0.2, 0, 0], hipR: [0.05, 0, -0.05], knR: [0.15, 0, 0], hipsY: -0.02, spine: [0, -0.15, 0] },
   none:  { shL: [-0.9, 0, 0.3], elL: [-1.5, 0, 0], shR: [-0.9, 0, -0.3], elR: [-1.5, 0, 0], hipL: [-0.25, 0, 0.15], knL: [0.35, 0, 0], hipR: [0.1, 0, -0.15], knR: [0.3, 0, 0], hipsY: -0.06, spine: [0.1, 0, 0] },
 };
-const MEDITATE = { hipsY: -0.6, hipL: [-1.45, 0.25, 0.85], hipR: [-1.45, -0.25, -0.85], knL: [2.55, 0, 0], knR: [2.55, 0, 0], shL: [-0.35, 0, 0.18], shR: [-0.35, 0, -0.18], elL: [-1.15, 0.0, 0], elR: [-1.15, 0, 0], spine: [-0.02, 0, 0], head: [0.08, 0, 0] };
+/* cross-legged: each ankle tucked toward the opposite knee, knees out, hands resting on the thighs (IK targets; the angles are fallbacks) */
+const MEDITATE = { hipsY: -0.6, hipL: [-1.45, 0.25, 0.85], hipR: [-1.45, -0.25, -0.85], knL: [2.55, 0, 0], knR: [2.55, 0, 0], shL: [-0.35, 0, 0.18], shR: [-0.35, 0, -0.18], elL: [-1.15, 0.0, 0], elR: [-1.15, 0, 0], spine: [-0.02, 0, 0], head: [0.08, 0, 0],
+  ik: { legL: ['hipJ', [-0.15, -0.065, 0.33], [1, 0.35, 0.5]], legR: ['hipJ', [0.14, -0.085, 0.19], [-1, 0.35, 0.5]], L: ['thigh', [0, 0.07, 0.02], [1, -0.6, -0.5]], R: ['thigh', [0, 0.07, 0.02], [-1, -0.6, -0.5]] } };
 const SWIM = { spine: [1.25, 0, 0], head: [-1.0, 0, 0], hipsY: 0 };
 const JOINTS = ['shL', 'elL', 'shR', 'elR', 'hipL', 'knL', 'hipR', 'knR', 'spine', 'head'];
 function samplePose(act, u) {
@@ -231,7 +239,7 @@ function animateCreature(C, dt, st) {
     if (C.head) C.head.rotation.x = st.graze ? 0.8 : Math.sin(ph * 2) * 0.05;
   } else {
     const bob = Math.abs(Math.sin(ph)) * 0.05 * amp * (C.species === 'skybison' ? 3 : 1); C.body.position.y = bob;
-    for (const l of C.legs) { l.g.rotation.x = Math.sin(ph + l.off) * 0.65 * amp * (l.claw ? 0.5 : 1); if (l.g.userData.splay) l.g.rotation.z = l.g.userData.splay + Math.cos(ph + l.off) * 0.2 * amp; }
+    for (const l of C.legs) { l.g.rotation.x = l.claw ? -Math.abs(Math.sin(ph + l.off)) * 0.45 * amp /* digging claws stroke up and forward, never into the ground */ : Math.sin(ph + l.off) * 0.65 * amp; if (l.g.userData.splay) l.g.rotation.z = l.g.userData.splay + Math.cos(ph + l.off) * 0.2 * amp; }
     if (C.tail) { C.tail.rotation.y = Math.sin(ph * 0.8) * 0.35; C.tail.rotation.x = st.alert ? -0.3 : 0; }
     if (C.head) { const graze = st.graze ? 1 : 0; C.headGraze = U.damp(C.headGraze || 0, graze, 4, dt); C.head.rotation.x = C.headGraze * 0.75 + Math.sin(ph * 2) * 0.04 * amp; C.head.rotation.y = st.look || 0; }
     if (C.species === 'turtleduck') C.body.rotation.z = Math.sin(ph * 2) * 0.12 * amp;

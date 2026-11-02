@@ -1,7 +1,7 @@
 # Automated test report
 
-Ran 749 tests in 159s — **749 passed, 0 failed**.
-Average simulation tick in a busy scene: 0.67 ms.
+Ran 770 tests in 114s — **770 passed, 0 failed**.
+Average simulation tick in a busy scene: 1.08 ms.
 
 | Area | Passed | Failed |
 |---|---|---|
@@ -17,6 +17,7 @@ Average simulation tick in a busy scene: 0.67 ms.
 | UI | 64 | 0 |
 | Save | 3 | 0 |
 | Animation | 52 | 0 |
+| Rig & fit | 21 | 0 |
 | Render | 12 | 0 |
 | Performance | 3 | 0 |
 | Console | 2 | 0 |
@@ -734,6 +735,27 @@ Average simulation tick in a busy scene: 0.67 ms.
 - ✅ [Animation] combat stance: air
 - ✅ [Animation] walk cycle swings the legs
 - ✅ [Animation] hit flash fades
+- ✅ [Rig & fit] both base meshes decode with the 30-bone skeleton
+- ✅ [Rig & fit] frame A: every vertex is fully weighted to real bones
+- ✅ [Rig & fit] frame A: standing soles rest on the ground
+- ✅ [Rig & fit] frame A: walking at 1.4 m/s keeps the planted foot from sliding
+- ✅ [Rig & fit] frame A: walking at 2.6 m/s keeps the planted foot from sliding
+- ✅ [Rig & fit] frame A: toes bend and heels lift at push-off
+- ✅ [Rig & fit] frame A: clavicles shrug with the arms overhead
+- ✅ [Rig & fit] frame A: meditation sits on the ground, hands on the thighs
+- ✅ [Rig & fit] frame A: the bow brings fist and palm together before the chest
+- ✅ [Rig & fit] frame A: eating brings the hand to the mouth
+- ✅ [Rig & fit] frame A: every IK pose resolves to finite joint angles
+- ✅ [Rig & fit] frame B: every vertex is fully weighted to real bones
+- ✅ [Rig & fit] frame B: standing soles rest on the ground
+- ✅ [Rig & fit] frame B: walking at 1.4 m/s keeps the planted foot from sliding
+- ✅ [Rig & fit] frame B: walking at 2.6 m/s keeps the planted foot from sliding
+- ✅ [Rig & fit] frame B: toes bend and heels lift at push-off
+- ✅ [Rig & fit] frame B: clavicles shrug with the arms overhead
+- ✅ [Rig & fit] frame B: meditation sits on the ground, hands on the thighs
+- ✅ [Rig & fit] frame B: the bow brings fist and palm together before the chest
+- ✅ [Rig & fit] frame B: eating brings the hand to the mouth
+- ✅ [Rig & fit] frame B: every IK pose resolves to finite joint angles
 - ✅ [Render] frame renders with real content: village at noon
 - ✅ [Render] frame renders with real content: village at sunset
 - ✅ [Render] frame renders with real content: village at night

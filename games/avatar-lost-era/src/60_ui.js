@@ -619,7 +619,7 @@ const Main = {
     const P = G.player; const cam = G.camObj;
     if (G.vr) { const rig = G.rigObj; rig.position.set(P.pos.x, P.pos.y + (P.swimming ? 0.6 : 0), P.pos.z); rig.rotation.set(0, G.vrYaw, 0); return; }
     const fp = G.settings.firstPerson; const shake = G.camShake > 0 ? (G.camShake -= dt, G.camShake) : 0;
-    const eye = V3(P.pos.x, P.pos.y + (P.meditating ? 1.0 : P.swimming ? 0.9 : 1.62) * (P.look.height || 1), P.pos.z);
+    const eyeH = P.H.rest ? P.H.rest.eyeY : 1.62; const eye = V3(P.pos.x, P.pos.y + (P.meditating ? eyeH * 0.58 : P.swimming ? 0.9 : eyeH) * (P.look.height || 1), P.pos.z);
     cam.rotation.order = 'YXZ';
     if (fp) { cam.position.copy(eye).add(V3(Math.sin(P.yaw) * 0.12, 0, Math.cos(P.yaw) * 0.12)); cam.rotation.set(G.camPitch, G.camYaw, 0); }
     else {
@@ -676,7 +676,7 @@ const Boot = {
     const statue = buildHumanoid({ nation: 'earth', body: 'A', height: 1.5, build: 1.1, skin: '#9a9286', hair: 'bun', hairColor: '#8a8276', eyes: '#8a8276', outfit: 0, beard: true }, { stone: true, mat: new THREE.MeshLambertMaterial({ vertexColors: true }) });
     statue.root.position.copy(World.statueAt); statue.root.rotation.y = Math.PI * 0.85; G.scene.add(statue.root);
     for (const [j, r] of [['shR', [-1.5, 0, 0.1]], ['elR', [-0.1, 0, 0]], ['shL', [-0.5, 0, 0.3]], ['elL', [-1.7, 0, 0]], ['hipL', [-0.25, 0, 0.3]], ['hipR', [-0.25, 0, -0.3]], ['knL', [0.4, 0, 0]], ['knR', [0.4, 0, 0]]]) statue.J[j].rotation.set(...r);
-    statue.J.hips.position.y = 0.84; statue.shadow.visible = false;
+    settleHumanoid(statue); statue.shadow.visible = false;
     G.campfires.push(new Campfire(-19, -7, true, { permanent: true })); G.campfires.push(new Campfire(LOC.daofei.x, LOC.daofei.z, true, { permanent: true }));
     for (const v of VILLAGERS) { const z = v.id === 'dorje' ? World.pagodaTop.z + 4.6 : v.z, x = v.x; const h = new Human(v, x, z, 'villager'); if (v.id === 'dorje') { h.pos.y = groundH(x, z, 1e9); } G.ents.push(h); }
     G.buildMs = performance.now() - t0;
