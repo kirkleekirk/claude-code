@@ -38,6 +38,12 @@ npm run dev        # http://localhost:5173
 You'll need a browser with WebGL 2 (any recent Chrome, Edge, Firefox or Safari). Phones and
 tablets get touch controls automatically (see [Mobile](#mobile)).
 
+To get a single file you can double-click to play (no server, works offline):
+
+```bash
+npm run package:single        # writes release/greenfall.html (~1.1 MB)
+```
+
 Useful URL flags while testing: `?q=low|medium|high|ultra` forces a graphics preset and
 `?autoplay=quick` jumps straight into a match.
 
