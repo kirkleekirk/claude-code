@@ -1,0 +1,725 @@
+// Stylized character rig built from primitives, with procedural animation and
+// cosmetic customization (outfit, back bling, weapon wraps).
+import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { canvasTexture, plaidTexture } from '../world/textures.js';
+import { clamp, lerp } from '../core/math.js';
+
+const matCache = new Map();
+export function M(color, opts = {}) {
+  const key = color + '|' + (opts.rough ?? 0.75) + '|' + (opts.metal ?? 0) + '|' + (opts.emissive ?? 0) + '|' + (opts.map ? opts.map.uuid : '');
+  if (matCache.has(key)) return matCache.get(key);
+  const m = new THREE.MeshStandardMaterial({ color, roughness: opts.rough ?? 0.75, metalness: opts.metal ?? 0, map: opts.map || null });
+  if (opts.emissive) { m.emissive = new THREE.Color(color); m.emissiveIntensity = opts.emissive; }
+  matCache.set(key, m);
+  return m;
+}
+const G = {
+  rbox: (w, h, d, r = 0.05) => new RoundedBoxGeometry(w, h, d, 2, Math.min(r, w / 2.01, h / 2.01, d / 2.01)),
+  cap: (r, len) => new THREE.CapsuleGeometry(r, len, 4, 10),
+  sph: (r, ws = 16, hs = 12, ...rest) => new THREE.SphereGeometry(r, ws, hs, ...rest),
+  cyl: (rt, rb, h, s = 12) => new THREE.CylinderGeometry(rt, rb, h, s),
+  box: (w, h, d) => new THREE.BoxGeometry(w, h, d),
+};
+const geoCache = new Map();
+export function torsoGeo(b = 1) {
+  // stylized hero torso: narrow waist, broad chest and shoulders
+  const pts = [[0.16, 0], [0.18, 0.06], [0.205, 0.18], [0.245, 0.32], [0.262, 0.41], [0.235, 0.49], [0.14, 0.55], [0.0, 0.565]].map(([r, y]) => new THREE.Vector2(r * b, y));
+  const g = new THREE.LatheGeometry(pts, 20);
+  g.scale(1, 1, 0.64);
+  return g;
+}
+export function pelvisGeo() {
+  const pts = [[0.0, -0.13], [0.13, -0.12], [0.185, -0.06], [0.195, 0.04], [0.172, 0.12], [0.0, 0.13]].map(([r, y]) => new THREE.Vector2(r, y));
+  const g = new THREE.LatheGeometry(pts, 16);
+  g.scale(1, 1, 0.72);
+  return g;
+}
+function cg(key, fn) { if (!geoCache.has(key)) geoCache.set(key, fn()); return geoCache.get(key); }
+// double-sided cloth/shell material (hoods and helmets are open shells)
+const dblCache = new Map();
+function dbl(color) { if (!dblCache.has(color)) dblCache.set(color, new THREE.MeshStandardMaterial({ color, roughness: 0.8, side: THREE.DoubleSide })); return dblCache.get(color); }
+
+const faceCache = new Map();
+export function faceTexture(style = 'default', eye = '#2a1a10') {
+  const key = style + eye;
+  if (faceCache.has(key)) return faceCache.get(key);
+  const t = canvasTexture(512, 256, (c, w, h) => {
+    c.fillStyle = 'rgba(0,0,0,0)'; c.clearRect(0, 0, w, h);
+    const cx = w * 0.25, cy = h * 0.53;
+    if (style === 'sack') {
+      c.fillStyle = '#c8a870'; c.fillRect(0, 0, w, h);
+      c.strokeStyle = '#3a2a1a'; c.lineWidth = 5;
+      c.beginPath(); c.moveTo(cx - 50, cy - 18); c.lineTo(cx - 22, cy - 18); c.moveTo(cx + 22, cy - 18); c.lineTo(cx + 50, cy - 18); c.stroke();
+      c.beginPath(); for (let i = -45; i <= 45; i += 10) { c.moveTo(cx + i, cy + 30); c.lineTo(cx + i + 5, cy + 40); } c.stroke();
+      c.beginPath(); c.moveTo(cx - 48, cy + 34); c.lineTo(cx + 48, cy + 34); c.stroke();
+      return;
+    }
+    if (style === 'pumpkin') {
+      c.fillStyle = '#e07a1a'; c.fillRect(0, 0, w, h);
+      c.fillStyle = '#ffd040';
+      c.beginPath(); c.moveTo(cx - 45, cy - 5); c.lineTo(cx - 25, cy - 35); c.lineTo(cx - 10, cy - 5); c.fill();
+      c.beginPath(); c.moveTo(cx + 45, cy - 5); c.lineTo(cx + 25, cy - 35); c.lineTo(cx + 10, cy - 5); c.fill();
+      c.beginPath(); c.moveTo(cx - 50, cy + 15); c.lineTo(cx + 50, cy + 15); c.lineTo(cx + 30, cy + 45); c.lineTo(cx - 30, cy + 45); c.fill();
+      return;
+    }
+    // eyes
+    for (const s of [-1, 1]) {
+      c.fillStyle = '#ffffff';
+      c.beginPath(); c.ellipse(cx + s * 26, cy - 8, 13, 16, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = eye;
+      c.beginPath(); c.ellipse(cx + s * 26 + s * 1, cy - 6, 8, 10, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#ffffff';
+      c.beginPath(); c.arc(cx + s * 26 + 3, cy - 10, 3, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = '#2a1a10'; c.lineWidth = 6; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(cx + s * 14, cy - 32 + (style === 'angry' ? s * -4 : 0)); c.lineTo(cx + s * 40, cy - 34 - (style === 'angry' ? s * -6 : 0)); c.stroke();
+    }
+    c.strokeStyle = '#6a2a20'; c.lineWidth = 4; c.lineCap = 'round';
+    c.beginPath();
+    if (style === 'grin') c.arc(cx, cy + 18, 18, 0.15 * Math.PI, 0.85 * Math.PI);
+    else if (style === 'angry') { c.moveTo(cx - 12, cy + 30); c.lineTo(cx + 12, cy + 28); }
+    else c.arc(cx, cy + 14, 13, 0.2 * Math.PI, 0.8 * Math.PI);
+    c.stroke();
+    if (style === 'beard') { c.fillStyle = 'rgba(70,40,20,0.85)'; c.beginPath(); c.ellipse(cx, cy + 40, 46, 30, 0, 0, Math.PI); c.fill(); }
+  });
+  faceCache.set(key, t);
+  return t;
+}
+
+// ---------------------------------------------------------------------------
+// Weapon / tool models (shared between player, bots, loot pickups)
+// ---------------------------------------------------------------------------
+export const RARITY_COLORS = [0xb0b4b8, 0x5fcf3a, 0x3a9ae8, 0xb54ae8, 0xf0a020, 0xf2d24a];
+// Gun models point down +z with the hand at the origin. Each gun reports anchor points so
+// workbench mods (barrels, muzzles, sights, stocks, grips, magazines) attach in the right place.
+export function buildWeaponModel(kind, rarity = 0, wrap = null, mods = null) {
+  const g = new THREE.Group();
+  mods = mods || {};
+  const body = M(wrap ? wrap.base : 0x2c2f34, { rough: 0.5, metal: 0.45 });
+  const black = M(wrap ? wrap.base : 0x18191c, { rough: 0.6, metal: 0.3 });
+  const steel = M(0x8c939b, { rough: 0.32, metal: 0.8 });
+  const accent = M(wrap ? wrap.accent : RARITY_COLORS[rarity] ?? 0xb0b4b8, { rough: 0.45, metal: 0.2, emissive: wrap?.glow ? 0.4 : 0 });
+  const wood = M(0x7a4a2a, { rough: 0.75 });
+  const walnut = M(0x5a3220, { rough: 0.6 });
+  const rubber = M(0x101012, { rough: 0.95 });
+  const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); m.castShadow = true; g.add(m); return m; };
+  const tube = (r, len, mat, x, y, z0) => add(G.cyl(r, r, len, 10), mat, x, y, z0 + len / 2, Math.PI / 2); // along +z from z0
+  // barrel length change from mods
+  const bm = mods.barrel;
+  const dBar = bm === 'long' ? 0.1 : bm === 'ext' ? 0.2 : bm === 'short' ? -0.1 : bm === 'sawed' ? -0.26 : 0;
+  const folding = mods.stock === 'folding';
+  let A = null; // anchors: muzzle {y,z,r}, top {y,z0,z1}, under {y,z}, stockEnd {y,z}, mag {y,z,w,h,d,rx,curved}
+  switch (kind) {
+    case 'pistol': {
+      const bl = 0.05 + Math.max(0, dBar * 0.6);
+      add(G.box(0.044, 0.07, 0.2), black, 0, 0.035, 0.065);                // slide
+      add(G.box(0.04, 0.035, 0.17), body, 0, -0.005, 0.06);                // frame
+      add(G.box(0.012, 0.012, 0.15), accent, 0.022, 0.03, 0.06);           // rarity stripe
+      tube(0.011, bl, steel, 0, 0.035, 0.165);
+      add(G.box(0.04, 0.13, 0.055), mods.grip === 'rubber' ? rubber : body, 0, -0.07, -0.01, 0.25);
+      add(G.box(0.008, 0.035, 0.05), body, 0, -0.03, 0.05);                 // trigger guard
+      A = { muzzle: { y: 0.035, z: 0.165 + bl, r: 0.011 }, top: { y: 0.072, z: 0.05 }, magBottom: { y: -0.14, z: -0.03 } };
+      break;
+    }
+    case 'snub': {
+      add(G.box(0.048, 0.07, 0.13), steel, 0, 0.03, 0.05);
+      add(G.cyl(0.042, 0.042, 0.07, 6), steel, 0, 0.022, 0.035, Math.PI / 2);
+      tube(0.016, 0.055, steel, 0, 0.045, 0.115);
+      add(G.box(0.03, 0.02, 0.04), steel, 0, 0.07, -0.015, 0.4);           // hammer
+      add(G.box(0.045, 0.11, 0.05), mods.grip === 'rubber' ? rubber : wood, 0, -0.055, -0.035, 0.38);
+      add(G.box(0.048, 0.03, 0.02), accent, 0, -0.03, -0.02, 0.38);        // grip medallion
+      A = { muzzle: { y: 0.045, z: 0.17, r: 0.016 }, top: { y: 0.07, z: 0.08 } };
+      break;
+    }
+    case 'longrev': {
+      const bl = 0.3 + Math.max(0, dBar * 0.6);
+      add(G.box(0.05, 0.075, 0.15), body, 0, 0.03, 0.05);
+      add(G.cyl(0.045, 0.045, 0.075, 6), steel, 0, 0.022, 0.04, Math.PI / 2);
+      tube(0.019, bl, body, 0, 0.048, 0.12);
+      add(G.box(0.03, 0.025, bl * 0.8), body, 0, 0.022, 0.12 + bl * 0.42); // ejector lug
+      add(G.box(0.006, 0.02, 0.015), accent, 0, 0.075, 0.11 + bl);        // front sight
+      add(G.box(0.03, 0.02, 0.04), body, 0, 0.075, -0.02, 0.4);
+      add(G.box(0.046, 0.12, 0.055), mods.grip === 'rubber' ? rubber : walnut, 0, -0.06, -0.04, 0.35);
+      add(G.box(0.05, 0.02, 0.12), accent, 0, 0.0, 0.07);                  // rarity band
+      A = { muzzle: { y: 0.048, z: 0.12 + bl, r: 0.019 }, top: { y: 0.082, z: 0.06 } };
+      break;
+    }
+    case 'mp5': {
+      const bl = 0.07 + dBar * 0.7;
+      add(G.box(0.062, 0.085, 0.34), black, 0, 0.0, 0.08);
+      add(G.box(0.075, 0.07, 0.14), black, 0, -0.01, 0.31);                // handguard
+      tube(0.014, Math.max(0.03, bl), steel, 0, 0.0, 0.38);
+      add(G.cyl(0.022, 0.022, 0.02, 10), black, 0, 0.065, -0.05, 0, 0, Math.PI / 2); // drum rear sight
+      add(G.box(0.012, 0.03, 0.012), black, 0, 0.055, 0.34);               // front sight hood
+      add(G.box(0.05, 0.11, 0.055), black, 0, -0.08, -0.03, 0.25);         // grip
+      A = { muzzle: { y: 0.0, z: 0.38 + Math.max(0.03, bl), r: 0.014 }, top: { y: 0.05, z: 0.12 }, under: { y: -0.05, z: 0.3 }, stock: { y: 0.0, z: -0.09 }, mag: { y: -0.06, z: 0.15, curve: 0.25, len: 0.2, w: 0.04, d: 0.06 } };
+      break;
+    }
+    case 'shotgun': {
+      const bl = 0.55 + dBar;
+      add(G.box(0.068, 0.09, 0.28), black, 0, 0.0, 0.05);
+      add(G.box(0.07, 0.03, 0.2), accent, 0, 0.02, 0.05);                  // receiver band
+      tube(0.022, bl, body, 0, 0.022, 0.19);
+      const tubeLen = mods.mag === 'tube' ? bl - 0.02 : Math.min(bl - 0.04, 0.38);
+      tube(0.019, Math.max(0.12, tubeLen), body, 0, -0.025, 0.19);
+      if (mods.mag === 'tube') add(G.box(0.05, 0.075, 0.025), steel, 0, 0.0, 0.17 + tubeLen);
+      add(G.box(0.08, 0.07, 0.17), wood, 0, -0.03, 0.19 + Math.min(0.32, bl * 0.55));   // pump
+      add(G.box(0.05, 0.1, 0.06), wood, 0, -0.07, -0.07, 0.35);           // grip
+      A = { muzzle: { y: 0.022, z: 0.19 + bl, r: 0.022 }, top: { y: 0.055, z: 0.06 }, under: { y: -0.07, z: 0.19 + Math.min(0.32, bl * 0.55) }, stock: { y: -0.02, z: -0.09, wood: true }, saddle: { y: 0.0, z: 0.06 } };
+      break;
+    }
+    case 'm4': {
+      const bl = 0.18 + dBar;
+      add(G.box(0.058, 0.075, 0.3), black, 0, 0.0, 0.07);                   // upper
+      add(G.box(0.05, 0.05, 0.18), black, 0, -0.055, 0.06);                 // lower
+      add(G.box(0.07, 0.075, 0.26), body, 0, 0.0, 0.35);                    // handguard
+      add(G.box(0.072, 0.012, 0.26), accent, 0, -0.02, 0.35);               // rarity rail
+      tube(0.013, Math.max(0.05, bl), black, 0, 0.005, 0.48);
+      add(G.box(0.012, 0.06, 0.02), black, 0, 0.05, 0.47);                  // front sight post
+      if (mods.sight !== 'reddot' && mods.sight !== 'scope4') add(G.box(0.03, 0.04, 0.12), black, 0, 0.055, 0.02); // carry handle
+      add(G.box(0.045, 0.11, 0.05), black, 0, -0.09, -0.04, 0.3);           // grip
+      tube(0.018, 0.1, black, 0, 0.0, -0.18);                               // buffer tube
+      A = { muzzle: { y: 0.005, z: 0.48 + Math.max(0.05, bl), r: 0.013 }, top: { y: 0.04, z: 0.1 }, under: { y: -0.045, z: 0.36 }, stock: { y: -0.01, z: -0.15, collapsible: true }, mag: { y: -0.07, z: 0.12, curve: 0.12, len: 0.17, w: 0.035, d: 0.065 } };
+      break;
+    }
+    case 'ak': {
+      const bl = 0.2 + dBar;
+      add(G.box(0.06, 0.08, 0.32), steel, 0, 0.0, 0.05);                    // receiver
+      add(G.box(0.075, 0.07, 0.19), wood, 0, -0.005, 0.32);                 // lower handguard
+      add(G.box(0.05, 0.035, 0.18), wood, 0, 0.05, 0.31);                   // gas tube cover
+      tube(0.014, Math.max(0.05, bl), body, 0, 0.0, 0.415);
+      add(G.box(0.014, 0.05, 0.02), body, 0, 0.04, 0.4 + Math.max(0.05, bl) - 0.03); // front sight
+      add(G.box(0.045, 0.1, 0.05), wood, 0, -0.085, -0.06, 0.3);            // grip
+      A = { muzzle: { y: 0.0, z: 0.415 + Math.max(0.05, bl), r: 0.014 }, top: { y: 0.045, z: 0.08 }, under: { y: -0.045, z: 0.32 }, stock: { y: -0.02, z: -0.11, wood: true, drop: 0.04 }, mag: { y: -0.06, z: 0.14, curve: 0.45, len: 0.22, w: 0.04, d: 0.07, mat: accent } };
+      break;
+    }
+    case 'scout': {
+      const bl = 0.36 + dBar;
+      add(G.box(0.058, 0.08, 0.5), black, 0, -0.015, 0.06);                 // synthetic stock/body
+      add(G.box(0.06, 0.012, 0.3), accent, 0, -0.045, 0.12);               // rarity stripe
+      tube(0.017, bl, black, 0, 0.012, 0.31);
+      add(G.cyl(0.026, 0.026, 0.2, 10), black, 0, 0.09, 0.1, Math.PI / 2);   // compact scope
+      add(G.cyl(0.033, 0.026, 0.05, 10), black, 0, 0.09, 0.22, Math.PI / 2);
+      for (const z of [0.05, 0.16]) add(G.box(0.02, 0.05, 0.02), black, 0, 0.05, z);
+      add(G.box(0.05, 0.012, 0.012), steel, 0.04, 0.02, -0.03);              // bolt handle
+      add(G.sph(0.014, 8, 6), steel, 0.065, 0.02, -0.03);
+      A = { muzzle: { y: 0.012, z: 0.31 + bl, r: 0.017 }, stock: { y: -0.02, z: -0.19 }, mag: { y: -0.06, z: 0.1, curve: 0, len: 0.06, w: 0.04, d: 0.07 } };
+      break;
+    }
+    case 'longrifle': {
+      const bl = 0.62 + dBar;
+      add(G.box(0.062, 0.075, 0.55), walnut, 0, -0.02, 0.15);               // fore-end + action bed
+      add(G.box(0.05, 0.05, 0.28), steel, 0, 0.03, 0.04);                    // action
+      tube(0.019, bl, body, 0, 0.03, 0.42);
+      add(G.cyl(0.032, 0.032, 0.36, 12), body, 0, 0.115, 0.08, Math.PI / 2);  // long scope
+      add(G.cyl(0.045, 0.032, 0.08, 12), body, 0, 0.115, 0.29, Math.PI / 2);
+      add(G.cyl(0.038, 0.032, 0.05, 12), body, 0, 0.115, -0.12, Math.PI / 2);
+      for (const z of [0.0, 0.18]) add(G.box(0.022, 0.06, 0.025), body, 0, 0.07, z);
+      add(G.box(0.055, 0.012, 0.012), steel, 0.04, 0.04, -0.06);
+      add(G.sph(0.016, 8, 6), steel, 0.07, 0.04, -0.06);
+      add(G.box(0.066, 0.02, 0.06), accent, 0, -0.05, 0.3);                 // rarity band
+      A = { muzzle: { y: 0.03, z: 0.42 + bl, r: 0.019 }, stock: { y: -0.04, z: -0.12, wood: true, drop: 0.06, long: true }, mag: { y: -0.065, z: 0.08, curve: 0, len: 0.05, w: 0.045, d: 0.08 } };
+      break;
+    }
+    case 'crossbow': {
+      add(G.box(0.06, 0.08, 0.6), wood, 0, 0, 0.1);
+      add(G.box(0.7, 0.04, 0.04), accent, 0, 0.03, 0.38);
+      add(G.box(0.05, 0.12, 0.06), body, 0, -0.08, 0.0, 0.2);
+      break;
+    }
+    case 'grenade': add(G.sph(0.07, 10, 8), M(0x3a5a2a), 0, 0, 0); add(G.box(0.03, 0.05, 0.03), body, 0, 0.08, 0); break;
+    case 'molotov': add(G.cyl(0.04, 0.05, 0.18, 8), M(0x8a5a2a, { rough: 0.2 }), 0, 0, 0); add(G.box(0.03, 0.08, 0.03), M(0xe8e0d0), 0, 0.12, 0); break;
+    case 'noisemaker': add(G.cyl(0.07, 0.07, 0.06, 12), M(0xc0392b), 0, 0, 0, Math.PI / 2); add(G.sph(0.03), M(0xd4b04a, { metal: 0.6 }), -0.04, 0.07, 0); add(G.sph(0.03), M(0xd4b04a, { metal: 0.6 }), 0.04, 0.07, 0); break;
+    case 'machete': add(G.box(0.02, 0.06, 0.5), M(0xc8ccd0, { metal: 0.8, rough: 0.3 }), 0, 0, 0.3); add(G.box(0.04, 0.05, 0.13), accent, 0, 0, -0.02); break;
+    case 'axe': { // fire axe: red head with a spike, wood handle
+      add(G.cyl(0.022, 0.026, 0.72, 8), wood, 0, 0, 0.26, Math.PI / 2);
+      add(G.box(0.03, 0.16, 0.12), M(0xc0302a, { rough: 0.45, metal: 0.3 }), 0, 0.05, 0.58);
+      add(G.box(0.022, 0.2, 0.025), M(0xd8dce0, { metal: 0.8, rough: 0.25 }), 0, 0.06, 0.65);   // edge
+      add(new THREE.ConeGeometry(0.03, 0.12, 6), M(0xc0302a, { rough: 0.45 }), 0, -0.07, 0.57, Math.PI);
+      add(G.box(0.05, 0.03, 0.1), accent, 0, 0, -0.05);
+      break;
+    }
+    case 'pickaxe': { // two-pointed steel head on a hickory handle
+      add(G.cyl(0.022, 0.026, 0.72, 8), wood, 0, 0, 0.26, Math.PI / 2);
+      const st = M(0x8c939b, { metal: 0.8, rough: 0.35 });
+      add(G.box(0.05, 0.06, 0.07), st, 0, 0, 0.6);
+      for (const sy of [1, -1]) { const h = add(new THREE.ConeGeometry(0.03, 0.24, 6), st, 0, sy * 0.14, 0.58); h.rotation.x = sy > 0 ? -0.35 : Math.PI + 0.35; }
+      add(G.box(0.05, 0.03, 0.1), accent, 0, 0, -0.05);
+      break;
+    }
+    default: add(G.box(0.08, 0.08, 0.2), accent, 0, 0, 0);
+  }
+  if (!A) return g;
+  // ---- stock ----
+  if (A.stock) {
+    const s = A.stock;
+    if (folding) {
+      add(G.box(0.012, 0.012, 0.22), steel, 0.02, s.y + 0.02, s.z - 0.11);
+      add(G.box(0.012, 0.012, 0.22), steel, 0.02, s.y - 0.04, s.z - 0.11);
+      add(G.box(0.014, 0.08, 0.02), steel, 0.02, s.y - 0.01, s.z - 0.22);
+    } else if (s.collapsible) {
+      add(G.box(0.055, 0.09, 0.14), black, 0, s.y - 0.02, s.z - 0.12);
+    } else {
+      const len = s.long ? 0.32 : 0.28;
+      add(G.box(0.058, 0.11, len), s.wood ? (kind === 'longrifle' ? walnut : wood) : black, 0, s.y - (s.drop || 0.02), s.z - len / 2, 0.1);
+    }
+    if (mods.stock === 'padded') add(G.box(0.065, 0.12, 0.035), rubber, folding ? 0.02 : 0, s.y - (s.drop || 0.02) - 0.03, s.z - (s.long ? 0.34 : s.collapsible ? 0.2 : 0.3));
+  }
+  // ---- magazine ----
+  if (A.mag) {
+    const m = A.mag, mat = m.mat || accent;
+    if (mods.mag === 'drum') {
+      add(G.cyl(0.085, 0.085, 0.075, 16), black, 0, m.y - 0.09, m.z, 0, 0, Math.PI / 2);
+      add(G.cyl(0.03, 0.03, 0.08, 8), accent, 0, m.y - 0.09, m.z, 0, 0, Math.PI / 2);
+    } else {
+      const len = m.len * (mods.mag === 'extmag' ? 1.5 : 1);
+      const segs = m.curve > 0.1 ? 3 : 1;
+      for (let i = 0; i < segs; i++) {
+        const t = (i + 0.5) / segs, a = m.curve * t;
+        add(G.box(m.w, len / segs + 0.004, m.d), mat, 0, m.y - len * t * Math.cos(a * 0.5), m.z + len * t * Math.sin(a * 0.5) * 1.1, -a);
+      }
+    }
+  }
+  if (A.magBottom && mods.mag === 'extmag') add(G.box(0.036, 0.05, 0.05), accent, 0, A.magBottom.y - 0.015, A.magBottom.z, 0.25);
+  // ---- grip under the handguard ----
+  if (A.under && mods.grip === 'vgrip') add(G.cyl(0.018, 0.02, 0.1, 8), black, 0, A.under.y - 0.06, A.under.z);
+  if (A.under && mods.grip === 'agrip') add(G.box(0.035, 0.05, 0.1), black, 0, A.under.y - 0.03, A.under.z, -0.5);
+  // ---- shells on the receiver ----
+  if (A.saddle && mods.mag === 'saddle') for (let i = 0; i < 4; i++) add(G.cyl(0.011, 0.011, 0.05, 6), M(0xc8402a, { rough: 0.5 }), 0.04, A.saddle.y + 0.02 - (i % 2) * 0.03, A.saddle.z - 0.05 + Math.floor(i / 2) * 0.05);
+  // ---- sights ----
+  if (A.top && mods.sight === 'reddot') {
+    const housing = M(0x4a4f56, { rough: 0.5, metal: 0.4 });
+    add(G.box(0.04, 0.04, 0.055), housing, 0, A.top.y + 0.022, A.top.z);
+    add(G.box(0.032, 0.025, 0.006), M(0xff3a2a, { emissive: 1.4 }), 0, A.top.y + 0.028, A.top.z - 0.029);
+  }
+  if (A.top && mods.sight === 'scope4') {
+    add(G.cyl(0.024, 0.024, 0.2, 10), black, 0, A.top.y + 0.045, A.top.z, Math.PI / 2);
+    add(G.cyl(0.032, 0.024, 0.04, 10), black, 0, A.top.y + 0.045, A.top.z + 0.11, Math.PI / 2);
+    for (const dz of [-0.05, 0.05]) add(G.box(0.018, 0.035, 0.02), black, 0, A.top.y + 0.015, A.top.z + dz);
+  }
+  // ---- muzzle ----
+  const mz = A.muzzle;
+  if (bm === 'ext') add(G.box(mz.r * 2.6, mz.r * 2.6, 0.03), steel, 0, mz.y, mz.z + 0.015);
+  if (mods.muzzle === 'suppressor') tube(mz.r * 2.3, 0.2, black, 0, mz.y, mz.z);
+  else if (mods.muzzle === 'comp') { add(G.box(mz.r * 2.6, mz.r * 2.6, 0.06), steel, 0, mz.y, mz.z + 0.03); add(G.box(mz.r * 2.8, 0.006, 0.04), black, 0, mz.y + mz.r * 0.6, mz.z + 0.03); }
+  else if (mods.muzzle === 'fullchoke') add(G.cyl(mz.r * 1.15, mz.r * 1.3, 0.035, 10), M(0xc8a040, { metal: 0.7, rough: 0.3 }), 0, mz.y, mz.z + 0.017, Math.PI / 2);
+  else if (mods.muzzle === 'spreadchoke') add(G.cyl(mz.r * 1.9, mz.r * 1.2, 0.045, 10), steel, 0, mz.y, mz.z + 0.022, Math.PI / 2);
+  return g;
+}
+
+
+export function buildBackBling(style) {
+  const g = new THREE.Group();
+  const add = (geo, mat, x, y, z, rx = 0, rz = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, 0, rz); m.castShadow = true; g.add(m); return m; };
+  switch (style) {
+    case 'haybale': add(G.cyl(0.2, 0.2, 0.34, 12), M(0xd9b866), 0, 0, -0.12, 0, Math.PI / 2); break;
+    case 'lantern': add(G.box(0.16, 0.24, 0.16), M(0x2a2a2a, { metal: 0.6 }), 0, 0, -0.12); add(G.box(0.1, 0.16, 0.1), M(0xffd070, { emissive: 1.5 }), 0, 0, -0.12); break;
+    case 'radio': add(G.rbox(0.32, 0.38, 0.14), M(0x5a6a3a), 0, 0, -0.12); add(G.cyl(0.008, 0.008, 0.5), M(0x222222), 0.1, 0.42, -0.12); break;
+    case 'guitar': add(G.cyl(0.16, 0.16, 0.08, 14), M(0x8a4a2a), 0, -0.1, -0.13, Math.PI / 2); add(G.box(0.05, 0.5, 0.04), M(0x3a2a1a), 0, 0.25, -0.13); break;
+    case 'beehive': add(G.rbox(0.3, 0.34, 0.2), M(0xf0e0b0), 0, 0, -0.14); add(G.rbox(0.32, 0.06, 0.22), M(0xd4b04a), 0, 0.19, -0.14); break;
+    case 'gascan': add(G.rbox(0.24, 0.32, 0.12), M(0xc0392b), 0, 0, -0.1); add(G.cyl(0.03, 0.03, 0.08), M(0xd4b04a), 0.08, 0.2, -0.1); break;
+    case 'crate': add(G.box(0.32, 0.32, 0.2), M(0xb08a5a), 0, 0, -0.14); break;
+    case 'wings': add(G.box(0.02, 0.4, 0.5), M(0x2a2a2a), 0.18, 0.05, -0.2, 0, -0.5); add(G.box(0.02, 0.4, 0.5), M(0x2a2a2a), -0.18, 0.05, -0.2, 0, 0.5); break;
+    case 'skull': add(G.sph(0.14, 12, 10), M(0xe8e0d0), 0, 0.02, -0.15); add(G.sph(0.03), M(0x7aff8a, { emissive: 2 }), 0.05, 0.04, -0.03); add(G.sph(0.03), M(0x7aff8a, { emissive: 2 }), -0.05, 0.04, -0.03); break;
+    case 'pack': default: add(G.rbox(0.32, 0.4, 0.16), M(0x5a4a3a), 0, 0, -0.11); add(G.rbox(0.26, 0.14, 0.06), M(0x4a3a2a), 0, -0.1, -0.2); break;
+  }
+  return g;
+}
+
+export function buildGlider(style = 'canvas') {
+  const g = new THREE.Group();
+  const frame = M(0x3a3a3a, { metal: 0.5 });
+  const cols = { canvas: [0xe8e0d0, 0xc0392b], barn: [0xa3302a, 0xf4f1ea], patch: [0x2f6fb5, 0xe6b422], crop: [0xe6b422, 0x2a2a2a], bat: [0x2a2a2a, 0x5a1a1a], toxic: [0x7aff8a, 0x1a3a1a], balloon: [0xd9473a, 0xe6b422] }[style] || [0xe8e0d0, 0xc0392b];
+  const wingMat = M(cols[0], { rough: 0.9 });
+  wingMat.side = THREE.DoubleSide;
+  const wing = new THREE.Mesh(new THREE.ConeGeometry(1.6, 0.6, 4, 1, true), wingMat);
+  wing.scale.set(1, 0.6, 0.7); wing.rotation.y = Math.PI / 4; wing.position.y = 1.6;
+  g.add(wing);
+  const stripe = new THREE.Mesh(G.box(0.15, 0.02, 1.5), M(cols[1]));
+  stripe.position.y = 1.78; g.add(stripe);
+  for (const sx of [-0.35, 0.35]) { const r = new THREE.Mesh(G.cyl(0.015, 0.015, 1.3, 4), frame); r.position.set(sx, 0.95, 0); r.rotation.z = sx * 0.4; g.add(r); }
+  const bar = new THREE.Mesh(G.cyl(0.02, 0.02, 0.9, 4), frame); bar.rotation.z = Math.PI / 2; bar.position.y = 0.4; g.add(bar);
+  return g;
+}
+
+// ---------------------------------------------------------------------------
+// Character
+// ---------------------------------------------------------------------------
+export const DEFAULT_OUTFIT = {
+  skin: 0xe0ac80, shirt: 0x3a6aa8, shirtPattern: null, shirt2: 0x1e3a5a, pants: 0x3a4a6a, boots: 0x5a3a24, gloves: null,
+  hair: 'short', hairColor: 0x4a2a14, hat: 'none', hatColor: 0xc0392b, face: 'default', eye: '#3a2a1a', vest: null, overalls: null, bandana: null, build: 1,
+};
+
+export class Character {
+  constructor(outfit = DEFAULT_OUTFIT, opts = {}) {
+    this.root = new THREE.Group();
+    this.root.name = 'character';
+    this.root.rotation.order = 'YXZ';
+    this.parts = {};
+    this.anim = { phase: 0, speed: 0, crouch: 0, air: 0, aimPitch: 0, weapon: 'none', action: null, actionT: 0, emote: null, emoteT: 0, state: 'ground', dead: 0, lean: 0, swim: 0 };
+    this.shadow = opts.shadow ?? true;
+    this.build(outfit);
+  }
+  dispose() {
+    this.root.traverse((o) => { if (o.isMesh && o.userData.ownGeo) o.geometry.dispose(); });
+  }
+  mesh(geo, mat, parent, x = 0, y = 0, z = 0) {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    m.castShadow = this.shadow; m.receiveShadow = false;
+    parent.add(m);
+    return m;
+  }
+  build(o) {
+    this.outfit = { ...DEFAULT_OUTFIT, ...o };
+    o = this.outfit;
+    while (this.root.children.length) this.root.remove(this.root.children[0]);
+    const P = this.parts;
+    const skin = M(o.skin, { rough: 0.6 });
+    const shirtMap = o.shirtPattern === 'plaid' ? plaidTexture('#' + o.shirt.toString(16).padStart(6, '0'), '#' + (o.shirt2 ?? 0x222222).toString(16).padStart(6, '0'), '#f0f0f0') : null;
+    const shirt = shirtMap ? M(0xffffff, { map: shirtMap, rough: 0.85 }) : M(o.shirt, { rough: 0.85 });
+    const pants = M(o.pants, { rough: 0.9 });
+    const boots = M(o.boots, { rough: 0.6 });
+    const gloves = o.gloves ? M(o.gloves) : skin;
+    const b = o.build || 1;
+    P.hips = new THREE.Group(); P.hips.position.y = 0.95; this.root.add(P.hips);
+    this.mesh(cg('pelvisL', pelvisGeo), o.overalls ? M(o.overalls) : pants, P.hips, 0, 0, 0);
+    P.spine = new THREE.Group(); P.spine.position.y = 0.1; P.hips.add(P.spine);
+    this.mesh(cg('torsoL' + b, () => torsoGeo(b)), shirt, P.spine, 0, -0.02, 0);
+    if (o.overalls) {
+      const om = M(o.overalls);
+      // bib + straps sit just outside the torso shell
+      this.mesh(cg('bib' + b, () => { const g = torsoGeo(b); g.scale(1.04, 0.5, 1.07); return g; }), om, P.spine, 0, -0.02, 0);
+      this.mesh(cg('bibFront', () => G.rbox(0.28, 0.2, 0.06, 0.03)), om, P.spine, 0, 0.3, 0.135);
+      for (const sx of [-0.1, 0.1]) { const st = this.mesh(cg('strap2', () => G.box(0.05, 0.3, 0.04)), om, P.spine, sx, 0.42, 0.13); st.rotation.x = -0.25; }
+    }
+    if (o.vest) {
+      // a vest is the torso shell, slightly larger, open down the front
+      this.mesh(cg('vest' + b, () => { const g = torsoGeo(b); g.scale(1.05, 0.97, 1.08); return g; }), M(o.vest, { rough: 0.8 }), P.spine, 0, 0.0, 0);
+      this.mesh(cg('vestGap', () => G.box(0.07, 0.4, 0.02)), shirt, P.spine, 0, 0.27, 0.178);
+    }
+    P.chest = new THREE.Group(); P.chest.position.y = 0.48; P.spine.add(P.chest);
+    P.neck = new THREE.Group(); P.neck.position.y = 0.06; P.chest.add(P.neck);
+    this.mesh(cg('neck', () => G.cyl(0.07, 0.08, 0.1, 10)), skin, P.neck, 0, 0.02, 0);
+    if (o.bandana) this.mesh(cg('bandana', () => G.cyl(0.085, 0.1, 0.07, 10)), M(o.bandana), P.neck, 0, 0.0, 0);
+    P.head = new THREE.Group(); P.head.position.y = 0.21; P.head.scale.setScalar(1.15); P.neck.add(P.head); // stylized: big readable heads
+    const headGeo = cg('head', () => { const g = G.sph(0.155, 20, 16); g.scale(1, 1.08, 1.05); return g; });
+    const headMat = o.face === 'sack' || o.face === 'pumpkin' ? M(0xffffff, { map: faceTexture(o.face), rough: 0.9 }) : skin;
+    this.mesh(headGeo, headMat, P.head, 0, 0, 0);
+    if (o.face !== 'sack' && o.face !== 'pumpkin' && o.hat !== 'plague') {
+      const fm = new THREE.MeshStandardMaterial({ map: faceTexture(o.face, o.eye), transparent: true, roughness: 0.6, depthWrite: false });
+      const face = this.mesh(cg('faceGeo', () => { const g = G.sph(0.157, 20, 16); g.scale(1, 1.08, 1.05); return g; }), fm, P.head, 0, 0, 0);
+      face.castShadow = false;
+      this.mesh(cg('nose', () => G.sph(0.025, 8, 6)), skin, P.head, 0, -0.01, 0.158);
+      for (const sx of [-1, 1]) this.mesh(cg('ear', () => G.sph(0.035, 8, 6)), skin, P.head, sx * 0.152, 0, 0);
+    }
+    this.buildHair(o);
+    // arms
+    for (const side of ['L', 'R']) {
+      const sx = side === 'L' ? 1 : -1;
+      const sh = new THREE.Group(); sh.position.set(sx * 0.3 * b, -0.03, 0); P.chest.add(sh); P['sh' + side] = sh;
+      this.mesh(cg('shoulder' + b, () => G.sph(0.087 * b, 12, 10)), shirt, sh, 0, -0.01, 0);
+      this.mesh(cg('uarm' + b, () => G.cap(0.084 * b, 0.18)), shirt, sh, 0, -0.15, 0);
+      const el = new THREE.Group(); el.position.y = -0.3; sh.add(el); P['el' + side] = el;
+      this.mesh(cg('elbow' + b, () => G.sph(0.08 * b, 10, 8)), shirt, el, 0, 0, 0);
+      this.mesh(cg('farm' + b, () => G.cap(0.076 * b, 0.17)), o.sleeves === 'short' ? skin : shirt, el, 0, -0.13, 0);
+      const hand = new THREE.Group(); hand.position.y = -0.28; el.add(hand); P['hand' + side] = hand;
+      this.mesh(cg('hand', () => G.rbox(0.115, 0.12, 0.09, 0.04)), gloves, hand, 0, -0.03, 0.0);
+    }
+    // legs
+    for (const side of ['L', 'R']) {
+      const sx = side === 'L' ? 1 : -1;
+      const hip = new THREE.Group(); hip.position.set(sx * 0.105, -0.06, 0); P.hips.add(hip); P['hip' + side] = hip;
+      this.mesh(cg('thigh', () => G.cap(0.112, 0.25)), o.overalls ? M(o.overalls) : pants, hip, 0, -0.2, 0);
+      const kn = new THREE.Group(); kn.position.y = -0.43; hip.add(kn); P['kn' + side] = kn;
+      this.mesh(cg('knee', () => G.sph(0.1, 10, 8)), o.overalls ? M(o.overalls) : pants, kn, 0, 0, 0);
+      this.mesh(cg('shin', () => G.cap(0.095, 0.24)), o.overalls ? M(o.overalls) : pants, kn, 0, -0.2, 0);
+      const ft = new THREE.Group(); ft.position.y = -0.42; kn.add(ft); P['ft' + side] = ft;
+      this.mesh(cg('boot', () => G.rbox(0.158, 0.145, 0.3, 0.055)), boots, ft, 0, -0.02, 0.05);
+    }
+    // attach points
+    P.back = new THREE.Group(); P.back.position.set(0, 0.25, -0.165); P.spine.add(P.back);
+    P.weaponR = new THREE.Group(); P.weaponR.position.set(0, -0.05, 0.02); P.handR.add(P.weaponR);
+    P.toolR = new THREE.Group(); P.toolR.position.set(0, -0.04, 0.0); P.handR.add(P.toolR);
+    P.gliderMount = new THREE.Group(); P.gliderMount.position.set(0, 0.3, 0); this.root.add(P.gliderMount);
+    if (this.backBlingStyle) this.setBackBling(this.backBlingStyle);
+  }
+  buildHair(o) {
+    const P = this.parts;
+    const hm = M(o.hairColor ?? 0x4a2a14, { rough: 0.9 });
+    const hc = M(o.hatColor ?? 0xc0392b, { rough: 0.7 });
+    const hairOn = o.hat !== 'helmet' && o.hat !== 'hood' && o.face !== 'pumpkin' && o.face !== 'sack' && o.hat !== 'gasmask' && o.hat !== 'plague' && o.hat !== 'combat';
+    if (hairOn) {
+      if (o.hair === 'short') this.mesh(cg('hairShort', () => { const g = G.sph(0.165, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.55); return g; }), hm, P.head, 0, 0.025, -0.01);
+      else if (o.hair === 'long') { this.mesh(cg('hairFull', () => G.sph(0.165, 16, 10)), hm, P.head, 0, 0.025, -0.012); this.mesh(cg('hairLong', () => G.rbox(0.3, 0.32, 0.12, 0.05)), hm, P.head, 0, -0.12, -0.1); }
+      else if (o.hair === 'ponytail') { this.mesh(cg('hairFull', () => G.sph(0.165, 16, 10)), hm, P.head, 0, 0.025, -0.012); this.mesh(cg('pony', () => G.cap(0.05, 0.18)), hm, P.head, 0, -0.08, -0.19).rotation.x = 0.4; }
+      else if (o.hair === 'mohawk') this.mesh(cg('mohawk', () => G.rbox(0.05, 0.12, 0.3, 0.02)), hm, P.head, 0, 0.16, -0.02);
+      else if (o.hair === 'curly') for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2; this.mesh(cg('curl', () => G.sph(0.07, 8, 6)), hm, P.head, Math.cos(a) * 0.11, 0.1 + Math.sin(k) * 0.02, Math.sin(a) * 0.11 - 0.02); }
+    }
+    switch (o.hat) {
+      case 'cap': this.mesh(cg('capTop', () => G.sph(0.168, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2)), hc, P.head, 0, 0.03, 0); this.mesh(cg('capBrim', () => G.box(0.22, 0.02, 0.14)), hc, P.head, 0, 0.04, 0.18); break;
+      case 'cowboy': case 'straw': {
+        const m = o.hat === 'straw' ? M(0xe0c070, { rough: 0.95 }) : hc;
+        this.mesh(cg('cbBrim', () => G.cyl(0.32, 0.32, 0.02, 20)), m, P.head, 0, 0.09, 0);
+        this.mesh(cg('cbTop', () => G.cyl(0.13, 0.16, 0.17, 14)), m, P.head, 0, 0.17, 0);
+        this.mesh(cg('cbBand', () => G.cyl(0.162, 0.162, 0.035, 14)), M(0x3a2a1a), P.head, 0, 0.11, 0);
+        break;
+      }
+      case 'beanie': this.mesh(cg('beanie', () => G.sph(0.175, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.55)), hc, P.head, 0, 0.03, 0); this.mesh(cg('pompom', () => G.sph(0.045, 8, 6)), M(0xf0f0f0), P.head, 0, 0.2, 0); break;
+      case 'helmet': { // football helmet: open face behind a cage
+        this.mesh(cg('helmOpen', () => G.sph(0.19, 18, 12, Math.PI / 2 + 0.75, Math.PI * 2 - 1.5, 0, Math.PI * 0.62)), dbl(o.hatColor ?? 0xc0392b), P.head, 0, 0.015, 0);
+        this.mesh(cg('helmCrown', () => G.sph(0.19, 18, 8, 0, Math.PI * 2, 0, Math.PI * 0.3)), hc, P.head, 0, 0.015, 0);
+        const cage = M(0xd8d8d8, { rough: 0.4, metal: 0.5 });
+        for (const y of [-0.06, -0.11]) { const bar = this.mesh(cg('cageBar', () => G.cyl(0.012, 0.012, 0.2, 6)), cage, P.head, 0, y, 0.17); bar.rotation.z = Math.PI / 2; }
+        for (const sx of [-0.09, 0.09]) this.mesh(cg('cageV', () => G.cyl(0.011, 0.011, 0.1, 6)), cage, P.head, sx, -0.08, 0.165);
+        break;
+      }
+      case 'combat': { // military helmet + goggles pushed up
+        this.mesh(cg('combatHelm', () => G.sph(0.192, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.46)), hc, P.head, 0, 0.03, -0.005);
+        this.mesh(cg('combatRim', () => G.cyl(0.198, 0.2, 0.025, 20)), hc, P.head, 0, 0.055, 0);
+        const strap = this.mesh(cg('goggleStrap', () => G.cyl(0.193, 0.193, 0.035, 20, 1, true)), M(0x1a1a1a), P.head, 0, 0.1, 0);
+        strap.material = dbl(0x1a1a1a);
+        for (const sx of [-0.055, 0.055]) this.mesh(cg('goggle', () => G.cyl(0.04, 0.04, 0.03, 12)), M(0x7affd0, { rough: 0.2, emissive: 0.5 }), P.head, sx, 0.1, 0.18).rotation.x = Math.PI / 2;
+        break;
+      }
+      case 'bucket': this.mesh(cg('bucket', () => G.cyl(0.16, 0.21, 0.14, 14)), hc, P.head, 0, 0.12, 0); break;
+      case 'hood': { // open at the front so the face shows
+        this.mesh(cg('hoodOpen', () => G.sph(0.205, 18, 12, Math.PI / 2 + 0.95, Math.PI * 2 - 1.9, 0, Math.PI * 0.72)), dbl(o.hatColor ?? 0x2a2a2a), P.head, 0, 0.01, -0.025);
+        const tip = this.mesh(cg('hoodTip', () => new THREE.ConeGeometry(0.09, 0.18, 10)), hc, P.head, 0, 0.12, -0.17); tip.rotation.x = -1.1;
+        this.mesh(cg('hoodCape', () => G.rbox(0.34, 0.16, 0.16, 0.06)), hc, P.head, 0, -0.17, -0.06);
+        break;
+      }
+      case 'crown': for (let k = 0; k < 9; k++) { const a = (k / 9) * Math.PI * 2; const c = this.mesh(cg('cob', () => G.cap(0.03, 0.09)), M(0xf2c832, { rough: 0.5, emissive: 0.15 }), P.head, Math.cos(a) * 0.14, 0.17, Math.sin(a) * 0.14); c.rotation.z = -Math.cos(a) * 0.3; c.rotation.x = Math.sin(a) * 0.3; } break;
+      case 'gasmask': { // hazmat hood, clear visor, respirator
+        const suit = o.shirt ?? 0xe8c832;
+        this.mesh(cg('hzHood', () => G.sph(0.215, 18, 12, Math.PI / 2 + 0.8, Math.PI * 2 - 1.6, 0, Math.PI * 0.78)), dbl(suit), P.head, 0, 0.0, -0.01);
+        const visor = new THREE.MeshStandardMaterial({ color: 0xbfe8ff, transparent: true, opacity: 0.32, roughness: 0.05, metalness: 0.2, depthWrite: false });
+        this.mesh(cg('hzVisor', () => G.sph(0.2, 18, 12, Math.PI / 2 - 0.8, 1.6, Math.PI * 0.15, Math.PI * 0.42)), visor, P.head, 0, 0.0, 0.0).castShadow = false;
+        this.mesh(cg('hzResp', () => G.rbox(0.13, 0.08, 0.07, 0.03)), M(0x2a2a2a), P.head, 0, -0.1, 0.165);
+        this.mesh(cg('gmFilter', () => G.cyl(0.04, 0.04, 0.06, 10)), M(0x5a5a5a), P.head, 0, -0.12, 0.215).rotation.x = Math.PI / 2;
+        break;
+      }
+      case 'plague': { // leather mask, brass goggles, long beak, wide hat
+        const leather = M(0x4a3424, { rough: 0.55 });
+        this.mesh(cg('pdMask', () => G.sph(0.162, 18, 14)), leather, P.head, 0, 0, 0.004);
+        for (const sx of [-0.06, 0.06]) {
+          this.mesh(cg('pdRim', () => G.cyl(0.042, 0.042, 0.03, 14)), M(0xb8902a, { metal: 0.7, rough: 0.3 }), P.head, sx, 0.035, 0.15).rotation.x = Math.PI / 2;
+          this.mesh(cg('pdLens', () => G.cyl(0.032, 0.032, 0.032, 14)), M(0xffb030, { emissive: 0.9, rough: 0.2 }), P.head, sx, 0.035, 0.152).rotation.x = Math.PI / 2;
+        }
+        const beak = this.mesh(cg('beak2', () => new THREE.ConeGeometry(0.055, 0.26, 10)), leather, P.head, 0, -0.06, 0.26); beak.rotation.x = Math.PI / 2 + 0.25;
+        this.mesh(cg('pdHat', () => G.cyl(0.14, 0.15, 0.16, 14)), M(0x1a1a1a), P.head, 0, 0.19, 0);
+        this.mesh(cg('pdBrim', () => G.cyl(0.3, 0.3, 0.02, 18)), M(0x1a1a1a), P.head, 0, 0.11, 0);
+        this.mesh(cg('pdHood', () => G.sph(0.2, 18, 10, Math.PI / 2 + 1.0, Math.PI * 2 - 2.0, Math.PI * 0.3, Math.PI * 0.5)), dbl(0x1a1a1a), P.head, 0, 0, -0.02);
+        break;
+      }
+      case 'veil': this.mesh(cg('cbBrim', () => G.cyl(0.32, 0.32, 0.02, 20)), M(0xf0ece0), P.head, 0, 0.09, 0); { const vm = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, transparent: true, opacity: 0.35 }); this.mesh(cg('veilNet', () => G.cyl(0.3, 0.24, 0.3, 16)), vm, P.head, 0, -0.06, 0); } break;
+      case 'antlers': for (const sx of [-1, 1]) { const a = this.mesh(cg('antler', () => G.cyl(0.015, 0.025, 0.25, 6)), M(0xd8c8a0), P.head, sx * 0.1, 0.22, 0); a.rotation.z = -sx * 0.5; } break;
+      default: break;
+    }
+    if (o.glasses) this.mesh(cg('glasses', () => G.box(0.24, 0.05, 0.03)), M(0x111111, { rough: 0.2 }), P.head, 0, 0.02, 0.16);
+  }
+  setBackBling(style) {
+    this.backBlingStyle = style;
+    if (this.backBling) this.parts.back.remove(this.backBling);
+    this.backBling = style && style !== 'none' ? buildBackBling(style) : null;
+    if (this.backBling) { this.backBling.traverse((o) => { if (o.isMesh) o.castShadow = this.shadow; }); this.parts.back.add(this.backBling); }
+  }
+  setGlider(style) {
+    if (this.glider) this.parts.gliderMount.remove(this.glider);
+    this.glider = buildGlider(style);
+    this.glider.visible = false;
+    this.parts.gliderMount.add(this.glider);
+  }
+  setWeapon(kind, rarity = 0, wrap = null, mods = null) {
+    if (this.weaponModel) this.parts.weaponR.remove(this.weaponModel);
+    this.weaponModel = null;
+    this.anim.weapon = kind || 'none';
+    if (!kind || kind === 'none' || kind === 'item' || kind === 'fists') return;
+    this.weaponModel = buildWeaponModel(kind, rarity, wrap, mods);
+    this.weaponModel.traverse((o) => { if (o.isMesh) o.castShadow = this.shadow; });
+    this.parts.weaponR.add(this.weaponModel);
+  }
+  playAction(name, dur = 0.45) { this.anim.action = name; this.anim.actionT = 0; this.anim.actionDur = dur; }
+  playEmote(name) { this.anim.emote = name; this.anim.emoteT = 0; }
+
+  // ------------------------------------------------------------------
+  update(dt) {
+    const a = this.anim, P = this.parts;
+    const t = (this._t = (this._t || 0) + dt);
+    // reset rotations
+    for (const k of ['hips', 'spine', 'chest', 'neck', 'head', 'shL', 'shR', 'elL', 'elR', 'hipL', 'hipR', 'knL', 'knR', 'ftL', 'ftR', 'handL', 'handR']) P[k].rotation.set(0, 0, 0);
+    P.hips.position.set(0, 0.95, 0);
+    this.root.rotation.x = 0; this.root.rotation.z = 0;
+    if (this.glider) this.glider.visible = false;
+    if (a.dead > 0) { this.poseDead(a.dead); return; }
+    const sp = a.speed;
+    const moving = sp > 0.3;
+    a.phase += dt * (moving ? 2.2 + sp * 1.05 : 0);
+    const ph = a.phase;
+    const run = clamp(sp / 6, 0, 1.2);
+    if (a.state === 'skydive') return this.poseSkydive(t);
+    if (a.state === 'glide') return this.poseGlide(t);
+    if (a.state === 'vault') return this.poseVault(a.vaultT || 0);
+    if (a.state === 'ride') return this.poseRide(t);
+    if (a.emote && !moving) { a.emoteT += dt; return this.poseEmote(a.emote, a.emoteT); }
+    if (moving) a.emote = null;
+    // legs
+    const legAmp = (0.25 + run * 0.6) * (moving ? 1 : 0);
+    const cr = a.crouch;
+    P.hipL.rotation.x = Math.sin(ph) * legAmp - cr * 0.9;
+    P.hipR.rotation.x = -Math.sin(ph) * legAmp - cr * 0.9;
+    P.knL.rotation.x = Math.max(0, -Math.sin(ph + 0.6)) * (0.4 + run * 0.9) * (moving ? 1 : 0) + cr * 1.5;
+    P.knR.rotation.x = Math.max(0, Math.sin(ph + 0.6)) * (0.4 + run * 0.9) * (moving ? 1 : 0) + cr * 1.5;
+    P.ftL.rotation.x = -cr * 0.6; P.ftR.rotation.x = -cr * 0.6;
+    P.hips.position.y = 0.95 - cr * 0.33 + (moving ? Math.abs(Math.sin(ph)) * 0.05 * (0.4 + run) : Math.sin(t * 1.6) * 0.008);
+    P.spine.rotation.x = run * 0.18 + cr * 0.35;
+    P.hips.rotation.y = moving ? Math.sin(ph) * 0.08 : 0;
+    P.spine.rotation.y = -P.hips.rotation.y * 1.4;
+    if (a.air > 0.1) {
+      P.hipL.rotation.x = -0.6; P.hipR.rotation.x = 0.2; P.knL.rotation.x = 1.0; P.knR.rotation.x = 0.5;
+    }
+    // arms by weapon
+    const aimP = clamp(a.aimPitch, -1.2, 1.2);
+    const w = a.weapon;
+    if (w === 'none' || w === 'item') {
+      const armAmp = (0.2 + run * 0.9) * (moving ? 1 : 0);
+      P.shL.rotation.x = -Math.sin(ph) * armAmp; P.shR.rotation.x = Math.sin(ph) * armAmp;
+      P.shL.rotation.z = 0.12; P.shR.rotation.z = -0.12;
+      P.elL.rotation.x = -0.3 - run * 0.6; P.elR.rotation.x = -0.3 - run * 0.6;
+      if (w === 'item') { P.shR.rotation.x = -0.7; P.elR.rotation.x = -0.9; }
+    } else if (w === 'machete' || w === 'axe' || w === 'pickaxe') {
+      const armAmp = (0.2 + run * 0.6) * (moving ? 1 : 0);
+      P.shL.rotation.x = -Math.sin(ph) * armAmp; P.shL.rotation.z = 0.15; P.elL.rotation.x = -0.4;
+      P.shR.rotation.x = -0.35 + Math.sin(ph) * armAmp * 0.4; P.shR.rotation.z = -0.15; P.elR.rotation.x = -0.9;
+    } else {
+      // two-handed aim pose (pistols use one hand plus support)
+      const oneHand = w === 'pistol' || w === 'snub' || w === 'longrev';
+      const lean = P.spine.rotation.x;
+      P.chest.rotation.x = -aimP * 0.5;
+      P.spine.rotation.x = lean - aimP * 0.25;
+      P.head.rotation.x = -aimP * 0.25;
+      P.shR.rotation.x = -1.45 - aimP * 0.25; P.shR.rotation.y = 0.25; P.shR.rotation.z = 0.05;
+      P.elR.rotation.x = oneHand ? -0.1 : -0.35;
+      P.shL.rotation.x = -1.35 - aimP * 0.25; P.shL.rotation.z = oneHand ? -0.5 : -0.8; P.shL.rotation.y = -0.45;
+      P.elL.rotation.x = oneHand ? -0.6 : -0.7;
+      P.handR.rotation.x = (oneHand ? 1.55 : 1.8) - lean;
+      if (w === 'grenade' || w === 'molotov' || w === 'noisemaker') { P.shR.rotation.x = -2.4; P.elR.rotation.x = -1.2; P.chest.rotation.y = 0; P.shL.rotation.x = -0.6; P.shL.rotation.z = 0.3; P.handR.rotation.x = 0; }
+    }
+    // actions
+    if (a.action) {
+      a.actionT += dt;
+      const k = a.actionT / (a.actionDur || 0.45);
+      if (k >= 1) a.action = null;
+      else this.poseAction(a.action, k);
+    }
+  }
+  poseAction(name, k) {
+    const P = this.parts;
+    const s = Math.sin(k * Math.PI);
+    switch (name) {
+      case 'swing': {
+        // overhead arc
+        const arc = k < 0.35 ? -2.6 * (k / 0.35) : -2.6 + 3.2 * ((k - 0.35) / 0.65);
+        P.shR.rotation.x = arc; P.elR.rotation.x = -0.5; P.chest.rotation.y = 0.4 - k * 0.8; P.spine.rotation.x = 0.15 + s * 0.2;
+        break;
+      }
+      case 'punch': P.shR.rotation.x = -1.55 * s; P.elR.rotation.x = -0.15 - (1 - s) * 0.6; P.chest.rotation.y = -0.35 * s; break;
+      case 'recoil': P.shR.rotation.x -= 0.12 * (1 - k); P.shL.rotation.x -= 0.12 * (1 - k); P.chest.rotation.x -= 0.06 * (1 - k); break;
+      case 'reload': P.shL.rotation.x = -0.9 + Math.sin(k * Math.PI * 2) * 0.3; P.elL.rotation.x = -1.2; P.handR.rotation.z = s * 0.5; break;
+      case 'consume': P.shR.rotation.x = -1.9 * s; P.elR.rotation.x = -1.6 * s; P.head.rotation.x = -0.25 * s; break;
+      case 'bandage': P.shR.rotation.x = -0.9; P.elR.rotation.x = -1.0 - Math.sin(k * 20) * 0.3; P.shL.rotation.x = -0.6; P.elL.rotation.x = -1.2; break;
+      case 'hammer': P.shR.rotation.x = -1.6 + Math.abs(Math.sin(k * Math.PI * 4)) * 0.8; P.elR.rotation.x = -0.8; break;
+      case 'throw': P.shR.rotation.x = -2.6 + k * 3.6; P.elR.rotation.x = -0.4; P.chest.rotation.y = 0.5 - k; break;
+      case 'search': P.shR.rotation.x = -1.2 + Math.sin(k * 18) * 0.2; P.shL.rotation.x = -1.1 + Math.cos(k * 18) * 0.2; P.spine.rotation.x = 0.35; break;
+      case 'hit': P.spine.rotation.x = -0.25 * s; P.head.rotation.x = -0.3 * s; break;
+      default: break;
+    }
+  }
+  poseDead(k) {
+    const P = this.parts;
+    const t = clamp(k, 0, 1);
+    this.root.rotation.x = -t * 1.45;
+    P.hips.position.y = lerp(0.95, 0.2, t);
+    P.shL.rotation.z = 1.2 * t; P.shR.rotation.z = -1.2 * t;
+    P.hipL.rotation.x = 0.3 * t; P.knR.rotation.x = 0.5 * t;
+    P.head.rotation.y = 0.5 * t;
+  }
+  poseSkydive(t) {
+    const P = this.parts;
+    this.root.rotation.x = 1.25;
+    P.shL.rotation.z = 1.6; P.shR.rotation.z = -1.6; P.shL.rotation.x = -0.3; P.shR.rotation.x = -0.3;
+    P.elL.rotation.x = -0.5; P.elR.rotation.x = -0.5;
+    P.hipL.rotation.z = 0.35; P.hipR.rotation.z = -0.35; P.knL.rotation.x = 0.7; P.knR.rotation.x = 0.7;
+    P.head.rotation.x = -0.8;
+    P.shL.rotation.z += Math.sin(t * 9) * 0.06; P.shR.rotation.z -= Math.cos(t * 8) * 0.06;
+  }
+  poseGlide(t) {
+    const P = this.parts;
+    if (this.glider) this.glider.visible = true;
+    P.shL.rotation.z = 2.8; P.shR.rotation.z = -2.8; P.elL.rotation.z = 0.3; P.elR.rotation.z = -0.3;
+    P.hipL.rotation.x = 0.15 + Math.sin(t * 2) * 0.1; P.hipR.rotation.x = -0.1 - Math.sin(t * 2) * 0.1;
+    P.knL.rotation.x = 0.3; P.knR.rotation.x = 0.4;
+  }
+  poseRide(t) {
+    const P = this.parts;
+    P.hips.position.y = 0.95;
+    P.spine.rotation.x = 0.42;
+    P.hipL.rotation.x = -1.05; P.hipR.rotation.x = -1.05; P.hipL.rotation.z = 0.18; P.hipR.rotation.z = -0.18;
+    P.knL.rotation.x = 1.55; P.knR.rotation.x = 1.55;
+    P.shL.rotation.x = -1.15; P.shR.rotation.x = -1.15; P.shL.rotation.z = -0.25; P.shR.rotation.z = 0.25;
+    P.elL.rotation.x = -0.45; P.elR.rotation.x = -0.45;
+    P.head.rotation.x = -0.25 + Math.sin(t * 9) * 0.01;
+  }
+  poseVault(k) {
+    const P = this.parts;
+    P.spine.rotation.x = 0.6 * Math.sin(k * Math.PI);
+    P.hipL.rotation.x = -1.2 * Math.sin(k * Math.PI); P.hipR.rotation.x = -0.6 * Math.sin(k * Math.PI);
+    P.knL.rotation.x = 1.4 * Math.sin(k * Math.PI); P.knR.rotation.x = 1.0 * Math.sin(k * Math.PI);
+    P.shL.rotation.x = -1.5; P.shR.rotation.x = -1.5;
+  }
+  poseEmote(name, t) {
+    const P = this.parts;
+    const b = Math.sin(t * 8);
+    switch (name) {
+      case 'hoedown':
+        P.hips.position.y = 0.95 + Math.abs(b) * 0.08;
+        P.hipL.rotation.x = Math.max(0, b) * -1.2; P.knL.rotation.x = Math.max(0, b) * 1.5;
+        P.hipR.rotation.x = Math.max(0, -b) * -1.2; P.knR.rotation.x = Math.max(0, -b) * 1.5;
+        P.shL.rotation.z = 0.4; P.shR.rotation.z = -0.4; P.elL.rotation.x = -1.6; P.elR.rotation.x = -1.6;
+        P.shL.rotation.x = -0.3; P.shR.rotation.x = -0.3;
+        P.hips.rotation.y = Math.sin(t * 4) * 0.3;
+        break;
+      case 'twostep':
+        this.root.rotation.z = Math.sin(t * 4) * 0.08;
+        P.hips.position.y = 0.95 + Math.abs(Math.sin(t * 4)) * 0.04;
+        P.hipL.rotation.x = Math.sin(t * 4) * 0.5; P.hipR.rotation.x = -Math.sin(t * 4) * 0.5;
+        P.shL.rotation.x = -0.8; P.elL.rotation.x = -1.4; P.shR.rotation.x = -0.4 + Math.sin(t * 4) * 0.3; P.shR.rotation.z = -0.6;
+        break;
+      case 'fiddle':
+        P.shL.rotation.x = -1.4; P.shL.rotation.z = -0.4; P.elL.rotation.x = -1.6; P.head.rotation.z = 0.4; P.head.rotation.x = 0.2;
+        P.shR.rotation.x = -1.2; P.elR.rotation.x = -0.6 + Math.sin(t * 10) * 0.5; P.shR.rotation.z = Math.sin(t * 10) * 0.4;
+        P.hips.position.y = 0.95 + Math.abs(Math.sin(t * 5)) * 0.03;
+        break;
+      case 'chicken':
+        P.shL.rotation.z = 0.6 + Math.abs(b) * 0.6; P.shR.rotation.z = -0.6 - Math.abs(b) * 0.6; P.elL.rotation.x = -2.2; P.elR.rotation.x = -2.2;
+        P.spine.rotation.x = 0.3; P.neck.rotation.x = Math.sin(t * 12) * 0.3;
+        P.hipL.rotation.x = -0.4; P.hipR.rotation.x = -0.4; P.knL.rotation.x = 0.8; P.knR.rotation.x = 0.8; P.hips.position.y = 0.8;
+        break;
+      case 'salute':
+        P.shR.rotation.x = -2.4; P.shR.rotation.z = -0.9; P.elR.rotation.x = -1.9; P.spine.rotation.x = -0.05;
+        break;
+      case 'lasso':
+        P.shR.rotation.x = -3.0; P.shR.rotation.y = Math.sin(t * 9) * 0.6; P.elR.rotation.x = -0.2; P.shL.rotation.x = -0.3;
+        P.hips.rotation.y = Math.sin(t * 2) * 0.2;
+        break;
+      case 'robot':
+        P.shL.rotation.x = -1.57 * (Math.floor(t * 2) % 2); P.shR.rotation.x = -1.57 * ((Math.floor(t * 2) + 1) % 2);
+        P.elL.rotation.x = -1.57; P.elR.rotation.x = -1.57; P.head.rotation.y = (Math.floor(t * 2) % 2 ? 1 : -1) * 0.5;
+        P.hips.position.y = 0.95 - (Math.floor(t * 4) % 2) * 0.05;
+        break;
+      case 'wave': default:
+        P.shR.rotation.x = -0.4; P.shR.rotation.z = -2.6; P.elR.rotation.z = Math.sin(t * 9) * 0.5;
+        break;
+    }
+  }
+}
