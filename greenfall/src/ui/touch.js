@@ -34,7 +34,7 @@ export class TouchControls {
     // buttons: [label, action, right(px), bottom(px) or top(px) for 'top', kind, toggle]
     const B = [
       ['FIRE', 'fire', 22, 112, 'big'], ['JUMP', 'jump', 26, 30, ''], ['CROUCH', 'crouch', 100, 26, 'small', true], ['RELOAD', 'reload', 168, 26, 'small'],
-      ['AIM', 'aim', 120, 200, 'small', true], ['USE', 'interact', 126, 118, ''], ['BUILD', 'build', 236, 26, 'small'], ['NEXT', 'wheel', 192, 172, 'small'],
+      ['AIM', 'aim', 120, 200, 'small', true], ['USE', 'interact', 126, 118, ''], ['NEXT', 'wheel', 192, 172, 'small'],
       ['HEAL', 'heal', 26, 206, 'small'], ['EAT', 'eat', 186, 236, 'small'],
       ['BAG', 'inventory', 128, 8, 'top'], ['MAP', 'map', 184, 8, 'top'], ['LIGHT', 'flashlight', 240, 8, 'top'], ['❚❚', 'pause', 296, 8, 'top'],
     ];
@@ -58,10 +58,10 @@ export class TouchControls {
   setMode(m) {
     if (this.mode === m) return;
     this.mode = m;
-    const drive = m === 'drive';
-    const L = { jump: drive ? 'BRAKE' : 'JUMP', interact: drive ? 'EXIT' : 'USE', heal: drive ? 'HORN' : 'HEAL' };
+    const drive = m === 'drive', build = m === 'build';
+    const L = { jump: drive ? 'BRAKE' : 'JUMP', interact: drive ? 'EXIT' : 'USE', heal: drive ? 'HORN' : 'HEAL', fire: build ? 'LAY' : 'FIRE', reload: build ? 'WINDOW' : 'RELOAD' };
     for (const [k, t] of Object.entries(L)) if (this.btns[k]) this.btns[k].el.textContent = t;
-    for (const k of ['fire', 'aim', 'crouch', 'reload', 'build', 'wheel', 'eat']) if (this.btns[k]) this.btns[k].el.style.display = drive ? 'none' : '';
+    for (const k of ['fire', 'aim', 'crouch', 'reload', 'wheel', 'eat']) if (this.btns[k]) this.btns[k].el.style.display = drive ? 'none' : '';
   }
   show(v) { this.root.classList.toggle('hidden', !v); document.body.classList.toggle('touchmode', !!v); }
 }

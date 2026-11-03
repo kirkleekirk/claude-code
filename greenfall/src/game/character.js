@@ -1,5 +1,5 @@
 // Stylized character rig built from primitives, with procedural animation and
-// cosmetic customization (outfit, back bling, harvest tool, glider, weapon wraps).
+// cosmetic customization (outfit, back bling, weapon wraps).
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { canvasTexture, plaidTexture } from '../world/textures.js';
@@ -23,18 +23,22 @@ const G = {
 };
 const geoCache = new Map();
 export function torsoGeo(b = 1) {
-  const pts = [[0.15, 0], [0.175, 0.06], [0.2, 0.2], [0.225, 0.34], [0.232, 0.42], [0.2, 0.5], [0.12, 0.55], [0.0, 0.56]].map(([r, y]) => new THREE.Vector2(r * b, y));
-  const g = new THREE.LatheGeometry(pts, 18);
-  g.scale(1, 1, 0.62);
+  // stylized hero torso: narrow waist, broad chest and shoulders
+  const pts = [[0.16, 0], [0.18, 0.06], [0.205, 0.18], [0.245, 0.32], [0.262, 0.41], [0.235, 0.49], [0.14, 0.55], [0.0, 0.565]].map(([r, y]) => new THREE.Vector2(r * b, y));
+  const g = new THREE.LatheGeometry(pts, 20);
+  g.scale(1, 1, 0.64);
   return g;
 }
 export function pelvisGeo() {
-  const pts = [[0.0, -0.13], [0.12, -0.12], [0.17, -0.06], [0.18, 0.04], [0.16, 0.12], [0.0, 0.13]].map(([r, y]) => new THREE.Vector2(r, y));
+  const pts = [[0.0, -0.13], [0.13, -0.12], [0.185, -0.06], [0.195, 0.04], [0.172, 0.12], [0.0, 0.13]].map(([r, y]) => new THREE.Vector2(r, y));
   const g = new THREE.LatheGeometry(pts, 16);
-  g.scale(1, 1, 0.7);
+  g.scale(1, 1, 0.72);
   return g;
 }
 function cg(key, fn) { if (!geoCache.has(key)) geoCache.set(key, fn()); return geoCache.get(key); }
+// double-sided cloth/shell material (hoods and helmets are open shells)
+const dblCache = new Map();
+function dbl(color) { if (!dblCache.has(color)) dblCache.set(color, new THREE.MeshStandardMaterial({ color, roughness: 0.8, side: THREE.DoubleSide })); return dblCache.get(color); }
 
 const faceCache = new Map();
 export function faceTexture(style = 'default', eye = '#2a1a10') {
@@ -227,6 +231,22 @@ export function buildWeaponModel(kind, rarity = 0, wrap = null, mods = null) {
     case 'molotov': add(G.cyl(0.04, 0.05, 0.18, 8), M(0x8a5a2a, { rough: 0.2 }), 0, 0, 0); add(G.box(0.03, 0.08, 0.03), M(0xe8e0d0), 0, 0.12, 0); break;
     case 'noisemaker': add(G.cyl(0.07, 0.07, 0.06, 12), M(0xc0392b), 0, 0, 0, Math.PI / 2); add(G.sph(0.03), M(0xd4b04a, { metal: 0.6 }), -0.04, 0.07, 0); add(G.sph(0.03), M(0xd4b04a, { metal: 0.6 }), 0.04, 0.07, 0); break;
     case 'machete': add(G.box(0.02, 0.06, 0.5), M(0xc8ccd0, { metal: 0.8, rough: 0.3 }), 0, 0, 0.3); add(G.box(0.04, 0.05, 0.13), accent, 0, 0, -0.02); break;
+    case 'axe': { // fire axe: red head with a spike, wood handle
+      add(G.cyl(0.022, 0.026, 0.72, 8), wood, 0, 0, 0.26, Math.PI / 2);
+      add(G.box(0.03, 0.16, 0.12), M(0xc0302a, { rough: 0.45, metal: 0.3 }), 0, 0.05, 0.58);
+      add(G.box(0.022, 0.2, 0.025), M(0xd8dce0, { metal: 0.8, rough: 0.25 }), 0, 0.06, 0.65);   // edge
+      add(new THREE.ConeGeometry(0.03, 0.12, 6), M(0xc0302a, { rough: 0.45 }), 0, -0.07, 0.57, Math.PI);
+      add(G.box(0.05, 0.03, 0.1), accent, 0, 0, -0.05);
+      break;
+    }
+    case 'pickaxe': { // two-pointed steel head on a hickory handle
+      add(G.cyl(0.022, 0.026, 0.72, 8), wood, 0, 0, 0.26, Math.PI / 2);
+      const st = M(0x8c939b, { metal: 0.8, rough: 0.35 });
+      add(G.box(0.05, 0.06, 0.07), st, 0, 0, 0.6);
+      for (const sy of [1, -1]) { const h = add(new THREE.ConeGeometry(0.03, 0.24, 6), st, 0, sy * 0.14, 0.58); h.rotation.x = sy > 0 ? -0.35 : Math.PI + 0.35; }
+      add(G.box(0.05, 0.03, 0.1), accent, 0, 0, -0.05);
+      break;
+    }
     default: add(G.box(0.08, 0.08, 0.2), accent, 0, 0, 0);
   }
   if (!A) return g;
@@ -287,55 +307,6 @@ export function buildWeaponModel(kind, rarity = 0, wrap = null, mods = null) {
   return g;
 }
 
-export function buildPickaxeModel(style = 'shovel') {
-  const g = new THREE.Group();
-  const handle = M(0x7a5232, { rough: 0.8 });
-  const metal = M(0x9aa0a8, { rough: 0.35, metal: 0.7 });
-  const add = (geo, mat, x, y, z, rx = 0, rz = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, 0, rz); m.castShadow = true; g.add(m); return m; };
-  switch (style) {
-    case 'pitchfork':
-      add(G.cyl(0.025, 0.025, 1.2, 6), handle, 0, 0.35, 0);
-      add(G.box(0.3, 0.04, 0.03), metal, 0, 0.95, 0);
-      for (const x of [-0.13, 0, 0.13]) add(G.cyl(0.012, 0.006, 0.32, 5), metal, x, 1.12, 0);
-      break;
-    case 'axe':
-      add(G.cyl(0.028, 0.03, 0.9, 6), handle, 0, 0.25, 0);
-      add(G.box(0.05, 0.16, 0.26), M(0xc0392b, { rough: 0.4, metal: 0.3 }), 0, 0.64, 0.1);
-      add(G.box(0.02, 0.18, 0.06), metal, 0, 0.64, 0.25);
-      break;
-    case 'sickle':
-      add(G.cyl(0.025, 0.025, 0.4, 6), handle, 0, 0.1, 0);
-      add(new THREE.TorusGeometry(0.2, 0.015, 4, 12, Math.PI * 1.2), metal, 0, 0.42, 0.12, 0, 0);
-      break;
-    case 'anchor':
-      add(G.cyl(0.03, 0.03, 0.9, 6), M(0x2a3a4a, { metal: 0.6, rough: 0.4 }), 0, 0.3, 0);
-      add(new THREE.TorusGeometry(0.22, 0.03, 6, 12, Math.PI), M(0x2a3a4a, { metal: 0.6, rough: 0.4 }), 0, -0.05, 0, 0, Math.PI);
-      add(new THREE.TorusGeometry(0.06, 0.02, 6, 10), M(0x2a3a4a, { metal: 0.6 }), 0, 0.8, 0);
-      break;
-    case 'oar':
-      add(G.cyl(0.025, 0.025, 1.1, 6), M(0xc8a070), 0, 0.3, 0);
-      add(G.box(0.03, 0.4, 0.16), M(0x2f6fb5), 0, 0.95, 0);
-      break;
-    case 'guitar':
-      add(G.box(0.05, 0.6, 0.05), M(0x3a2a1a), 0, 0.5, 0);
-      add(G.cyl(0.16, 0.16, 0.08, 14), M(0xc0602a, { rough: 0.4 }), 0, 0.0, 0, Math.PI / 2);
-      add(G.cyl(0.13, 0.13, 0.08, 14), M(0xc0602a, { rough: 0.4 }), 0, 0.2, 0, Math.PI / 2);
-      break;
-    case 'scythe':
-      add(G.cyl(0.025, 0.025, 1.3, 6), M(0x4a3a2a), 0, 0.4, 0);
-      add(G.box(0.02, 0.06, 0.55), M(0x7aff8a, { emissive: 0.6, metal: 0.5 }), 0, 1.02, 0.25);
-      break;
-    case 'bat':
-      add(G.cyl(0.05, 0.022, 0.85, 8), M(0xc8a070), 0, 0.35, 0);
-      for (let k = 0; k < 4; k++) add(G.cyl(0.004, 0.004, 0.14, 4), metal, 0.05, 0.55 + k * 0.06, 0, 0, Math.PI / 2);
-      break;
-    default: // shovel
-      add(G.cyl(0.025, 0.028, 0.95, 6), handle, 0, 0.3, 0);
-      add(G.box(0.18, 0.04, 0.03), handle, 0, 0.8, 0);
-      add(G.box(0.2, 0.26, 0.025), metal, 0, -0.27, 0.0);
-  }
-  return g;
-}
 
 export function buildBackBling(style) {
   const g = new THREE.Group();
@@ -375,7 +346,7 @@ export function buildGlider(style = 'canvas') {
 // Character
 // ---------------------------------------------------------------------------
 export const DEFAULT_OUTFIT = {
-  skin: 0xe0ac80, shirt: 0x3a6aa8, shirtPattern: 'plaid', shirt2: 0x1e3a5a, pants: 0x3a4a6a, boots: 0x5a3a24, gloves: null,
+  skin: 0xe0ac80, shirt: 0x3a6aa8, shirtPattern: null, shirt2: 0x1e3a5a, pants: 0x3a4a6a, boots: 0x5a3a24, gloves: null,
   hair: 'short', hairColor: 0x4a2a14, hat: 'none', hatColor: 0xc0392b, face: 'default', eye: '#3a2a1a', vest: null, overalls: null, bandana: null, build: 1,
 };
 
@@ -417,19 +388,25 @@ export class Character {
     this.mesh(cg('torsoL' + b, () => torsoGeo(b)), shirt, P.spine, 0, -0.02, 0);
     if (o.overalls) {
       const om = M(o.overalls);
-      this.mesh(cg('bib', () => G.rbox(0.3, 0.3, 0.29, 0.05)), om, P.spine, 0, 0.17, 0);
-      for (const sx of [-0.12, 0.12]) this.mesh(cg('strap', () => G.box(0.05, 0.38, 0.29)), om, P.spine, sx, 0.34, 0);
+      // bib + straps sit just outside the torso shell
+      this.mesh(cg('bib' + b, () => { const g = torsoGeo(b); g.scale(1.04, 0.5, 1.07); return g; }), om, P.spine, 0, -0.02, 0);
+      this.mesh(cg('bibFront', () => G.rbox(0.28, 0.2, 0.06, 0.03)), om, P.spine, 0, 0.3, 0.135);
+      for (const sx of [-0.1, 0.1]) { const st = this.mesh(cg('strap2', () => G.box(0.05, 0.3, 0.04)), om, P.spine, sx, 0.42, 0.13); st.rotation.x = -0.25; }
     }
-    if (o.vest) this.mesh(cg('vest' + b, () => G.rbox(0.46 * b, 0.42, 0.3, 0.08)), M(o.vest), P.spine, 0, 0.28, 0);
+    if (o.vest) {
+      // a vest is the torso shell, slightly larger, open down the front
+      this.mesh(cg('vest' + b, () => { const g = torsoGeo(b); g.scale(1.05, 0.97, 1.08); return g; }), M(o.vest, { rough: 0.8 }), P.spine, 0, 0.0, 0);
+      this.mesh(cg('vestGap', () => G.box(0.07, 0.4, 0.02)), shirt, P.spine, 0, 0.27, 0.178);
+    }
     P.chest = new THREE.Group(); P.chest.position.y = 0.48; P.spine.add(P.chest);
     P.neck = new THREE.Group(); P.neck.position.y = 0.06; P.chest.add(P.neck);
-    this.mesh(cg('neck', () => G.cyl(0.06, 0.07, 0.1, 8)), skin, P.neck, 0, 0.02, 0);
+    this.mesh(cg('neck', () => G.cyl(0.07, 0.08, 0.1, 10)), skin, P.neck, 0, 0.02, 0);
     if (o.bandana) this.mesh(cg('bandana', () => G.cyl(0.085, 0.1, 0.07, 10)), M(o.bandana), P.neck, 0, 0.0, 0);
-    P.head = new THREE.Group(); P.head.position.y = 0.2; P.neck.add(P.head);
+    P.head = new THREE.Group(); P.head.position.y = 0.21; P.head.scale.setScalar(1.15); P.neck.add(P.head); // stylized: big readable heads
     const headGeo = cg('head', () => { const g = G.sph(0.155, 20, 16); g.scale(1, 1.08, 1.05); return g; });
     const headMat = o.face === 'sack' || o.face === 'pumpkin' ? M(0xffffff, { map: faceTexture(o.face), rough: 0.9 }) : skin;
     this.mesh(headGeo, headMat, P.head, 0, 0, 0);
-    if (o.face !== 'sack' && o.face !== 'pumpkin') {
+    if (o.face !== 'sack' && o.face !== 'pumpkin' && o.hat !== 'plague') {
       const fm = new THREE.MeshStandardMaterial({ map: faceTexture(o.face, o.eye), transparent: true, roughness: 0.6, depthWrite: false });
       const face = this.mesh(cg('faceGeo', () => { const g = G.sph(0.157, 20, 16); g.scale(1, 1.08, 1.05); return g; }), fm, P.head, 0, 0, 0);
       face.castShadow = false;
@@ -440,39 +417,38 @@ export class Character {
     // arms
     for (const side of ['L', 'R']) {
       const sx = side === 'L' ? 1 : -1;
-      const sh = new THREE.Group(); sh.position.set(sx * 0.28 * b, 0.0, 0); P.chest.add(sh); P['sh' + side] = sh;
-      this.mesh(cg('shoulder' + b, () => G.sph(0.085 * b, 10, 8)), shirt, sh, 0, 0, 0);
-      this.mesh(cg('uarm', () => G.cap(0.072, 0.2)), shirt, sh, 0, -0.15, 0);
+      const sh = new THREE.Group(); sh.position.set(sx * 0.3 * b, -0.03, 0); P.chest.add(sh); P['sh' + side] = sh;
+      this.mesh(cg('shoulder' + b, () => G.sph(0.087 * b, 12, 10)), shirt, sh, 0, -0.01, 0);
+      this.mesh(cg('uarm' + b, () => G.cap(0.084 * b, 0.18)), shirt, sh, 0, -0.15, 0);
       const el = new THREE.Group(); el.position.y = -0.3; sh.add(el); P['el' + side] = el;
-      this.mesh(cg('elbow', () => G.sph(0.07, 10, 8)), shirt, el, 0, 0, 0);
-      this.mesh(cg('farm', () => G.cap(0.064, 0.19)), o.sleeves === 'short' ? skin : shirt, el, 0, -0.13, 0);
+      this.mesh(cg('elbow' + b, () => G.sph(0.08 * b, 10, 8)), shirt, el, 0, 0, 0);
+      this.mesh(cg('farm' + b, () => G.cap(0.076 * b, 0.17)), o.sleeves === 'short' ? skin : shirt, el, 0, -0.13, 0);
       const hand = new THREE.Group(); hand.position.y = -0.28; el.add(hand); P['hand' + side] = hand;
-      this.mesh(cg('hand', () => G.rbox(0.1, 0.11, 0.075, 0.035)), gloves, hand, 0, -0.03, 0.0);
+      this.mesh(cg('hand', () => G.rbox(0.115, 0.12, 0.09, 0.04)), gloves, hand, 0, -0.03, 0.0);
     }
     // legs
     for (const side of ['L', 'R']) {
       const sx = side === 'L' ? 1 : -1;
-      const hip = new THREE.Group(); hip.position.set(sx * 0.1, -0.06, 0); P.hips.add(hip); P['hip' + side] = hip;
-      this.mesh(cg('thigh', () => G.cap(0.098, 0.28)), o.overalls ? M(o.overalls) : pants, hip, 0, -0.2, 0);
+      const hip = new THREE.Group(); hip.position.set(sx * 0.105, -0.06, 0); P.hips.add(hip); P['hip' + side] = hip;
+      this.mesh(cg('thigh', () => G.cap(0.112, 0.25)), o.overalls ? M(o.overalls) : pants, hip, 0, -0.2, 0);
       const kn = new THREE.Group(); kn.position.y = -0.43; hip.add(kn); P['kn' + side] = kn;
-      this.mesh(cg('knee', () => G.sph(0.088, 10, 8)), o.overalls ? M(o.overalls) : pants, kn, 0, 0, 0);
-      this.mesh(cg('shin', () => G.cap(0.082, 0.26)), o.overalls ? M(o.overalls) : pants, kn, 0, -0.2, 0);
+      this.mesh(cg('knee', () => G.sph(0.1, 10, 8)), o.overalls ? M(o.overalls) : pants, kn, 0, 0, 0);
+      this.mesh(cg('shin', () => G.cap(0.095, 0.24)), o.overalls ? M(o.overalls) : pants, kn, 0, -0.2, 0);
       const ft = new THREE.Group(); ft.position.y = -0.42; kn.add(ft); P['ft' + side] = ft;
-      this.mesh(cg('boot', () => G.rbox(0.14, 0.13, 0.28, 0.05)), boots, ft, 0, -0.02, 0.05);
+      this.mesh(cg('boot', () => G.rbox(0.158, 0.145, 0.3, 0.055)), boots, ft, 0, -0.02, 0.05);
     }
     // attach points
-    P.back = new THREE.Group(); P.back.position.set(0, 0.25, -0.13); P.spine.add(P.back);
+    P.back = new THREE.Group(); P.back.position.set(0, 0.25, -0.165); P.spine.add(P.back);
     P.weaponR = new THREE.Group(); P.weaponR.position.set(0, -0.05, 0.02); P.handR.add(P.weaponR);
     P.toolR = new THREE.Group(); P.toolR.position.set(0, -0.04, 0.0); P.handR.add(P.toolR);
     P.gliderMount = new THREE.Group(); P.gliderMount.position.set(0, 0.3, 0); this.root.add(P.gliderMount);
     if (this.backBlingStyle) this.setBackBling(this.backBlingStyle);
-    if (this.pickaxeStyle) this.setPickaxe(this.pickaxeStyle);
   }
   buildHair(o) {
     const P = this.parts;
     const hm = M(o.hairColor ?? 0x4a2a14, { rough: 0.9 });
     const hc = M(o.hatColor ?? 0xc0392b, { rough: 0.7 });
-    const hairOn = o.hat !== 'helmet' && o.hat !== 'hood' && o.face !== 'pumpkin' && o.face !== 'sack' && o.hat !== 'gasmask';
+    const hairOn = o.hat !== 'helmet' && o.hat !== 'hood' && o.face !== 'pumpkin' && o.face !== 'sack' && o.hat !== 'gasmask' && o.hat !== 'plague' && o.hat !== 'combat';
     if (hairOn) {
       if (o.hair === 'short') this.mesh(cg('hairShort', () => { const g = G.sph(0.165, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.55); return g; }), hm, P.head, 0, 0.025, -0.01);
       else if (o.hair === 'long') { this.mesh(cg('hairFull', () => G.sph(0.165, 16, 10)), hm, P.head, 0, 0.025, -0.012); this.mesh(cg('hairLong', () => G.rbox(0.3, 0.32, 0.12, 0.05)), hm, P.head, 0, -0.12, -0.1); }
@@ -490,12 +466,52 @@ export class Character {
         break;
       }
       case 'beanie': this.mesh(cg('beanie', () => G.sph(0.175, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.55)), hc, P.head, 0, 0.03, 0); this.mesh(cg('pompom', () => G.sph(0.045, 8, 6)), M(0xf0f0f0), P.head, 0, 0.2, 0); break;
-      case 'helmet': this.mesh(cg('helm', () => G.sph(0.185, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.6)), hc, P.head, 0, 0.02, 0); this.mesh(cg('visor', () => G.box(0.26, 0.09, 0.05)), M(0x2a3a4a, { rough: 0.2, metal: 0.4 }), P.head, 0, 0.02, 0.165); break;
+      case 'helmet': { // football helmet: open face behind a cage
+        this.mesh(cg('helmOpen', () => G.sph(0.19, 18, 12, Math.PI / 2 + 0.75, Math.PI * 2 - 1.5, 0, Math.PI * 0.62)), dbl(o.hatColor ?? 0xc0392b), P.head, 0, 0.015, 0);
+        this.mesh(cg('helmCrown', () => G.sph(0.19, 18, 8, 0, Math.PI * 2, 0, Math.PI * 0.3)), hc, P.head, 0, 0.015, 0);
+        const cage = M(0xd8d8d8, { rough: 0.4, metal: 0.5 });
+        for (const y of [-0.06, -0.11]) { const bar = this.mesh(cg('cageBar', () => G.cyl(0.012, 0.012, 0.2, 6)), cage, P.head, 0, y, 0.17); bar.rotation.z = Math.PI / 2; }
+        for (const sx of [-0.09, 0.09]) this.mesh(cg('cageV', () => G.cyl(0.011, 0.011, 0.1, 6)), cage, P.head, sx, -0.08, 0.165);
+        break;
+      }
+      case 'combat': { // military helmet + goggles pushed up
+        this.mesh(cg('combatHelm', () => G.sph(0.192, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.46)), hc, P.head, 0, 0.03, -0.005);
+        this.mesh(cg('combatRim', () => G.cyl(0.198, 0.2, 0.025, 20)), hc, P.head, 0, 0.055, 0);
+        const strap = this.mesh(cg('goggleStrap', () => G.cyl(0.193, 0.193, 0.035, 20, 1, true)), M(0x1a1a1a), P.head, 0, 0.1, 0);
+        strap.material = dbl(0x1a1a1a);
+        for (const sx of [-0.055, 0.055]) this.mesh(cg('goggle', () => G.cyl(0.04, 0.04, 0.03, 12)), M(0x7affd0, { rough: 0.2, emissive: 0.5 }), P.head, sx, 0.1, 0.18).rotation.x = Math.PI / 2;
+        break;
+      }
       case 'bucket': this.mesh(cg('bucket', () => G.cyl(0.16, 0.21, 0.14, 14)), hc, P.head, 0, 0.12, 0); break;
-      case 'hood': this.mesh(cg('hood', () => G.sph(0.2, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.7)), hc, P.head, 0, 0.0, -0.03); break;
+      case 'hood': { // open at the front so the face shows
+        this.mesh(cg('hoodOpen', () => G.sph(0.205, 18, 12, Math.PI / 2 + 0.95, Math.PI * 2 - 1.9, 0, Math.PI * 0.72)), dbl(o.hatColor ?? 0x2a2a2a), P.head, 0, 0.01, -0.025);
+        const tip = this.mesh(cg('hoodTip', () => new THREE.ConeGeometry(0.09, 0.18, 10)), hc, P.head, 0, 0.12, -0.17); tip.rotation.x = -1.1;
+        this.mesh(cg('hoodCape', () => G.rbox(0.34, 0.16, 0.16, 0.06)), hc, P.head, 0, -0.17, -0.06);
+        break;
+      }
       case 'crown': for (let k = 0; k < 9; k++) { const a = (k / 9) * Math.PI * 2; const c = this.mesh(cg('cob', () => G.cap(0.03, 0.09)), M(0xf2c832, { rough: 0.5, emissive: 0.15 }), P.head, Math.cos(a) * 0.14, 0.17, Math.sin(a) * 0.14); c.rotation.z = -Math.cos(a) * 0.3; c.rotation.x = Math.sin(a) * 0.3; } break;
-      case 'gasmask': this.mesh(cg('gmHead', () => G.sph(0.165, 14, 10)), M(0x2a2a2a), P.head, 0, 0, 0); this.mesh(cg('gmFace', () => G.rbox(0.18, 0.12, 0.08, 0.03)), M(0x3a4a3a), P.head, 0, -0.04, 0.15); for (const sx of [-0.06, 0.06]) this.mesh(cg('gmEye', () => G.cyl(0.035, 0.035, 0.02, 10)), M(0x9aff9a, { emissive: 0.8 }), P.head, sx, 0.03, 0.155).rotation.x = Math.PI / 2; this.mesh(cg('gmFilter', () => G.cyl(0.045, 0.045, 0.07, 10)), M(0x5a5a5a), P.head, 0, -0.08, 0.2).rotation.x = Math.PI / 2; break;
-      case 'plague': this.mesh(cg('pdHat', () => G.cyl(0.14, 0.15, 0.16, 14)), M(0x1a1a1a), P.head, 0, 0.17, 0); this.mesh(cg('pdBrim', () => G.cyl(0.28, 0.28, 0.02, 16)), M(0x1a1a1a), P.head, 0, 0.09, 0); this.mesh(cg('beak', () => new THREE.ConeGeometry(0.05, 0.22, 8)), M(0xe8dcc0), P.head, 0, -0.03, 0.24).rotation.x = Math.PI / 2; break;
+      case 'gasmask': { // hazmat hood, clear visor, respirator
+        const suit = o.shirt ?? 0xe8c832;
+        this.mesh(cg('hzHood', () => G.sph(0.215, 18, 12, Math.PI / 2 + 0.8, Math.PI * 2 - 1.6, 0, Math.PI * 0.78)), dbl(suit), P.head, 0, 0.0, -0.01);
+        const visor = new THREE.MeshStandardMaterial({ color: 0xbfe8ff, transparent: true, opacity: 0.32, roughness: 0.05, metalness: 0.2, depthWrite: false });
+        this.mesh(cg('hzVisor', () => G.sph(0.2, 18, 12, Math.PI / 2 - 0.8, 1.6, Math.PI * 0.15, Math.PI * 0.42)), visor, P.head, 0, 0.0, 0.0).castShadow = false;
+        this.mesh(cg('hzResp', () => G.rbox(0.13, 0.08, 0.07, 0.03)), M(0x2a2a2a), P.head, 0, -0.1, 0.165);
+        this.mesh(cg('gmFilter', () => G.cyl(0.04, 0.04, 0.06, 10)), M(0x5a5a5a), P.head, 0, -0.12, 0.215).rotation.x = Math.PI / 2;
+        break;
+      }
+      case 'plague': { // leather mask, brass goggles, long beak, wide hat
+        const leather = M(0x4a3424, { rough: 0.55 });
+        this.mesh(cg('pdMask', () => G.sph(0.162, 18, 14)), leather, P.head, 0, 0, 0.004);
+        for (const sx of [-0.06, 0.06]) {
+          this.mesh(cg('pdRim', () => G.cyl(0.042, 0.042, 0.03, 14)), M(0xb8902a, { metal: 0.7, rough: 0.3 }), P.head, sx, 0.035, 0.15).rotation.x = Math.PI / 2;
+          this.mesh(cg('pdLens', () => G.cyl(0.032, 0.032, 0.032, 14)), M(0xffb030, { emissive: 0.9, rough: 0.2 }), P.head, sx, 0.035, 0.152).rotation.x = Math.PI / 2;
+        }
+        const beak = this.mesh(cg('beak2', () => new THREE.ConeGeometry(0.055, 0.26, 10)), leather, P.head, 0, -0.06, 0.26); beak.rotation.x = Math.PI / 2 + 0.25;
+        this.mesh(cg('pdHat', () => G.cyl(0.14, 0.15, 0.16, 14)), M(0x1a1a1a), P.head, 0, 0.19, 0);
+        this.mesh(cg('pdBrim', () => G.cyl(0.3, 0.3, 0.02, 18)), M(0x1a1a1a), P.head, 0, 0.11, 0);
+        this.mesh(cg('pdHood', () => G.sph(0.2, 18, 10, Math.PI / 2 + 1.0, Math.PI * 2 - 2.0, Math.PI * 0.3, Math.PI * 0.5)), dbl(0x1a1a1a), P.head, 0, 0, -0.02);
+        break;
+      }
       case 'veil': this.mesh(cg('cbBrim', () => G.cyl(0.32, 0.32, 0.02, 20)), M(0xf0ece0), P.head, 0, 0.09, 0); { const vm = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, transparent: true, opacity: 0.35 }); this.mesh(cg('veilNet', () => G.cyl(0.3, 0.24, 0.3, 16)), vm, P.head, 0, -0.06, 0); } break;
       case 'antlers': for (const sx of [-1, 1]) { const a = this.mesh(cg('antler', () => G.cyl(0.015, 0.025, 0.25, 6)), M(0xd8c8a0), P.head, sx * 0.1, 0.22, 0); a.rotation.z = -sx * 0.5; } break;
       default: break;
@@ -508,15 +524,6 @@ export class Character {
     this.backBling = style && style !== 'none' ? buildBackBling(style) : null;
     if (this.backBling) { this.backBling.traverse((o) => { if (o.isMesh) o.castShadow = this.shadow; }); this.parts.back.add(this.backBling); }
   }
-  setPickaxe(style) {
-    this.pickaxeStyle = style;
-    if (this.pickaxe) this.parts.toolR.remove(this.pickaxe);
-    this.pickaxe = buildPickaxeModel(style);
-    this.pickaxe.rotation.x = Math.PI / 2;
-    this.pickaxe.position.set(0, 0, 0.05);
-    this.pickaxe.visible = false;
-    this.parts.toolR.add(this.pickaxe);
-  }
   setGlider(style) {
     if (this.glider) this.parts.gliderMount.remove(this.glider);
     this.glider = buildGlider(style);
@@ -527,8 +534,7 @@ export class Character {
     if (this.weaponModel) this.parts.weaponR.remove(this.weaponModel);
     this.weaponModel = null;
     this.anim.weapon = kind || 'none';
-    if (this.pickaxe) this.pickaxe.visible = kind === 'pickaxe';
-    if (!kind || kind === 'pickaxe' || kind === 'none' || kind === 'item') return;
+    if (!kind || kind === 'none' || kind === 'item' || kind === 'fists') return;
     this.weaponModel = buildWeaponModel(kind, rarity, wrap, mods);
     this.weaponModel.traverse((o) => { if (o.isMesh) o.castShadow = this.shadow; });
     this.parts.weaponR.add(this.weaponModel);
@@ -581,7 +587,7 @@ export class Character {
       P.shL.rotation.z = 0.12; P.shR.rotation.z = -0.12;
       P.elL.rotation.x = -0.3 - run * 0.6; P.elR.rotation.x = -0.3 - run * 0.6;
       if (w === 'item') { P.shR.rotation.x = -0.7; P.elR.rotation.x = -0.9; }
-    } else if (w === 'pickaxe' || w === 'machete') {
+    } else if (w === 'machete' || w === 'axe' || w === 'pickaxe') {
       const armAmp = (0.2 + run * 0.6) * (moving ? 1 : 0);
       P.shL.rotation.x = -Math.sin(ph) * armAmp; P.shL.rotation.z = 0.15; P.elL.rotation.x = -0.4;
       P.shR.rotation.x = -0.35 + Math.sin(ph) * armAmp * 0.4; P.shR.rotation.z = -0.15; P.elR.rotation.x = -0.9;
@@ -617,6 +623,7 @@ export class Character {
         P.shR.rotation.x = arc; P.elR.rotation.x = -0.5; P.chest.rotation.y = 0.4 - k * 0.8; P.spine.rotation.x = 0.15 + s * 0.2;
         break;
       }
+      case 'punch': P.shR.rotation.x = -1.55 * s; P.elR.rotation.x = -0.15 - (1 - s) * 0.6; P.chest.rotation.y = -0.35 * s; break;
       case 'recoil': P.shR.rotation.x -= 0.12 * (1 - k); P.shL.rotation.x -= 0.12 * (1 - k); P.chest.rotation.x -= 0.06 * (1 - k); break;
       case 'reload': P.shL.rotation.x = -0.9 + Math.sin(k * Math.PI * 2) * 0.3; P.elL.rotation.x = -1.2; P.handR.rotation.z = s * 0.5; break;
       case 'consume': P.shR.rotation.x = -1.9 * s; P.elR.rotation.x = -1.6 * s; P.head.rotation.x = -0.25 * s; break;

@@ -51,6 +51,7 @@ export class Interact {
       for (const d of rt.doors) this.createDoor(d, ch);
       for (const w of rt.windows) if (w.boarded > 0) { this.boardCollider(w); this.activeWindows.add(w); }
       if (!b.lootSpawned) this.spawnBuildingLoot(b);
+      this.G.net?.catchUpBuilding(b);
     }
     for (const c of this.crates) if (!c.mesh && this.G.view.chunkOf(c.x, c.z) === ch) this.makeCrateMesh(c);
     this.group.add(ch.dyn);
@@ -123,6 +124,24 @@ export class Interact {
     this.updateDoorCollider(d);
     this.G.audio?.play(d.open ? 'door_open' : 'door_close', d, { vol: 0.7 });
     this.G.emitNoise(d.x, d.z, 5, by, 'door');
+    this.G.net?.onDoorChange(d);
+  }
+  // multiplayer: another player opened, closed or broke this door
+  applyDoorState(d, m, silent = false) {
+    if (m.br && !d.broken) { d.broken = true; d.open = true; if (d.mesh && d.mesh.parent) d.mesh.parent.remove(d.mesh); d.mesh = null; this.updateDoorCollider(d); if (!silent) this.G.audio?.play('door_break', d, { vol: 1 }); return; }
+    if (d.broken || d.open === !!m.o) return;
+    d.open = !!m.o; d.swing = m.s || 1;
+    if (!d.pivot) d.angle = d.open ? 1.6 : 0;
+    this.updateDoorCollider(d);
+    if (!silent) this.G.audio?.play(d.open ? 'door_open' : 'door_close', d, { vol: 0.7 });
+  }
+  applyBoardState(rec, on, silent = false) {
+    if (on && !rec.boarded) {
+      if (rec.kind === 'door' && rec.open) { rec.open = false; this.updateDoorCollider(rec); }
+      rec.boarded = 1; rec.hp = rec.kind === 'door' ? DOOR_BOARD_HP : BOARD_HP;
+      this.createBoards(rec);
+      if (!silent) this.G.audio?.play('hammer', rec, { vol: 0.9 });
+    } else if (!on && rec.boarded) this.unboard(rec, null);
   }
   damageDoor(d, dmg, src) {
     if (d.broken) return false;
@@ -134,6 +153,7 @@ export class Interact {
       if (d.mesh && d.mesh.parent) d.mesh.parent.remove(d.mesh);
       d.mesh = null;
       this.updateDoorCollider(d);
+      this.G.net?.onDoorChange(d);
       this.G.audio?.play('door_break', d, { vol: 1 });
       this.G.fx.impact(d.x, d.floorY + 1, d.z, d.nx, 0, d.nz, 'wood');
       return false;
@@ -182,6 +202,7 @@ export class Interact {
     rec.hp = (rec.kind === 'door' ? DOOR_BOARD_HP : BOARD_HP) * (by.mods ? by.mods.get('barricadeHp') : 1);
     by.stats.boarded++;
     this.createBoards(rec);
+    this.G.net?.onBoardChange(rec);
     this.G.audio?.play('hammer', rec, { vol: 0.9 });
     this.G.emitNoise(rec.x, rec.z, 35, by, 'hammer');
     return true;
@@ -193,6 +214,7 @@ export class Interact {
     if (rec.kind !== 'door' && rec.col) { this.G.physics.remove(rec.col); rec.col = null; }
     if (rec.kind === 'door') this.updateDoorCollider(rec);
     this.activeWindows.delete(rec);
+    this.G.net?.onBoardChange(rec);
     if (by) by.addItem('wood', 10);
     this.G.audio?.play('board_break', rec, { vol: 0.7 });
   }
@@ -235,28 +257,42 @@ export class Interact {
     b.lootSpawned = true;
     const rt = b.rt;
     const G = this.G;
+    // multiplayer: every player rolls the same loot for a building from the match seed
+    const saved = this.rng;
+    if (G.net) this.rng = new RNG((G.seed ^ Math.imul(b.id + 1, 2654435761)) >>> 0);
+    try { this._spawnBuildingLoot(b, rt, G); } finally { this.rng = saved; }
+  }
+  _spawnBuildingLoot(b, rt, G) {
+    let lootN = 0;
     const poi = G.poiAt?.(b.x, b.z);
     const mul = (poi ? poi.loot : 0.8) * (G.match?.lootMul ?? 1);
     let placed = 0;
-    const cap = 2 + Math.ceil(rt.rooms.length * 0.8) + (b.kind === 'store' || b.kind === 'bigbox' || b.kind === 'warehouse' ? 4 : 0);
+    // a house holds a handful of things, not a pile in every room (containers hold the rest)
+    const cap = 1 + Math.ceil(rt.rooms.length * 0.45) + (b.kind === 'store' || b.kind === 'bigbox' || b.kind === 'warehouse' ? 3 : 0);
+    const used = [];
     for (const spot of this.rng.shuffle([...rt.loot])) {
       if (placed >= cap) break;
       if (!this.rng.chance(0.3 * mul)) continue;
+      if (used.some((u) => Math.hypot(u.x - spot.x, u.z - spot.z) < 2.2 && Math.abs(u.y - spot.y) < 1.5)) continue; // spread out
+      used.push(spot);
       placed++;
       const cats = CAT_WEIGHTS[spot.cat || b.shopCat || 'default'] || CAT_WEIGHTS.default;
       const cat = this.rng.weighted(cats);
       const it = this.rollItem(cat, spot.tier > 1 ? 'container' : 'floor');
+      it.nid = `L${b.id}.${lootN++}`;
       this.addWorldItem(it, spot.x, spot.y, spot.z);
-      if (it.ammo && this.rng.chance(0.8)) this.addWorldItem({ id: it.ammo, n: AMMO[it.ammo].pickup, r: 0 }, spot.x + 0.4, spot.y, spot.z + 0.2);
+      if (it.ammo && this.rng.chance(0.8)) this.addWorldItem({ id: it.ammo, n: AMMO[it.ammo].pickup, r: 0, nid: `L${b.id}.${lootN++}` }, spot.x + 0.4, spot.y, spot.z + 0.2);
     }
     // supply crate
     if (rt.loot.length && this.rng.chance(0.07 * mul + (b.kind === 'barn' || b.kind === 'warehouse' ? 0.12 : 0))) {
       const spot = this.rng.pick(rt.loot);
-      this.crates.push({ x: spot.x, y: spot.y, z: spot.z, rot: b.rot, opened: false, mesh: null, kind: 'supply' });
+      this.crates.push({ x: spot.x, y: spot.y, z: spot.z, rot: b.rot, opened: false, mesh: null, kind: 'supply', nid: `C${b.id}` });
     }
   }
   addWorldItem(it, x, y, z) {
+    const net = this.G.net;
     const rec = { ...it, x, y, z, mesh: null, t: 0 };
+    if (net) { rec.nid = it.nid || net.newId('I'); if (net.taken.has(rec.nid)) return null; }
     this.items.push(rec);
     const p = this.G.player;
     if (p && Math.hypot(x - p.pos.x, z - p.pos.z) < 70) this.makeItemMesh(rec);
@@ -271,7 +307,9 @@ export class Interact {
       if (this.G.physics.lineOfSight(x, y + 0.3, z, tx, y + 0.3, tz)) { px = tx; pz = tz; break; }
     }
     const gy = this.G.physics.groundAt(px, pz, y + 1.0);
-    return this.addWorldItem(it, px, gy + 0.02, pz);
+    const rec = this.addWorldItem(it, px, gy + 0.02, pz);
+    if (rec) this.G.net?.onDropItem(rec);
+    return rec;
   }
   makeItemMesh(rec) {
     const g = new THREE.Group();
@@ -321,6 +359,7 @@ export class Interact {
     if (rec.mesh) this.itemGroup.remove(rec.mesh);
     const i = this.items.indexOf(rec);
     if (i >= 0) this.items.splice(i, 1);
+    this.G.net?.onTakeItem(rec);
   }
   makeCrateMesh(c) {
     const g = new THREE.Group();
@@ -338,6 +377,7 @@ export class Interact {
   openCrate(c, by) {
     if (c.opened) return;
     c.opened = true;
+    this.G.net?.onCrateOpen(c);
     if (c.mesh) { this.itemGroup.remove(c.mesh); c.mesh = null; this.makeCrateMesh(c); }
     const n = c.kind === 'airdrop' ? 5 : 3;
     const table = c.kind === 'airdrop' ? 'airdrop' : 'supply';
@@ -356,6 +396,7 @@ export class Interact {
   searchContainer(c, by) {
     if (c.searched) return;
     c.searched = true;
+    this.G.net?.onSearch(c);
     by.stats.searched++;
     const table = CONTAINER_LOOT[c.kind] || CONTAINER_LOOT.cabinet;
     const luck = by.mods ? by.mods.get('luck') : 1;

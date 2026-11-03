@@ -7,7 +7,7 @@ export const RARITIES = {
   epic: { name: 'Epic', color: '#b54ae8', bg: ['#c060f0', '#4a1a78'], price: 1400 },
   legendary: { name: 'Legendary', color: '#f0a020', bg: ['#f5b23a', '#8a3a10'], price: 2000 },
 };
-export const TYPE_NAMES = { outfit: 'Outfit', backbling: 'Back Bling', pickaxe: 'Harvesting Tool', paint: 'Bike Paint', emote: 'Emote', wrap: 'Wrap' };
+export const TYPE_NAMES = { outfit: 'Outfit', backbling: 'Back Bling', paint: 'Bike Paint', emote: 'Emote', wrap: 'Wrap' };
 
 const O = (id, name, rarity, outfit, desc, set) => ({ id, type: 'outfit', name, rarity, outfit, desc, set });
 export const COSMETICS = [
@@ -27,7 +27,7 @@ export const COSMETICS = [
   O('scarecrow', 'Patchwork Jack', 'epic', { skin: 0xc8a870, face: 'sack', shirt: 0x8a3a2a, shirtPattern: 'plaid', shirt2: 0x3a2a1a, overalls: 0x5a4a3a, pants: 0x5a4a3a, boots: 0x3a2a1a, hat: 'straw', gloves: 0xd8b860 }, 'The crows were the first to leave.', 'Harvest Moon'),
   O('hazmat', 'Hazmat Hank', 'epic', { skin: 0xe0ac80, shirt: 0xe8c832, pants: 0xe8c832, boots: 0x1a1a1a, gloves: 0x1a1a1a, hat: 'gasmask', build: 1.05 }, 'Came to contain the Greenfall. Stayed to survive it.', 'Greenfall'),
   O('pumpkin', 'Pumpkin Pete', 'epic', { skin: 0x8a6a4a, face: 'pumpkin', shirt: 0x2a2a2a, overalls: 0x6a3a8a, pants: 0x6a3a8a, boots: 0x1a1a1a, gloves: 0x3a6a2a }, 'Carved himself a new head.', 'Harvest Moon'),
-  O('ranger', 'Night Ranger', 'epic', { skin: 0x5a3a2a, shirt: 0x2a3a2a, pants: 0x1a2a1a, boots: 0x1a1a1a, vest: 0x3a4a3a, hat: 'helmet', hatColor: 0x2a3a2a, gloves: 0x1a1a1a }, 'Owns the dark. Hates the green.', 'Greenfall'),
+  O('ranger', 'Night Ranger', 'epic', { skin: 0x5a3a2a, shirt: 0x2a3a2a, pants: 0x1a2a1a, boots: 0x1a1a1a, vest: 0x3a4a3a, hat: 'combat', hatColor: 0x3a4a32, gloves: 0x1a1a1a, face: 'angry' }, 'Owns the dark. Hates the green.', 'Greenfall'),
   O('marshwitch', 'Marsh Witch', 'epic', { skin: 0x9ab88a, shirt: 0x4a2a5a, pants: 0x2a1a2a, boots: 0x1a1a1a, hat: 'hood', hatColor: 0x3a1a4a, face: 'angry', eye: '#7aff5a' }, 'The swamp whispers. She listens.', 'Bellerose'),
   O('cornking', 'Corn King', 'legendary', { skin: 0xe0ac80, shirt: 0xe8b830, pants: 0x3a6a2a, boots: 0x6a4a1a, hat: 'crown', hair: 'long', hairColor: 0xf0d060, gloves: 0xf0d060, face: 'grin', build: 1.08 }, 'Ruler of the endless rows. Bow, or be harvested.', 'Harvest Moon'),
   O('plague', 'Dr. Mire', 'legendary', { skin: 0xd8d0c0, shirt: 0x1a1a1a, pants: 0x1a1a1a, boots: 0x2a1a1a, gloves: 0x3a2a1a, hat: 'plague', vest: 0x2a2a2a }, 'Has a cure. Will not share it.', 'Greenfall'),
@@ -43,16 +43,6 @@ export const COSMETICS = [
   { id: 'bb_crate', type: 'backbling', name: 'Supply Run', rarity: 'uncommon', style: 'crate', desc: 'Fragile. This side up.' },
   { id: 'bb_wings', type: 'backbling', name: 'Nightwings', rarity: 'epic', style: 'wings', desc: 'Not for flying. Mostly.' },
   { id: 'bb_skull', type: 'backbling', name: 'Green Glow', rarity: 'legendary', style: 'skull', desc: 'Its eyes follow the horde.' },
-  // ---- harvesting tools ----
-  { id: 'pk_shovel', type: 'pickaxe', name: 'Rusty Shovel', rarity: 'uncommon', style: 'shovel', desc: 'Dig in.' },
-  { id: 'pk_pitchfork', type: 'pickaxe', name: 'Pitchfork', rarity: 'rare', style: 'pitchfork', desc: 'Torches sold separately.' },
-  { id: 'pk_axe', type: 'pickaxe', name: 'Fire Axe', rarity: 'rare', style: 'axe', desc: 'Break glass in case of horde.' },
-  { id: 'pk_sickle', type: 'pickaxe', name: 'Harvest Hook', rarity: 'uncommon', style: 'sickle', desc: 'Reap what you sow.' },
-  { id: 'pk_anchor', type: 'pickaxe', name: 'Dead Weight', rarity: 'epic', style: 'anchor', desc: 'Salvaged from Pelican Harbor.' },
-  { id: 'pk_oar', type: 'pickaxe', name: 'Paddle Out', rarity: 'uncommon', style: 'oar', desc: 'Up the creek, with a paddle.' },
-  { id: 'pk_guitar', type: 'pickaxe', name: 'Power Chord', rarity: 'epic', style: 'guitar', desc: 'Encore!' },
-  { id: 'pk_scythe', type: 'pickaxe', name: 'Greenfall Scythe', rarity: 'legendary', style: 'scythe', desc: 'Forged in the green light.' },
-  { id: 'pk_bat', type: 'pickaxe', name: 'Tailgater', rarity: 'rare', style: 'bat', desc: 'Batter up.' },
   // ---- bike paint (applied to any dirt bike you ride) ----
   { id: 'pt_stock', type: 'paint', name: 'Stock Orange', rarity: 'uncommon', paint: { body: 0xe8702a, accent: 0x1e1e1e }, desc: 'Fresh off the farm.' },
   { id: 'pt_barn', type: 'paint', name: 'Barnstormer', rarity: 'rare', paint: { body: 0xa3302a, accent: 0xf4f1ea }, desc: 'Red as a barn door.' },
@@ -81,38 +71,70 @@ export const COSMETICS = [
   { id: 'wr_candy', type: 'wrap', name: 'Fair Candy', rarity: 'epic', wrap: { base: 0xe86aa0, accent: 0x6ad8f0 }, desc: 'Cotton candy for your rifle.' },
 ];
 export const BY_ID = Object.fromEntries(COSMETICS.map((c) => [c.id, c]));
-export const DEFAULT_OWNED = ['farmhand', 'prairie', 'bb_pack', 'pk_shovel', 'pt_stock', 'em_wave', 'wr_none'];
-export const DEFAULT_EQUIPPED = { outfit: 'farmhand', backbling: 'bb_pack', pickaxe: 'pk_shovel', paint: 'pt_stock', emote: 'em_wave', wrap: 'wr_none' };
+// Harvesting tools were retired when the starting pickaxe was removed. Anyone who bought one
+// gets its price back in Shards (see profile.js / server.mjs).
+export const RETIRED = { pk_shovel: 'uncommon', pk_pitchfork: 'rare', pk_axe: 'rare', pk_sickle: 'uncommon', pk_anchor: 'epic', pk_oar: 'uncommon', pk_guitar: 'epic', pk_scythe: 'legendary', pk_bat: 'rare' };
+export const retiredRefund = (id) => (RETIRED[id] && id !== 'pk_shovel' ? (RARITIES[RETIRED[id]].price * 0.6) | 0 : 0);
+export const DEFAULT_OWNED = ['farmhand', 'prairie', 'bb_pack', 'pt_stock', 'em_wave', 'wr_none'];
+export const DEFAULT_EQUIPPED = { outfit: 'farmhand', backbling: 'bb_pack', paint: 'pt_stock', emote: 'em_wave', wrap: 'wr_none' };
 export const priceOf = (c) => c.price ?? (RARITIES[c.rarity].price * (c.type === 'outfit' ? 1 : c.type === 'emote' ? 0.5 : c.type === 'wrap' ? 0.4 : 0.6)) | 0;
 
-// The shop rotates every day at 00:00 UTC.
-export function shopForDay(dayIndex) {
+// ---- Item shop: Featured (2) + Daily (6), rotating every day at 00:00 UTC ----
+// The rotation is a pure function of the UTC day number, so every player (and the wallet
+// server) computes the same shop. The clock is synced to a server when one is reachable so
+// a wrong PC clock can't show a different shop.
+let clockOffset = 0;
+export function setClockOffset(ms) { clockOffset = ms; }
+export const nowMs = () => Date.now() + clockOffset;
+export function currentDay() { return Math.floor(nowMs() / 86400000); }
+export function msToNextDay() { return 86400000 - (nowMs() % 86400000); }
+
+const SHOP_POOL = () => COSMETICS.filter((c) => !DEFAULT_OWNED.includes(c.id));
+function rawShop(dayIndex, exclude = new Set()) {
   const r = new RNG(9001 + dayIndex * 7919);
-  const pool = COSMETICS.filter((c) => !DEFAULT_OWNED.includes(c.id));
+  const pool = SHOP_POOL().filter((c) => !exclude.has(c.id));
+  // featured: two outfits, at least one Epic or Legendary when possible
   const outfits = r.shuffle(pool.filter((c) => c.type === 'outfit'));
-  const featured = outfits.slice(0, 2).map((o) => {
-    // bundle-ish: matching back bling suggestion
-    return o;
-  });
+  const big = outfits.filter((c) => c.rarity === 'epic' || c.rarity === 'legendary');
+  const featured = [];
+  if (big.length) featured.push(big[0]);
+  for (const o of outfits) { if (featured.length >= 2) break; if (!featured.includes(o)) featured.push(o); }
+  // daily: six mixed items, at most two of a type
   const rest = r.shuffle(pool.filter((c) => !featured.includes(c)));
   const daily = [];
   for (const c of rest) { if (daily.length >= 6) break; if (daily.filter((d) => d.type === c.type).length >= 2) continue; daily.push(c); }
   return { featured, daily };
 }
-export function currentDay() { return Math.floor(Date.now() / 86400000); }
-export function msToNextDay() { return 86400000 - (Date.now() % 86400000); }
+const shopCache = new Map();
+const EPOCH = 20700; // rotation history starts here (2026-09-04); earlier days use the raw roll
+export function shopForDay(dayIndex) {
+  if (shopCache.has(dayIndex)) return shopCache.get(dayIndex);
+  if (dayIndex <= EPOCH) { const s = rawShop(dayIndex); shopCache.set(dayIndex, s); return s; }
+  // walk forward from the last known day: nothing in yesterday's shop comes straight back
+  let d = dayIndex;
+  while (d > EPOCH + 1 && !shopCache.has(d - 1)) d--;
+  for (; d <= dayIndex; d++) {
+    const y = shopForDay(d - 1);
+    shopCache.set(d, rawShop(d, new Set([...y.featured, ...y.daily].map((c) => c.id))));
+  }
+  return shopCache.get(dayIndex);
+}
+// days since an item was last in the shop (null = not in the last 90 days)
+export function lastSeen(id, dayIndex) {
+  for (let d = 1; d <= 90; d++) { const s = shopForDay(dayIndex - d); if (s.featured.some((c) => c.id === id) || s.daily.some((c) => c.id === id)) return d; }
+  return null;
+}
 
 export function cosmeticsFor(equipped) {
   const o = BY_ID[equipped.outfit] || BY_ID.farmhand;
   return {
     outfit: o.outfit,
-    cosmetics: { backbling: BY_ID[equipped.backbling]?.style || 'pack', pickaxe: BY_ID[equipped.pickaxe]?.style || 'shovel', wrap: BY_ID[equipped.wrap]?.wrap || null },
+    cosmetics: { backbling: BY_ID[equipped.backbling]?.style || 'pack', wrap: BY_ID[equipped.wrap]?.wrap || null },
     emote: BY_ID[equipped.emote]?.anim || 'wave',
   };
 }
 export function randomOutfit(rng) {
   const outfits = COSMETICS.filter((c) => c.type === 'outfit');
   const bbs = COSMETICS.filter((c) => c.type === 'backbling');
-  const pks = COSMETICS.filter((c) => c.type === 'pickaxe');
-  return { outfit: rng.pick(outfits).outfit, cosmetics: { backbling: rng.pick(bbs).style, pickaxe: rng.pick(pks).style } };
+  return { outfit: rng.pick(outfits).outfit, cosmetics: { backbling: rng.pick(bbs).style } };
 }

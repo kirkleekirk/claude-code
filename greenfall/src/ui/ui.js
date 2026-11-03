@@ -1,14 +1,15 @@
 // Menus & overlays: loading, lobby (play / locker / item shop / career / settings),
 // in-match inventory + crafting, full map, pause and results.
-import { COSMETICS, BY_ID, RARITIES, TYPE_NAMES, shopForDay, currentDay, msToNextDay, priceOf } from '../data/cosmetics.js';
+import { COSMETICS, BY_ID, RARITIES, TYPE_NAMES, shopForDay, currentDay, msToNextDay, priceOf, lastSeen } from '../data/cosmetics.js';
 import { ITEMS, WEAPONS, AMMO, RECIPES, RARITY, RARITY_HEX } from '../data/items.js';
 import { PRESETS } from '../game/match.js';
 import { QUALITY } from '../game/graphics.js';
-import { thumbnail, gunThumb } from './thumbs.js';
+import { thumbnail, gunThumb, turntable } from './thumbs.js';
 import { POIS, WORLD } from '../world/layout.js';
 import { formatTime, clamp } from '../core/math.js';
 import { DEFAULT_BINDS } from '../core/input.js';
 import { CLASSES, CLASS_BY_ID, classBudget } from '../data/classes.js';
+import { MultiplayerUI } from './mp.js';
 import { gunStats, MODS, modsFor, slotsFor, modLines, canMod, canAfford, costText, installMod, removeMod, knowsMod, costFor, BLUEPRINT_MODS } from '../data/gunmods.js';
 
 const el = (tag, cls, parent, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; if (parent) parent.appendChild(e); return e; };
@@ -25,7 +26,7 @@ const TIPS = [
   'Shooting a car can set off its alarm. Everything within 140m will come running.',
   'At night the sky turns green and the dead get faster. Your flashlight makes you visible.',
   'Valuables (watches, coins, idols) are worth Shards — but only if you extract with them.',
-  'Hit trees, rocks and cars with your harvesting tool to gather building materials.',
+  'You start with bare hands. Find an axe, pickaxe or machete to chop trees, break rocks and strip cars for materials.',
   'Hordes grow when they see you or hear loud noises, and the big ones migrate fast.',
 ];
 
@@ -33,6 +34,7 @@ export class UI {
   constructor(G, root) {
     this.G = G;
     this.root = root;
+    this.mp = new MultiplayerUI(this);
     this.overlay = null;
     this.tab = 'play';
     this.loading = el('div', '', root);
@@ -88,6 +90,7 @@ export class UI {
   renderPlay(page) {
     const P = this.G.profile.data;
     el('div', 'nameplate', page, P.name);
+    if (this.G.profile.data.refundNotice) { const n = this.G.profile.data.refundNotice; delete this.G.profile.data.refundNotice; this.G.profile.save(); el('div', 'toast', page, `Harvesting tools were retired — you were refunded ${n} Shards.`).style.cssText = 'position:absolute;top:58px;left:50%;transform:translateX(-50%);opacity:1'; }
     if (this.G.profile.data.tampered) el('div', 'toast', page, 'Your save was edited outside the game, so your Shards were reset.').style.cssText = 'position:absolute;top:58px;left:50%;transform:translateX(-50%);opacity:1';
     const left = el('div', 'lobby-left', page);
     left.innerHTML = `<div class="season">SEASON 1 · THE GREENFALL</div><div class="lobby-title">The dead rise<br>with the green sky.</div>
@@ -109,8 +112,10 @@ export class UI {
       const b = el('button', P.settings.matchLength === k ? 'sel' : '', lens, `${pr.label}<small>${pr.desc}</small>`);
       b.onclick = () => { this.click(); P.settings.matchLength = k; this.G.profile.save(); this.renderLobby(); };
     }
-    const play = el('button', 'btn yellow playbtn display', panel, 'Play');
+    const play = el('button', 'btn yellow playbtn display', panel, 'Play solo');
     play.onclick = () => { this.click(); this.G.startMatch(P.settings.matchLength); };
+    const mpb = el('button', 'btn mpbtn display', panel, 'Multiplayer');
+    mpb.onclick = () => { this.click(); this.mp.openBrowser(); };
   }
   classCard(parent, c, selected) {
     const b = classBudget(c);
@@ -175,7 +180,7 @@ export class UI {
   }
   keyList() {
     const rows = [['Move', 'W A S D'], ['Sprint', 'Shift'], ['Jump / Vault window', 'Space'], ['Crouch (quiet)', 'C / Ctrl'], ['Fire / Use', 'Left Mouse'], ['Aim', 'Right Mouse'], ['Reload', 'R'], ['Interact / Hold to board', 'E'],
-      ['Harvest tool / Slots', '1 – 6, Wheel'], ['Build mode', 'Q'], ['Wall / Floor / Ramp / Roof', 'Z X V F'], ['Material / Rotate', 'G / R'], ['Quick heal', 'H'], ['Quick eat / drink', 'X'], ['Inventory & crafting', 'Tab'],
+      ['Hands / Slots', '1 – 6, Wheel'], ['Trowel: wall ↔ window wall', 'R'], ['Quick heal', 'H'], ['Quick eat / drink', 'X'], ['Inventory & crafting', 'Tab'],
       ['Map', 'M'], ['Flashlight', 'L'], ['Drop item', 'T'], ['Emote', 'B'], ['Pause', 'Esc / P']];
     return rows.map(([a, k]) => `<div><span>${a}</span><kbd>${k}</kbd></div>`).join('');
   }
@@ -186,12 +191,12 @@ export class UI {
     const wrap = el('div', 'shop', page);
     const head = el('div', 'shop-head', wrap);
     el('h1', '', head, 'Item Shop');
+    const day = currentDay();
     const timer = el('div', 'timer', head);
-    const upd = () => { timer.textContent = 'NEW ITEMS IN ' + formatTime(msToNextDay() / 1000); };
+    const upd = () => { timer.textContent = 'NEW ITEMS IN ' + formatTime(msToNextDay() / 1000); if (currentDay() !== day) this.renderLobby(); };
     upd();
     clearInterval(this.shopTimer);
     this.shopTimer = setInterval(() => { if (!document.body.contains(timer)) { clearInterval(this.shopTimer); return; } upd(); }, 1000);
-    const day = currentDay();
     const shop = shopForDay(day);
     const secs = el('div', 'shop-sections', wrap);
     for (const [title, list, cls] of [['Featured', shop.featured, 'featured'], ['Daily', shop.daily, 'daily']]) {
@@ -209,6 +214,8 @@ export class UI {
     img.alt = item.name;
     img.src = thumbnail(item, P.data.equipped.outfit);
     const price = priceOf(item);
+    const seen = lastSeen(item.id, currentDay());
+    el('div', 'tag', c, seen === null ? 'NEW!' : seen <= 1 ? '' : `Last seen ${seen}d ago`).classList.toggle('new', seen === null);
     el('div', 'info', c, `<div class="name">${item.name}</div><div class="type">${TYPE_NAMES[item.type]}</div>${owned ? '<div class="owned">OWNED</div>' : `<div class="price"><span class="shard"></span>${price.toLocaleString()}</div>`}`);
     el('div', 'rarity-strip', c).style.background = RARITIES[item.rarity].color;
     c.onclick = () => { this.click(); this.itemModal(item); };
@@ -219,7 +226,8 @@ export class UI {
     const price = priceOf(item);
     const m = el('div', 'modal', this.root);
     const box = el('div', 'modal-box', m);
-    const img = el('img', 'art', box); img.src = thumbnail(item, P.data.equipped.outfit);
+    const art = el('canvas', 'art', box); // turning 3D preview, like the OG shop's item inspect
+    turntable(item, art, P.data.equipped.outfit);
     const meta = el('div', 'meta', box);
     meta.innerHTML = `<span class="rarity-tag" style="background:${RARITIES[item.rarity].color}">${RARITIES[item.rarity].name} ${TYPE_NAMES[item.type]}</span><h2>${item.name}</h2><div class="desc">${item.desc || ''}</div>${item.set ? `<div class="desc" style="color:#9bff57">Part of the ${item.set} set.</div>` : ''}`;
     el('div', 'spacer', meta);
@@ -248,13 +256,13 @@ export class UI {
     this.lockerType = this.lockerType || 'outfit';
     const wrap = el('div', 'locker', page);
     const slots = el('div', 'locker-slots', wrap);
-    for (const t of ['outfit', 'backbling', 'pickaxe', 'paint', 'emote', 'wrap']) {
+    for (const t of ['outfit', 'backbling', 'paint', 'emote', 'wrap']) {
       const it = BY_ID[P.data.equipped[t]];
       const s = el('div', 'lslot' + (this.lockerType === t ? ' sel' : ''), slots);
       const img = el('img', '', s); img.src = thumbnail(it, P.data.equipped.outfit);
       el('div', 'lbl', s, TYPE_NAMES[t]);
       el('div', 'nm', s, it.name);
-      s.onclick = () => { this.click(); this.lockerType = t; this.renderLobby(); if (t === 'emote') this.G.lobby.playEmote(BY_ID[P.data.equipped.emote].anim); if (t === 'pickaxe') this.G.lobby.showPickaxe(true); if (t === 'wrap') this.G.lobby.showWeapon(BY_ID[P.data.equipped.wrap].wrap); };
+      s.onclick = () => { this.click(); this.lockerType = t; this.renderLobby(); if (t === 'emote') this.G.lobby.playEmote(BY_ID[P.data.equipped.emote].anim); if (t === 'wrap') this.G.lobby.showWeapon(BY_ID[P.data.equipped.wrap].wrap); };
     }
     const grid = el('div', 'locker-grid', wrap);
     el('h2', '', grid, TYPE_NAMES[this.lockerType]);
@@ -271,7 +279,6 @@ export class UI {
         if (!owned) { this.tab = 'shop'; this.itemModal(it); return; }
         this.G.wallet.equip(it.type, it.id); this.G.onCosmeticsChanged(); this.renderLobby();
         if (it.type === 'emote') this.G.lobby.playEmote(it.anim);
-        if (it.type === 'pickaxe') this.G.lobby.showPickaxe(true);
         if (it.type === 'wrap') this.G.lobby.showWeapon(it.wrap);
       };
     }
@@ -354,7 +361,7 @@ export class UI {
   openPause() {
     const o = this.openOverlay();
     this.overlayKind = 'pause';
-    this.G.paused = true;
+    this.G.paused = !this.G.net; // multiplayer matches keep running
     const box = el('div', 'pause', o);
     el('h1', '', box, 'Paused');
     const b1 = el('button', 'btn yellow', box, 'Resume'); b1.onclick = () => { this.click(); this.G.paused = false; this.closeOverlay(); };
@@ -562,6 +569,8 @@ export class UI {
     }).join('');
   }
   describe(def, s) {
+    if (def.type === 'trowel') return 'Hold it to lay a brick wall where you stand (30 stone), or a wall with a window to see and shoot through (25 stone). R switches. Click to lay bricks — it takes a few seconds and it\'s loud.';
+    if (def.type === 'blueprint') return 'Learn it to build this mod at any weapon workbench.';
     if (def.type === 'weapon') {
       if (def.melee) return `Melee · ${def.dmg[s.r]} damage · silent<br><small>${def.blurb || ''}</small>`;
       const st = gunStats(s);
@@ -648,6 +657,7 @@ export class UI {
     const o = this.openOverlay();
     this.overlayKind = 'results';
     const box = el('div', 'results', o);
+    if (this.G.net?.isHost && !this.G.net.closed) el('div', 'toast', box, 'Other players are still in your match. Leaving this screen closes the server for everyone.').style.cssText = 'position:static;opacity:1;margin-bottom:10px';
     const win = r.outcome === 'extracted';
     const title = win ? 'EXTRACTED!' : r.outcome === 'left' ? 'LEFT BEHIND' : 'ELIMINATED';
     el('div', 'big ' + (win ? 'win' : 'lose'), box, title);

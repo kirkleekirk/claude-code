@@ -1,4 +1,4 @@
-// Greenfall account & wallet server — zero dependencies (Node 18+).
+// Greenfall account & wallet server + multiplayer relay — zero dependencies (Node 18+).
 //
 // Source of truth for Shards, owned cosmetics and match rewards, plus redeeming Shard
 // packs bought on itch.io. Run:   node server/server.mjs
@@ -11,9 +11,10 @@
 //   ITCH_PACKS={"1234567":1000,"1234568":2800}   itch game/product id → Shards per purchase
 //   STORE_PACKS=[{"id":"small","shards":1000,"label":"$1.99","url":"https://you.itch.io/greenfall-shards-1000"}]
 import http from 'http';
+import { attachRelay, PROTOCOL } from './relay.mjs';
 import fs from 'fs';
 import crypto from 'crypto';
-import { BY_ID, priceOf, shopForDay, currentDay, DEFAULT_OWNED, DEFAULT_EQUIPPED } from '../src/data/cosmetics.js';
+import { BY_ID, priceOf, shopForDay, currentDay, DEFAULT_OWNED, DEFAULT_EQUIPPED, RETIRED, retiredRefund } from '../src/data/cosmetics.js';
 import { computeRewards, applyXp, REWARD_CAPS } from '../src/data/rewards.js';
 
 const PORT = +(process.env.PORT || 8787);
@@ -25,6 +26,13 @@ const MIN_MATCH = { quick: 0.35 * 25 * 60, standard: 0.35 * 65 * 60, marathon: 0
 
 let db = { players: {}, tokens: {}, matches: {}, codes: {}, redeemed: {} };
 try { db = { ...db, ...JSON.parse(fs.readFileSync(DB_FILE, 'utf8')) }; } catch (e) { /* new db */ }
+// migrate: retired harvesting tools are refunded in Shards
+for (const p of Object.values(db.players)) {
+  if (!p.owned?.some((id) => RETIRED[id])) continue;
+  p.shards += p.owned.reduce((n, id) => n + retiredRefund(id), 0);
+  p.owned = p.owned.filter((id) => !RETIRED[id]);
+  if (p.equipped) delete p.equipped.pickaxe;
+}
 let saveTimer = null;
 const save = () => { clearTimeout(saveTimer); saveTimer = setTimeout(() => { fs.writeFileSync(DB_FILE + '.tmp', JSON.stringify(db)); fs.renameSync(DB_FILE + '.tmp', DB_FILE); }, 200); };
 const hash = (t) => crypto.createHash('sha256').update(t).digest('hex');
@@ -65,6 +73,8 @@ const routes = {
   'POST /api/session': async (req, body, p) => { if (p) return { profile: publicProfile(p) }; const n = newPlayer(); return { token: n.token, profile: publicProfile(n.player) }; },
   'GET /api/profile': async (req, body, p) => ({ profile: publicProfile(p) }),
   'GET /api/store': async () => ({ packs: STORE_PACKS }),
+  'GET /api/time': async () => ({ now: Date.now(), day: currentDay() }),
+  'GET /api/rooms': async () => ({ rooms: relay ? relay.listRooms() : [], protocol: PROTOCOL }),
   'POST /api/equip': async (req, { type, id }, p) => { const it = BY_ID[id]; if (!it || it.type !== type || !p.owned.includes(id)) throw [400, 'Not owned']; p.equipped[type] = id; save(); return { profile: publicProfile(p) }; },
   'POST /api/buy': async (req, { itemId }, p) => {
     const it = BY_ID[itemId];
@@ -124,7 +134,8 @@ function corsOrigin(origin) {
   if (ORIGINS.length) return ORIGINS.includes(origin) ? origin : '';
   return /^https:\/\/([a-z0-9-]+\.)*itch\.(zone|io)$/.test(origin) || /^http:\/\/localhost(:\d+)?$/.test(origin) ? origin : '';
 }
-http.createServer(async (req, res) => {
+let relay = null;
+const httpServer = http.createServer(async (req, res) => {
   const origin = corsOrigin(req.headers.origin);
   const head = { 'content-type': 'application/json', ...(origin ? { 'access-control-allow-origin': origin, 'access-control-allow-headers': 'content-type, authorization', 'access-control-allow-methods': 'GET, POST, OPTIONS', vary: 'origin' } : {}) };
   if (req.method === 'OPTIONS') { res.writeHead(204, head); res.end(); return; }
@@ -136,7 +147,7 @@ http.createServer(async (req, res) => {
     for await (const c of req) { raw += c; if (raw.length > 20000) throw [413, 'Too large']; }
     const body = raw ? JSON.parse(raw) : {};
     const p = auth(req);
-    if (!p && key !== 'POST /api/session' && key !== 'GET /api/store') throw [401, 'Not signed in'];
+    if (!p && key !== 'POST /api/session' && key !== 'GET /api/store' && key !== 'GET /api/time' && key !== 'GET /api/rooms') throw [401, 'Not signed in'];
     if (p && limited(p)) throw [429, 'Slow down'];
     const out = await fn(req, body, p);
     res.writeHead(200, head); res.end(JSON.stringify(out));
@@ -145,4 +156,7 @@ http.createServer(async (req, res) => {
     if (!Array.isArray(e)) console.error(e);
     res.writeHead(code, head); res.end(JSON.stringify({ error: msg }));
   }
-}).listen(PORT, () => console.log(`Greenfall server on :${PORT}`));
+});
+// multiplayer relay (server list + message relay) shares the port
+relay = attachRelay(httpServer, { allowOrigin: (o) => !o || !!corsOrigin(o), log: (...a) => console.log(new Date().toISOString(), ...a) });
+httpServer.listen(PORT, () => console.log(`Greenfall server (wallet + multiplayer relay) on :${PORT}`));

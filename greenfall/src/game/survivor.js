@@ -42,8 +42,6 @@ export class Survivor {
     this.character = opts.noModel ? null : new Character(opts.outfit, { shadow: opts.shadow ?? true });
     if (this.character) {
       if (this.cosmetics.backbling) this.character.setBackBling(this.cosmetics.backbling);
-      this.character.setPickaxe(this.cosmetics.pickaxe || 'shovel');
-      this.character.setGlider(this.cosmetics.glider || 'canvas');
     }
   }
   get feetY() { return this.pos.y; }
@@ -66,7 +64,7 @@ export class Survivor {
   refreshModel() {
     if (!this.character) return;
     const s = this.activeSlot();
-    if (this.inv.active === 0) this.character.setWeapon('pickaxe');
+    if (this.inv.active === 0) this.character.setWeapon('none'); // bare hands
     else if (!s) this.character.setWeapon('none');
     else {
       const def = ITEMS[s.id];

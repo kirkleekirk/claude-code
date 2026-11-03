@@ -72,14 +72,12 @@ export class Lobby {
     if (this.character) this.scene.remove(this.character.root);
     this.character = new Character(c.outfit, { shadow: true });
     this.character.setBackBling(c.cosmetics.backbling);
-    this.character.setPickaxe(c.cosmetics.pickaxe);
     this.character.root.position.set(0, 0.24, 0);
     this.scene.add(this.character.root);
     this.emote = c.emote;
     this.wrap = c.cosmetics.wrap;
   }
   playEmote(name) { if (this.character) { this.character.playEmote(name || this.emote); this.emoteT = 8; } }
-  showPickaxe(v) { if (this.character?.pickaxe) { this.character.setWeapon(v ? 'pickaxe' : 'none'); } }
   showWeapon(wrap) { this.character?.setWeapon('m4', 4, wrap); this.character.anim.aimPitch = 0; }
   update(dt) {
     this.t += dt;

@@ -36,6 +36,7 @@ export class Zombies {
     this.col = new THREE.Color();
     this.killedTotal = 0;
     this.groanT = 0;
+    this.nidSeq = 0;
   }
   makeZombie(i) {
     return { idx: i, active: false, pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, hp: 100, maxHp: 100, type: 'walker', state: 'idle', stateT: 0,
@@ -121,11 +122,45 @@ export class Zombies {
     zb.rise = opts.rise ? 0.001 : 1;
     zb.dieT = 0; zb.burn = 0; zb.atkCd = 1; zb.atkT = -1; zb.path = null; zb.stuckT = 0; zb.alertT = 0; zb.vaultT = 0; zb.building = -1; zb.smash = null; zb.stagger = 0;
     zb.lastPos.copy(zb.pos);
-    zb.skin = r.pick(SKINS); zb.shirt = r.pick(SHIRTS); zb.pants = r.pick(PANTS); zb.hair = r.chance(0.6) ? r.pick([0x2a2a20, 0x5a4a3a, 0x8a8a7a, 0x3a2a1a]) : null;
+    zb.nid = ++this.nidSeq; // network id; looks are derived from it so every player sees the same zombie
+    this.dress(zb);
     zb.armPose = r.range(0.7, 1.4);
     if (opts.rise) { G.fx.dirtBurst(x, zb.pos.y, z); G.audio?.play('rise', zb.pos, { vol: 0.6 }); }
     this.list.push(zb);
     return zb;
+  }
+  dress(zb) {
+    const h = (zb.nid * 2654435761) >>> 0;
+    zb.skin = SKINS[h % SKINS.length]; zb.shirt = SHIRTS[(h >>> 4) % SHIRTS.length]; zb.pants = PANTS[(h >>> 8) % PANTS.length];
+    zb.hair = (h >>> 12) % 10 < 6 ? [0x2a2a20, 0x5a4a3a, 0x8a8a7a, 0x3a2a1a][(h >>> 16) % 4] : null;
+  }
+  // multiplayer (joining player): a zombie the host simulates; we only mirror it
+  spawnNet(nid, x, y, z, typeChar, scale) {
+    if (!this.pool.length) return null;
+    const zb = this.pool.pop();
+    const type = typeChar === 'r' ? 'runner' : typeChar === 'b' ? 'brute' : 'walker';
+    zb.type = type; zb.maxHp = zb.hp = TYPES[type].hp; zb.scale = scale || TYPES[type].scale;
+    zb.nid = nid; this.dress(zb);
+    zb.pos.set(x, y, z); zb.vel.set(0, 0, 0); zb.active = true; zb.state = 'wander'; zb.stateT = 0; zb.target = null;
+    zb.rise = 1; zb.dieT = 0; zb.burn = 0; zb.stagger = 0; zb.armPose = 0.7 + ((nid * 7919) % 70) / 100;
+    zb.netPos = zb.netPos || new THREE.Vector3(); zb.netPos.set(x, y, z); zb.netYaw = 0; zb.netSeen = this.G.time;
+    zb.lastPos.copy(zb.pos);
+    this.list.push(zb);
+    return zb;
+  }
+  netUpdate(dt) {
+    for (let i = this.list.length - 1; i >= 0; i--) {
+      const zb = this.list[i];
+      if (zb.state === 'dead') { zb.dieT += dt; if (zb.dieT > 9) this.release(zb); continue; }
+      zb.lastPos.copy(zb.pos);
+      zb.pos.lerp(zb.netPos, Math.min(1, dt * 10));
+      zb.vel.set((zb.pos.x - zb.lastPos.x) / Math.max(dt, 1e-3), 0, (zb.pos.z - zb.lastPos.z) / Math.max(dt, 1e-3));
+      let dy = zb.netYaw - zb.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+      zb.yaw += dy * Math.min(1, dt * 10);
+      zb.phase += dt * Math.hypot(zb.vel.x, zb.vel.z) * 2.2;
+      zb.stagger = Math.max(0, zb.stagger - dt);
+      if (zb.burn > 0) zb.burn -= dt;
+    }
   }
   release(zb) {
     zb.active = false;
@@ -139,6 +174,7 @@ export class Zombies {
 
   // ---------- senses ----------
   hear(x, z, radius, src, kind) {
+    if (this.G.net?.isClient) return;
     for (const zb of this.list) {
       if (zb.state === 'dead') continue;
       const d = Math.hypot(zb.pos.x - x, zb.pos.z - z);
@@ -176,6 +212,12 @@ export class Zombies {
   // ---------- damage ----------
   damage(zb, dmg, src, opts = {}) {
     if (!zb.active || zb.state === 'dead') return;
+    if (this.G.net?.isClient) { // the host owns the dead; tell it, show the hit here
+      this.G.net.onZombieHit(zb, dmg, src, opts);
+      zb.stagger = Math.max(zb.stagger, opts.melee ? 0.45 : 0.18);
+      if (Math.random() < 0.3) this.G.audio?.play('zombie_hurt', zb.pos, { vol: 0.7 });
+      return;
+    }
     if (opts.head) dmg *= 1.5; // aim for the head
     zb.hp -= dmg;
     zb.stagger = Math.max(zb.stagger, opts.melee ? 0.45 : 0.18);
@@ -192,6 +234,7 @@ export class Zombies {
     if (src) { src.stats.zombieKills++; if (src.isPlayer) this.G.hud.zombieKill(opts.head); }
     this.G.audio?.play('zombie_die', zb.pos, { vol: 0.8 });
     this.G.hordes?.onZombieKilled(zb);
+    this.G.net?.onZombieKilled(zb, src, opts);
   }
   burnArea(x, z, r, dps, src) {
     for (const zb of this.list) {
@@ -233,6 +276,7 @@ export class Zombies {
   // ---------- AI ----------
   update(dt) {
     const G = this.G;
+    if (G.net?.isClient) { this.netUpdate(dt); return; }
     const night = G.env?.night || 0;
     const physical = G.survivors.filter((s) => s.alive && s.physical && !s.extracted);
     const player = G.player;
@@ -401,7 +445,8 @@ export class Zombies {
       const T = TYPES[zb.type];
       const scale = 0.72 + Math.min(1, G.match?.progress || 0) * 0.5;
       if (t.vehicle && t.vehicle.def.cab) { G.rides.damage(t.vehicle, T.dmg * scale * 3, null); G.audio?.play('smash', zb.pos, { vol: 0.8 }); return; }
-      t.takeDamage(Math.round(T.dmg * scale), null, { type: 'zombie', heavy: zb.type === 'brute', infect: zb.type === 'runner' ? 0.14 : 0.1 });
+      const kb = zb.type === 'brute' ? [(t.pos.x - zb.pos.x) * 7 / (d || 1), (t.pos.z - zb.pos.z) * 7 / (d || 1)] : null;
+      t.takeDamage(Math.round(T.dmg * scale), null, { type: 'zombie', heavy: zb.type === 'brute', infect: zb.type === 'runner' ? 0.14 : 0.1, zpos: zb.pos, kb });
       G.audio?.play('zombie_hit', t.pos, { vol: 0.9 });
       if (t.isPlayer) { G.hud.damageFrom(zb.pos); G.player.shake(zb.type === 'brute' ? 0.6 : 0.25); }
       if (zb.type === 'brute') { const k = 7 / (d || 1); t.vel.x += (t.pos.x - zb.pos.x) * k; t.vel.z += (t.pos.z - zb.pos.z) * k; t.vel.y = 4; }

@@ -1,6 +1,6 @@
 // Offscreen renderer that paints item-shop / locker thumbnails of cosmetics.
 import * as THREE from 'three';
-import { Character, buildBackBling, buildPickaxeModel, buildWeaponModel } from '../game/character.js';
+import { Character, buildBackBling, buildWeaponModel } from '../game/character.js';
 import { makeDirtBike } from '../game/vehicles.js';
 import { RARITIES, BY_ID } from '../data/cosmetics.js';
 
@@ -49,8 +49,6 @@ export function thumbnail(item, equippedOutfit = null) {
       target.set(0, 1.05, 0); dist = 4.6;
     } else if (item.type === 'backbling') {
       const m = buildBackBling(item.style); m.rotation.y = Math.PI + 0.5; obj.add(m); target.set(0, 0, -0.12); dist = 1.6;
-    } else if (item.type === 'pickaxe') {
-      const m = buildPickaxeModel(item.style); m.rotation.z = -0.6; obj.add(m); target.set(0, 0.35, 0); dist = 2.6;
     } else if (item.type === 'paint') {
       const m = makeDirtBike(item.paint); m.rotation.y = -0.9; obj.add(m);
     } else if (item.type === 'emote') {
@@ -112,4 +110,47 @@ export function gunThumb(id, kind, rarity, mods, w = 360, h = 170) {
   if (gunCache.size > 60) gunCache.clear();
   gunCache.set(key, url);
   return url;
+}
+
+// Slowly turning 3D preview (item detail view): renders into the shared offscreen renderer
+// and copies each frame into a visible 2D canvas. Emotes play their animation. Stops by
+// itself when the canvas leaves the page.
+export function turntable(item, canvas, equippedOutfit = null) {
+  const { r, scene, cam, canvas: src } = renderer();
+  const W = 256, H = 300;
+  const obj = new THREE.Group();
+  let ch = null, target = new THREE.Vector3(0, 1.05, 0), dist = 4.6;
+  if (item.type === 'outfit' || item.type === 'emote' || item.type === 'backbling') {
+    const outfit = item.type === 'outfit' ? item.outfit : BY_ID[equippedOutfit || 'farmhand'].outfit;
+    ch = new Character(outfit, { shadow: false });
+    if (item.type === 'backbling') ch.setBackBling(item.style);
+    if (item.type === 'emote') ch.playEmote(item.anim);
+    obj.add(ch.root);
+  } else {
+    const m = item.type === 'paint' ? makeDirtBike(item.paint) : buildWeaponModel('m4', 4, item.wrap);
+    if (item.type === 'wrap') m.scale.setScalar(2.4);
+    obj.add(m);
+    const box = new THREE.Box3().setFromObject(obj), size = box.getSize(new THREE.Vector3());
+    target = box.getCenter(new THREE.Vector3());
+    dist = Math.max(size.x, size.y, size.z) / (2 * Math.tan((cam.fov * Math.PI) / 360)) * 1.4;
+  }
+  const bg = new THREE.CanvasTexture(bgCanvas(item.rarity)); bg.colorSpace = THREE.SRGBColorSpace;
+  const ctx = canvas.getContext('2d');
+  canvas.width = W; canvas.height = H;
+  let last = performance.now(), a = item.type === 'backbling' ? Math.PI : 0.3;
+  const frame = (t) => {
+    if (!canvas.isConnected) { bg.dispose(); ch?.dispose?.(); return; }
+    const dt = Math.min(0.05, (t - last) / 1000); last = t;
+    a += dt * 0.7;
+    obj.rotation.y = a;
+    if (ch) { if (item.type === 'emote' && !ch.anim.emote) ch.playEmote(item.anim); ch.update(dt); }
+    r.setSize(W, H, false); cam.aspect = W / H; cam.updateProjectionMatrix();
+    scene.add(obj); scene.background = bg;
+    cam.position.set(target.x, target.y + dist * 0.12, target.z + dist); cam.lookAt(target);
+    r.render(scene, cam);
+    scene.remove(obj); scene.background = null;
+    ctx.clearRect(0, 0, W, H); ctx.drawImage(src, 0, 0, W, H);
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
 }

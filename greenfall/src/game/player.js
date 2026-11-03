@@ -1,9 +1,8 @@
 // The local player: input → movement, third-person camera, aiming, interactions,
-// building mode, item use, skydive/glider and vaulting through windows.
+// bricklaying (with a trowel), item use, driving and vaulting through windows.
 import * as THREE from 'three';
 import { Survivor, MOVE, HOTBAR } from './survivor.js';
 import { ITEMS, WEAPONS, THROWABLES, AMMO } from '../data/items.js';
-import { PIECES } from './building.js';
 import { gunStats } from '../data/gunmods.js';
 import { clamp, lerp, dampAngle, wrapAngle } from '../core/math.js';
 import { COL } from '../world/buildings.js';
@@ -18,7 +17,7 @@ export class Player extends Survivor {
     this.fov = 72;
     this.recoilP = 0; this.shakeAmt = 0;
     this.mode = 'ground';
-    this.buildMode = false; this.buildPiece = 'wall'; this.buildMat = 'wood'; this.buildRotate = 0; this.buildCd = 0;
+    this.buildMode = false; this.buildPiece = 'wall'; this.buildCd = 0; // buildMode = holding a Mason's Trowel
     this.ads = false;
     this.flashlight = false;
     this.aimPoint = new THREE.Vector3();
@@ -172,11 +171,11 @@ export class Player extends Survivor {
     this.updateSurvival(dt);
     G.weapons.updateShooter(this, dt);
     // slot selection
-    if (!this.buildMode) {
-      for (let k = 1; k <= HOTBAR + 1; k++) if (I.pressed('slot' + k)) this.equip(k - 1);
-      if (I.mouse.wheel && !G.ui.isOpen()) this.equip(((this.inv.active + Math.sign(I.mouse.wheel)) % (HOTBAR + 1) + HOTBAR + 1) % (HOTBAR + 1));
-    }
-    if (I.pressed('build')) this.toggleBuild();
+    for (let k = 1; k <= HOTBAR + 1; k++) if (I.pressed('slot' + k)) this.equip(k - 1);
+    if (I.mouse.wheel && !G.ui.isOpen()) this.equip(((this.inv.active + Math.sign(I.mouse.wheel)) % (HOTBAR + 1) + HOTBAR + 1) % (HOTBAR + 1));
+    const wasBuilding = this.buildMode;
+    this.buildMode = this.activeDef()?.type === 'trowel';
+    if (wasBuilding && !this.buildMode) G.builds.showGhost(null);
     if (I.pressed('flashlight')) { this.flashlight = !this.flashlight; G.audio?.play('ui_click', null, { vol: 0.4 }); }
     // movement
     const ax = I.moveAxes();
@@ -226,13 +225,11 @@ export class Player extends Survivor {
       if (this.action.kind === 'hold' && !I.down('interact') && !this.action.auto) this.cancelAction();
       else if (this.action && this.action.t >= this.action.dur) { const a = this.action; this.action = null; a.onDone?.(); }
     }
-    if (I.pressed('reload') && !this.buildMode) G.weapons.startReload(this);
+    if (I.pressed('reload')) { if (this.buildMode) { this.buildPiece = this.buildPiece === 'wall' ? 'window' : 'wall'; G.audio?.play('ui_click', null, { vol: 0.4 }); } else G.weapons.startReload(this); }
     if (I.pressed('heal')) this.quickHeal();
     if (I.pressed('eat') && !this.buildMode) this.quickEat();
     if (I.pressed('drop')) this.dropActive();
-    // building or using
-    if (this.buildMode) this.updateBuild(dt);
-    else this.updateUse(dt);
+    this.updateUse(dt);
     // interactions
     this.interT -= dt;
     if (this.interT <= 0) { this.interT = 0.1; this.interaction = this.action ? this.interaction : G.inter.findInteraction(this, this.aimDir); }
@@ -256,7 +253,7 @@ export class Player extends Survivor {
     const G = this.G, I = G.input;
     if (G.ui.isOpen()) return;
     const slot = this.activeSlot();
-    if (this.inv.active === 0) { if (I.fire) G.weapons.swingPickaxe(this, this.aimPoint); return; }
+    if (this.inv.active === 0) { if (I.fire) G.weapons.punch(this, this.aimPoint); return; }
     if (!slot) return;
     const def = ITEMS[slot.id];
     if (def.type === 'weapon') {
@@ -281,6 +278,8 @@ export class Player extends Survivor {
       }
     } else if (def.type === 'heal' || def.type === 'food') {
       if (I.firePressed) this.useItem({ list: this.inv.slots, i: this.inv.active - 1, slot });
+    } else if (def.type === 'trowel') {
+      this.updateBuild(dt);
     } else if (def.type === 'tool') {
       if (I.firePressed && !this.action) G.rides.useItemOn(this, { list: this.inv.slots, i: this.inv.active - 1, slot });
     }
@@ -324,7 +323,7 @@ export class Player extends Survivor {
   beginInteract(it) {
     const G = this.G;
     if (it.kind === 'item') return this.pickup(it.obj);
-    if (it.kind === 'vehicle') { if (G.rides.enter(this, it.obj)) { this.mode = 'drive'; this.buildMode = false; G.builds.showGhost(null); this.interaction = null; } return; }
+    if (it.kind === 'vehicle') { if (G.rides.enter(this, it.obj)) { this.mode = 'drive'; G.builds.showGhost(null); this.interaction = null; } return; }
     if (it.kind === 'door') { G.inter.toggleDoor(it.obj, this); return; }
     if (it.kind === 'bench') { G.ui.openWorkbench(it.obj); return; }
     const done = () => {
@@ -343,7 +342,7 @@ export class Player extends Survivor {
     };
     if (it.kind === 'board' || it.kind === 'boarddoor') {
       const cost = it.kind === 'boarddoor' ? 30 : 20;
-      if (this.inv.mats.wood < cost) { G.hud.toast(true, `Need ${cost} wood — harvest trees with your tool`); return; }
+      if (this.inv.mats.wood < cost) { G.hud.toast(true, `Need ${cost} wood — chop trees with an axe or machete`); return; }
       this.character.playAction('hammer', it.hold);
       G.audio?.play('hammer', null, { vol: 0.6 });
     } else if (it.kind === 'search') this.character.playAction('search', it.hold);
@@ -378,7 +377,7 @@ export class Player extends Survivor {
     if (left === rec.n) { G.hud.toast(true, 'Inventory full — drop something (T) or swap'); return; }
     G.hud.pickup(rec.id, rec.n - left, rec.r);
     G.audio?.play('pickup', null, { vol: 0.6 });
-    if (left <= 0) G.inter.removeWorldItem(rec); else rec.n = left;
+    if (left <= 0) G.inter.removeWorldItem(rec); else { rec.n = left; G.net?.onItemQty(rec); }
     // auto-equip first weapon
     if (def?.type === 'weapon' && this.inv.active === 0) { const idx = this.inv.slots.findIndex((s) => s && s.id === rec.id); if (idx >= 0) this.equip(idx + 1); }
   }
@@ -417,29 +416,16 @@ export class Player extends Survivor {
     }
     G.weapons.updateShooter(this, dt);
   }
-  // ---------------- building ----------------
-  toggleBuild() {
-    this.buildMode = !this.buildMode;
-    this.G.builds.showGhost(null);
-    this.cancelAction();
-    if (this.buildMode) this.character.setWeapon('pickaxe'); else this.refreshModel();
-    this.G.audio?.play('ui_click', null, { vol: 0.4 });
-  }
+  // ---------------- bricklaying (Mason's Trowel in hand) ----------------
   updateBuild(dt) {
     const G = this.G, I = G.input;
-    if (I.pressed('pieceWall') || I.pressed('slot1')) this.buildPiece = 'wall';
-    if (I.pressed('pieceFloor') || I.pressed('slot2')) this.buildPiece = 'floor';
-    if (I.pressed('pieceRamp') || I.pressed('slot3')) this.buildPiece = 'ramp';
-    if (I.pressed('pieceCone') || I.pressed('slot4')) this.buildPiece = 'cone';
-    if (I.mouse.wheel) this.buildPiece = PIECES[(PIECES.indexOf(this.buildPiece) + Math.sign(I.mouse.wheel) + 4) % 4];
-    if (I.pressed('material')) { const m = ['wood', 'stone', 'metal']; this.buildMat = m[(m.indexOf(this.buildMat) + 1) % 3]; }
-    if (I.pressed('rotate')) this.buildRotate = (this.buildRotate + 1) % 4;
-    const p = G.builds.target(this, this.buildPiece, this.camYaw, this.camPitch, this.buildRotate);
-    const ok = G.builds.canPlace(p) && this.inv.mats[this.buildMat] >= G.builds.costFor(this);
-    G.builds.showGhost(p, this.buildMat, ok);
+    const p = G.builds.target(this, this.buildPiece, this.camYaw);
+    const ok = G.builds.canPlace(p, this) && this.inv.mats.stone >= G.builds.costFor(this, this.buildPiece);
+    G.builds.showGhost(p, ok);
     this.buildCd -= dt;
-    if (I.fire && this.buildCd <= 0 && ok && !G.ui.isOpen()) {
-      if (G.builds.place(this, p, this.buildMat)) { this.buildCd = 0.12; this.character.playAction('hammer', 0.25); }
+    if (I.firePressed && this.buildCd <= 0 && !G.ui.isOpen()) {
+      if (!ok) { G.hud.toast(true, this.inv.mats.stone < G.builds.costFor(this, this.buildPiece) ? `Need ${G.builds.costFor(this, this.buildPiece)} stone — break rocks with a pickaxe` : "Can't lay a wall here"); return; }
+      if (G.builds.place(this, p)) { this.buildCd = 1.2; this.character.playAction('hammer', 1.0); }
     }
   }
 

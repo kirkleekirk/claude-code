@@ -2,8 +2,8 @@
 
 **A free zombie extraction battle royale for the browser.**
 
-You wake up somewhere in the farm country of Greenfall County with a few supplies and the
-skills of your class. Loot the farms, towns and an old coastal quarter, keep yourself fed,
+You wake up somewhere in the farm country of Greenfall County with a few supplies, the
+skills of your class and nothing but your bare hands, alone or with friends. Loot the farms, towns and an old coastal quarter, keep yourself fed,
 watered and patched up, find a bike or a truck, and get off the island alive. You can't
 outrun the dead forever. Instead of a storm, **hordes** close in: green zones where zombies
 claw up out of the ground nonstop. They swell when they hear gunfire or spot you, drift
@@ -26,6 +26,7 @@ There are two ways out:
 | ![Dusk over Cedar Ridge](docs/dusk-country.png) | ![Night at a Hollow Creek farm](docs/night-farm.png) |
 | ![Bellerose](docs/bellerose.png) | ![A horde rolling over the hills](docs/horde.png) |
 | ![Item shop](docs/item-shop.png) | ![Island map](docs/map.png) |
+| ![Multiplayer server list](docs/multiplayer.png) | ![Characters in the lobby](docs/lobby.png) |
 
 ## Play it locally
 
@@ -76,9 +77,8 @@ To sell Shards later, you also need the small wallet server. See
 | Jump · vault through a window | Space |
 | Fire / use item · aim | Left mouse · Right mouse |
 | Reload · interact (hold to board up, search) | R · E |
-| Harvesting tool / hotbar | 1 – 6, mouse wheel |
-| Build mode · wall / floor / ramp / roof | Q · Z X V F (or 1–4) |
-| Change material · rotate piece | G · R |
+| Bare hands / hotbar | 1 – 6, mouse wheel |
+| Holding a Mason's Trowel: lay bricks · wall ↔ wall with window | Left mouse · R |
 | Quick heal · quick eat/drink | H · X |
 | Inventory & crafting · map · flashlight | Tab · M · L |
 | Drop held item · emote · pause | T · B · Esc / P |
@@ -86,6 +86,10 @@ To sell Shards later, you also need the small wallet server. See
 **Driving:** E gets on or off. W/S are throttle and brake/reverse, A/D steer, Space is the
 handbrake, H honks the horn and L turns the headlights on and off. The camera follows behind
 you; move the mouse to look around.
+
+**Melee and gathering:** you start with bare hands, which can only punch. Find a **Fire
+Axe**, **Pickaxe** or **Machete** to chop trees, break rocks, strip cars for metal and smash
+doors, boards and brick walls.
 
 **Workbenches:** walk up to one and press E. Revolvers fire faster from the hip than when
 aiming (right mouse).
@@ -140,8 +144,8 @@ always match (`src/data/classes.js` checks the budget; every class is within ±4
 | **Survivor** | Nothing special | Nothing | Water bottle |
 | **Mechanic** | +100% vehicle repair, −35% fuel use, can fix vehicles with 20 metal | −30% healing from meds, −12% gun damage, −30% stamina, −12% accuracy | Repair kit, gas can |
 | **Medic** | +40% healing from meds, +40% healing speed, +45% infection resistance, bandages slow infection | −25% gun damage, −20% reload speed, −25% melee damage | Medkit, 3 bandages |
-| **Carpenter** | +60% barricade strength, +60% build and board-up speed, −30% build cost, +30% materials | −15% gun damage, −20% accuracy, −30% stamina, −20% reload speed | 80 wood |
-| **Soldier** | +15% gun damage, +20% accuracy, +25% reload speed | +35% hunger and thirst, +25% noise, −20% healing from meds | Sidearm, 32 light ammo |
+| **Carpenter** | +60% barricade strength, +60% bricklaying and board-up speed, −30% brick wall cost, +30% materials | −15% gun damage, −20% accuracy, −30% stamina, −20% reload speed | Mason's Trowel, 50 wood, 30 stone |
+| **Soldier** | +15% gun damage, +20% accuracy, +25% reload speed | +35% hunger and thirst, +25% noise, −20% healing from meds | 9mm Pistol, 30 rounds |
 | **Scout** | +8% move speed, +50% stamina, −25% noise | −25% max health, −10% gun damage, −2 backpack slots | Energy drink |
 | **Farmer** | −35% hunger and thirst, raw food and dirty water are safe, +30% materials | −15% gun damage, −15% accuracy, −20% reload speed | 3 apples, campfire kit |
 | **Hunter** | +30% accuracy, −20% noise, +5% gun damage | −15% max health, −30% healing from meds, −20% melee damage | Crossbow, 8 bolts |
@@ -242,16 +246,38 @@ Walk over a blueprint and press E to learn it for the rest of the match. It does
 slot. When a gun still has locked mods, the bench says how many; Tab shows the blueprints you
 know.
 
-### Building
-Harvest wood, stone and metal, then build walls, floors, ramps and roofs. Pieces build up
-health over time and collapse when they lose support.
+### Materials, melee tools and brick walls
+
+There's no free-form building. You still gather **wood, stone and metal**, but only with a
+melee tool you find. Each tool is better at some things:
+
+| Tool | Best at | Smashing doors, boards and walls |
+|---|---|---|
+| **Fire Axe** | Wood (trees, fences) | Strongest |
+| **Pickaxe** | Stone (rocks) and metal (cars) | Strong |
+| **Machete** | Fighting the dead; some wood | Weak |
+| Bare hands | Nothing | Barely |
+
+Materials go into barricades (wood), crafting (bandages, splints, campfires, armor), gun mods
+(metal and wood) and vehicle repair (metal, for the Mechanic).
+
+**Brick walls** are the one thing you can build, and only in a special case: you need a
+**Mason's Trowel** (found in hardware stores, sheds and toolboxes; the Carpenter starts with
+one).
+* Hold the trowel to see where a wall would go: on the ground where you stand, on the edge of
+  the 4 m grid you're facing.
+* Click to lay it. **R** switches between a plain wall (30 stone) and a wall with a window
+  you can see and shoot through (25 stone).
+* Walls take a few seconds to set and the bricklaying is loud.
+* No floors, ramps, roofs or stacking.
+* Guns, explosives and melee tools break walls; an axe needs about 5 hits.
 
 ### Rivals
 
 29–59 AI survivors with original cosmetics. When they're far away they're simulated cheaply,
 so the match pace stays right. Near you they're fully physical: they loot, fight with
-human-like aim error, panic-build walls when shot, heal, flee hordes and race you to the
-extraction.
+human-like aim error, dodge when shot, heal, fight the dead with whatever melee tool they
+found, flee hordes and race you to the extraction.
 
 ### Day and night
 
@@ -268,15 +294,28 @@ extraction.
 | Standard | ~1 hr | 50 |
 | Marathon | 2–3 hr | 60 |
 
-You can pause at any time, since it's single-player.
+You can pause a solo match at any time. Multiplayer matches keep running when you open the
+menu.
 
 ### Meta
 
 * Shards (the in-game currency), XP and levels, career stats and match history.
-* An **item shop** that rotates daily at 00:00 UTC, with Featured and Daily sections and
-  rarity cards, plus a **locker** for outfits, back blings, harvesting tools, **bike paints**,
-  emotes and weapon wraps.
-* All 20 outfits and every item are original designs.
+* An **item shop** in the OG layout:
+  * Two **Featured** outfits (at least one Epic or Legendary) and six **Daily** items, all
+    rotating at 00:00 UTC.
+  * Nothing from yesterday's shop comes straight back. Cards say **NEW!** or how many days
+    ago an item was last in the shop.
+  * Clicking an item shows a slowly turning 3D preview.
+* **The shop is the same for every player.** The rotation is computed from the UTC day, and
+  the game syncs its clock to the Greenfall server (or the page host's clock on itch.io), so
+  a wrong PC clock doesn't show a different shop. The wallet server uses the same rotation
+  when it checks purchases.
+* A **locker** for outfits, back blings, **bike paints**, emotes and weapon wraps. The old
+  harvesting tool skins were retired along with the starting pickaxe. Anyone who bought one
+  automatically gets its price back in Shards.
+* All 20 outfits and every item are original designs. The characters use stylized
+  proportions (bigger heads, broader shoulders, solid limbs). Hoods, helmets and masks show
+  the face, and plain shirts stay plain.
 
 ## Mobile
 
@@ -289,9 +328,59 @@ it on your own phone before launch):
   Android Chrome does. iPhone Safari doesn't let web pages go fullscreen, so on iPhone the
   game plays with the browser bars visible.
 * Touch controls: a move stick on the left, drag anywhere on the right to look, and buttons
-  for fire, aim, jump, crouch, reload, build, use, heal and eat. When you get on a vehicle,
-  the buttons change to **BRAKE / EXIT / HORN** and the combat buttons hide.
+  for fire, aim, jump, crouch, reload, use, heal and eat.
+  * On a vehicle the buttons change to **BRAKE / EXIT / HORN** and the combat buttons hide.
+  * With a trowel they change to **LAY / WINDOW**.
 * Phones and tablets start on the **Low** graphics preset. Players can raise it in Settings.
+
+## Multiplayer
+
+Press **Multiplayer** on the Play tab. You get a **server list**:
+
+* **Search** by server or host name.
+* **Filter** by match length, region, *has space*, *no password* and *not started*.
+* **Sort** by most or fewest players, newest, or name.
+* The list refreshes every 5 seconds, and your filters are remembered.
+
+**Host a server** to make your own:
+* Name it and pick the match length.
+* Choose 2–8 players and a region.
+* Add an optional password.
+* Choose whether AI survivors fill the rest of the island.
+
+Players gather in the room lobby (the host can kick), and the host presses **Start match**.
+
+How it works:
+* The **host's game runs the shared world**: zombies, hordes, AI survivors, the riverboat
+  and helicopter, and airdrops. Everyone else's game mirrors it.
+* **Each player's own game runs their own movement**, and reports shots and hits. Hits on
+  other players, AI survivors and zombies are sent to whoever is in charge of them.
+* Loot taken or dropped, doors, barricades, searched containers, supply crates, brick walls
+  and the vehicles people drive are shared.
+* **House loot is rolled from the match seed**, so every player generates the same items
+  without sending them.
+* **Extraction seats are decided by the host.** The riverboat's 3 seats really are 3 for
+  everyone.
+* Matches can't be joined once they've started. If the host leaves, the match ends for
+  everyone. If a player leaves, the others are told.
+
+**Running it:** multiplayer uses the same zero-dependency Node server as the wallet.
+`server/server.mjs` serves both, or run `server/relay.mjs` alone for just multiplayer. The
+server only lists rooms and passes messages; the game logic runs in the host's browser.
+
+```bash
+PORT=8787 ALLOWED_ORIGINS=https://html-classic.itch.zone,https://YOURNAME.itch.io node server/server.mjs
+VITE_GREENFALL_API=https://your-server.example.com npm run package:itch
+```
+
+In development (`npm run dev` on localhost), the game looks for the server on
+`http://localhost:8787`, so `npm run server` in a second terminal is all you need. Set
+`VITE_GREENFALL_MP` instead of `VITE_GREENFALL_API` to use a separate relay host.
+
+Limits to know:
+* The host's connection and PC carry the match. Trust is client-side: a player's game reports
+  its own hits, which is fine for friends but not cheat-proof.
+* Up to 8 players per server.
 
 ## Currency and selling Shards
 
@@ -394,11 +483,14 @@ src/
   ui/                hud, menus/shop/locker/class picker, thumbnails, lobby scene, touch controls
   data/              items & loot tables, gun mods + blueprints, cosmetics + shop rotation,
                      classes, rewards
+  net/               multiplayer: link (relay connection), net (in-match sync), puppet (remote survivors)
 server/
-  server.mjs         optional wallet/account server (Shards, purchases, rewards, itch.io codes)
+  server.mjs         wallet/account server (Shards, purchases, rewards, itch.io codes) + relay
+  relay.mjs          multiplayer relay: server list + WebSocket message relay (zero dependencies)
 scripts/
-  package-itch.mjs   zips dist/ for itch.io
+  package-itch.mjs   zips dist/ for itch.io        package-single.mjs  one-file build
   smoke-test.mjs     headless boot + simulated match (needs Playwright)
+  mp-test.mjs        headless two-player test: host, server list, join, sync checks
 ```
 
 Run `npm run build && npm run test:smoke` for an automated end-to-end check. It boots the
@@ -406,11 +498,18 @@ game in headless Chromium, checks that nobody spawned in the harbor or Bellerose
 at a workbench (and checks that advanced mods stay hidden until their blueprint is learned),
 drives a vehicle, and fast-forwards a Quick match through the riverboat and the helicopter.
 
+`npm run test:mp` starts the server and two browsers. It checks the whole multiplayer flow:
+* hosting through the menus, finding the server in the list (and filtering it out), joining
+  and starting
+* both players seeing each other, and host zombies appearing for the other player
+* dropped and picked-up items, doors, and identical house loot
+* damage between players, and a player leaving
+
 ## Roadmap ideas
 
-* Online multiplayer. This needs an authoritative game server; the AI survivors already use
-  the same `Survivor` code path a networked player would.
-* Duos and squads with AI or friends, plus a spectator view after elimination
+* Duos and squads (teams) in multiplayer, joining matches in progress, and a spectator view
+  after elimination
+* A dedicated-server mode so matches don't depend on the host's PC
 * The ocean update: boats, swimming and an underwater area
 * More vehicles (tractors, a farm ATV) and passenger seats
 * Saving a match in progress so you can finish a Marathon later

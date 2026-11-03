@@ -43,8 +43,14 @@ export const WEAPONS = {
   // ---- not guns ----
   crossbow: { name: 'Crossbow', model: 'crossbow', ammo: 'bolts', rar: [0, 1, 2, 3, 4], mag: 1, rate: 0.9, dmg: [68, 72, 78, 84, 90], head: 2.2, spread: 0.02, adsSpread: 0.002, bloom: 0, reload: [1.4, 1.35, 1.3, 1.25, 1.2], range: 160, auto: false, noise: 6, recoil: 0.02, projectile: true, speed: 75, drop: 9, suppressed: true, slotIcon: 'XB',
     blurb: 'Silent. The dead never hear it.' },
-  machete: { name: 'Machete', model: 'machete', melee: true, rar: [0, 1, 2, 3, 4], rate: 1.7, dmg: [40, 42, 45, 48, 52], head: 1.3, range: 2.4, noise: 2, slotIcon: 'M',
-    blurb: 'Quiet and never runs out of ammo.' },
+  // ---- melee: found, not brought. They gather materials and break things. ----
+  // harvest = materials per hit multiplier; smash = damage multiplier vs doors, boards and walls
+  machete: { name: 'Machete', model: 'machete', melee: true, rar: [0, 1, 2, 3, 4], rate: 1.7, dmg: [40, 42, 45, 48, 52], head: 1.3, range: 2.4, noise: 2, slotIcon: 'MA',
+    harvest: { wood: 0.8, stone: 0.25, metal: 0.25 }, smash: 0.7, blurb: 'Fast and quiet. Best against the dead; can hack some wood.' },
+  axe: { name: 'Fire Axe', model: 'axe', melee: true, rar: [0, 1, 2], rate: 1.15, dmg: [48, 50, 54, 54, 54], head: 1.3, range: 2.5, noise: 4, slotIcon: 'AX',
+    harvest: { wood: 1.6, stone: 0.5, metal: 0.4 }, smash: 1.8, blurb: 'Fells trees and chops through doors, boards and walls.' },
+  pickaxe: { name: 'Pickaxe', model: 'pickaxe', melee: true, rar: [0, 1, 2], rate: 1.0, dmg: [42, 44, 47, 47, 47], head: 1.3, range: 2.5, noise: 5, slotIcon: 'PK',
+    harvest: { wood: 0.6, stone: 1.6, metal: 1.4 }, smash: 1.5, blurb: 'Breaks rock and scrap metal. Brick walls crumble.' },
 };
 // the rarity a gun actually spawns in: the allowed rarity closest to the roll
 export function clampRarity(id, r) {
@@ -82,6 +88,7 @@ export const ITEMS = {
   energy: { type: 'food', name: 'Energy Drink', stack: 4, time: 1.4, water: 18, stamina: 90, icon: '⚡', color: '#7aff5a', value: 4 },
   gascan: { type: 'tool', name: 'Gas Can', stack: 2, icon: '⛽', color: '#e0503a', value: 8 },
   repairkit: { type: 'tool', name: 'Repair Kit', stack: 2, icon: '🔧', color: '#b8c0c8', value: 12 },
+  trowel: { type: 'trowel', name: "Mason's Trowel", stack: 1, icon: '🧱', color: '#d07a4a', value: 10 },
   cloth: { type: 'craft', name: 'Cloth Scraps', stack: 20, icon: '≋', color: '#d8d0c0', value: 1 },
   campfire: { type: 'deploy', name: 'Campfire Kit', stack: 3, icon: '🔥', color: '#f08030', value: 6 },
   watch: { type: 'valuable', name: 'Gold Pocket Watch', stack: 1, icon: '◷', color: '#f0c040', value: 220 },
@@ -104,12 +111,12 @@ export const RECIPES = [
 // ---------- loot tables ----------
 const W = (arr) => arr; // [id, weight]
 export const LOOT = {
-  weapon: W([['pistol', 18], ['snub', 10], ['longrev', 5], ['mp5', 13], ['pump', 16], ['m4', 15], ['ak', 11], ['scout', 5], ['longrifle', 3], ['crossbow', 4], ['machete', 5]]),
+  weapon: W([['pistol', 18], ['snub', 10], ['longrev', 5], ['mp5', 13], ['pump', 16], ['m4', 15], ['ak', 11], ['scout', 5], ['longrifle', 3], ['crossbow', 4], ['machete', 5], ['axe', 5], ['pickaxe', 4]]),
   ammo: W([['a9', 28], ['a556', 28], ['g12', 18], ['a45', 13], ['a762', 9], ['bolts', 4]]),
   heal: W([['bandage', 40], ['medkit', 8], ['splint', 14], ['antibiotics', 10], ['painkillers', 12], ['armor', 16]]),
   food: W([['beans', 22], ['chips', 18], ['water', 24], ['soda', 12], ['energy', 5], ['apple', 8], ['dirtywater', 6], ['rawchicken', 3], ['corn', 2]]),
   throw: W([['grenade', 35], ['molotov', 30], ['noisemaker', 35]]),
-  craft: W([['cloth', 70], ['campfire', 30]]),
+  craft: W([['cloth', 66], ['campfire', 28], ['trowel', 6]]),
   auto: W([['gascan', 60], ['repairkit', 40]]),
   valuable: W([['cash', 35], ['locket', 20], ['watch', 15], ['coin', 15], ['records', 12], ['idol', 3]]),
 };

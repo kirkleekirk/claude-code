@@ -41,8 +41,8 @@ export class Match {
     G.scene.add(this.group);
   }
   get progress() { return clamp(this.elapsed / this.preset.duration, 0, 1.5); }
-  get aliveCount() { return this.G.survivors.filter((s) => s.alive && !s.extracted).length; }
-  get totalPlayers() { return this.G.survivors.length; }
+  get aliveCount() { return this.G.net?.isClient ? this.G.net.alive : this.G.survivors.filter((s) => s.alive && !s.extracted).length; }
+  get totalPlayers() { return this.G.net?.isClient ? this.G.net.total : this.G.survivors.length; }
 
   // Pick ground spawn points: the player near a farmhouse/home in the countryside, everyone
   // else spread out (and well away from the player).
@@ -81,7 +81,8 @@ export class Match {
     if (this.phase !== 'ended') this.elapsed += dt;
     // clock: day length preset, start 7:30
     G.dayNight.hour = (7.5 + (this.elapsed / this.preset.dayLen) * 24) % 24;
-    if (this.phase === 'live' || this.phase === 'final') this.updateLive(dt);
+    if (G.net?.isClient) { if (this.phase !== 'ended') this.clientLive(dt); }
+    else if (this.phase === 'live' || this.phase === 'final') this.updateLive(dt);
     this.updateBoat(dt);
     this.updateHeli(dt);
     this.updateAirdrops(dt);
@@ -90,7 +91,7 @@ export class Match {
     const G = this.G;
     this.phase = 'live';
     // initial hordes far from the player
-    for (let i = 0; i < this.preset.initialHordes; i++) G.hordes.naturalSpawn();
+    if (!G.net?.isClient) for (let i = 0; i < this.preset.initialHordes; i++) G.hordes.naturalSpawn();
     G.hordes.nextNatural = this.hordeInterval;
     G.hud.announce(`DAY 1 · ${(this.spawnZone || 'Greenfall County').toUpperCase()}`, 'yellow', 5);
     G.hud.setObjective('Find weapons, food and water. Avoid the hordes.');
@@ -120,10 +121,37 @@ export class Match {
     if (!G.player.alive && !this.result) { this.resultT = (this.resultT || 0) + dt; if (this.resultT > 3.5) this.finish('eliminated'); }
   }
 
-  // ---------------- riverboat (mid-match extraction) ----------------
-  announceBoat() {
+  // multiplayer, joining player: the host runs the timeline; we only react to it
+  clientLive(dt) {
     const G = this.G;
-    const d = this.rng.pick(DOCKS);
+    if ((this.heliState === 'inbound' || this.heliState === 'landed') && G.net.alive <= 1 && G.player.alive && !G.player.extracted) this.extractPlayer('heli', true);
+    if (!G.player.alive && !this.result) { this.resultT = (this.resultT || 0) + dt; if (this.resultT > 3.5) this.finish('eliminated'); }
+  }
+  netSync(m) {
+    const G = this.G;
+    if (m.bs !== this.boatState) {
+      if (this.boatState === 'none' && m.bs !== 'gone' && m.dk) this.announceBoat(DOCKS.find((d) => d.id === m.dk));
+      if (m.bs === 'docked' && this.boatState === 'inbound') { this.boatT = 0.01; this.updateBoat(0.02); }
+      else if (m.bs === 'departing' && this.boat && this.boatState !== 'departing') this.departBoat();
+      else if (m.bs === 'gone' && this.boat) { this.group.remove(this.boat.mesh); this.boat = null; this.boatState = 'gone'; }
+      if (m.bs !== 'gone') this.boatState = m.bs;
+    }
+    if (this.boatState === 'inbound' || this.boatState === 'docked') this.boatT = m.bt;
+    this.boatSeats = m.seats;
+    if (m.hs !== this.heliState) {
+      if (this.heliState === 'none' && m.hs !== 'gone' && m.lz) this.announceHeli(LZS.find((l) => l.name === m.lz));
+      if (m.hs === 'landed' && this.heliState === 'inbound') { this.heliT = 0.01; this.updateHeli(0.02); }
+      else if (m.hs === 'departing' && this.heli && this.heliState !== 'departing') this.departHeli();
+      if (m.hs !== 'gone') this.heliState = m.hs;
+    }
+    if (this.heliState === 'inbound' || this.heliState === 'landed') this.heliT = m.ht;
+    void G;
+  }
+
+  // ---------------- riverboat (mid-match extraction) ----------------
+  announceBoat(dock = null) {
+    const G = this.G;
+    const d = dock || this.rng.pick(DOCKS);
     this.dock = d;
     this.boatState = 'inbound';
     this.boatT = 180;
@@ -180,6 +208,7 @@ export class Match {
   }
   board(s, how) {
     if (s.extracted || !s.alive) return;
+    if (this.G.net?.isClient && s === this.G.player) { this.G.net.requestBoard(how); return; } // the host has the seats
     if (how === 'boat') { if (this.boatSeats <= 0) return; this.boatSeats--; }
     s.extracted = true;
     s.extractedBy = how;
@@ -190,11 +219,11 @@ export class Match {
   }
 
   // ---------------- helicopter (final extraction) ----------------
-  announceHeli() {
+  announceHeli(forced = null) {
     const G = this.G;
     // choose LZ: not inside hordes, prefer far from current hordes
-    let best = null, bs = -1e9;
-    for (const lz of LZS) {
+    let best = forced, bs = -1e9;
+    if (!forced) for (const lz of LZS) {
       const z = G.hordes.zoneAt(lz.x, lz.z);
       const s = (z.edge > 0 ? z.edge : -500) + this.rng.range(0, 300);
       if (s > bs) { bs = s; best = lz; }
@@ -255,7 +284,7 @@ export class Match {
     G.hud.announce('THE HELICOPTER IS LEAVING', 'red');
     // everyone still on the island is lost
     if (G.player.alive && !G.player.extracted) { setTimeout(() => { if (!this.result) this.finish('left'); }, 5000); }
-    for (const s of G.survivors) if (s !== G.player && s.alive && !s.extracted) { s.health = 0; s.die(null, { type: 'left' }); }
+    if (!G.net?.isClient) for (const s of G.survivors) if (s !== G.player && s.alive && !s.extracted) { s.health = 0; s.die(null, { type: 'left' }); }
   }
   extractionTarget(bot) {
     if (this.boatState === 'docked' && this.boatSeats > 0 && bot.gear > 0.2) {
@@ -288,18 +317,21 @@ export class Match {
   }
 
   // ---------------- airdrops ----------------
-  spawnAirdrop() {
+  spawnAirdrop(net = null) {
     const G = this.G;
     let x, z;
-    for (let k = 0; k < 20; k++) {
+    if (net) { x = net.x; z = net.z; }
+    else for (let k = 0; k < 20; k++) {
       x = this.rng.range(500, 3500); z = this.rng.range(400, 2600);
       if (G.world.coastAt(x, z) > 60 && !G.hordes.inside(x, z)) break;
     }
+    const nid = net?.n || `A${this.airdrops.length}`;
     const mesh = makeParachuteCrate();
     const y = G.world.heightAt(x, z);
     mesh.position.set(x, y + 260, z);
     this.group.add(mesh);
-    this.airdrops.push({ x, z, y, mesh, landed: false });
+    this.airdrops.push({ x, z, y, mesh, landed: false, nid });
+    if (!net) G.net?.onLocalAirdrop({ x, z, nid });
     G.hud.announce('SUPPLY DROP INCOMING', 'yellow');
     G.hud.killfeedSystem('A supply drop is falling — check your map.');
   }
@@ -312,7 +344,7 @@ export class Match {
       if (a.mesh.position.y <= a.y + 0.5) {
         a.landed = true;
         this.group.remove(a.mesh);
-        G.inter.crates.push({ x: a.x, y: a.y, z: a.z, rot: 0, opened: false, mesh: null, kind: 'airdrop' });
+        G.inter.crates.push({ x: a.x, y: a.y, z: a.z, rot: 0, opened: false, mesh: null, kind: 'airdrop', nid: a.nid });
         const ch = G.view.chunkOf(a.x, a.z);
         if (ch.state === 'near') G.inter.makeCrateMesh(G.inter.crates[G.inter.crates.length - 1]);
         G.emitNoise(a.x, a.z, 250, null, 'airdrop', true);

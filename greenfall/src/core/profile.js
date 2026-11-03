@@ -1,6 +1,6 @@
 // Persistent player profile (localStorage). Everything is wrapped in try/catch so the
 // game still runs in private windows / blocked storage.
-import { DEFAULT_OWNED, DEFAULT_EQUIPPED } from '../data/cosmetics.js';
+import { DEFAULT_OWNED, DEFAULT_EQUIPPED, RETIRED, retiredRefund } from '../data/cosmetics.js';
 import { xpForLevel, applyXp } from '../data/rewards.js';
 
 // Tamper check for the offline save. Not real security (anything in the browser can be
@@ -38,6 +38,14 @@ export class Profile {
         if (d.owned) d.owned = d.owned.map((id) => (id.startsWith('gl_') ? { gl_canvas: 'pt_stock', gl_barn: 'pt_barn', gl_patch: 'pt_patch', gl_crop: 'pt_crop', gl_bat: 'pt_dusk', gl_toxic: 'pt_toxic', gl_balloon: 'pt_fair' }[id] || 'pt_stock' : id));
         if (d.equipped) { delete d.equipped.glider; }
         if (d.sig && d.sig !== sign(d)) { d.shards = 0; d.tampered = true; }
+        // migrate: harvesting tools were retired; refund any that were bought
+        if (d.owned && d.owned.some((id) => RETIRED[id])) {
+          const refund = d.owned.reduce((n, id) => n + retiredRefund(id), 0);
+          d.owned = d.owned.filter((id) => !RETIRED[id]);
+          if (!d.tampered) d.shards = (d.shards || 0) + refund;
+          if (refund) d.refundNotice = refund;
+        }
+        if (d.equipped) delete d.equipped.pickaxe;
         return { ...def, ...d, stats: { ...def.stats, ...(d.stats || {}) }, settings: { ...def.settings, ...(d.settings || {}) }, equipped: { ...def.equipped, ...(d.equipped || {}) }, owned: Array.from(new Set([...(d.owned || []), ...DEFAULT_OWNED])) };
       }
     } catch (e) { /* ignore */ }

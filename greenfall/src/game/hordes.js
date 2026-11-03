@@ -87,6 +87,7 @@ export class Hordes {
   inside(x, z) { for (const h of this.list) if (Math.hypot(x - h.x, z - h.z) < h.r) return h; return null; }
 
   noise(x, z, radius, src, kind) {
+    if (this.G.net?.isClient) return;
     // heat map for natural horde spawns
     const cx = Math.floor(x / 64), cz = Math.floor(z / 64);
     if (cx >= 0 && cz >= 0 && cx < this.hw) { const i = cz * this.hw + cx; if (i < this.heat.length) this.heat[i] += radius; }
@@ -139,6 +140,7 @@ export class Hordes {
     U.uTime.value = U.uTime.value; // keep shared uniform alive
     this.mat.uniforms.uTime.value += dt;
     this.mat.uniforms.uNight.value = G.env?.night || 0;
+    if (G.net?.isClient) { this.updateUniforms(); return; } // the host moves the hordes
     // decay heat
     for (let i = 0; i < this.heat.length; i++) this.heat[i] *= Math.exp(-dt / 240);
     // natural spawns
@@ -183,14 +185,18 @@ export class Hordes {
         break;
       }
     }
-    // feed shader uniforms (terrain + world tint)
+    this.updateUniforms();
+    this.spawnZombies(dt);
+  }
+  // feed shader uniforms (terrain + world tint)
+  updateUniforms() {
+    const G = this.G;
     const sorted = [...this.list].sort((a, b) => Math.hypot(a.x - G.camera.position.x, a.z - G.camera.position.z) - a.r - (Math.hypot(b.x - G.camera.position.x, b.z - G.camera.position.z) - b.r));
     U.uHordeCount.value = Math.min(MAX_HORDES, sorted.length);
     for (let i = 0; i < MAX_HORDES; i++) {
       const h = sorted[i];
       if (h) U.uHordes.value[i].set(h.x, h.z, h.r, 1); else U.uHordes.value[i].set(0, 0, 0, 0);
     }
-    this.spawnZombies(dt);
   }
 
   // Spawn the dead around physical survivors that are inside / near hordes, plus ambient wanderers.

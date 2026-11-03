@@ -3,9 +3,8 @@
 export const DEFAULT_BINDS = {
   forward: ['KeyW', 'ArrowUp'], back: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
   jump: ['Space'], sprint: ['ShiftLeft', 'ShiftRight'], crouch: ['KeyC', 'ControlLeft'], reload: ['KeyR'], interact: ['KeyE'],
-  build: ['KeyQ'], inventory: ['Tab', 'KeyI'], map: ['KeyM'], heal: ['KeyH'], eat: ['KeyX'], flashlight: ['KeyL'], emote: ['KeyB'],
+  inventory: ['Tab', 'KeyI'], map: ['KeyM'], heal: ['KeyH'], eat: ['KeyX'], flashlight: ['KeyL'], emote: ['KeyB'],
   slot1: ['Digit1'], slot2: ['Digit2'], slot3: ['Digit3'], slot4: ['Digit4'], slot5: ['Digit5'], slot6: ['Digit6'],
-  material: ['KeyG'], rotate: ['KeyR'], pieceWall: ['KeyZ', 'F1'], pieceFloor: ['KeyX', 'F2'], pieceRamp: ['KeyV', 'F3'], pieceCone: ['KeyF', 'F4'],
   drop: ['KeyT'], pause: ['Escape', 'KeyP'],
 };
 

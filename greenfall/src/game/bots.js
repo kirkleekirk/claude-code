@@ -25,6 +25,7 @@ export class Bot extends Survivor {
   constructor(G, opts) {
     super(G, { ...opts, noModel: true });
     this.rng = new RNG(opts.seed || this.id * 977);
+    this.isBot = true;
     this.skill = clamp(this.rng.range(0.15, 0.9) * (G.match?.botSkill ?? 1), 0.05, 0.95);
     this.aggression = this.rng.range(0.2, 0.95);
     this.outfitDef = opts.outfit;
@@ -53,8 +54,6 @@ export class Bot extends Survivor {
     if (!this.character) {
       this.character = new (G.CharacterClass)(this.outfitDef, { shadow: true });
       this.character.setBackBling(this.cosmetics.backbling || 'pack');
-      this.character.setPickaxe(this.cosmetics.pickaxe || 'shovel');
-      this.character.setGlider(this.cosmetics.glider || 'canvas');
     }
     if (!this.equipped) this.generateLoadout();
     // drop on ground safely
@@ -89,6 +88,7 @@ export class Bot extends Survivor {
     }
     if (g > 0.25 || r.chance(0.35)) give('pump', 10 + Math.floor(g * 25));
     if (g > 0.55 && r.chance(0.4)) give(r.chance(0.6) ? 'scout' : 'longrifle', 8 + Math.floor(g * 10));
+    if (r.chance(0.45)) this.addItem(r.pick(['machete', 'axe', 'pickaxe']), 1, r.int(0, 2));
     if (g > 0.15) this.addItem('bandage', r.int(2, 6));
     if (g > 0.4 && r.chance(0.6)) this.addItem('medkit', 1);
     if (g > 0.3) { this.armor = Math.floor(r.range(0, 1) * g * 100); }
@@ -207,7 +207,11 @@ export class Bot extends Survivor {
         const aim = new THREE.Vector3(z.pos.x, z.pos.y + 1.3 * z.scale, z.pos.z);
         if (this.ws.cd <= 0) G.weapons.fire(this, aim, { spreadMul: 1.4 });
         wish = { x: -dx / (d || 1), z: -dz / (d || 1) }; speed = 3;
-      } else if (d < 2.5) { G.weapons.swingPickaxe(this, new THREE.Vector3(z.pos.x, z.pos.y + 1.2, z.pos.z)); }
+      } else if (d < 2.5) {
+        const aimZ = new THREE.Vector3(z.pos.x, z.pos.y + 1.2, z.pos.z);
+        const mi = this.inv.slots.findIndex((x) => x && WEAPONS[x.id]?.melee);
+        if (mi >= 0) { if (this.inv.active !== mi + 1) this.equip(mi + 1); G.weapons.fire(this, aimZ); } else G.weapons.punch(this, aimZ);
+      }
       else { wish = { x: -dx / (d || 1), z: -dz / (d || 1) }; speed = 6.5; }
     } else if (this.goal) {
       const wp = this.nextWaypoint();
@@ -349,7 +353,7 @@ export class Bot extends Survivor {
       const def = ITEMS[it.id];
       const left = this.addItem(it.id, it.n, it.r, it.mag, it.mods);
       if (left < it.n) {
-        if (left <= 0) G.inter.removeWorldItem(it); else it.n = left;
+        if (left <= 0) G.inter.removeWorldItem(it); else { it.n = left; G.net?.onItemQty(it); }
         if (def?.type === 'weapon') this.gear = Math.min(1, this.gear + 0.05 + it.r * 0.04);
         break;
       }
@@ -359,17 +363,8 @@ export class Bot extends Survivor {
   onShotBy(shooter) {
     if (!this.alive || !shooter) return;
     if (shooter !== this.target && (!this.target || this.rng.chance(0.6))) { this.target = shooter; this.state = 'fight'; this.seenT = 0.2; }
-    // OG panic wall
-    if (this.inv.mats.wood >= 10 && this.rng.chance(0.35 + this.skill * 0.4) && this.G.time - (this.lastWall || 0) > 2.5) {
-      this.lastWall = this.G.time;
-      const yaw = Math.atan2(shooter.pos.x - this.pos.x, shooter.pos.z - this.pos.z) + Math.PI;
-      const p = this.G.builds.target(this, 'wall', yaw, 0, 0);
-      this.G.builds.place(this, p, this.inv.mats.stone >= 10 && this.rng.chance(0.4) ? 'stone' : 'wood');
-      if (this.rng.chance(0.4 * this.skill) && this.inv.mats.wood >= 10) {
-        const r = this.G.builds.target(this, 'ramp', yaw, 0, 0);
-        this.G.builds.place(this, r, 'wood');
-      }
-    }
+    // under fire: break line of sight by changing strafe direction and crouching briefly
+    this.strafe = -this.strafe || 1; this.strafeT = this.rng.range(0.4, 1.0);
   }
 }
 

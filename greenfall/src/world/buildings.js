@@ -60,10 +60,21 @@ class BCtx {
   }
   link(a, b, cost = 1, kind = 'walk') { if (a >= 0 && b >= 0) this.rt.nav.edges.push([a, b, kind]); }
   loot(lx, ly, lz, tier = 1, cat = null) {
+    if (this.blocked(lx, lz, 0.2, 0.2, ly - 0.45)) return; // nothing in doorways or on stairs
     const [x, z] = this.toW(lx, lz);
     this.rt.loot.push({ x, y: this.b.y + ly, z, tier, cat });
   }
+  // furniture-free zones (doorways, stair ends), building space
+  keepClear(x, z, hx, hz, y) { (this.clearZones || (this.clearZones = [])).push({ x, z, hx, hz, y }); }
+  blocked(x, z, sx, sz, y) {
+    for (const c of this.clearZones || []) {
+      if (Math.abs(y - c.y) > 1.2) continue;
+      if (Math.abs(x - c.x) < c.hx + sx / 2 && Math.abs(z - c.z) < c.hz + sz / 2) return true;
+    }
+    return false;
+  }
   container(lx, ly, lz, kind, yaw = 0) {
+    if (this.blocked(lx, lz, 0.3, 0.3, ly - 0.6)) return;
     const [x, z] = this.toW(lx, lz);
     this.rt.containers.push({ x, y: this.b.y + ly, z, kind, rot: this.b.rot + yaw, searched: false, building: this.b.id });
   }
@@ -124,6 +135,11 @@ function wall(ctx, ax, az, bx, bz, y0, h, openings, o) {
   for (const sp of spans) {
     if (sp.solid) { piece(sp.s0, sp.s1, y0, y0 + h); continue; }
     const op = sp.op;
+    // keep the floor in front of and behind every doorway free of furniture
+    if (op.kind === 'door' || op.kind === 'gap' || op.kind === 'bigdoor') {
+      const sm = (sp.s0 + sp.s1) / 2;
+      ctx.keepClear(ax + ux * sm, az + uz * sm, Math.abs(ux) > 0.5 ? (sp.s1 - sp.s0) / 2 + 0.35 : 1.25, Math.abs(ux) > 0.5 ? 1.25 : (sp.s1 - sp.s0) / 2 + 0.35, y0);
+    }
     const oy0 = y0 + op.y0, oy1 = Math.min(y0 + h, y0 + op.y1);
     piece(sp.s0, sp.s1, y0, oy0);
     piece(sp.s0, sp.s1, oy1, y0 + h);
@@ -330,7 +346,11 @@ function furnish(ctx, room, kind, y) {
   const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
   const w = x1 - x0, d = z1 - z0;
   const full = ctx.detail === 0;
-  const B = (bx, by, bz, sx, sy, sz, c, l = TEX.WHITE, col = true) => { if (full) ctx.box(bx, y + by, bz, sx, sy, sz, c, l, 0.6); if (col) ctx.col(bx, y + by, bz, sx, sy, sz, 0, COL.SOLID | COL.BULLET | COL.WALK); };
+  const B = (bx, by, bz, sx, sy, sz, c, l = TEX.WHITE, col = true) => {
+    if (ctx.blocked(bx, bz, sx, sz, y)) return; // never block a doorway or a staircase
+    if (full) ctx.box(bx, y + by, bz, sx, sy, sz, c, l, 0.6);
+    if (col) ctx.col(bx, y + by, bz, sx, sy, sz, 0, COL.SOLID | COL.BULLET | COL.WALK);
+  };
   const wallSide = r.int(0, 3);
   const nearWall = (depth) => {
     // pick a position against one wall
@@ -584,6 +604,13 @@ function genericBuilding(ctx, P) {
       // railing on the open side
       if (ctx.detail === 0) ctx.box(stair.x0 - 0.04, fy + H * 0.5 + 0.5, stair.z0 + stair.len / 2, 0.06, 0.06, stair.len, 0x5a3a26, TEX.PLANKS, 1);
     }
+  }
+  // stairs: keep both ends walkable on every floor
+  if (stair) for (let f = 0; f < floors; f++) {
+    const fy = F + f * H;
+    if (f < floors - 1) ctx.keepClear((stair.x0 + stair.x1) / 2 - 0.5, stair.z0 + 0.4, (stair.x1 - stair.x0) / 2 + 0.9, 1.0, fy);
+    if (f > 0) ctx.keepClear((stair.x0 + stair.x1) / 2 - 0.6, stair.z1 + 0.7, (stair.x1 - stair.x0) / 2 + 1.0, 1.0, fy);
+    ctx.keepClear((stair.x0 + stair.x1) / 2, (stair.z0 + stair.z1) / 2, (stair.x1 - stair.x0) / 2 + 0.1, stair.len / 2, fy); // the stairwell itself
   }
   // rooms + interior walls + furniture + nav
   const roomsByFloor = [];

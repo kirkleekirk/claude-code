@@ -11,7 +11,9 @@
     "package:itch": "vite build && node scripts/package-itch.mjs",
     "test:smoke": "node scripts/smoke-test.mjs",
     "check:classes": "node scripts/check-classes.mjs",
-    "package:single": "vite build && node scripts/package-single.mjs"
+    "package:single": "vite build && node scripts/package-single.mjs",
+    "test:mp": "node scripts/mp-test.mjs",
+    "server": "node server/server.mjs"
   },
   "dependencies": {
     "@fontsource/lilita-one": "5.2.8",

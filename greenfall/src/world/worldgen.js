@@ -488,7 +488,7 @@ export class WorldData {
     const GUN_SIGNS = ['GUNS', 'SHERIFF', 'ARMY SURPLUS', 'PAWN', 'HARDWARE'];
     for (const b of this.buildings) {
       const h = ((b.seed >>> 4) % 1000) / 1000;
-      b.bench = ((b.kind === 'store' || b.kind === 'shop') && GUN_SIGNS.includes(b.sign)) || (b.kind === 'garage' && h < 0.5) || (b.kind === 'barn' && h < 0.4) || (b.kind === 'gas' && h < 0.6) || (b.kind === 'warehouse' && h < 0.5);
+      b.bench = ((b.kind === 'store' || b.kind === 'shop') && GUN_SIGNS.includes(b.sign)) || (b.kind === 'garage' && h < 0.5) || (b.kind === 'barn' && h < 0.22) || (b.kind === 'gas' && h < 0.6) || (b.kind === 'warehouse' && h < 0.5);
     }
   }
 

@@ -87,17 +87,18 @@ export class HUD {
     for (let i = 0; i < 6; i++) {
       const s = el('div', 'hslot', this.hotbar, `<span class="key">${i + 1}</span><span class="ico"></span><span class="cnt"></span><span class="lbl"></span>`);
       // tap a slot to equip it (touch) / click (desktop when unlocked)
-      const pick = (e) => { e.preventDefault(); e.stopPropagation(); const P = this.G.player; if (P && P.alive && !P.buildMode) P.equip(i); };
+      const pick = (e) => { e.preventDefault(); e.stopPropagation(); const P = this.G.player; if (P && P.alive) P.equip(i); };
       s.addEventListener('touchstart', pick, { passive: false });
       s.addEventListener('mousedown', (e) => { if (!this.G.input.locked) pick(e); });
       this.slots.push(s);
     }
     this.res = el('div', 'resources', r);
     this.buildbar = el('div', 'buildbar hidden', this.res);
-    const svg = { wall: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" fill="none" stroke="#fff" stroke-width="2"/></svg>', floor: '<svg viewBox="0 0 24 24"><path d="M2 16 L12 10 L22 16 L12 22 Z" fill="none" stroke="#fff" stroke-width="2"/></svg>', ramp: '<svg viewBox="0 0 24 24"><path d="M3 20 L21 6 L21 20 Z" fill="none" stroke="#fff" stroke-width="2"/></svg>', cone: '<svg viewBox="0 0 24 24"><path d="M3 18 L12 6 L21 18 Z" fill="none" stroke="#fff" stroke-width="2"/></svg>' };
+    // bricklaying bar (shown while holding a Mason's Trowel): plain wall or wall with a window
+    const svg = { wall: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" fill="none" stroke="#fff" stroke-width="2"/><path d="M3 9h18M3 14h18M9 4v5M15 9v5M9 14v6" stroke="#fff" stroke-width="1.2"/></svg>', window: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" fill="none" stroke="#fff" stroke-width="2"/><rect x="8" y="8" width="8" height="6" fill="none" stroke="#9bd7ff" stroke-width="2"/></svg>' };
     this.bpieces = {};
-    const keys = { wall: 'Z', floor: 'X', ramp: 'V', cone: 'F' };
-    for (const p of ['wall', 'floor', 'ramp', 'cone']) this.bpieces[p] = el('div', 'bpiece', this.buildbar, svg[p] + `<span>${keys[p]}</span>`);
+    for (const p of ['wall', 'window']) this.bpieces[p] = el('div', 'bpiece', this.buildbar, svg[p] + `<span>${p === 'wall' ? '30' : '25'}</span>`);
+    this.bhint = el('div', 'bhint', this.buildbar, 'R: switch · Click: lay bricks');
     this.ammo = el('div', 'ammo', this.res);
     this.matsEl = el('div', 'mats', this.res);
     this.matEls = {};
@@ -210,9 +211,9 @@ export class HUD {
     for (let i = 0; i < 6; i++) {
       const s = this.slots[i];
       const item = i === 0 ? null : P.inv.slots[i - 1];
-      s.classList.toggle('active', P.inv.active === i && !P.buildMode);
+      s.classList.toggle('active', P.inv.active === i);
       let ico = '', cnt = '', lbl = '', bg = 'rgba(0,0,0,.45)';
-      if (i === 0) { ico = '⛏'; lbl = 'Harvest Tool'; }
+      if (i === 0) { ico = '✊'; lbl = 'Hands'; }
       else if (item) {
         const def = ITEMS[item.id];
         if (def.type === 'weapon') { ico = `<span style="font-size:13px">${def.slotIcon}</span>`; cnt = def.melee ? '' : item.mag; bg = `linear-gradient(180deg, ${RARITY_HEX[item.r]}cc, ${RARITY_HEX[item.r]}55)`; }
@@ -236,14 +237,14 @@ export class HUD {
       if (this._vh !== k) { this._vh = k; this.vehEl.querySelector('.vhint').textContent = k; }
     }
     // resources
-    for (const m of ['wood', 'stone', 'metal']) { const e = this.matEls[m]; e.querySelector('span').textContent = P.inv.mats[m]; e.classList.toggle('sel', P.buildMode && P.buildMat === m); }
+    for (const m of ['wood', 'stone', 'metal']) { const e = this.matEls[m]; e.querySelector('span').textContent = P.inv.mats[m]; e.classList.toggle('sel', P.buildMode && m === 'stone'); }
     this.buildbar.classList.toggle('hidden', !P.buildMode);
     for (const p in this.bpieces) this.bpieces[p].classList.toggle('sel', P.buildPiece === p);
     const w = P.activeWeapon();
     const wdef = w && WEAPONS[w.id];
     this.ammo.innerHTML = wdef && !wdef.melee && !P.buildMode ? `${w.mag}<small> / ${P.inv.ammo[wdef.ammo]}</small>${P.ws.reload > 0 ? ' <small style="color:#ffd23f">RELOADING</small>' : ''}` : '';
     this.res.classList.toggle('hidden', !onFoot);
-    if (this.G.touch) this.G.touch.setMode(v ? 'drive' : 'foot');
+    if (this.G.touch) this.G.touch.setMode(v ? 'drive' : P.buildMode ? 'build' : 'foot');
     // crosshair
     const spread = wdef && !wdef.melee ? ((P.ads ? wdef.adsSpread : wdef.spread) + P.ws.bloom) * (Math.hypot(P.vel.x, P.vel.z) > 1 ? 1.5 : 1) * (P.onGround ? 1 : 2) : 0.01;
     const px = clamp(spread * window.innerHeight * 0.9, 4, 80);

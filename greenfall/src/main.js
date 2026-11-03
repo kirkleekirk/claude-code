@@ -24,6 +24,8 @@ import { FX } from './game/fx.js';
 import { Animals } from './game/animals.js';
 import { Rides } from './game/rides.js';
 import { Wallet } from './core/wallet.js';
+import { syncClock } from './core/clock.js';
+import { Net, BOT_BASE } from './net/net.js';
 import { Match, PRESETS } from './game/match.js';
 import { Character, buildWeaponModel } from './game/character.js';
 import { HUD, buildMapCanvas } from './ui/hud.js';
@@ -154,6 +156,8 @@ class Game {
     this.ui.showLobby();
     this.ready = true;
     if (this.wallet.configured) this.wallet.init().then(() => { if (!this.inMatch) this.ui.renderLobby(); });
+    // everyone sees the same item shop: sync the clock, then refresh the lobby if the day differs
+    syncClock(this.wallet.base).then((off) => { if (Math.abs(off) > 3000 && !this.inMatch) this.ui.renderLobby(); });
     this.last = performance.now();
     this.renderer.setAnimationLoop(() => this.loop());
     if (new URLSearchParams(location.search).has('autoplay')) this.startMatch(new URLSearchParams(location.search).get('autoplay') || 'quick');
@@ -175,22 +179,24 @@ class Game {
     this.physics = new Physics(w);
     this.view.physics = this.physics;
   }
-  startMatch(presetKey = 'standard') {
+  startMatch(presetKey = 'standard', mp = null) {
     this.audio.init();
     this.audio.stopMusic();
     if (this.touchMode && document.fullscreenEnabled && !document.fullscreenElement) this.goFullscreen();
     this.ui.hideLobby();
     this.ui.setLoading(0.1, 'Waking up somewhere in Greenfall County...');
-    setTimeout(() => this._startMatch(presetKey), 30);
+    setTimeout(() => this._startMatch(presetKey, mp), 30);
   }
-  _startMatch(presetKey) {
-    this.seed = (Math.random() * 1e9) | 0;
+  _startMatch(presetKey, mp = null) {
+    this.seed = mp?.seed ?? ((Math.random() * 1e9) | 0);
     this.resetWorldState();
     // removed-tree tracking for reset
     if (!this.view._origRemoveTree) this.view._origRemoveTree = this.view.removeTree.bind(this.view);
     const origRemove = this.view._origRemoveTree;
     this.view.removeTree = (i) => { this._removedTrees.add(i); const ch = this.view.chunkOf(this.world.trees.x[i], this.world.trees.z[i]); ch._treesDirty = true; origRemove(i); };
     this.survivors = [];
+    // multiplayer: the host runs the world, joining players mirror it (see net/net.js)
+    this.net = mp ? new Net(this, mp.link, { role: mp.role, me: mp.me, hostId: mp.hostId, roster: mp.roster, bots: mp.botInfo }) : null;
     this.fx = new FX(this); this.scene.add(this.fx.group);
     this.zombies = new Zombies(this, this.gfx.q.maxZombies); this.scene.add(this.zombies.group);
     this.hordes = new Hordes(this); this.scene.add(this.hordes.group);
@@ -206,10 +212,19 @@ class Game {
     this.scene.add(this.player.character.root);
     this.survivors.push(this.player);
     this.bots = new BotManager(this);
-    this.bots.create(this.match.preset.players - 1);
-    // random ground spawns (no drop): player first, then everyone else spread out
-    const spots = this.match.pickSpawns(this.match.preset.players);
-    const sp = spots[0];
+    const humans = mp ? mp.roster.length : 1;
+    const nBots = !mp ? this.match.preset.players - 1 : mp.role === 'host' && mp.bots ? Math.max(0, this.match.preset.players - humans) : 0;
+    this.bots.create(nBots);
+    // random ground spawns (no drop): players first, then everyone else spread out
+    let spots, sp;
+    if (mp?.role === 'client') {
+      const mine = mp.spawns[mp.me] || Object.values(mp.spawns)[0];
+      sp = { x: mine[0], z: mine[1], yaw: mine[2], zone: mine[3] };
+      spots = [sp];
+    } else {
+      spots = this.match.pickSpawns(humans + nBots);
+      sp = spots[0];
+    }
     this.match.spawnZone = sp.zone;
     this.view.buildAround(sp.x, sp.z, 280);
     this.terrain.prebuildAround(sp.x, sp.z, 500);
@@ -218,7 +233,22 @@ class Game {
     P.mode = 'ground'; P.onGround = true; P.character.anim.state = 'ground';
     P.yaw = sp.yaw; P.camYaw = sp.yaw + Math.PI; P.camPitch = -0.12;
     P.giveKit(); P.equip(0);
-    this.bots.placeAt(spots.slice(1));
+    if (mp?.role === 'host') {
+      // spots[0] is the host; the next ones go to the other players, the rest to AI
+      const spawns = {};
+      const others = mp.roster.filter((r) => r.id !== mp.me);
+      spawns[mp.me] = [spots[0].x, spots[0].z, spots[0].yaw, spots[0].zone];
+      others.forEach((r, k) => { const s = spots[k + 1] || spots[0]; spawns[r.id] = [+s.x.toFixed(1), +s.z.toFixed(1), +s.yaw.toFixed(2), s.zone]; });
+      this.bots.placeAt(spots.slice(others.length + 1));
+      this.net.botInfo = new Map(this.bots.bots.map((b) => [BOT_BASE + b.id, { id: BOT_BASE + b.id, name: b.name, outfit: b.outfitDef, cosmetics: b.cosmetics, cls: b.cls.id }]));
+      this.net.spawnPos = spawns;
+      this.net.spawnHumans();
+      for (const [id, p] of this.net.puppets) { const s = spawns[id]; if (s) { p.pos.set(s[0], this.physics.groundAt(s[0], s[1], 999, 0.4), s[1]); p.target.copy(p.pos); p.seen = true; } }
+      mp.link.to('all', { k: 'start', seed: this.seed, preset: presetKey, roster: mp.roster, spawns, bots: [...this.net.botInfo.values()] });
+    } else if (mp?.role === 'client') {
+      this.net.spawnHumans();
+      for (const [id, p] of this.net.puppets) { const s = mp.spawns[id]; if (s) { p.pos.set(s[0], this.physics.groundAt(s[0], s[1], 999, 0.4), s[1]); p.target.copy(p.pos); p.seen = true; } }
+    } else this.bots.placeAt(spots.slice(1));
     this.rides = new Rides(this); this.scene.add(this.rides.group);
     this.rides.spawnAll();
     this.match.startLive();
@@ -233,9 +263,10 @@ class Game {
     this.touch.show(this.touchMode);
     this.audio.loop('wind', true, 0.4);
     if (!this.touchMode) this.input.requestLock();
-    if (!this.profile.data.seenTutorial) { this.hud.hint('WASD move · Mouse aim · E interact · Tab inventory · M map · Q build · H heal · X eat · L flashlight', 12); this.profile.data.seenTutorial = true; this.profile.save(); }
+    if (!this.profile.data.seenTutorial) { this.hud.hint('WASD move · Mouse aim · E interact · Tab inventory · M map · H heal · X eat · L flashlight · Find an axe or pickaxe to gather materials', 12); this.profile.data.seenTutorial = true; this.profile.save(); }
   }
   teardownMatch() {
+    if (this.net) { this.net.close(); this.net = null; }
     for (const g of [this.fx?.group, this.zombies?.group, this.hordes?.group, this.inter?.group, this.builds?.group, this.animals?.group, this.match?.group, this.weapons?.projGroup, this.rides?.group]) if (g) this.scene.remove(g);
     if (this.rides) { this.scene.remove(this.rides.light); this.scene.remove(this.rides.light.target); }
     for (const s of this.survivors) if (s.character) this.scene.remove(s.character.root);
@@ -278,6 +309,7 @@ class Game {
   // ---------------- world events ----------------
   emitNoise(x, z, radius, src, kind, big = false) {
     if (!this.inMatch) return;
+    if (this.net?.isClient) return; // the host hears everything (shots, steps and doors arrive as events)
     if (src && src.mods) radius *= src.mods.get('noise');
     this.zombies.hear(x, z, radius, src, kind);
     this.hordes.noise(x, z, radius, src, kind);
@@ -291,7 +323,8 @@ class Game {
     void big;
   }
   onSurvivorDeath(s, src, opts) {
-    this.hud.kill(s, src, opts);
+    this.net?.onDeath(s, src, opts);
+    if (!(this.net?.isClient && s.isPuppet)) this.hud.kill(s, src, opts); // the host sends the kill feed
     if (src && src !== s && src.stats) src.stats.kills++;
     if (s.physical && opts?.type !== 'left') {
       // loot explosion
@@ -357,6 +390,7 @@ class Game {
     this.input.enabled = !this.ui.isOpen();
     P.update(dt);
     this.input.enabled = true;
+    this.net?.update(dt);
     // extraction boarding (player)
     const board = this.match.checkBoarding(P);
     if (board && this.input.down('interact') && !this.ui.isOpen()) {
@@ -376,6 +410,7 @@ class Game {
     // keep the camera's surroundings streamed in
     const focus = [P.pos];
     for (const b of this.bots.bots) if (b.physical && b.alive) focus.push(b.pos);
+    if (this.net?.isHost) for (const p of this.net.puppets.values()) if (p.alive) focus.push(p.pos); // the dead hunt other players too
     const fast = P.mode === 'drive' && Math.abs(P.vehicle?.speed || 0) > 12;
     this.view.update(this.camera.position, focus, fast ? 9 : 5);
     this.terrain.update(this.camera.position, fast ? 6 : 3);

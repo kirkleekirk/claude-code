@@ -1,4 +1,4 @@
-// Firing, melee/harvesting, projectiles (bolts, sniper rounds, grenades, molotovs,
+// Firing, melee (gathering with found axes, pickaxes and machetes), projectiles (bolts, sniper rounds, grenades, molotovs,
 // alarm clocks), fire areas and explosions. Every shot makes noise the dead can hear.
 import * as THREE from 'three';
 import { WEAPONS, THROWABLES, ITEMS, AMMO } from '../data/items.js';
@@ -160,6 +160,7 @@ export class Weapons {
     G.fx.muzzle(muzzle.x, muzzle.y, muzzle.z, dx, dy, dz, st.suppressed);
     for (const e of endPts.slice(0, 4)) if (!st.suppressed || Math.random() < 0.3) G.fx.tracer(muzzle.x, muzzle.y, muzzle.z, e[0], e[1], e[2], s.isPlayer ? 0xfff2a0 : 0xffc070);
     G.audio?.play('shot_' + st.sound, s.isPlayer ? null : s.pos, { vol: s.isPlayer ? 0.75 : 1 });
+    G.net?.onLocalShot(s, muzzle, [dx, dy, dz], endPts, st);
     G.emitNoise(s.pos.x, s.pos.z, st.noise, s, 'gunshot');
     s.character?.playAction('recoil', 0.18);
     if (s.isPlayer) G.player.addRecoil(st.recoil * (opts.ads ? 0.6 : 1));
@@ -234,20 +235,24 @@ export class Weapons {
     const G = this.G;
     s.ws.cd = 1 / def.rate;
     s.character?.playAction('swing', 0.42);
+    G.net?.onLocalAct(s, 'swing', 0.42);
     G.audio?.play('swing', s.isPlayer ? null : s.pos, { vol: 0.5 });
     const dmg = (def.dmg[rarity] ?? 40) * (s.mods ? s.mods.get('meleeDamage') : 1);
-    this._meleeAt(s, dmg, def.range, aimPoint, false);
+    setTimeout(() => { if (s.alive) this._meleeAt(s, dmg, def.range, aimPoint, def); }, 120);
     return true;
   }
-  swingPickaxe(s, aimPoint) {
+  // bare hands: weak, can't gather anything
+  punch(s, aimPoint) {
     if (s.ws.cd > 0) return false;
-    s.ws.cd = 0.62;
-    s.character?.playAction('swing', 0.45);
-    this.G.audio?.play('swing', s.isPlayer ? null : s.pos, { vol: 0.45 });
-    setTimeout(() => { if (s.alive) this._meleeAt(s, 20 * (s.mods ? s.mods.get('meleeDamage') : 1), 2.6, aimPoint, true); }, 140);
+    s.ws.cd = 0.5;
+    s.character?.playAction('punch', 0.32);
+    this.G.net?.onLocalAct(s, 'punch', 0.32);
+    this.G.audio?.play('swing', s.isPlayer ? null : s.pos, { vol: 0.35 });
+    setTimeout(() => { if (s.alive) this._meleeAt(s, 11 * (s.mods ? s.mods.get('meleeDamage') : 1), 1.9, aimPoint, null); }, 100);
     return true;
   }
-  _meleeAt(s, dmg, range, aimPoint, harvest) {
+  // `tool` is the melee weapon's definition (null for fists)
+  _meleeAt(s, dmg, range, aimPoint, tool) {
     const G = this.G;
     const ox = s.pos.x, oy = s.pos.y + (s.crouch ? 0.9 : 1.3), oz = s.pos.z;
     let dx = aimPoint.x - ox, dy = aimPoint.y - oy, dz = aimPoint.z - oz;
@@ -281,15 +286,17 @@ export class Weapons {
     if (!c) return;
     const ref = c.ref;
     let gain = null, amt = 0;
-    if (ref?.piece) { G.builds.damage(ref.piece, harvest ? 50 : dmg, s); G.audio?.play('hit_wood', s.isPlayer ? null : s.pos, { vol: 0.6 }); return; }
-    if (ref?.barricade) { G.inter.damageBarricade(ref.barricade, dmg, s); G.audio?.play('hit_wood', s.isPlayer ? null : s.pos, { vol: 0.6 }); return; }
-    if (ref?.door) { G.inter.damageDoor(ref.door, dmg, s); G.audio?.play('hit_wood', s.isPlayer ? null : s.pos, { vol: 0.6 }); return; }
-    if (!harvest) return;
+    const smash = dmg * (tool?.smash ?? 0.15);
+    if (ref?.piece) { G.builds.damage(ref.piece, smash, s); G.audio?.play('hit_stone', s.isPlayer ? null : s.pos, { vol: 0.6 }); G.fx.impact(wh.x, wh.y, wh.z, wh.n[0], wh.n[1], wh.n[2], 'stone'); return; }
+    if (ref?.barricade) { G.inter.damageBarricade(ref.barricade, smash, s); G.audio?.play('hit_wood', s.isPlayer ? null : s.pos, { vol: 0.6 }); return; }
+    if (ref?.door) { G.inter.damageDoor(ref.door, smash, s); G.audio?.play('hit_wood', s.isPlayer ? null : s.pos, { vol: 0.6 }); return; }
+    const harvest = tool?.harvest;
+    if (!harvest) { if (s.isPlayer && (ref?.type === 'tree' || ref?.type === 'rock' || ref?.type === 'car')) G.hud.toast(true, 'Find an axe, pickaxe or machete to gather materials'); return; }
     if (ref?.type === 'tree') {
       const ti = ref.tree;
       const info = TREE_INFO[G.world.trees.t[ti]];
       gain = 'wood'; amt = Math.round(7 * (info?.wood || 1) + Math.random() * 3);
-      ref.hp = (ref.hp ?? 140 * (info?.wood || 1)) - 36;
+      ref.hp = (ref.hp ?? 140 * (info?.wood || 1)) - 36 * (harvest.wood ?? 0.5);
       G.fx.impact(wh.x, wh.y, wh.z, wh.n[0], wh.n[1], wh.n[2], 'wood');
       G.audio?.play('hit_wood', s.isPlayer ? null : s.pos, { vol: 0.8 });
       if (ref.hp <= 0) { G.view.removeTree(ti); G.audio?.play('tree_fall', wh, { vol: 0.8 }); amt += 10; }
@@ -298,7 +305,8 @@ export class Weapons {
     else if (ref?.type === 'wood' || ref?.type === 'fence') { gain = 'wood'; amt = 5 + Math.floor(Math.random() * 3); G.audio?.play('hit_wood', s.isPlayer ? null : s.pos, { vol: 0.7 }); }
     else if (c.building !== undefined) { gain = ['wood', 'stone', 'wood'][Math.floor(Math.random() * 3)]; amt = 3; G.audio?.play('hit_wood', s.isPlayer ? null : s.pos, { vol: 0.6 }); }
     if (gain) {
-      amt = Math.round(amt * (s.mods ? s.mods.get('harvest') : 1));
+      amt = Math.round(amt * (harvest[gain] ?? 0.5) * (s.mods ? s.mods.get('harvest') : 1));
+      if (amt <= 0) return;
       const left = s.addItem(gain, amt);
       if (s.isPlayer && amt - left > 0) G.hud.matGain(gain, amt - left);
       G.emitNoise(s.pos.x, s.pos.z, 24, s, 'harvest');
@@ -425,6 +433,7 @@ export class Weapons {
     const G = this.G;
     G.fx.explosion(x, y, z, radius);
     G.audio?.play('explosion', { x, y, z }, { vol: 1 });
+    G.net?.onExplosion(x, y, z, radius);
     G.emitNoise(x, z, 300, owner, 'explosion', true);
     for (const s of G.survivors) {
       if (!s.alive || !s.physical) continue;
