@@ -1,6 +1,6 @@
 // Headless smoke test: serves dist/, boots the game in Chromium (software WebGL), starts a
-// Quick match and fast-forwards the simulation through the drop, the riverboat and the
-// helicopter phase. Fails on any page error.
+// Quick match, checks the random spawns, drives a vehicle, and fast-forwards the simulation
+// through the riverboat and the helicopter phase. Fails on any page error.
 //   npm run build && npm run test:smoke
 import http from 'http';
 import fs from 'fs';
@@ -38,20 +38,32 @@ const report = await page.evaluate(() => {
   const sim = (secs) => { for (let i = 0; i < secs * 20; i++) { G.tick(0.05); G.updateEnv(0.05); G.hud.update(0.05); G.frame++; } };
   const P = G.player;
   G.match.godMode = true; // the test player has no hands on the keyboard
-  sim(15);
-  P.jumpFromPlane();
+  const spawned = P.mode;
+  const banned = G.survivors.filter((x) => (x.pos.x > 2500 && x.pos.z < 1150) || x.pos.x > 2700).length;
+  // drive the nearest vehicle for a bit
+  const v = G.rides.list.slice().sort((a, b) => a.pos.distanceTo(P.pos) - b.pos.distanceTo(P.pos))[0];
+  v.fuel = 1; v.hp = 1;
+  P.pos.set(v.pos.x + 2, v.pos.y, v.pos.z);
+  G.rides.enter(P, v); P.mode = 'drive';
+  let top = 0;
+  G.input.virtual.moveY = 1;
+  for (let k = 0; k < 16; k++) { sim(0.5); top = Math.max(top, Math.abs(v.speed)); }
+  G.input.virtual.moveY = 0;
+  const drove = Math.round(top * 3.6); // top speed in km/h
+  G.rides.exit(P, true);
   sim(60);
-  const landed = P.mode;
   G.match.elapsed = G.match.preset.duration * 0.46; sim(240);
   const boat = G.match.boatState;
   G.match.elapsed = G.match.preset.duration; sim(30);
   const heli = G.match.heliState;
-  return { landed, boat, heli, alive: G.match.aliveCount, zombies: G.zombies.count, hordes: G.hordes.list.length };
+  return { spawned, banned, vehicles: G.rides.list.length, drove, boat, heli, alive: G.match.aliveCount, zombies: G.zombies.count, hordes: G.hordes.list.length };
 });
 console.log('✓ simulated', JSON.stringify(report));
 await browser.close();
 server.close();
 if (errors.length) { console.error('✗ page errors:\n' + errors.join('\n')); process.exit(1); }
-if (report.landed !== 'ground') { console.error('✗ player did not land: ' + report.landed); process.exit(1); }
+if (report.spawned !== 'ground') { console.error('✗ player did not spawn on the ground: ' + report.spawned); process.exit(1); }
 if (report.heli === 'none') { console.error('✗ helicopter never triggered'); process.exit(1); }
+if (report.banned) { console.error('✗ someone spawned in the harbor/Bellerose'); process.exit(1); }
+if (!(report.drove > 10)) { console.error('✗ vehicle did not drive'); process.exit(1); }
 console.log('✓ smoke test passed');

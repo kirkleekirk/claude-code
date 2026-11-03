@@ -173,6 +173,10 @@ export class AudioEngine {
       case 'thunder': this.thunder(o, t, v); break;
       case 'boat_horn': { const f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 700; f.connect(o); for (const fr of [98, 147]) { const os = c.createOscillator(); os.type = 'sawtooth'; os.frequency.value = fr; const g = c.createGain(); this.env(g, t, 0.15, 0.35 * v, 2.6, 0.2 * v); g.gain.setValueAtTime(0.3 * v, t + 2.4); g.gain.exponentialRampToValueAtTime(0.0001, t + 3.2); os.connect(g).connect(f); os.start(t); os.stop(t + 3.3); } break; }
       case 'heli_flyby': N(3, 'lowpass', 400, 0.7, 0.8, 0.5); break;
+      case 'crash': N(0.5, 'lowpass', 1800, 0.6, 1.1, 0.002, 200); O(0.3, 'sine', 70, 35, 1.0); for (let k = 0; k < 4; k++) this.later(k * 0.05, () => O(0.2, 'triangle', 900 + Math.random() * 900, 400, 0.15)); break;
+      case 'pour': for (let k = 0; k < 6; k++) this.later(k * 0.35, () => N(0.3, 'bandpass', 700 + Math.random() * 300, 3, 0.3, 0.05)); break;
+      case 'engine_start': for (let k = 0; k < 5; k++) this.later(k * 0.09, () => N(0.08, 'lowpass', 500, 1, 0.6)); this.later(0.45, () => O(0.5, 'sawtooth', 60, 110, 0.35)); break;
+      case 'horn': { const f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1800; f.connect(o); for (const fr of [415, 494]) { const os = c.createOscillator(); os.type = 'square'; os.frequency.value = fr; const g = c.createGain(); this.env(g, t, 0.02, 0.18 * v, 0.7, 0.1 * v); g.gain.setValueAtTime(0.12 * v, t + 0.6); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.8); os.connect(g).connect(f); os.start(t); os.stop(t + 0.85); } break; }
       case 'ui_click': O(0.05, 'sine', 1100, 900, 0.25); break;
       case 'ui_hover': O(0.03, 'sine', 1500, 1500, 0.08); break;
       case 'ui_buy': for (let k = 0; k < 4; k++) this.later(k * 0.08, () => O(0.25, 'triangle', [523, 659, 784, 1047][k], [523, 659, 784, 1047][k], 0.25)); break;
@@ -248,8 +252,32 @@ export class AudioEngine {
       default: break;
     }
   }
+  // continuous engine sound for the vehicle you're driving
+  engine(on, frac = 0, kind = 'bike') {
+    if (!this.ctx) return;
+    const c = this.ctx;
+    if (on && !this.eng) {
+      const g = c.createGain(); g.gain.value = 0;
+      const o1 = c.createOscillator(); o1.type = 'sawtooth';
+      const o2 = c.createOscillator(); o2.type = 'square';
+      const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 900;
+      const g2 = c.createGain(); g2.gain.value = 0.35;
+      o1.connect(f); o2.connect(g2).connect(f); f.connect(g); g.connect(this.bus.sfx);
+      o1.start(); o2.start();
+      this.eng = { g, o1, o2, f };
+    }
+    if (!this.eng) return;
+    const t = c.currentTime;
+    const base = kind === 'bike' ? 55 : 38;
+    const rpm = base + frac * (kind === 'bike' ? 150 : 90);
+    this.eng.o1.frequency.setTargetAtTime(rpm, t, 0.08);
+    this.eng.o2.frequency.setTargetAtTime(rpm * 0.5, t, 0.08);
+    this.eng.f.frequency.setTargetAtTime(500 + frac * 1600, t, 0.1);
+    this.eng.g.gain.setTargetAtTime(on ? 0.16 + frac * 0.12 : 0, t, 0.15);
+    if (!on) { const e = this.eng; this.eng = null; setTimeout(() => { try { e.o1.stop(); e.o2.stop(); e.g.disconnect(); } catch (err) { /* */ } }, 600); }
+  }
   stopLoop(name) { const L = this.loops[name]; if (!L) return; L.g.gain.setTargetAtTime(0, this.ctx.currentTime, 0.1); setTimeout(() => { for (const n of L.nodes) { try { n.stop(); } catch (e) { /* */ } } L.g.disconnect(); }, 600); delete this.loops[name]; }
-  stopAll() { for (const k of Object.keys(this.loops)) this.stopLoop(k); this.stopMusic(); }
+  stopAll() { for (const k of Object.keys(this.loops)) this.stopLoop(k); this.stopMusic(); this.engine(false); }
 
   // ---- music: Karplus-Strong plucked guitar, country progression ----
   pluckBuffer(freq) {

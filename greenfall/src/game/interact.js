@@ -178,7 +178,7 @@ export class Interact {
     if (rec.kind === 'door' && rec.open) { rec.open = false; this.updateDoorCollider(rec); }
     by.inv.mats.wood -= cost;
     rec.boarded = 1;
-    rec.hp = rec.kind === 'door' ? DOOR_BOARD_HP : BOARD_HP;
+    rec.hp = (rec.kind === 'door' ? DOOR_BOARD_HP : BOARD_HP) * (by.mods ? by.mods.get('barricadeHp') : 1);
     by.stats.boarded++;
     this.createBoards(rec);
     this.G.audio?.play('hammer', rec, { vol: 0.9 });
@@ -223,6 +223,7 @@ export class Interact {
     }
     let n = 1;
     if (id === 'cloth') n = this.rng.int(1, 3);
+    void 0;
     if (id === 'bandage') n = this.rng.int(2, 4);
     if (def.type === 'throw') n = this.rng.int(1, 2);
     return { id, n, r: 0 };
@@ -348,7 +349,9 @@ export class Interact {
     c.searched = true;
     by.stats.searched++;
     const table = CONTAINER_LOOT[c.kind] || CONTAINER_LOOT.cabinet;
-    const n = this.rng.chance(0.3) ? 0 : this.rng.int(1, c.kind === 'fridge' || c.kind === 'shelf' ? 3 : 2);
+    const luck = by.mods ? by.mods.get('luck') : 1;
+    let n = this.rng.chance(0.3 / luck) ? 0 : this.rng.int(1, c.kind === 'fridge' || c.kind === 'shelf' ? 3 : 2);
+    if (n && this.rng.chance(luck - 1)) n++;
     if (n === 0) { this.G.hud.toast(by.isPlayer, 'Nothing useful...'); return; }
     for (let k = 0; k < n; k++) {
       const it = this.rollItem(this.rng.weighted(table), 'container');
@@ -588,6 +591,25 @@ export class Interact {
       }
     }
     for (const cf of this.campfires) consider('cook', cf, cf.x, cf.y + 0.4, cf.z, 2.6, 'Cook food / boil water', 3.5);
+    // vehicles
+    const R = G.rides;
+    if (R) {
+      for (const v of R.list) {
+        if (v.driver || Math.abs(v.pos.x - s.pos.x) > 5 || Math.abs(v.pos.z - s.pos.z) > 5) continue;
+        const why = R.status(v);
+        const info = v.wrecked ? '' : ` · ⛽${Math.round(v.fuel * 100)}% · 🔧${Math.round(v.hp * 100)}%`;
+        const reach = v.type === 'truck' ? 3.6 : 2.6;
+        consider('vehicle', v, v.pos.x, v.pos.y + 1, v.pos.z, reach, v.wrecked ? 'Burned-out wreck' : `${v.type === 'truck' ? 'Drive' : 'Ride'} ${v.def.name}${info}${why ? ' — ' + why : ''}`);
+        if (!v.wrecked && v.hp < 0.98 && R.canPatch(s)) consider('patch', v, v.pos.x, v.pos.y + 0.6, v.pos.z, reach - 0.3, 'Scrap repair (20 metal)', 3 / (s.mods ? s.mods.get('repair') : 1));
+      }
+      // siphon gas from abandoned cars
+      const ch = G.view.chunkOf(s.pos.x, s.pos.z);
+      for (const p of ch.props) {
+        if ((p.type !== 'car' && p.type !== 'truck') || p.siphoned || p.data?.wreck) continue;
+        if (Math.abs(p.x - s.pos.x) > 4 || Math.abs(p.z - s.pos.z) > 4) continue;
+        consider('siphon', p, p.x, p.y + 0.8, p.z, 3.2, 'Siphon gas', 3);
+      }
+    }
     // water's edge
     const wl = G.world.waterLevelAt(s.pos.x + aimDir.x * 1.5, s.pos.z + aimDir.z * 1.5);
     const gh = G.world.heightAt(s.pos.x + aimDir.x * 1.5, s.pos.z + aimDir.z * 1.5);

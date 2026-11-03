@@ -63,7 +63,7 @@ export class Weapons {
     const wh = G.physics.raycast(ox, oy, oz, dx, dy, dz, range);
     const maxT = wh ? wh.t : range;
     const eh = this.rayEntities(ox, oy, oz, dx, dy, dz, maxT, shooter);
-    const base = def.dmg[rarity] || def.dmg[def.dmg.length - 1];
+    const base = (def.dmg[rarity] || def.dmg[def.dmg.length - 1]) * (shooter.mods ? shooter.mods.get('gunDamage') : 1);
     if (eh) {
       const dist = eh.t;
       let dmg = base * dmgMul;
@@ -107,6 +107,7 @@ export class Weapons {
       if (ref?.piece) { G.builds.damage(ref.piece, dmg, shooter); kind = ref.piece.mat === 'wood' ? 'wood' : ref.piece.mat === 'stone' ? 'stone' : 'spark'; }
       else if (ref?.barricade) { G.inter.damageBarricade(ref.barricade, dmg * 0.6, shooter); kind = 'wood'; }
       else if (ref?.door) { G.inter.damageDoor(ref.door, dmg * 0.5, shooter); kind = 'wood'; }
+      else if (ref?.vehicle) { kind = 'spark'; G.rides.damage(ref.vehicle, dmg, shooter); }
       else if (ref?.type === 'car' || ref?.type === 'metal') { kind = 'spark'; if (ref.type === 'car' && ref.prop) G.inter.carAlarm(ref.prop); }
       else if (ref?.type === 'tree' || ref?.type === 'wood' || ref?.type === 'fence') kind = 'wood';
       else if (ref?.type === 'rock') kind = 'stone';
@@ -140,6 +141,7 @@ export class Weapons {
     if (!s.onGround) spread *= 2;
     if (s.crouch) spread *= 0.72;
     if (opts.spreadMul) spread *= opts.spreadMul;
+    if (s.mods) spread /= s.mods.get('accuracy');
     const pellets = def.pellets || 1;
     let endPts = [];
     for (let p = 0; p < pellets; p++) {
@@ -189,8 +191,8 @@ export class Weapons {
     const def = WEAPONS[slot.id];
     if (!def || def.melee || s.ws.reload > 0 || slot.mag >= def.mag) return false;
     if ((s.inv.ammo[def.ammo] || 0) <= 0) { if (s.isPlayer) this.G.hud.toast(true, `No ${def.ammo} ammo`); return false; }
-    const t = def.reload[slot.r] ?? def.reload[0];
-    s.ws.reload = def.perShell ? t : t;
+    const t = (def.reload[slot.r] ?? def.reload[0]) / (s.mods ? s.mods.get('reloadSpeed') : 1);
+    s.ws.reload = t;
     s.ws.reloadTotal = s.ws.reload;
     s.character?.playAction('reload', s.ws.reload);
     this.G.audio?.play('reload', s.isPlayer ? null : s.pos, { vol: 0.5 });
@@ -210,7 +212,7 @@ export class Weapons {
           if (def.perShell) {
             if (s.inv.ammo[def.ammo] > 0 && slot.mag < def.mag) {
               slot.mag++; s.inv.ammo[def.ammo]--;
-              if (slot.mag < def.mag && s.inv.ammo[def.ammo] > 0) { ws.reload = def.reload[slot.r] ?? def.reload[0]; }
+              if (slot.mag < def.mag && s.inv.ammo[def.ammo] > 0) { ws.reload = (def.reload[slot.r] ?? def.reload[0]) / (s.mods ? s.mods.get('reloadSpeed') : 1); }
             }
           } else {
             const need = def.mag - slot.mag;
@@ -228,7 +230,7 @@ export class Weapons {
     s.ws.cd = 1 / def.rate;
     s.character?.playAction('swing', 0.42);
     G.audio?.play('swing', s.isPlayer ? null : s.pos, { vol: 0.5 });
-    const dmg = def.dmg[rarity] ?? 40;
+    const dmg = (def.dmg[rarity] ?? 40) * (s.mods ? s.mods.get('meleeDamage') : 1);
     this._meleeAt(s, dmg, def.range, aimPoint, false);
     return true;
   }
@@ -237,7 +239,7 @@ export class Weapons {
     s.ws.cd = 0.62;
     s.character?.playAction('swing', 0.45);
     this.G.audio?.play('swing', s.isPlayer ? null : s.pos, { vol: 0.45 });
-    setTimeout(() => { if (s.alive) this._meleeAt(s, 20, 2.6, aimPoint, true); }, 140);
+    setTimeout(() => { if (s.alive) this._meleeAt(s, 20 * (s.mods ? s.mods.get('meleeDamage') : 1), 2.6, aimPoint, true); }, 140);
     return true;
   }
   _meleeAt(s, dmg, range, aimPoint, harvest) {
@@ -291,6 +293,7 @@ export class Weapons {
     else if (ref?.type === 'wood' || ref?.type === 'fence') { gain = 'wood'; amt = 5 + Math.floor(Math.random() * 3); G.audio?.play('hit_wood', s.isPlayer ? null : s.pos, { vol: 0.7 }); }
     else if (c.building !== undefined) { gain = ['wood', 'stone', 'wood'][Math.floor(Math.random() * 3)]; amt = 3; G.audio?.play('hit_wood', s.isPlayer ? null : s.pos, { vol: 0.6 }); }
     if (gain) {
+      amt = Math.round(amt * (s.mods ? s.mods.get('harvest') : 1));
       const left = s.addItem(gain, amt);
       if (s.isPlayer && amt - left > 0) G.hud.matGain(gain, amt - left);
       G.emitNoise(s.pos.x, s.pos.z, 24, s, 'harvest');
@@ -431,6 +434,7 @@ export class Weapons {
     G.animals?.explosion?.(x, y, z, radius, dmg, owner);
     G.builds.explosion(x, y, z, radius, 220);
     G.inter.explosion(x, y, z, radius);
+    G.rides?.explosion(x, y, z, radius, dmg);
     const pd = Math.hypot(G.player.pos.x - x, G.player.pos.z - z);
     if (pd < 60) G.player.shake(Math.max(0, 1 - pd / 60) * 0.8);
   }

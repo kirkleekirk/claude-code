@@ -9,7 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "package:itch": "vite build && node scripts/package-itch.mjs",
-    "test:smoke": "node scripts/smoke-test.mjs"
+    "test:smoke": "node scripts/smoke-test.mjs",
+    "check:classes": "node scripts/check-classes.mjs"
   },
   "dependencies": {
     "@fontsource/lilita-one": "5.2.8",

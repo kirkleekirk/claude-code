@@ -7,7 +7,7 @@ export const RARITIES = {
   epic: { name: 'Epic', color: '#b54ae8', bg: ['#c060f0', '#4a1a78'], price: 1400 },
   legendary: { name: 'Legendary', color: '#f0a020', bg: ['#f5b23a', '#8a3a10'], price: 2000 },
 };
-export const TYPE_NAMES = { outfit: 'Outfit', backbling: 'Back Bling', pickaxe: 'Harvesting Tool', glider: 'Glider', emote: 'Emote', wrap: 'Wrap' };
+export const TYPE_NAMES = { outfit: 'Outfit', backbling: 'Back Bling', pickaxe: 'Harvesting Tool', paint: 'Bike Paint', emote: 'Emote', wrap: 'Wrap' };
 
 const O = (id, name, rarity, outfit, desc, set) => ({ id, type: 'outfit', name, rarity, outfit, desc, set });
 export const COSMETICS = [
@@ -53,14 +53,15 @@ export const COSMETICS = [
   { id: 'pk_guitar', type: 'pickaxe', name: 'Power Chord', rarity: 'epic', style: 'guitar', desc: 'Encore!' },
   { id: 'pk_scythe', type: 'pickaxe', name: 'Greenfall Scythe', rarity: 'legendary', style: 'scythe', desc: 'Forged in the green light.' },
   { id: 'pk_bat', type: 'pickaxe', name: 'Tailgater', rarity: 'rare', style: 'bat', desc: 'Batter up.' },
-  // ---- gliders ----
-  { id: 'gl_canvas', type: 'glider', name: 'Canvas Kite', rarity: 'uncommon', style: 'canvas', desc: 'Homemade. Mostly safe.' },
-  { id: 'gl_barn', type: 'glider', name: 'Barnstormer', rarity: 'rare', style: 'barn', desc: 'Red as a barn door.' },
-  { id: 'gl_patch', type: 'glider', name: 'Quilted Wing', rarity: 'uncommon', style: 'patch', desc: 'Grandma stitched it.' },
-  { id: 'gl_crop', type: 'glider', name: 'Crop Duster', rarity: 'epic', style: 'crop', desc: 'Low and slow.' },
-  { id: 'gl_bat', type: 'glider', name: 'Dusk Wing', rarity: 'epic', style: 'bat', desc: 'Silent descent.' },
-  { id: 'gl_toxic', type: 'glider', name: 'Green Front', rarity: 'legendary', style: 'toxic', desc: 'Ride the storm in.' },
-  { id: 'gl_balloon', type: 'glider', name: 'County Fair', rarity: 'rare', style: 'balloon', desc: 'Step right up.' },
+  // ---- bike paint (applied to any dirt bike you ride) ----
+  { id: 'pt_stock', type: 'paint', name: 'Stock Orange', rarity: 'uncommon', paint: { body: 0xe8702a, accent: 0x1e1e1e }, desc: 'Fresh off the farm.' },
+  { id: 'pt_barn', type: 'paint', name: 'Barnstormer', rarity: 'rare', paint: { body: 0xa3302a, accent: 0xf4f1ea }, desc: 'Red as a barn door.' },
+  { id: 'pt_patch', type: 'paint', name: 'Quilted', rarity: 'uncommon', paint: { body: 0x2f6fb5, accent: 0xe6b422 }, desc: 'Grandma picked the colors.' },
+  { id: 'pt_crop', type: 'paint', name: 'Crop Duster', rarity: 'epic', paint: { body: 0xe6b422, accent: 0x1a1a1a }, desc: 'Low and fast.' },
+  { id: 'pt_dusk', type: 'paint', name: 'Dusk Rider', rarity: 'epic', paint: { body: 0x1a1a1a, accent: 0x8a1a1a }, desc: 'Silent descent. Loud engine.' },
+  { id: 'pt_toxic', type: 'paint', name: 'Green Front', rarity: 'legendary', paint: { body: 0x16261a, accent: 0x7aff5a }, desc: 'Ride the storm in.' },
+  { id: 'pt_fair', type: 'paint', name: 'County Fair', rarity: 'rare', paint: { body: 0xd9473a, accent: 0xe6b422 }, desc: 'Step right up.' },
+  { id: 'pt_chrome', type: 'paint', name: 'Moonshine Chrome', rarity: 'legendary', paint: { body: 0xc8ccd0, accent: 0x2a2a2a }, desc: 'Polished every Sunday.' },
   // ---- emotes ----
   { id: 'em_wave', type: 'emote', name: 'Howdy', rarity: 'uncommon', anim: 'wave', desc: 'A friendly hello.' },
   { id: 'em_hoedown', type: 'emote', name: 'Hoedown', rarity: 'rare', anim: 'hoedown', desc: 'Kick up some dust.' },
@@ -80,8 +81,8 @@ export const COSMETICS = [
   { id: 'wr_candy', type: 'wrap', name: 'Fair Candy', rarity: 'epic', wrap: { base: 0xe86aa0, accent: 0x6ad8f0 }, desc: 'Cotton candy for your rifle.' },
 ];
 export const BY_ID = Object.fromEntries(COSMETICS.map((c) => [c.id, c]));
-export const DEFAULT_OWNED = ['farmhand', 'prairie', 'bb_pack', 'pk_shovel', 'gl_canvas', 'em_wave', 'wr_none'];
-export const DEFAULT_EQUIPPED = { outfit: 'farmhand', backbling: 'bb_pack', pickaxe: 'pk_shovel', glider: 'gl_canvas', emote: 'em_wave', wrap: 'wr_none' };
+export const DEFAULT_OWNED = ['farmhand', 'prairie', 'bb_pack', 'pk_shovel', 'pt_stock', 'em_wave', 'wr_none'];
+export const DEFAULT_EQUIPPED = { outfit: 'farmhand', backbling: 'bb_pack', pickaxe: 'pk_shovel', paint: 'pt_stock', emote: 'em_wave', wrap: 'wr_none' };
 export const priceOf = (c) => c.price ?? (RARITIES[c.rarity].price * (c.type === 'outfit' ? 1 : c.type === 'emote' ? 0.5 : c.type === 'wrap' ? 0.4 : 0.6)) | 0;
 
 // The shop rotates every day at 00:00 UTC.
@@ -105,7 +106,7 @@ export function cosmeticsFor(equipped) {
   const o = BY_ID[equipped.outfit] || BY_ID.farmhand;
   return {
     outfit: o.outfit,
-    cosmetics: { backbling: BY_ID[equipped.backbling]?.style || 'pack', pickaxe: BY_ID[equipped.pickaxe]?.style || 'shovel', glider: BY_ID[equipped.glider]?.style || 'canvas', wrap: BY_ID[equipped.wrap]?.wrap || null },
+    cosmetics: { backbling: BY_ID[equipped.backbling]?.style || 'pack', pickaxe: BY_ID[equipped.pickaxe]?.style || 'shovel', wrap: BY_ID[equipped.wrap]?.wrap || null },
     emote: BY_ID[equipped.emote]?.anim || 'wave',
   };
 }
@@ -113,6 +114,5 @@ export function randomOutfit(rng) {
   const outfits = COSMETICS.filter((c) => c.type === 'outfit');
   const bbs = COSMETICS.filter((c) => c.type === 'backbling');
   const pks = COSMETICS.filter((c) => c.type === 'pickaxe');
-  const gls = COSMETICS.filter((c) => c.type === 'glider');
-  return { outfit: rng.pick(outfits).outfit, cosmetics: { backbling: rng.pick(bbs).style, pickaxe: rng.pick(pks).style, glider: rng.pick(gls).style } };
+  return { outfit: rng.pick(outfits).outfit, cosmetics: { backbling: rng.pick(bbs).style, pickaxe: rng.pick(pks).style } };
 }

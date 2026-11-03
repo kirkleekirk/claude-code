@@ -16,7 +16,7 @@ export class Player extends Survivor {
     this.camDist = 3.2; this.shoulder = 0.62;
     this.fov = 72;
     this.recoilP = 0; this.shakeAmt = 0;
-    this.mode = 'plane';
+    this.mode = 'ground';
     this.buildMode = false; this.buildPiece = 'wall'; this.buildMat = 'wood'; this.buildRotate = 0; this.buildCd = 0;
     this.ads = false;
     this.flashlight = false;
@@ -56,6 +56,7 @@ export class Player extends Survivor {
     else if (this.mode === 'skydive' || this.mode === 'glide') this.updateAir(dt);
     else if (this.mode === 'vault') this.updateVault(dt);
     else if (this.mode === 'ground') this.updateGround(dt);
+    else if (this.mode === 'drive') this.updateDrive(dt);
     else if (this.mode === 'dead') { this.deadT += dt; this.syncModel(dt, 0); }
     else if (this.mode === 'extracted') { /* camera handled by match */ }
     this.updateCamera(dt);
@@ -79,7 +80,6 @@ export class Player extends Survivor {
     if (this.character) this.character.root.visible = true;
     this.character.anim.state = 'skydive';
     this.G.audio?.play('whoosh', null, { vol: 0.6 });
-    this.G.hud.hint('Steer with WASD · look down to dive faster · SPACE to open your glider early');
     this.G.onPlayerJumped?.();
   }
   updateAir(dt) {
@@ -195,6 +195,7 @@ export class Player extends Survivor {
     if (this.action) speed = Math.min(speed, 2.2);
     if (this.legsHurt) speed *= 0.62;
     if (this.thirst <= 0 || this.hunger <= 0) speed *= 0.85;
+    speed *= this.mods.get('moveSpeed');
     let jump = I.pressed('jump');
     if (jump && this.onGround && this.tryVault()) return;
     if (jump && this.action) jump = false;
@@ -276,6 +277,8 @@ export class Player extends Survivor {
       }
     } else if (def.type === 'heal' || def.type === 'food') {
       if (I.firePressed) this.useItem({ list: this.inv.slots, i: this.inv.active - 1, slot });
+    } else if (def.type === 'tool') {
+      if (I.firePressed && !this.action) G.rides.useItemOn(this, { list: this.inv.slots, i: this.inv.active - 1, slot });
     }
   }
   quickHeal() {
@@ -284,10 +287,11 @@ export class Player extends Survivor {
     if (this.bleed) ref = pick((s) => s.id === 'bandage') || pick((s) => s.id === 'medkit');
     if (!ref && this.fracture) ref = pick((s) => s.id === 'splint') || pick((s) => s.id === 'painkillers');
     if (!ref && this.infection > 0) ref = pick((s) => s.id === 'antibiotics');
-    if (!ref && this.health < 50) ref = pick((s) => s.id === 'medkit') || pick((s) => s.id === 'bandage');
-    if (!ref && this.health < 75) ref = pick((s) => s.id === 'bandage') || pick((s) => s.id === 'medkit');
+    const f = this.hpFrac;
+    if (!ref && f < 0.5) ref = pick((s) => s.id === 'medkit') || pick((s) => s.id === 'bandage');
+    if (!ref && f < 0.75) ref = pick((s) => s.id === 'bandage') || pick((s) => s.id === 'medkit');
     if (!ref && this.armor < 100) ref = pick((s) => s.id === 'armor');
-    if (!ref && this.health < 100) ref = pick((s) => s.id === 'medkit') || pick((s) => s.id === 'painkillers');
+    if (!ref && f < 1) ref = pick((s) => s.id === 'medkit') || pick((s) => s.id === 'painkillers');
     if (!ref) { this.G.hud.toast(true, 'Nothing useful to heal with'); return; }
     this.useItem(ref);
   }
@@ -316,6 +320,7 @@ export class Player extends Survivor {
   beginInteract(it) {
     const G = this.G;
     if (it.kind === 'item') return this.pickup(it.obj);
+    if (it.kind === 'vehicle') { if (G.rides.enter(this, it.obj)) { this.mode = 'drive'; this.buildMode = false; G.builds.showGhost(null); this.interaction = null; } return; }
     if (it.kind === 'door') { G.inter.toggleDoor(it.obj, this); return; }
     const done = () => {
       switch (it.kind) {
@@ -324,6 +329,8 @@ export class Player extends Survivor {
         case 'search': G.inter.searchContainer(it.obj, this); break;
         case 'crate': G.inter.openCrate(it.obj, this); break;
         case 'cook': G.inter.cook(this); break;
+        case 'siphon': G.rides.siphon(this, it.obj); break;
+        case 'patch': G.rides.patch(this, it.obj); break;
         case 'water': { const left = this.addItem('dirtywater', 1); if (left) G.hud.toast(true, 'Inventory full'); else G.hud.pickup('dirtywater', 1, 0); break; }
         default: break;
       }
@@ -336,7 +343,10 @@ export class Player extends Survivor {
       G.audio?.play('hammer', null, { vol: 0.6 });
     } else if (it.kind === 'search') this.character.playAction('search', it.hold);
     G.emitNoise(this.pos.x, this.pos.z, it.kind === 'search' ? 5 : 3, this, 'interact');
-    this.startAction('hold', it.hold, done, { label: it.prompt });
+    let hold = it.hold;
+    if (it.kind === 'board' || it.kind === 'boarddoor' || it.kind === 'unboard') hold /= this.mods.get('buildSpeed');
+    if (it.kind === 'search' || it.kind === 'crate') hold /= this.mods.get('search');
+    this.startAction('hold', hold, done, { label: it.prompt });
   }
   pickup(rec) {
     const G = this.G;
@@ -358,6 +368,40 @@ export class Player extends Survivor {
     if (def?.type === 'weapon' && this.inv.active === 0) { const idx = this.inv.slots.findIndex((s) => s && s.id === rec.id); if (idx >= 0) this.equip(idx + 1); }
   }
 
+  // ---------------- driving ----------------
+  updateDrive(dt) {
+    const G = this.G, I = G.input, v = this.vehicle;
+    if (!this.alive) { G.rides.exit(this, true); this.mode = 'dead'; return; }
+    if (!v) { this.mode = 'ground'; return; }
+    this.updateSurvival(dt);
+    const ax = I.moveAxes();
+    G.rides.drive(this, v, dt, { x: ax.x, y: ax.y, brake: I.down('jump') });
+    if (!this.vehicle) return; // thrown off
+    const D = v.def;
+    const fx = Math.sin(v.yaw), fz = Math.cos(v.yaw);
+    this.pos.set(v.pos.x - fx * (v.type === 'bike' ? 0.15 : -0.3), v.pos.y + D.seatY, v.pos.z - fz * (v.type === 'bike' ? 0.15 : -0.3));
+    this.vel.set(fx * v.speed, 0, fz * v.speed);
+    this.yaw = v.yaw;
+    this.indoor = null;
+    if (I.pressed('interact')) { G.rides.exit(this); return; }
+    if (I.pressed('flashlight')) this.headlights = !this.headlights;
+    if (I.pressed('heal')) { G.audio?.play('horn', v.pos, { vol: 1 }); G.emitNoise(v.pos.x, v.pos.z, 110, this, 'horn'); }
+    // camera follows behind unless the player is looking around
+    const { dx } = I.lookDelta();
+    if (Math.abs(dx) > 0.0005) this.lookT = 1.6; else this.lookT = Math.max(0, (this.lookT || 0) - dt);
+    if (this.lookT <= 0 && Math.abs(v.speed) > 2) { this.camYaw = dampAngle(this.camYaw, v.yaw + Math.PI, 3, dt); this.camPitch += (-0.18 - this.camPitch) * Math.min(1, dt * 2); }
+    const ch = this.character;
+    if (ch) {
+      ch.root.visible = v.type === 'bike';
+      ch.anim.state = 'ride';
+      ch.root.position.set(v.pos.x - fx * 0.2, v.pos.y + 0.32, v.pos.z - fz * 0.2);
+      ch.root.rotation.y = v.yaw;
+      ch.root.rotation.z = v.lean;
+      ch.anim.speed = 0;
+      ch.update(dt);
+    }
+    G.weapons.updateShooter(this, dt);
+  }
   // ---------------- building ----------------
   toggleBuild() {
     this.buildMode = !this.buildMode;
@@ -376,7 +420,7 @@ export class Player extends Survivor {
     if (I.pressed('material')) { const m = ['wood', 'stone', 'metal']; this.buildMat = m[(m.indexOf(this.buildMat) + 1) % 3]; }
     if (I.pressed('rotate')) this.buildRotate = (this.buildRotate + 1) % 4;
     const p = G.builds.target(this, this.buildPiece, this.camYaw, this.camPitch, this.buildRotate);
-    const ok = G.builds.canPlace(p) && this.inv.mats[this.buildMat] >= 10;
+    const ok = G.builds.canPlace(p) && this.inv.mats[this.buildMat] >= G.builds.costFor(this);
     G.builds.showGhost(p, this.buildMat, ok);
     this.buildCd -= dt;
     if (I.fire && this.buildCd <= 0 && ok && !G.ui.isOpen()) {
@@ -395,6 +439,8 @@ export class Player extends Survivor {
     } else if (this.mode === 'dead') {
       target = this.pos.clone().add(new THREE.Vector3(0, 1, 0)); dist = 6 + Math.min(4, this.deadT); shoulder = 0; fovT = 70;
       this.camYaw += dt * 0.15;
+    } else if (this.mode === 'drive' && this.vehicle) {
+      target = this.vehicle.pos.clone().add(new THREE.Vector3(0, this.vehicle.type === 'bike' ? 1.6 : 2.2, 0)); dist = this.vehicle.def.camDist; shoulder = 0; fovT = (G.settings?.fov ?? 72) + Math.min(10, Math.abs(this.vehicle.speed) * 0.4);
     } else if (this.mode === 'extracted' && this.extractCam) {
       target = this.extractCam.clone(); dist = 14; shoulder = 0; fovT = 70;
     } else {
@@ -414,7 +460,7 @@ export class Player extends Survivor {
     if (this.scoped) dist = 0.05;
     // collision
     let actual = dist;
-    if (this.mode === 'ground' || this.mode === 'vault' || this.mode === 'dead') {
+    if (this.mode === 'ground' || this.mode === 'vault' || this.mode === 'dead' || this.mode === 'drive') {
       const hit = G.physics.raycast(pivot.x, pivot.y, pivot.z, -d.x, -d.y, -d.z, dist + 0.3, COL.SOLID);
       if (hit) actual = Math.max(0.3, hit.t - 0.3);
     }
@@ -424,8 +470,15 @@ export class Player extends Survivor {
     if (cam.position.y < gmin) cam.position.y = gmin;
     cam.rotation.order = 'YXZ';
     cam.rotation.set(pitch, yaw, 0);
+    // a wall right behind the vehicle: rise up and look down at it instead of sitting in the cab
+    if (this.mode === 'drive' && actual < dist - 0.5) {
+      const lift = Math.min(6, (dist - actual) * 0.8);
+      const up = G.physics.raycast(cam.position.x, cam.position.y, cam.position.z, 0, 1, 0, lift + 0.4, COL.SOLID);
+      cam.position.y += up ? Math.max(0, up.t - 0.4) : lift;
+      cam.lookAt(target);
+    }
     if (this.shakeAmt > 0.001) { cam.position.x += (Math.random() - 0.5) * this.shakeAmt * 0.3; cam.position.y += (Math.random() - 0.5) * this.shakeAmt * 0.3; cam.rotation.z = (Math.random() - 0.5) * this.shakeAmt * 0.05; }
-    if (this.character) this.character.root.visible = this.mode !== 'plane' && !(this.scoped);
+    if (this.character && this.mode !== 'drive') this.character.root.visible = this.mode !== 'plane' && !(this.scoped);
     G.audio?.setListener(cam.position.x, cam.position.y, cam.position.z, yaw);
   }
   updateFlashlight(dt) {

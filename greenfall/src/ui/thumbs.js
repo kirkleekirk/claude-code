@@ -1,6 +1,7 @@
 // Offscreen renderer that paints item-shop / locker thumbnails of cosmetics.
 import * as THREE from 'three';
-import { Character, buildBackBling, buildPickaxeModel, buildGlider, buildWeaponModel } from '../game/character.js';
+import { Character, buildBackBling, buildPickaxeModel, buildWeaponModel } from '../game/character.js';
+import { makeDirtBike } from '../game/vehicles.js';
 import { RARITIES, BY_ID } from '../data/cosmetics.js';
 
 let R = null;
@@ -50,8 +51,8 @@ export function thumbnail(item, equippedOutfit = null) {
       const m = buildBackBling(item.style); m.rotation.y = Math.PI + 0.5; obj.add(m); target.set(0, 0, -0.12); dist = 1.6;
     } else if (item.type === 'pickaxe') {
       const m = buildPickaxeModel(item.style); m.rotation.z = -0.6; obj.add(m); target.set(0, 0.35, 0); dist = 2.6;
-    } else if (item.type === 'glider') {
-      const m = buildGlider(item.style); obj.add(m); target.set(0, 1.0, 0); dist = 5.5;
+    } else if (item.type === 'paint') {
+      const m = makeDirtBike(item.paint); m.rotation.y = -0.9; obj.add(m);
     } else if (item.type === 'emote') {
       const base = BY_ID[equippedOutfit || 'farmhand'];
       const ch = new Character(base.outfit, { shadow: false });

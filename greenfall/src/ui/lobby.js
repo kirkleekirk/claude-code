@@ -73,7 +73,6 @@ export class Lobby {
     this.character = new Character(c.outfit, { shadow: true });
     this.character.setBackBling(c.cosmetics.backbling);
     this.character.setPickaxe(c.cosmetics.pickaxe);
-    this.character.setGlider(c.cosmetics.glider);
     this.character.root.position.set(0, 0.24, 0);
     this.scene.add(this.character.root);
     this.emote = c.emote;

@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { ITEMS, WEAPONS, AMMO, MAT_CAP } from '../data/items.js';
 import { Character } from './character.js';
+import { CLASS_BY_ID, makeMods } from '../data/classes.js';
 import { clamp, lerp } from '../core/math.js';
 
 export const HOTBAR = 5, PACK = 8;
@@ -19,12 +20,16 @@ export class Survivor {
     this.pos = new THREE.Vector3();
     this.vel = new THREE.Vector3();
     this.yaw = 0; this.lookYaw = 0; this.lookPitch = 0;
-    this.health = 100; this.armor = 0; this.alive = true; this.extracted = false;
+    this.cls = CLASS_BY_ID[opts.classId] || CLASS_BY_ID.survivor;
+    this.mods = makeMods(this.cls);
+    this.maxHealth = Math.round(100 * this.mods.get('maxHealth'));
+    this.health = this.maxHealth; this.armor = 0; this.alive = true; this.extracted = false;
+    this.vehicle = null;
     this.hunger = 100; this.thirst = 100; this.stamina = 100;
     this.bleed = 0; this.fracture = false; this.infection = 0; this.sick = 0; this.painkill = 0; this.boost = 0;
     this.onGround = false; this.crouch = false; this.sprinting = false; this.swimming = false; this.airTime = 0;
     this.height = MOVE.height;
-    this.inv = { slots: new Array(HOTBAR).fill(null), pack: new Array(PACK).fill(null), active: 0, mats: { wood: 0, stone: 0, metal: 0 }, ammo: { light: 0, medium: 0, heavy: 0, shells: 0, bolts: 0 } };
+    this.inv = { slots: new Array(HOTBAR).fill(null), pack: new Array(Math.max(2, PACK + this.mods.get('packSlots'))).fill(null), active: 0, mats: { wood: 0, stone: 0, metal: 0 }, ammo: { light: 0, medium: 0, heavy: 0, shells: 0, bolts: 0 } };
     this.ws = { cd: 0, reload: 0, bloom: 0, shotsFired: 0, lastShot: -9 };
     this.action = null;
     this.stats = { kills: 0, zombieKills: 0, damage: 0, damageTaken: 0, healed: 0, eaten: 0, built: 0, boarded: 0, searched: 0, distance: 0, timeAlive: 0 };
@@ -136,8 +141,9 @@ export class Survivor {
     const s = ref.slot, def = ITEMS[s.id];
     if (!def || this.action) return false;
     if (def.type === 'heal') {
-      if (def.heal && !def.stopBleed && this.health >= (def.healCap || 100) && !def.painkill) return false;
-      if (def.heal && def.healCap && this.health >= def.healCap && !(def.stopBleed && this.bleed) && !def.painkill) { this.G.hud?.toast(this.isPlayer, `Can't heal above ${def.healCap} with ${def.name}`); return false; }
+      const cap = this.healCapOf(def);
+      if (def.heal && !def.stopBleed && this.health >= cap && !def.painkill) return false;
+      if (def.heal && def.healCap && this.health >= cap && !(def.stopBleed && this.bleed) && !def.painkill) { this.G.hud?.toast(this.isPlayer, `Can't heal above ${Math.round(cap)} with ${def.name}`); return false; }
       if (def.armor && this.armor >= 100) return false;
       if (def.fixFracture && !this.fracture) { this.G.hud?.toast(this.isPlayer, 'No fracture to splint'); return false; }
       if ((def.cureInfection) && !this.infection && !this.sick) { this.G.hud?.toast(this.isPlayer, 'You feel fine'); return false; }
@@ -145,9 +151,10 @@ export class Survivor {
     if (def.type === 'food' && (def.food || 0) > 0 && this.hunger > 97 && !(def.water > 0 && this.thirst < 95)) { this.G.hud?.toast(this.isPlayer, "You're full"); return false; }
     if (def.type === 'food' && !(def.food > 0) && def.water > 0 && this.thirst > 97) { this.G.hud?.toast(this.isPlayer, 'Not thirsty'); return false; }
     const anim = def.type === 'food' ? 'consume' : def.fixFracture || def.stopBleed ? 'bandage' : 'consume';
-    this.character?.playAction(anim, def.time);
+    const useTime = def.type === 'heal' ? def.time / this.mods.get('healSpeed') : def.time;
+    this.character?.playAction(anim, useTime);
     this.G.audio?.play(def.type === 'food' ? 'eat' : 'bandage', this.pos, { vol: 0.6 });
-    return this.startAction('use', def.time, () => {
+    return this.startAction('use', useTime, () => {
       if (!ref.list[ref.i] || ref.list[ref.i].id !== s.id) return;
       this.applyItem(def);
       s.n--;
@@ -155,18 +162,23 @@ export class Survivor {
     }, { item: s.id });
   }
   applyItem(def) {
-    if (def.heal) { const before = this.health; this.health = Math.max(this.health, Math.min(def.healCap || 100, this.health + def.heal)); this.stats.healed += this.health - before; }
-    if (def.stopBleed) this.bleed = 0;
-    if (def.armor) this.armor = Math.min(100, this.armor + def.armor);
+    if (def.heal) { const before = this.health; this.health = Math.max(this.health, Math.min(this.healCapOf(def), this.health + def.heal * this.mods.get('healPower'))); this.stats.healed += this.health - before; }
+    if (def.stopBleed) { this.bleed = 0; if (this.mods.has('fieldMedic') && this.infection > 0) this.infection = Math.max(1, this.infection - 25); }
+    if (def.armor) this.armor = Math.min(100, this.armor + def.armor * this.mods.get('healPower'));
     if (def.fixFracture) { this.fracture = false; this.G.hud?.toast(this.isPlayer, 'Leg splinted'); }
     if (def.cureInfection) { this.infection = 0; this.sick = 0; }
     if (def.painkill) this.painkill = def.painkill;
     if (def.food) { this.hunger = clamp(this.hunger + def.food, 0, 100); this.stats.eaten++; }
     if (def.water) this.thirst = clamp(this.thirst + def.water, 0, 100);
     if (def.stamina) { this.stamina = 100; this.boost = Math.max(this.boost, def.stamina); }
-    if (def.sick && Math.random() < def.sick) { this.sick = 90; this.G.hud?.toast(this.isPlayer, 'Your stomach turns... food poisoning'); }
+    if (def.sick && !this.mods.has('ironStomach') && Math.random() < def.sick) { this.sick = 90; this.G.hud?.toast(this.isPlayer, 'Your stomach turns... food poisoning'); }
   }
 
+  healCapOf(def) { return ((def.healCap || 100) / 100) * this.maxHealth; }
+  get hpFrac() { return this.health / this.maxHealth; }
+  giveKit() {
+    for (const [id, n, r] of this.cls.kit || []) this.addItem(id, n, r ?? 0);
+  }
   // ---------------- damage ----------------
   takeDamage(amount, src = null, opts = {}) {
     if (!this.alive || this.extracted || amount <= 0) return 0;
@@ -186,7 +198,7 @@ export class Survivor {
     // conditions
     if (opts.type === 'zombie') {
       if (Math.random() < 0.3) this.bleed = Math.max(this.bleed, 1);
-      if (Math.random() < (opts.infect ?? 0.1)) { if (!this.infection) this.G.hud?.toast(this.isPlayer, 'You were bitten — infection is spreading'); this.infection = Math.max(this.infection, 1); }
+      if (Math.random() < (opts.infect ?? 0.1) / this.mods.get('infection')) { if (!this.infection) this.G.hud?.toast(this.isPlayer, 'You were bitten — infection is spreading'); this.infection = Math.max(this.infection, 1); }
       if (opts.heavy && Math.random() < 0.25) this.breakLeg();
     } else if (opts.type === 'bullet' && amount >= 22 && Math.random() < 0.28) this.bleed = Math.max(this.bleed, amount > 60 ? 2 : 1);
     if (this.action && this.action.kind !== 'use') this.cancelAction();
@@ -213,7 +225,7 @@ export class Survivor {
   updateSurvival(dt) {
     if (!this.alive || this.extracted) return;
     const sc = this.G.match?.survivalScale ?? 1;
-    const exert = this.sprinting ? 1.6 : 1;
+    const exert = (this.sprinting ? 1.6 : 1) * this.mods.get('hunger');
     this.hunger = Math.max(0, this.hunger - dt * 0.062 * sc * exert * (this.sick > 0 ? 1.4 : 1));
     this.thirst = Math.max(0, this.thirst - dt * 0.09 * sc * exert * (this.sick > 0 ? 3 : 1));
     let dmg = 0;
@@ -221,7 +233,7 @@ export class Survivor {
     if (this.thirst <= 0) dmg += 0.6;
     if (this.bleed) dmg += this.bleed === 2 ? 1.5 : 0.65;
     if (this.infection > 0) {
-      this.infection = Math.min(100, this.infection + dt / 7);
+      this.infection = Math.min(100, this.infection + dt / (7 * this.mods.get('infection')));
       if (this.infection > 50) dmg += this.infection >= 100 ? 0.6 : 0.2;
     }
     if (this.sick > 0) { this.sick = Math.max(0, this.sick - dt); if (Math.random() < dt * 0.04) { this.G.emitNoise?.(this.pos.x, this.pos.z, 20, this, 'cough'); this.G.audio?.play('cough', this.pos, { vol: 0.7 }); } }
@@ -231,10 +243,10 @@ export class Survivor {
       this._dot = (this._dot || 0) + dmg * dt;
       if (this._dot >= 1) { const d = Math.floor(this._dot); this._dot -= d; this.takeDamage(d, null, { type: this.bleed ? 'bleed' : 'starve' }); }
     } else if (this.hunger > 60 && this.thirst > 60 && !this.bleed && this.infection < 50 && this.G.time - this.lastHitT > 8) {
-      this.health = Math.min(100, this.health + dt * 0.15);
+      this.health = Math.min(this.maxHealth, this.health + dt * 0.15);
     }
     // stamina
-    if (this.sprinting) this.stamina = Math.max(0, this.stamina - dt * (this.boost > 0 ? 5 : 13));
+    if (this.sprinting) this.stamina = Math.max(0, this.stamina - dt * (this.boost > 0 ? 5 : 13) / this.mods.get('stamina'));
     else this.stamina = Math.min(100, this.stamina + dt * (this.boost > 0 ? 30 : 16) * (this.thirst < 20 ? 0.5 : 1));
     this.stats.timeAlive += dt;
   }

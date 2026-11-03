@@ -400,6 +400,7 @@ export class Zombies {
     if (d < 1.75 * zb.scale && Math.abs(t.pos.y - zb.pos.y) < 1.7) {
       const T = TYPES[zb.type];
       const scale = 0.72 + Math.min(1, G.match?.progress || 0) * 0.5;
+      if (t.vehicle && t.vehicle.def.cab) { G.rides.damage(t.vehicle, T.dmg * scale * 3, null); G.audio?.play('smash', zb.pos, { vol: 0.8 }); return; }
       t.takeDamage(Math.round(T.dmg * scale), null, { type: 'zombie', heavy: zb.type === 'brute', infect: zb.type === 'runner' ? 0.14 : 0.1 });
       G.audio?.play('zombie_hit', t.pos, { vol: 0.9 });
       if (t.isPlayer) { G.hud.damageFrom(zb.pos); G.player.shake(zb.type === 'brute' ? 0.6 : 0.25); }

@@ -22,6 +22,8 @@ import { Interact } from './game/interact.js';
 import { Builds } from './game/building.js';
 import { FX } from './game/fx.js';
 import { Animals } from './game/animals.js';
+import { Rides } from './game/rides.js';
+import { Wallet } from './core/wallet.js';
 import { Match, PRESETS } from './game/match.js';
 import { Character, buildWeaponModel } from './game/character.js';
 import { HUD, buildMapCanvas } from './ui/hud.js';
@@ -39,6 +41,7 @@ class Game {
     this.canvas = document.getElementById('game');
     this.uiRoot = document.getElementById('ui');
     this.profile = new Profile();
+    this.wallet = new Wallet(this.profile);
     const S = this.profile.data.settings;
     this.touchMode = S.touch === 'on' || (S.touch === 'auto' && isTouchDevice());
     const autoQ = this.touchMode ? 'low' : 'medium';
@@ -65,6 +68,13 @@ class Game {
     this.canvas.addEventListener('click', () => { if (this.inMatch && !this.ui.isOpen() && !this.touchMode) this.input.requestLock(); });
     window.__game = this;
     this.boot();
+  }
+  goFullscreen() {
+    const el = document.documentElement;
+    try {
+      const p = el.requestFullscreen ? el.requestFullscreen({ navigationUI: 'hide' }) : null;
+      if (p && p.then) p.then(() => { try { screen.orientation?.lock?.('landscape').catch(() => {}); } catch (e) { /* */ } }).catch(() => {});
+    } catch (e) { /* not allowed here */ }
   }
   applyAudio() {
     const S = this.profile.data.settings;
@@ -143,6 +153,7 @@ class Game {
     this.ui.hideLoading();
     this.ui.showLobby();
     this.ready = true;
+    if (this.wallet.configured) this.wallet.init().then(() => { if (!this.inMatch) this.ui.renderLobby(); });
     this.last = performance.now();
     this.renderer.setAnimationLoop(() => this.loop());
     if (new URLSearchParams(location.search).has('autoplay')) this.startMatch(new URLSearchParams(location.search).get('autoplay') || 'quick');
@@ -167,8 +178,9 @@ class Game {
   startMatch(presetKey = 'standard') {
     this.audio.init();
     this.audio.stopMusic();
+    if (this.touchMode && document.fullscreenEnabled && !document.fullscreenElement) this.goFullscreen();
     this.ui.hideLobby();
-    this.ui.setLoading(0.1, 'Preparing the drop...');
+    this.ui.setLoading(0.1, 'Waking up somewhere in Greenfall County...');
     setTimeout(() => this._startMatch(presetKey), 30);
   }
   _startMatch(presetKey) {
@@ -190,35 +202,48 @@ class Game {
     this.view.onChunkFar = (ch) => this.inter.onChunkFar(ch);
     this.match = new Match(this, presetKey);
     const cos = cosmeticsFor(this.profile.data.equipped);
-    this.player = new Player(this, { name: this.profile.data.name, outfit: cos.outfit, cosmetics: cos.cosmetics, emote: cos.emote, team: 1 });
+    this.player = new Player(this, { name: this.profile.data.name, outfit: cos.outfit, cosmetics: cos.cosmetics, emote: cos.emote, team: 1, classId: this.profile.data.settings.classId });
     this.scene.add(this.player.character.root);
     this.survivors.push(this.player);
-    this.player.pos.copy(this.match.plane.pos);
-    this.player.camYaw = Math.atan2(-this.match.plane.vel.x, -this.match.plane.vel.z) + 0.6;
-    this.player.camPitch = -0.35;
     this.bots = new BotManager(this);
     this.bots.create(this.match.preset.players - 1);
-    this.bots.planDrop(this.match.plane);
+    // random ground spawns (no drop): player first, then everyone else spread out
+    const spots = this.match.pickSpawns(this.match.preset.players);
+    const sp = spots[0];
+    this.match.spawnZone = sp.zone;
+    this.view.buildAround(sp.x, sp.z, 280);
+    this.terrain.prebuildAround(sp.x, sp.z, 500);
+    const P = this.player;
+    P.pos.set(sp.x, this.physics.groundAt(sp.x, sp.z, 999, 0.4), sp.z);
+    P.mode = 'ground'; P.onGround = true; P.character.anim.state = 'ground';
+    P.yaw = sp.yaw; P.camYaw = sp.yaw + Math.PI; P.camPitch = -0.12;
+    P.giveKit(); P.equip(0);
+    this.bots.placeAt(spots.slice(1));
+    this.rides = new Rides(this); this.scene.add(this.rides.group);
+    this.rides.spawnAll();
+    this.match.startLive();
+    this.wallet.matchStart(presetKey);
     if (this.gfx.q.grass > 0) { this.grass = new Grass(this.world, this.terrain, this.gfx.q.grass); this.scene.add(this.grass.mesh); }
     this.inMatch = true;
+    document.body.classList.add('inmatch');
     this.paused = false;
     this.time = 0;
     this.ui.hideLoading();
     this.hud.show(true);
     this.touch.show(this.touchMode);
-    this.hud.announce('PRESS SPACE TO JUMP', 'yellow', 6);
-    this.hud.setObjective('Ride the plane. Jump over the island.');
     this.audio.loop('wind', true, 0.4);
     if (!this.touchMode) this.input.requestLock();
     if (!this.profile.data.seenTutorial) { this.hud.hint('WASD move · Mouse aim · E interact · Tab inventory · M map · Q build · H heal · X eat · L flashlight', 12); this.profile.data.seenTutorial = true; this.profile.save(); }
   }
   teardownMatch() {
-    for (const g of [this.fx?.group, this.zombies?.group, this.hordes?.group, this.inter?.group, this.builds?.group, this.animals?.group, this.match?.group, this.weapons?.projGroup]) if (g) this.scene.remove(g);
+    for (const g of [this.fx?.group, this.zombies?.group, this.hordes?.group, this.inter?.group, this.builds?.group, this.animals?.group, this.match?.group, this.weapons?.projGroup, this.rides?.group]) if (g) this.scene.remove(g);
+    if (this.rides) { this.scene.remove(this.rides.light); this.scene.remove(this.rides.light.target); }
     for (const s of this.survivors) if (s.character) this.scene.remove(s.character.root);
     if (this.player?.spot) { this.scene.remove(this.player.spot); this.scene.remove(this.player.spot.target); }
     if (this.grass) { this.scene.remove(this.grass.mesh); this.grass = null; }
     this.audio.stopAll();
     this.inMatch = false;
+    document.body.classList.remove('inmatch');
     this.survivors = [];
     U.uHordeCount.value = 0;
   }
@@ -230,10 +255,11 @@ class Game {
     this.ui.showLobby();
     this.audio.startMusic('lobby');
   }
-  onMatchEnd(r) {
+  async onMatchEnd(r) {
     const P = this.profile, d = P.data;
-    d.shards += r.shards;
-    const ups = P.addXp(r.xp);
+    const granted = await this.wallet.matchEnd(r);
+    r.shards = granted.shards; r.xp = granted.xp;
+    const ups = granted.levelUps;
     d.stats.matches++;
     d.stats.kills += r.kills;
     d.stats.zombieKills += r.zombieKills;
@@ -252,6 +278,7 @@ class Game {
   // ---------------- world events ----------------
   emitNoise(x, z, radius, src, kind, big = false) {
     if (!this.inMatch) return;
+    if (src && src.mods) radius *= src.mods.get('noise');
     this.zombies.hear(x, z, radius, src, kind);
     this.hordes.noise(x, z, radius, src, kind);
     if (kind === 'gunshot' || kind === 'explosion') {
@@ -343,11 +370,12 @@ class Game {
     this.inter.update(dt);
     this.builds.update(dt);
     this.animals.update(dt);
+    this.rides.update(dt);
     this.match.update(dt);
     // keep the camera's surroundings streamed in
     const focus = [P.pos];
     for (const b of this.bots.bots) if (b.physical && b.alive) focus.push(b.pos);
-    const fast = P.mode === 'skydive' || P.mode === 'glide';
+    const fast = P.mode === 'drive' && Math.abs(P.vehicle?.speed || 0) > 12;
     this.view.update(this.camera.position, focus, fast ? 9 : 5);
     this.terrain.update(this.camera.position, fast ? 6 : 3);
     if (this.grass) this.grass.update(this.camera.position);

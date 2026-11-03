@@ -68,6 +68,7 @@ export class Builds {
     this.edges = new THREE.LineSegments(new THREE.EdgesGeometry(this.geos.wallwood), new THREE.LineBasicMaterial({ color: 0xbfe6ff }));
     this.ghost.add(this.edges);
   }
+  costFor(s) { return Math.max(1, Math.round(COST * (s.mods ? s.mods.get('buildCost') : 1))); }
   key(p) { return `${p.type}:${p.i}:${p.j}:${p.k}:${p.dir}`; }
   // Compute the piece the survivor would place now
   target(s, type, yaw, pitch, rotate = 0) {
@@ -130,10 +131,11 @@ export class Builds {
   }
   place(s, p, mat) {
     if (!this.canPlace(p)) return null;
-    if (s.inv.mats[mat] < COST) { if (s.isPlayer) this.G.hud.toast(true, `Not enough ${mat}`); return null; }
-    s.inv.mats[mat] -= COST;
+    const cost = this.costFor(s);
+    if (s.inv.mats[mat] < cost) { if (s.isPlayer) this.G.hud.toast(true, `Not enough ${mat}`); return null; }
+    s.inv.mats[mat] -= cost;
     const M = MATS[mat];
-    const piece = { ...p, mat, hp: M.hp * M.start, maxHp: M.hp, building: true, buildT: 0, owner: s.id, cols: [] };
+    const piece = { ...p, mat, hp: M.hp * M.start, maxHp: M.hp, building: true, buildT: 0, owner: s.id, cols: [], speed: s.mods ? s.mods.get('buildSpeed') : 1 };
     const mesh = new THREE.Mesh(this.geos[p.type + mat], this.buildingMat);
     mesh.position.set(p.x, p.y + (p.type === 'ramp' ? LEVEL / 2 : 0), p.z);
     mesh.rotation.y = p.rot;
@@ -163,8 +165,8 @@ export class Builds {
     for (const pc of this.pieces.values()) {
       if (!pc.building) continue;
       const M = MATS[pc.mat];
-      pc.buildT += dt;
-      pc.hp = Math.min(pc.maxHp, pc.hp + (pc.maxHp * (1 - M.start) / M.buildTime) * dt);
+      pc.buildT += dt * pc.speed;
+      pc.hp = Math.min(pc.maxHp, pc.hp + (pc.maxHp * (1 - M.start) / M.buildTime) * dt * pc.speed);
       this.buildingMat.opacity = 0.5;
       if (pc.buildT >= M.buildTime) { pc.building = false; pc.mesh.material = this.mat; }
     }

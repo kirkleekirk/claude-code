@@ -1,10 +1,11 @@
 // Match director: drop plane, day/night clock, hordes schedule, airdrops, the mid-match
 // riverboat evac, the final helicopter, pacing and end-of-match results.
 import * as THREE from 'three';
-import { makePlane, makeBoat, makeHeli, makeParachuteCrate } from './vehicles.js';
-import { DOCKS, LZS, WORLD } from '../world/layout.js';
+import { makeBoat, makeHeli, makeParachuteCrate } from './vehicles.js';
+import { DOCKS, LZS, WORLD, SPAWN_ZONES, NO_SPAWN } from '../world/layout.js';
 import { RNG } from '../core/rng.js';
 import { clamp, formatTime, lerp } from '../core/math.js';
+import { computeRewards } from '../data/rewards.js';
 
 export const PRESETS = {
   quick: { label: 'Quick', desc: '~25 min · 30 survivors', players: 30, duration: 25 * 60, dayLen: 12 * 60, hordeInterval: 150, hordeGrowth: 0.4, survivalScale: 1.7, heliAt: 5, boatAt: 0.45, lootMul: 1.25, botSkill: 0.85, initialHordes: 2, ambientMul: 1 },
@@ -19,7 +20,8 @@ export class Match {
     const P = (this.preset = PRESETS[this.presetKey]);
     this.rng = new RNG(G.seed + 7);
     this.elapsed = 0;
-    this.phase = 'plane';
+    this.phase = 'live';
+    this.plane = null;
     this.survivalScale = P.survivalScale;
     this.hordeInterval = P.hordeInterval;
     this.hordeGrowth = P.hordeGrowth;
@@ -37,55 +39,52 @@ export class Match {
     this.group = new THREE.Group();
     this.group.name = 'match';
     G.scene.add(this.group);
-    this.setupPlane();
   }
   get progress() { return clamp(this.elapsed / this.preset.duration, 0, 1.5); }
   get aliveCount() { return this.G.survivors.filter((s) => s.alive && !s.extracted).length; }
   get totalPlayers() { return this.G.survivors.length; }
 
-  setupPlane() {
-    const a = this.rng.range(0, Math.PI * 2);
-    const cx = 2000 + this.rng.range(-500, 500), cz = 1500 + this.rng.range(-400, 400);
-    const L = 2900;
-    const from = new THREE.Vector3(cx - Math.cos(a) * L, 520, cz - Math.sin(a) * L);
-    const to = new THREE.Vector3(cx + Math.cos(a) * L, 520, cz + Math.sin(a) * L);
-    const mesh = makePlane();
-    mesh.lookAt(to.x - from.x + mesh.position.x, 0, to.z - from.z);
-    this.group.add(mesh);
-    const dir = to.clone().sub(from).normalize();
-    this.plane = { from, to, pos: from.clone(), vel: dir.clone().multiplyScalar(58), t: 0, mesh, canJump: false, len: from.distanceTo(to) };
-    mesh.position.copy(from);
-    mesh.rotation.set(0, Math.atan2(dir.x, dir.z), 0);
+  // Pick ground spawn points: the player near a farmhouse/home in the countryside, everyone
+  // else spread out (and well away from the player).
+  pickSpawns(n) {
+    const G = this.G, W = G.world, r = this.rng;
+    const banned = (x, z) => NO_SPAWN.some((b) => x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1);
+    const total = SPAWN_ZONES.reduce((a, z) => a + z.w, 0);
+    const pickZone = () => { let t = r.next() * total; for (const z of SPAWN_ZONES) { t -= z.w; if (t <= 0) return z; } return SPAWN_ZONES[0]; };
+    const homes = W.buildings.filter((b) => ['house', 'farmhouse', 'barn', 'cabin', 'shed', 'garage', 'shack', 'store', 'shop'].includes(b.kind) && !banned(b.x, b.z));
+    const out = [];
+    const ok = (x, z, minD) => {
+      if (banned(x, z) || W.coastAt(x, z) < 40 || W.isWater(x, z)) return false;
+      if (W.occAt(x, z) & (4 | 16)) return false;
+      if (Math.abs(W.heightAt(x + 2, z) - W.heightAt(x - 2, z)) > 2.5) return false;
+      return out.every((o) => Math.hypot(o.x - x, o.z - z) > minD);
+    };
+    for (let i = 0; i < n; i++) {
+      const minD = i === 0 ? 0 : i < 6 ? 420 : 150;
+      let spot = null;
+      for (let t = 0; t < 120 && !spot; t++) {
+        const zone = pickZone();
+        const cands = homes.filter((b) => b.x > zone.x0 && b.x < zone.x1 && b.z > zone.z0 && b.z < zone.z1);
+        const b = cands.length ? r.pick(cands) : null;
+        let x, z;
+        if (b) { const a = r.next() * Math.PI * 2, d = Math.max(b.w, b.d) / 2 + r.range(6, 16); x = b.x + Math.cos(a) * d; z = b.z + Math.sin(a) * d; }
+        else { x = r.range(zone.x0, zone.x1); z = r.range(zone.z0, zone.z1); }
+        if (!ok(x, z, t > 80 ? minD * 0.5 : minD)) continue;
+        spot = { x, z, yaw: b ? Math.atan2(b.x - x, b.z - z) : r.range(-3, 3), zone: zone.name };
+      }
+      out.push(spot || { x: 700, z: 1900, yaw: 0, zone: 'Hollow Creek Farms' });
+    }
+    return out;
   }
-  planeOverLand(p) { return p.x > 150 && p.x < 3800 && p.z > 150 && p.z < 2850 && this.G.world.coastAt(p.x, p.z) > 0; }
-
   update(dt) {
     const G = this.G;
-    if (this.phase !== 'ended') this.elapsed += dt * (this.phase === 'plane' ? 0.35 : 1);
+    if (this.phase !== 'ended') this.elapsed += dt;
     // clock: day length preset, start 7:30
     G.dayNight.hour = (7.5 + (this.elapsed / this.preset.dayLen) * 24) % 24;
-    if (this.plane) this.updatePlane(dt);
     if (this.phase === 'live' || this.phase === 'final') this.updateLive(dt);
     this.updateBoat(dt);
     this.updateHeli(dt);
     this.updateAirdrops(dt);
-  }
-  updatePlane(dt) {
-    const pl = this.plane, G = this.G;
-    pl.t = Math.min(1, pl.t + (58 * dt) / pl.len);
-    pl.pos.lerpVectors(pl.from, pl.to, pl.t);
-    pl.mesh.position.copy(pl.pos);
-    for (const p of pl.mesh.props) p.rotation.z += dt * 40;
-    pl.canJump = this.planeOverLand(pl.pos) || pl.t > 0.2;
-    G.audio?.loop('plane', pl.t < 1, 0.9, pl.pos);
-    if (G.player.mode === 'plane' && pl.t >= 0.97) G.player.forceJump = true;
-    if (G.player.mode === 'plane' && pl.t > 0.1) G.hud.setObjective(pl.canJump ? 'Press SPACE to jump' : 'Wait for land...');
-    if (pl.t >= 1) {
-      this.group.remove(pl.mesh);
-      G.audio?.loop('plane', false);
-      this.plane = null;
-    }
-    if (this.phase === 'plane' && G.player.mode !== 'plane') this.startLive();
   }
   startLive() {
     const G = this.G;
@@ -93,7 +92,7 @@ export class Match {
     // initial hordes far from the player
     for (let i = 0; i < this.preset.initialHordes; i++) G.hordes.naturalSpawn();
     G.hordes.nextNatural = this.hordeInterval;
-    G.hud.announce('SURVIVE. LOOT. EXTRACT.', 'yellow');
+    G.hud.announce(`DAY 1 · ${(this.spawnZone || 'Greenfall County').toUpperCase()}`, 'yellow', 5);
     G.hud.setObjective('Find weapons, food and water. Avoid the hordes.');
   }
 
@@ -329,13 +328,12 @@ export class Match {
     const placement = outcome === 'extracted' ? 1 : this.aliveCount + 1;
     const loot = outcome === 'extracted' ? P.lootValue() : 0;
     const mins = P.stats.timeAlive / 60;
-    const shards = Math.round(40 + P.stats.kills * 30 + P.stats.zombieKills * 1.5 + mins * 3 + (outcome === 'extracted' ? 350 + loot : 0) + (outcome === 'left' ? 60 : 0));
-    const xp = Math.round(120 + P.stats.kills * 80 + P.stats.zombieKills * 6 + mins * 25 + (outcome === 'extracted' ? 900 : 0) + P.stats.boarded * 10 + P.stats.searched * 4);
-    this.result = { outcome, how, auto, placement, total: this.totalPlayers, kills: P.stats.kills, zombieKills: P.stats.zombieKills, time: P.stats.timeAlive, loot, shards, xp, damage: Math.round(P.stats.damage), built: P.stats.built, boarded: P.stats.boarded, killer: P.killedBy || null, preset: this.preset.label };
+    void mins;
+    const { shards, xp } = computeRewards({ outcome, time: P.stats.timeAlive, kills: P.stats.kills, zombieKills: P.stats.zombieKills, loot, boarded: P.stats.boarded, searched: P.stats.searched });
+    this.result = { searched: P.stats.searched, presetKey: this.presetKey, outcome, how, auto, placement, total: this.totalPlayers, kills: P.stats.kills, zombieKills: P.stats.zombieKills, time: P.stats.timeAlive, loot, shards, xp, damage: Math.round(P.stats.damage), built: P.stats.built, boarded: P.stats.boarded, killer: P.killedBy || null, preset: this.preset.label };
     G.onMatchEnd?.(this.result);
   }
   objectiveText() {
-    if (this.phase === 'plane') return '';
     if (this.heliState === 'inbound') return `Helicopter lands at ${this.lz.name} in ${formatTime(this.heliT)}`;
     if (this.heliState === 'landed') return `Helicopter leaves ${this.lz.name} in ${formatTime(this.heliT)}`;
     if (this.boatState === 'inbound') return `Riverboat docks at ${this.dock.name} in ${formatTime(this.boatT)}`;

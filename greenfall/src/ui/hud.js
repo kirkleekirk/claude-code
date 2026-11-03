@@ -73,7 +73,9 @@ export class HUD {
     this.hordeW = el('div', 'hordewarn hidden', r);
     this.killfeed = el('div', 'killfeed', r);
     this.vitals = el('div', 'vitals', r);
+    this.classBadge = el('div', 'classbadge', this.vitals);
     this.statuses = el('div', 'statuses', this.vitals);
+    this.vehEl = el('div', 'vehpanel hidden', r, '<div class="vspd"><b>0</b><small>km/h</small></div><div class="vbars"><div class="vrow"><span>⛽</span><div class="vb"><div class="fuel"></div></div></div><div class="vrow"><span>🔧</span><div class="vb"><div class="cond"></div></div></div></div><div class="vhint"></div>');
     this.arBar = el('div', 'vbar ar', this.vitals, '<div class="fill"></div><div class="num"></div>');
     this.hpBar = el('div', 'vbar hp', this.vitals, '<div class="fill"></div><div class="num"></div>');
     this.meters = el('div', 'meters', this.vitals);
@@ -183,11 +185,12 @@ export class HUD {
     this.hintT -= dt; if (this.hintT <= 0) this.hintEl.classList.add('hidden');
     this.hitT -= dt; if (this.hitT <= 0) this.hitmark.style.opacity = 0;
     const onFoot = P.mode === 'ground' || P.mode === 'vault';
+    if (this._cls !== P.cls) { this._cls = P.cls; this.classBadge.innerHTML = `<span style="color:${P.cls.color}">${P.cls.icon}</span> ${P.cls.name}`; }
     // vitals
     const hp = Math.ceil(P.health), ar = Math.ceil(P.armor);
-    this.hpBar.querySelector('.fill').style.width = hp + '%';
+    this.hpBar.querySelector('.fill').style.width = (P.health / P.maxHealth) * 100 + '%';
     this.hpBar.querySelector('.num').textContent = hp;
-    this.hpBar.classList.toggle('low', hp < 30);
+    this.hpBar.classList.toggle('low', P.hpFrac < 0.3);
     this.arBar.querySelector('.fill').style.width = ar + '%';
     this.arBar.querySelector('.num').textContent = ar;
     this.arBar.style.display = ar > 0 ? '' : 'none';
@@ -201,8 +204,7 @@ export class HUD {
     if (P.hunger < 15) st += `<span class="status warn">Starving</span>`;
     if (P.thirst < 15) st += `<span class="status warn">Dehydrated</span>`;
     if (P.boost > 0) st += `<span class="status good">⚡ Energized</span>`;
-    if (P.indoor) st += `<span class="status good">⌂ Indoors</span>`;
-    if (P.crouch) st += `<span class="status good">Stealth</span>`;
+
     if (this._st !== st) { this.statuses.innerHTML = st; this._st = st; }
     // hotbar
     for (let i = 0; i < 6; i++) {
@@ -221,6 +223,18 @@ export class HUD {
       if (s._k !== key) { s._k = key; s.querySelector('.ico').innerHTML = ico; s.querySelector('.cnt').textContent = cnt; s.querySelector('.lbl').textContent = lbl; s.style.background = bg; }
     }
     this.hotbar.classList.toggle('hidden', !onFoot);
+    // vehicle panel
+    const v = P.vehicle;
+    this.vehEl.classList.toggle('hidden', !v);
+    if (v) {
+      this.vehEl.querySelector('.vspd b').textContent = Math.round(Math.abs(v.speed) * 3.6);
+      const fuel = this.vehEl.querySelector('.fuel'), cond = this.vehEl.querySelector('.cond');
+      fuel.style.width = v.fuel * 100 + '%'; fuel.style.background = v.fuel < 0.15 ? '#ff5a4a' : '#f0c040';
+      cond.style.width = v.hp * 100 + '%'; cond.style.background = v.hp < 0.3 ? '#ff5a4a' : v.hp < 0.6 ? '#f0a020' : '#7fd85a';
+      const hint = this.G.touchMode ? 'USE exit · JUMP brake · HEAL horn' : `${this.G.input.keyName('interact')} exit · Space brake · H horn · L lights`;
+      const k = (v.engineOn ? '' : 'ENGINE OFF · ') + hint;
+      if (this._vh !== k) { this._vh = k; this.vehEl.querySelector('.vhint').textContent = k; }
+    }
     // resources
     for (const m of ['wood', 'stone', 'metal']) { const e = this.matEls[m]; e.querySelector('span').textContent = P.inv.mats[m]; e.classList.toggle('sel', P.buildMode && P.buildMat === m); }
     this.buildbar.classList.toggle('hidden', !P.buildMode);
@@ -229,6 +243,7 @@ export class HUD {
     const wdef = w && WEAPONS[w.id];
     this.ammo.innerHTML = wdef && !wdef.melee && !P.buildMode ? `${w.mag}<small> / ${P.inv.ammo[wdef.ammo]}</small>${P.ws.reload > 0 ? ' <small style="color:#ffd23f">RELOADING</small>' : ''}` : '';
     this.res.classList.toggle('hidden', !onFoot);
+    if (this.G.touch) this.G.touch.setMode(v ? 'drive' : 'foot');
     // crosshair
     const spread = wdef && !wdef.melee ? ((P.ads ? wdef.adsSpread : wdef.spread) + P.ws.bloom) * (Math.hypot(P.vel.x, P.vel.z) > 1 ? 1.5 : 1) * (P.onGround ? 1 : 2) : 0.01;
     const px = clamp(spread * window.innerHeight * 0.9, 4, 80);
@@ -319,6 +334,14 @@ export class HUD {
       c.beginPath(); c.arc(x, y, h.r * scale, 0, Math.PI * 2); c.fill(); c.stroke();
     }
     this.drawMarkers(c, toS, 1);
+    // nearby vehicles
+    if (G.rides) for (const v of G.rides.list) {
+      if (v.driver || v.wrecked) continue;
+      if (Math.hypot(v.pos.x - P.pos.x, v.pos.z - P.pos.z) > 130) continue;
+      const [vx, vy] = toS(v.pos.x, v.pos.z);
+      c.fillStyle = v.fuel > 0 && v.hp >= 0.15 ? '#f0c040' : '#a08a5a'; c.strokeStyle = '#000'; c.lineWidth = 1.5;
+      c.beginPath(); c.rect(vx - 4, vy - 3, 8, 6); c.fill(); c.stroke();
+    }
     // player arrow
     c.save(); c.translate(S / 2, S / 2); c.rotate(-P.camYaw + Math.PI);
     c.fillStyle = '#ffd23f'; c.strokeStyle = '#000'; c.lineWidth = 1.5;

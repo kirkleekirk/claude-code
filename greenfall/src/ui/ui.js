@@ -8,6 +8,7 @@ import { thumbnail } from './thumbs.js';
 import { POIS, WORLD } from '../world/layout.js';
 import { formatTime, clamp } from '../core/math.js';
 import { DEFAULT_BINDS } from '../core/input.js';
+import { CLASSES, CLASS_BY_ID, classBudget } from '../data/classes.js';
 
 const el = (tag, cls, parent, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; if (parent) parent.appendChild(e); return e; };
 const TIPS = [
@@ -71,7 +72,10 @@ export class UI {
     }
     el('div', 'spacer', top);
     el('div', 'levelbadge', top, `<span class="lv">LV ${P.level}</span>`);
-    el('div', 'currency', top, `<span class="shard"></span>${P.shards.toLocaleString()}`);
+    if (document.fullscreenEnabled && !document.fullscreenElement) { const fs = el('button', 'btn ghost fullscreen-btn', top, '⛶'); fs.title = 'Fullscreen'; fs.onclick = () => { this.click(); this.G.goFullscreen(); }; }
+    const cur = el('div', 'currency', top, `<span class="shard"></span>${P.shards.toLocaleString()}`);
+    if (this.G.wallet.online) { const g = el('button', 'btn yellow getshards', top, '+'); g.title = 'Get Shards'; g.onclick = () => { this.click(); this.showGetShards(); }; }
+    void cur;
     const page = el('div', 'page', L);
     if (this.tab === 'play') this.renderPlay(page);
     else if (this.tab === 'shop') this.renderShop(page);
@@ -83,6 +87,7 @@ export class UI {
   renderPlay(page) {
     const P = this.G.profile.data;
     el('div', 'nameplate', page, P.name);
+    if (this.G.profile.data.tampered) el('div', 'toast', page, 'Your save was edited outside the game, so your Shards were reset.').style.cssText = 'position:absolute;top:58px;left:50%;transform:translateX(-50%);opacity:1';
     const left = el('div', 'lobby-left', page);
     left.innerHTML = `<div class="season">SEASON 1 · THE GREENFALL</div><div class="lobby-title">The dead rise<br>with the green sky.</div>
       <div class="newsbox"><b>Greenfall County</b> fell overnight. Loot the farms, towns and the old coastal quarter of Bellerose, keep yourself fed, patched up and quiet — and get out alive.<br><br>
@@ -90,6 +95,11 @@ export class UI {
     const how = el('button', 'btn ghost howto', left, 'How to play');
     how.onclick = () => { this.click(); this.showHelp(); };
     const panel = el('div', 'playpanel', page);
+    const cls = CLASS_BY_ID[P.settings.classId] || CLASS_BY_ID.survivor;
+    const cc = el('div', 'modecard classcard', panel);
+    cc.innerHTML = `<div class="cc-row"><span class="cc-icon" style="color:${cls.color}">${cls.icon}</span><div><h3>${cls.name}</h3><div class="cc-tag">${cls.tagline}</div></div></div>`;
+    const ch = el('button', 'btn ghost cc-btn', cc, 'Change class');
+    ch.onclick = () => { this.click(); this.showClassPicker(); };
     const mode = el('div', 'modecard', panel);
     mode.innerHTML = '<h3>Solo · Extraction Royale</h3>';
     const lens = el('div', 'lengths', mode);
@@ -100,6 +110,56 @@ export class UI {
     }
     const play = el('button', 'btn yellow playbtn display', panel, 'Play');
     play.onclick = () => { this.click(); this.G.startMatch(P.settings.matchLength); };
+  }
+  classCard(parent, c, selected) {
+    const b = classBudget(c);
+    const d = el('div', 'clscard' + (selected ? ' sel' : ''), parent);
+    d.style.setProperty('--cc', c.color);
+    const kit = (c.kit || []).map(([id, n]) => `${n > 1 ? n + '× ' : ''}${(ITEMS[id] || AMMO[id] || { name: id[0].toUpperCase() + id.slice(1) }).name}`).join(', ');
+    const lines = b.lines.map((l) => `<li class="${l.good ? 'up' : 'down'}">${l.good ? '▲' : '▼'} ${l.special ? l.text : l.text}</li>`).join('') || '<li class="eq">● No bonuses or drawbacks</li>';
+    const max = 60;
+    d.innerHTML = `<div class="cl-head"><span class="cl-icon">${c.icon}</span><div><div class="cl-name">${c.name}</div><div class="cl-tag">${c.tagline}</div></div></div>
+      <ul class="cl-lines">${lines}</ul>
+      <div class="cl-bals"><div class="cl-bal"><span>Bonus</span><div class="cl-bar"><div class="up" style="width:${(b.buff / max) * 100}%"></div></div></div>
+      <div class="cl-bal"><span>Drawback</span><div class="cl-bar"><div class="down" style="width:${(b.nerf / max) * 100}%"></div></div></div></div>
+      <div class="cl-kit">Starts with: ${kit || '—'}</div>`;
+    return d;
+  }
+  showClassPicker() {
+    const P = this.G.profile.data;
+    const o = this.openOverlay();
+    this.overlayKind = 'classes';
+    const box = el('div', 'clspicker', o);
+    const top = el('div', 'cls-top', box);
+    el('h1', 'display', top, 'Choose your class');
+    const close = el('button', 'btn ghost', top, 'Close');
+    close.onclick = () => { this.click(); this.closeOverlay(); };
+    el('div', 'desc', box, 'Every bonus is paid for with a drawback of the same size — the bars always match. Survivor is perfectly even.');
+    const grid = el('div', 'clsgrid', box);
+    for (const c of CLASSES) {
+      const card = this.classCard(grid, c, (P.settings.classId || 'survivor') === c.id);
+      card.onclick = () => { this.click(); P.settings.classId = c.id; this.G.profile.save(); this.closeOverlay(); this.renderLobby(); };
+    }
+    o.onclick = (e) => { if (e.target === o) this.closeOverlay(); };
+  }
+  showGetShards() {
+    const W = this.G.wallet;
+    const m = el('div', 'modal', this.root);
+    const box = el('div', 'modal-box', m);
+    box.style.flexDirection = 'column';
+    el('h2', '', box, 'Get Shards');
+    el('div', 'desc', box, 'Buy a Shard pack on itch.io, then paste the purchase code you receive below. Shards are cosmetic only.');
+    const packs = el('div', 'packs', box);
+    for (const p of W.store || []) { const a = el('a', 'btn yellow', packs, `<span class="shard" style="width:16px;height:16px;vertical-align:-2px"></span> ${p.shards.toLocaleString()} · ${p.label}`); a.href = p.url; a.target = '_blank'; a.rel = 'noopener'; }
+    if (!(W.store || []).length) el('div', 'desc', packs, 'No packs are on sale right now.');
+    const row = el('div', 'redeem', box);
+    const inp = el('input', '', row); inp.placeholder = 'Purchase or gift code';
+    inp.onfocus = () => { this.G.input.textFocus = true; }; inp.onblur = () => { this.G.input.textFocus = false; };
+    const go = el('button', 'btn lime', row, 'Redeem');
+    const msg = el('div', 'desc', box);
+    go.onclick = async () => { go.disabled = true; const r = await W.redeem(inp.value); go.disabled = false; msg.innerHTML = r.ok ? `<span style="color:#9be070">+${r.added.toLocaleString()} Shards added!</span>` : `<span style="color:#ff8a7a">${r.error}</span>`; if (r.ok) { this.G.audio?.play('ui_buy', null, { bus: 'ui' }); this.renderLobby(); } };
+    const close = el('button', 'btn ghost', box, 'Close'); close.onclick = () => m.remove();
+    m.onclick = (e) => { if (e.target === m) m.remove(); };
   }
   showHelp() {
     const o = this.openOverlay();
@@ -139,7 +199,7 @@ export class UI {
       const cards = el('div', 'cards', sec);
       for (const item of list) this.card(cards, item, P);
     }
-    el('p', 'desc', wrap, 'Shards are earned by playing: extracting with valuables pays best. Every item is cosmetic only — no pay-to-win.').style.marginTop = '18px';
+    el('p', 'desc', wrap, this.G.wallet.online ? 'Shards are earned by playing (extracting with valuables pays best) or added with the + button. Every item is cosmetic only — no pay-to-win.' : 'Shards are earned by playing: extracting with valuables pays best. Every item is cosmetic only — no pay-to-win.').style.marginTop = '18px';
   }
   card(parent, item, P) {
     const owned = P.owns(item.id);
@@ -165,13 +225,15 @@ export class UI {
     const row = el('div', '', meta); row.style.display = 'flex'; row.style.gap = '8px'; row.style.flexWrap = 'wrap';
     if (owned) {
       const eq = el('button', 'btn lime', row, P.data.equipped[item.type] === item.id ? 'Equipped' : 'Equip');
-      eq.onclick = () => { P.equip(item.type, item.id); this.G.onCosmeticsChanged(); this.click(); m.remove(); this.renderLobby(); };
+      eq.onclick = () => { this.G.wallet.equip(item.type, item.id); this.G.onCosmeticsChanged(); this.click(); m.remove(); this.renderLobby(); };
     } else {
       const buy = el('button', 'btn yellow', row, `<span class="shard" style="width:18px;height:18px;vertical-align:-3px"></span> Purchase ${price.toLocaleString()}`);
       if (P.data.shards < price) { buy.disabled = true; buy.title = 'Not enough Shards'; el('div', 'desc', meta, `You need ${(price - P.data.shards).toLocaleString()} more Shards. Play matches and extract with valuables to earn more.`); }
-      buy.onclick = () => {
-        if (P.buy(item, price)) { this.G.audio?.play('ui_buy', null, { vol: 0.8, bus: 'ui' }); P.equip(item.type, item.id); this.G.onCosmeticsChanged(); m.remove(); this.renderLobby(); }
-        else this.G.audio?.play('ui_error', null, { bus: 'ui' });
+      buy.onclick = async () => {
+        buy.disabled = true;
+        const r = await this.G.wallet.buy(item);
+        if (r.ok) { this.G.audio?.play('ui_buy', null, { vol: 0.8, bus: 'ui' }); this.G.wallet.equip(item.type, item.id); this.G.onCosmeticsChanged(); m.remove(); this.renderLobby(); }
+        else { buy.disabled = false; this.G.audio?.play('ui_error', null, { bus: 'ui' }); el('div', 'desc', meta, `<span style="color:#ff8a7a">${r.error}</span>`); }
       };
     }
     const close = el('button', 'btn ghost', row, 'Close');
@@ -185,7 +247,7 @@ export class UI {
     this.lockerType = this.lockerType || 'outfit';
     const wrap = el('div', 'locker', page);
     const slots = el('div', 'locker-slots', wrap);
-    for (const t of ['outfit', 'backbling', 'pickaxe', 'glider', 'emote', 'wrap']) {
+    for (const t of ['outfit', 'backbling', 'pickaxe', 'paint', 'emote', 'wrap']) {
       const it = BY_ID[P.data.equipped[t]];
       const s = el('div', 'lslot' + (this.lockerType === t ? ' sel' : ''), slots);
       const img = el('img', '', s); img.src = thumbnail(it, P.data.equipped.outfit);
@@ -206,7 +268,7 @@ export class UI {
       d.onclick = () => {
         this.click();
         if (!owned) { this.tab = 'shop'; this.itemModal(it); return; }
-        P.equip(it.type, it.id); this.G.onCosmeticsChanged(); this.renderLobby();
+        this.G.wallet.equip(it.type, it.id); this.G.onCosmeticsChanged(); this.renderLobby();
         if (it.type === 'emote') this.G.lobby.playEmote(it.anim);
         if (it.type === 'pickaxe') this.G.lobby.showPickaxe(true);
         if (it.type === 'wrap') this.G.lobby.showWeapon(it.wrap);
@@ -297,6 +359,7 @@ export class UI {
     const b1 = el('button', 'btn yellow', box, 'Resume'); b1.onclick = () => { this.click(); this.G.paused = false; this.closeOverlay(); };
     const b2 = el('button', 'btn', box, 'Settings'); b2.onclick = () => { this.click(); this.overlay.innerHTML = ''; const page = el('div', 'page', this.overlay); page.style.cssText = 'position:fixed;inset:0'; this.renderSettings(page, true); this.addBack(page); };
     const b3 = el('button', 'btn', box, 'Controls'); b3.onclick = () => { this.click(); this.overlay.innerHTML = ''; const page = el('div', 'results', this.overlay); page.innerHTML = `<h1 class="display" style="margin:0 0 10px">Controls</h1><div class="keys" style="text-align:left">${this.keyList()}</div>`; const bk = el('button', 'btn yellow', page, 'Back'); bk.style.marginTop = '14px'; bk.onclick = () => { this.click(); this.openPause(); }; };
+    if (document.fullscreenEnabled) { const bf = el('button', 'btn', box, document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen'); bf.onclick = () => { this.click(); if (document.fullscreenElement) document.exitFullscreen(); else this.G.goFullscreen(); this.openPause(); }; }
     const b4 = el('button', 'btn red', box, 'Leave match'); b4.onclick = () => { this.click(); if (confirm('Leave this match? You will not earn extraction rewards.')) { this.G.paused = false; this.closeOverlay(); this.G.match.finish('eliminated'); } };
   }
   togglePause() { if (this.overlayKind === 'pause') { this.G.paused = false; this.closeOverlay(); } else if (!this.overlay) this.openPause(); else { this.closeOverlay(); } }
@@ -352,6 +415,7 @@ export class UI {
       det.innerHTML = `<h3 style="color:${def.type === 'weapon' ? RARITY_HEX[s.r] : '#fff'}">${def.type === 'weapon' ? RARITY[s.r] + ' ' : ''}${def.name}</h3><div class="desc">${this.describe(def, s)}</div>`;
       const btns = el('div', 'btns', det);
       if (def.type === 'heal' || def.type === 'food') { const u = el('button', 'btn lime', btns, 'Use'); u.onclick = () => { this.click(); p.useItem({ list: this.invSel.list, i: this.invSel.i, slot: s }); this.closeOverlay(); }; }
+      if (def.type === 'tool') { const u = el('button', 'btn lime', btns, 'Use on vehicle'); u.onclick = () => { this.click(); this.closeOverlay(); this.G.rides.useItemOn(p, { list: this.invSel.list, i: this.invSel.i, slot: s }); }; }
       const d = el('button', 'btn red', btns, 'Drop');
       d.onclick = () => { this.click(); G.inter.dropItem({ ...s }, p.pos.x, p.pos.y + 0.5, p.pos.z); this.invSel.list[this.invSel.i] = null; this.invSel = null; p.refreshModel(); this.renderInventory(); };
       el('div', 'desc', det, '<small>Tip: click another slot to move/swap.</small>');
@@ -401,6 +465,8 @@ export class UI {
     if (def.cooks) parts.push(`cook at a campfire → ${ITEMS[def.cooks].name}`);
     if (def.type === 'valuable') parts.push(`Worth ${def.value} Shards if you extract with it`);
     if (def.type === 'throw') parts.push(def.lure ? 'Rings loudly for 26s — lures the dead' : def.fireRadius ? 'Sets an area on fire' : `Explodes for ${def.dmg} damage`);
+    if (s.id === 'gascan') parts.push('Refuels a dirt bike by 60% or a truck by 30%. Siphon more from abandoned cars.');
+    if (s.id === 'repairkit') parts.push('Repairs a vehicle by 45%. Mechanics repair twice as much.');
     if (def.type === 'deploy') parts.push('Place it, then cook food and boil water. Its light draws the dead at night.');
     if (def.type === 'craft') parts.push('Crafting material');
     if (def.time) parts.push(`${def.time}s to use`);

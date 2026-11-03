@@ -115,6 +115,17 @@ export const LAKE = { x: 2080, z: 1480, rx: 220, rz: 150 };
 export const LOOKOUT_HILL = { x: 1500, z: 2150, h: 42, sigma: 230 };
 export const QUARRY = { x: 2470, z: 2620, rx: 95, rz: 70, depth: 16 };
 
+// Where survivors wake up. Mostly farms, Millbrook and the open country; never the
+// harbor or Bellerose (those are dangerous places you travel to).
+export const SPAWN_ZONES = [
+  { name: 'Hollow Creek Farms', x0: 260, z0: 1150, x1: 1220, z1: 2740, w: 4 },
+  { name: 'Millbrook', x0: 260, z0: 230, x1: 1150, z1: 1010, w: 2.6 },
+  { name: 'Cedar Ridge', x0: 1300, z0: 1000, x1: 2500, z1: 2720, w: 2.4 },
+  { name: 'Route 9 Plaza', x0: 1200, z0: 260, x1: 1700, z1: 1000, w: 0.6 },
+  { name: 'Redbarn Farm', x0: 1750, z0: 950, x1: 2600, z1: 1350, w: 0.8 },
+];
+export const NO_SPAWN = [{ x0: 2500, z0: 0, x1: 4800, z1: 1150 }, { x0: 2700, z0: 1100, x1: 4800, z1: 3000 }];
+
 // Mid-match riverboat evac docks (the boat steams in from the ocean / bay).
 export const DOCKS = [
   { id: 'wharf', name: 'Bellerose Wharf', x: 3815, z: 1880, boatX: 3860, boatZ: 1880, rot: 0 },

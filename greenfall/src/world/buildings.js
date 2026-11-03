@@ -865,7 +865,7 @@ export function generateBuilding(b, gb, signs, detail = 0) {
     case 'gas':
     case 'diner': {
       const isDiner = b.kind === 'diner';
-      b.shopCat = { 'GROCERY': 'food', 'PHARMACY': 'meds', 'HARDWARE': 'tools', 'ARMY SURPLUS': 'guns', 'FEED & SEED': 'farm', 'SHERIFF': 'guns', 'GUNS': 'guns', 'PAWN': 'guns' }[b.sign] || (b.kind === 'gas' ? 'food' : null);
+      b.shopCat = { 'GROCERY': 'food', 'PHARMACY': 'meds', 'HARDWARE': 'tools', 'ARMY SURPLUS': 'guns', 'FEED & SEED': 'farm', 'SHERIFF': 'guns', 'GUNS': 'guns', 'PAWN': 'guns' }[b.sign] || (b.kind === 'gas' ? 'auto' : null);
       const sw = b.w * 0.55;
       genericBuilding(ctx, {
         floors: 1, H: 3.6, wall: st.wall ?? (isDiner ? 0xd8dde2 : r.pick([0xd8cfb8, 0xc9b79a, 0xb8c0c8, 0xe0d8c8])), wallLayer: st.wallTex ? TEXL(st.wallTex) : isDiner ? TEX.RIBBED : TEX.CONCRETE,

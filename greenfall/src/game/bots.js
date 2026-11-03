@@ -8,6 +8,7 @@ import { POIS } from '../world/layout.js';
 import { RNG } from '../core/rng.js';
 import { clamp, wrapAngle, dampAngle } from '../core/math.js';
 import { randomOutfit } from '../data/cosmetics.js';
+import { CLASSES } from '../data/classes.js';
 
 const PHYS_IN = 250, PHYS_OUT = 330;
 const NAME_A = ['Corn', 'Bayou', 'Rusty', 'Dusty', 'Hollow', 'Gravel', 'Possum', 'Moon', 'Cedar', 'Prairie', 'Barn', 'Okra', 'Biscuit', 'Tumble', 'Copper', 'Ghost', 'Swamp', 'Hay', 'Thunder', 'Muddy', 'Pecan', 'Catfish', 'Lantern', 'Whiskey', 'Gator', 'Rattler'];
@@ -210,6 +211,7 @@ export class Bot extends Survivor {
     }
     if (this.action) speed = Math.min(speed, 2);
     if (this.legsHurt) speed *= 0.62;
+    speed *= this.mods.get('moveSpeed');
     const sp = this.move(dt, wish ? wish.x : 0, wish ? wish.z : 0, wish ? speed : 0, jump);
     // stuck → hop / detour
     if (wish && sp < 0.6) {
@@ -258,9 +260,9 @@ export class Bot extends Survivor {
     }
     const hasGun = this.inv.slots.some((s) => s && WEAPONS[s.id] && !WEAPONS[s.id].melee && (s.mag > 0 || this.inv.ammo[WEAPONS[s.id].ammo] > 0));
     // healing
-    if (!this.action && this.health < 55 && (!enemy || G.time - this.lastHitT > 3)) {
+    if (!this.action && this.hpFrac < 0.55 && (!enemy || G.time - this.lastHitT > 3)) {
       const ref = this.findItem((s) => s.id === 'medkit' || s.id === 'bandage');
-      if (ref && this.health < (ITEMS[ref.slot.id].healCap || 100)) { this.useItem(ref); return; }
+      if (ref && this.health < this.healCapOf(ITEMS[ref.slot.id])) { this.useItem(ref); return; }
     }
     if (this.bleed && !this.action) { const ref = this.findItem((s) => s.id === 'bandage' || s.id === 'medkit'); if (ref) { this.useItem(ref); return; } }
     if (enemy && hasGun && (this.aggression > 0.35 || enemy === this.target || ed < 30)) {
@@ -376,13 +378,22 @@ export class BotManager {
   create(n) {
     for (let i = 0; i < n; i++) {
       const outfit = randomOutfit(this.rng);
-      const b = new Bot(this.G, { name: botName(this.rng), outfit: outfit.outfit, cosmetics: outfit.cosmetics, seed: this.rng.int(1, 1e9) });
+      const b = new Bot(this.G, { name: botName(this.rng), outfit: outfit.outfit, cosmetics: outfit.cosmetics, seed: this.rng.int(1, 1e9), classId: this.rng.pick(CLASSES).id });
       b.team = 1000 + i;
       this.bots.push(b);
       this.G.survivors.push(b);
     }
   }
-  // decide jump points & destinations along the plane path
+  // place bots on the ground at their spawn points
+  placeAt(spots) {
+    this.bots.forEach((b, i) => {
+      const sp = spots[i];
+      b.pos.set(sp.x, this.G.world.heightAt(sp.x, sp.z), sp.z);
+      b.yaw = sp.yaw;
+      b.jumped = true; b.landed = true; b.state = 'loot'; b.stateT = 0; b.goal = null;
+      b.giveKit();
+    });
+  }
   planDrop(plane) {
     for (const b of this.bots) {
       b.jumpAt = this.rng.range(0.08, 0.92);

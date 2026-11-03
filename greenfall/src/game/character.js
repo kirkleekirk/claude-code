@@ -418,6 +418,7 @@ export class Character {
     if (a.state === 'skydive') return this.poseSkydive(t);
     if (a.state === 'glide') return this.poseGlide(t);
     if (a.state === 'vault') return this.poseVault(a.vaultT || 0);
+    if (a.state === 'ride') return this.poseRide(t);
     if (a.emote && !moving) { a.emoteT += dt; return this.poseEmote(a.emote, a.emoteT); }
     if (moving) a.emote = null;
     // legs
@@ -515,6 +516,16 @@ export class Character {
     P.shL.rotation.z = 2.8; P.shR.rotation.z = -2.8; P.elL.rotation.z = 0.3; P.elR.rotation.z = -0.3;
     P.hipL.rotation.x = 0.15 + Math.sin(t * 2) * 0.1; P.hipR.rotation.x = -0.1 - Math.sin(t * 2) * 0.1;
     P.knL.rotation.x = 0.3; P.knR.rotation.x = 0.4;
+  }
+  poseRide(t) {
+    const P = this.parts;
+    P.hips.position.y = 0.95;
+    P.spine.rotation.x = 0.42;
+    P.hipL.rotation.x = -1.05; P.hipR.rotation.x = -1.05; P.hipL.rotation.z = 0.18; P.hipR.rotation.z = -0.18;
+    P.knL.rotation.x = 1.55; P.knR.rotation.x = 1.55;
+    P.shL.rotation.x = -1.15; P.shR.rotation.x = -1.15; P.shL.rotation.z = -0.25; P.shR.rotation.z = 0.25;
+    P.elL.rotation.x = -0.45; P.elR.rotation.x = -0.45;
+    P.head.rotation.x = -0.25 + Math.sin(t * 9) * 0.01;
   }
   poseVault(k) {
     const P = this.parts;

@@ -52,6 +52,8 @@ export const ITEMS = {
   dirtywater: { type: 'food', name: 'Dirty Water', stack: 6, time: 1.6, water: 30, sick: 0.5, cooks: 'water', icon: '💧', color: '#8a9a5a', value: 0 },
   soda: { type: 'food', name: 'Soda Pop', stack: 6, time: 1.4, water: 22, food: 4, stamina: 30, icon: '▯', color: '#e05050', value: 2 },
   energy: { type: 'food', name: 'Energy Drink', stack: 4, time: 1.4, water: 18, stamina: 90, icon: '⚡', color: '#7aff5a', value: 4 },
+  gascan: { type: 'tool', name: 'Gas Can', stack: 2, icon: '⛽', color: '#e0503a', value: 8 },
+  repairkit: { type: 'tool', name: 'Repair Kit', stack: 2, icon: '🔧', color: '#b8c0c8', value: 12 },
   cloth: { type: 'craft', name: 'Cloth Scraps', stack: 20, icon: '≋', color: '#d8d0c0', value: 1 },
   campfire: { type: 'deploy', name: 'Campfire Kit', stack: 3, icon: '🔥', color: '#f08030', value: 6 },
   watch: { type: 'valuable', name: 'Gold Pocket Watch', stack: 1, icon: '◷', color: '#f0c040', value: 220 },
@@ -80,19 +82,21 @@ export const LOOT = {
   food: W([['beans', 22], ['chips', 18], ['water', 24], ['soda', 12], ['energy', 5], ['apple', 8], ['dirtywater', 6], ['rawchicken', 3], ['corn', 2]]),
   throw: W([['grenade', 35], ['molotov', 30], ['noisemaker', 35]]),
   craft: W([['cloth', 70], ['campfire', 30]]),
+  auto: W([['gascan', 60], ['repairkit', 40]]),
   valuable: W([['cash', 35], ['locket', 20], ['watch', 15], ['coin', 15], ['records', 12], ['idol', 3]]),
 };
 export const CAT_WEIGHTS = {
-  default: [['weapon', 24], ['ammo', 24], ['heal', 15], ['food', 20], ['throw', 6], ['craft', 7], ['valuable', 4]],
+  default: [['weapon', 24], ['ammo', 24], ['heal', 15], ['food', 20], ['throw', 6], ['craft', 7], ['valuable', 4], ['auto', 4]],
+  auto: [['auto', 55], ['food', 25], ['craft', 10], ['ammo', 10]],
   food: [['food', 70], ['ammo', 10], ['heal', 8], ['craft', 6], ['weapon', 6]],
   meds: [['heal', 70], ['food', 15], ['craft', 15]],
   guns: [['weapon', 50], ['ammo', 40], ['throw', 10]],
-  tools: [['craft', 35], ['throw', 25], ['heal', 15], ['weapon', 15], ['ammo', 10]],
-  farm: [['food', 35], ['ammo', 20], ['weapon', 20], ['craft', 20], ['throw', 5]],
+  tools: [['craft', 30], ['auto', 20], ['throw', 20], ['heal', 15], ['weapon', 10], ['ammo', 10]],
+  farm: [['food', 32], ['ammo', 18], ['weapon', 18], ['craft', 16], ['auto', 12], ['throw', 4]],
 };
 export const CONTAINER_LOOT = {
   fridge: [['food', 100]], cabinet: [['food', 45], ['heal', 20], ['ammo', 25], ['valuable', 10]], dresser: [['craft', 35], ['valuable', 25], ['ammo', 25], ['weapon', 15]],
-  medcab: [['heal', 100]], toolbox: [['craft', 40], ['throw', 30], ['heal', 15], ['ammo', 15]], shelf: [['food', 30], ['heal', 20], ['ammo', 25], ['craft', 15], ['throw', 10]],
+  medcab: [['heal', 100]], toolbox: [['auto', 40], ['craft', 30], ['throw', 15], ['heal', 8], ['ammo', 7]], shelf: [['food', 30], ['heal', 20], ['ammo', 22], ['craft', 13], ['throw', 8], ['auto', 7]],
   register: [['valuable', 85], ['ammo', 15]], crate: [['ammo', 40], ['weapon', 35], ['heal', 15], ['throw', 10]],
 };
 export const RARITY_WEIGHTS = {

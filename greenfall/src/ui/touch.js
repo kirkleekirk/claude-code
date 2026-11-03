@@ -38,8 +38,10 @@ export class TouchControls {
       ['HEAL', 'heal', 26, 206, 'small'], ['EAT', 'eat', 186, 236, 'small'],
       ['BAG', 'inventory', 128, 8, 'top'], ['MAP', 'map', 184, 8, 'top'], ['LIGHT', 'flashlight', 240, 8, 'top'], ['❚❚', 'pause', 296, 8, 'top'],
     ];
+    this.btns = {};
     for (const [label, action, rx, by, kind, toggle] of B) {
       const b = el('div', 'tbtn' + (kind ? ' ' + kind : ''), this.root, label);
+      this.btns[action] = { el: b, label };
       b.style.right = rx + 'px';
       if (kind === 'top') b.style.top = by + 'px'; else b.style.bottom = by + 'px';
       let on = false;
@@ -52,6 +54,14 @@ export class TouchControls {
       const up = (e) => { if (!toggle) { V.buttons[action] = false; b.classList.remove('on'); } e.preventDefault(); };
       b.addEventListener('touchend', up); b.addEventListener('touchcancel', up);
     }
+  }
+  setMode(m) {
+    if (this.mode === m) return;
+    this.mode = m;
+    const drive = m === 'drive';
+    const L = { jump: drive ? 'BRAKE' : 'JUMP', interact: drive ? 'EXIT' : 'USE', heal: drive ? 'HORN' : 'HEAL' };
+    for (const [k, t] of Object.entries(L)) if (this.btns[k]) this.btns[k].el.textContent = t;
+    for (const k of ['fire', 'aim', 'crouch', 'reload', 'build', 'wheel', 'eat']) if (this.btns[k]) this.btns[k].el.style.display = drive ? 'none' : '';
   }
   show(v) { this.root.classList.toggle('hidden', !v); document.body.classList.toggle('touchmode', !!v); }
 }
