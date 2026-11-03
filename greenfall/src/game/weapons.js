@@ -1,7 +1,8 @@
 // Firing, melee/harvesting, projectiles (bolts, sniper rounds, grenades, molotovs,
 // alarm clocks), fire areas and explosions. Every shot makes noise the dead can hear.
 import * as THREE from 'three';
-import { WEAPONS, THROWABLES, ITEMS } from '../data/items.js';
+import { WEAPONS, THROWABLES, ITEMS, AMMO } from '../data/items.js';
+import { gunStats } from '../data/gunmods.js';
 import { COL } from '../world/buildings.js';
 import { TREE_INFO } from '../world/vegetation.js';
 import { clamp } from '../core/math.js';
@@ -57,25 +58,25 @@ export class Weapons {
     return hit;
   }
 
-  // trace one bullet; returns end point
-  traceBullet(shooter, def, rarity, ox, oy, oz, dx, dy, dz, range, dmgMul = 1) {
+  // trace one bullet; returns end point. `st` = gunStats() of the gun that fired it.
+  traceBullet(shooter, st, ox, oy, oz, dx, dy, dz, range, dmgMul = 1) {
     const G = this.G;
     const wh = G.physics.raycast(ox, oy, oz, dx, dy, dz, range);
     const maxT = wh ? wh.t : range;
     const eh = this.rayEntities(ox, oy, oz, dx, dy, dz, maxT, shooter);
-    const base = (def.dmg[rarity] || def.dmg[def.dmg.length - 1]) * (shooter.mods ? shooter.mods.get('gunDamage') : 1);
+    const base = st.dmg * (shooter.mods ? shooter.mods.get('gunDamage') : 1);
     if (eh) {
       const dist = eh.t;
       let dmg = base * dmgMul;
-      if (def.pellets) dmg *= clamp(1.25 - dist / 18, 0.25, 1);
-      else if (def.range < 120) dmg *= clamp(1.15 - dist / (def.range * 1.6), 0.55, 1);
+      if (st.pellets) dmg *= clamp(1.25 - dist / (st.range * 0.45), 0.25, 1);
+      else if (st.falloff) dmg *= clamp(1.15 - dist / (st.range * 1.6), 0.55, 1);
       const head = eh.part === 'head';
-      if (head) dmg *= def.head;
+      if (head) dmg *= st.head;
       dmg = Math.round(dmg);
       const px = ox + dx * eh.t, py = oy + dy * eh.t, pz = oz + dz * eh.t;
       if (eh.survivor) {
         const hadArmor = eh.survivor.armor > 0;
-        const dealt = eh.survivor.takeDamage(dmg, shooter, { type: 'bullet', head, weapon: def.name });
+        const dealt = eh.survivor.takeDamage(dmg, shooter, { type: 'bullet', head, weapon: st.name });
         shooter.stats.damage += dealt;
         G.fx.impact(px, py, pz, -dx, -dy, -dz, hadArmor ? 'armor' : 'blood');
         if (shooter.isPlayer) G.hud.hit(px, py, pz, dmg, head, hadArmor);
@@ -93,7 +94,7 @@ export class Weapons {
       return [px, py, pz];
     }
     if (wh) {
-      this.hitCollider(wh, shooter, base * dmgMul * (def.pellets ? 1 : 1), dx, dz);
+      this.hitCollider(wh, shooter, base * dmgMul, dx, dz);
       return [wh.x, wh.y, wh.z];
     }
     return [ox + dx * range, oy + dy * range, oz + dz * range];
@@ -126,9 +127,10 @@ export class Weapons {
     const def = WEAPONS[slot.id];
     if (!def || s.ws.cd > 0 || s.ws.reload > 0) return false;
     if (def.melee) return this.melee(s, def, slot.r, aimPoint);
+    const st = gunStats(slot);
     if (slot.mag <= 0) { this.startReload(s); if (s.isPlayer) G.audio?.play('dryfire', null, { vol: 0.5 }); return false; }
     slot.mag--;
-    s.ws.cd = 1 / def.rate;
+    s.ws.cd = 1 / (st.rate * (opts.ads ? 1 : st.hipRate)); // revolvers fan faster from the hip
     s.ws.lastShot = G.time;
     // muzzle origin
     const muzzle = this.muzzlePos(s);
@@ -136,33 +138,33 @@ export class Weapons {
     const L = Math.hypot(dx, dy, dz) || 1;
     dx /= L; dy /= L; dz /= L;
     const moving = Math.hypot(s.vel.x, s.vel.z) > 1;
-    let spread = (opts.ads ? def.adsSpread : def.spread) + s.ws.bloom;
+    let spread = (opts.ads ? st.adsSpread : st.spread) + s.ws.bloom;
     if (moving) spread *= 1.5;
     if (!s.onGround) spread *= 2;
     if (s.crouch) spread *= 0.72;
     if (opts.spreadMul) spread *= opts.spreadMul;
     if (s.mods) spread /= s.mods.get('accuracy');
-    const pellets = def.pellets || 1;
+    const pellets = st.pellets || 1;
     let endPts = [];
     for (let p = 0; p < pellets; p++) {
       const [ex, ey, ez] = this.spreadDir(dx, dy, dz, spread);
-      if (def.projectile || def.drop) {
-        this.spawnBullet(s, def, slot.r, muzzle, ex, ey, ez);
+      if (st.projectile || st.drop) {
+        this.spawnBullet(s, st, muzzle, ex, ey, ez);
       } else {
-        const end = this.traceBullet(s, def, slot.r, muzzle.x, muzzle.y, muzzle.z, ex, ey, ez, def.range * 1.4);
+        const end = this.traceBullet(s, st, muzzle.x, muzzle.y, muzzle.z, ex, ey, ez, st.range * 1.4);
         endPts.push(end);
       }
     }
-    s.ws.bloom = Math.min(def.spread * 2.2, s.ws.bloom + def.bloom);
+    s.ws.bloom = Math.min(st.spread * 2.2, s.ws.bloom + st.bloom);
     // fx
-    G.fx.muzzle(muzzle.x, muzzle.y, muzzle.z, dx, dy, dz, def.suppressed);
-    for (const e of endPts.slice(0, 4)) if (!def.suppressed || Math.random() < 0.3) G.fx.tracer(muzzle.x, muzzle.y, muzzle.z, e[0], e[1], e[2], s.isPlayer ? 0xfff2a0 : 0xffc070);
-    G.audio?.play(def.suppressed ? 'shot_suppressed' : 'shot_' + def.model, s.isPlayer ? null : s.pos, { vol: s.isPlayer ? 0.75 : 1 });
-    G.emitNoise(s.pos.x, s.pos.z, def.noise, s, 'gunshot');
+    G.fx.muzzle(muzzle.x, muzzle.y, muzzle.z, dx, dy, dz, st.suppressed);
+    for (const e of endPts.slice(0, 4)) if (!st.suppressed || Math.random() < 0.3) G.fx.tracer(muzzle.x, muzzle.y, muzzle.z, e[0], e[1], e[2], s.isPlayer ? 0xfff2a0 : 0xffc070);
+    G.audio?.play('shot_' + st.sound, s.isPlayer ? null : s.pos, { vol: s.isPlayer ? 0.75 : 1 });
+    G.emitNoise(s.pos.x, s.pos.z, st.noise, s, 'gunshot');
     s.character?.playAction('recoil', 0.18);
-    if (s.isPlayer) G.player.addRecoil(def.recoil * (opts.ads ? 0.6 : 1));
-    if (slot.mag <= 0 && (s.inv.ammo[def.ammo] || 0) > 0 && def.mag > 1) this.startReload(s);
-    else if (def.mag === 1 && (s.inv.ammo[def.ammo] || 0) > 0) this.startReload(s);
+    if (s.isPlayer) G.player.addRecoil(st.recoil * (opts.ads ? 0.6 : 1));
+    if (slot.mag <= 0 && (s.inv.ammo[st.ammo] || 0) > 0 && st.mag > 1) this.startReload(s);
+    else if (st.mag === 1 && (s.inv.ammo[st.ammo] || 0) > 0) this.startReload(s);
     return true;
   }
   spreadDir(dx, dy, dz, spread) {
@@ -189,9 +191,11 @@ export class Weapons {
     const slot = s.activeSlot();
     if (!slot) return false;
     const def = WEAPONS[slot.id];
-    if (!def || def.melee || s.ws.reload > 0 || slot.mag >= def.mag) return false;
-    if ((s.inv.ammo[def.ammo] || 0) <= 0) { if (s.isPlayer) this.G.hud.toast(true, `No ${def.ammo} ammo`); return false; }
-    const t = (def.reload[slot.r] ?? def.reload[0]) / (s.mods ? s.mods.get('reloadSpeed') : 1);
+    if (!def || def.melee) return false;
+    const st = gunStats(slot);
+    if (s.ws.reload > 0 || slot.mag >= st.mag) return false;
+    if ((s.inv.ammo[st.ammo] || 0) <= 0) { if (s.isPlayer) this.G.hud.toast(true, `No ${AMMO[st.ammo].name}`); return false; }
+    const t = st.reload / (s.mods ? s.mods.get('reloadSpeed') : 1);
     s.ws.reload = t;
     s.ws.reloadTotal = s.ws.reload;
     s.character?.playAction('reload', s.ws.reload);
@@ -209,15 +213,16 @@ export class Weapons {
         const slot = s.activeSlot();
         const def = slot && WEAPONS[slot.id];
         if (def && !def.melee) {
-          if (def.perShell) {
-            if (s.inv.ammo[def.ammo] > 0 && slot.mag < def.mag) {
-              slot.mag++; s.inv.ammo[def.ammo]--;
-              if (slot.mag < def.mag && s.inv.ammo[def.ammo] > 0) { ws.reload = (def.reload[slot.r] ?? def.reload[0]) / (s.mods ? s.mods.get('reloadSpeed') : 1); }
+          const st = gunStats(slot);
+          if (st.perShell) {
+            if (s.inv.ammo[st.ammo] > 0 && slot.mag < st.mag) {
+              slot.mag++; s.inv.ammo[st.ammo]--;
+              if (slot.mag < st.mag && s.inv.ammo[st.ammo] > 0) { ws.reload = st.reload / (s.mods ? s.mods.get('reloadSpeed') : 1); }
             }
           } else {
-            const need = def.mag - slot.mag;
-            const take = Math.min(need, s.inv.ammo[def.ammo]);
-            slot.mag += take; s.inv.ammo[def.ammo] -= take;
+            const need = st.mag - slot.mag;
+            const take = Math.min(need, s.inv.ammo[st.ammo]);
+            slot.mag += take; s.inv.ammo[st.ammo] -= take;
           }
         }
       }
@@ -301,11 +306,11 @@ export class Weapons {
   }
 
   // ----- projectiles -----
-  spawnBullet(s, def, rarity, from, dx, dy, dz) {
-    const mesh = new THREE.Mesh(Weapons.boltGeo || (Weapons.boltGeo = new THREE.BoxGeometry(0.04, 0.04, def.projectile ? 0.7 : 1.4)), Weapons.boltMat || (Weapons.boltMat = new THREE.MeshBasicMaterial({ color: 0xfff0b0 })));
+  spawnBullet(s, st, from, dx, dy, dz) {
+    const mesh = new THREE.Mesh(Weapons.boltGeo || (Weapons.boltGeo = new THREE.BoxGeometry(0.04, 0.04, st.projectile ? 0.7 : 1.4)), Weapons.boltMat || (Weapons.boltMat = new THREE.MeshBasicMaterial({ color: 0xfff0b0 })));
     mesh.position.copy(from);
     this.projGroup.add(mesh);
-    this.projectiles.push({ kind: 'bullet', def, rarity, owner: s, pos: from.clone(), vel: new THREE.Vector3(dx, dy, dz).multiplyScalar(def.speed), life: 4, mesh, gravity: def.drop });
+    this.projectiles.push({ kind: 'bullet', def: st, owner: s, pos: from.clone(), vel: new THREE.Vector3(dx, dy, dz).multiplyScalar(st.speed), life: 4, mesh, gravity: st.drop });
   }
   throwItem(s, id, aimPoint) {
     const G = this.G;
@@ -343,7 +348,7 @@ export class Weapons {
           const maxT = wh ? wh.t : L;
           const eh = this.rayEntities(ox, oy, oz, dx, dy, dz, maxT, p.owner);
           if (eh || wh) {
-            this.traceBullet(p.owner, p.def, p.rarity, ox, oy, oz, dx, dy, dz, L + 0.01);
+            this.traceBullet(p.owner, p.def, ox, oy, oz, dx, dy, dz, L + 0.01);
             if (p.def.projectile && wh && !eh) G.fx.stuckBolt?.(wh.x, wh.y, wh.z, dx, dy, dz);
             done = true;
           }

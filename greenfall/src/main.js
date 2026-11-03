@@ -101,8 +101,8 @@ class Game {
     try { await document.fonts.load('40px "Lilita One"'); } catch (e) { /* ignore */ }
     this.world = new WorldData(WORLD_SEED);
     const gen = this.world;
-    const steps = ['computeCoast', 'computeBaseHeight', 'buildRoads', 'carveLakeAndQuarry', 'flattenTowns', 'applyRoads', 'placeContent', 'flattenPads', 'classifySurface', 'placeTrees', 'placeRoadside'];
-    const labels = ['Charting the coastline', 'Raising the hills', 'Laying Route 9', 'Filling Lake Wren', 'Grading town lots', 'Paving the roads', 'Raising farms, towns & Bellerose', 'Pouring foundations', 'Painting the land', 'Planting forests & orchards', 'Stringing power lines'];
+    const steps = ['computeCoast', 'computeBaseHeight', 'buildRoads', 'carveLakeAndQuarry', 'flattenTowns', 'applyRoads', 'placeContent', 'flattenPads', 'placeBenches', 'classifySurface', 'placeTrees', 'placeRoadside'];
+    const labels = ['Charting the coastline', 'Raising the hills', 'Laying Route 9', 'Filling Lake Wren', 'Grading town lots', 'Paving the roads', 'Raising farms, towns & Bellerose', 'Pouring foundations', 'Setting up workbenches', 'Painting the land', 'Planting forests & orchards', 'Stringing power lines'];
     for (let i = 0; i < steps.length; i++) { await step(0.05 + (i / steps.length) * 0.45, labels[i] + '...'); gen[steps[i]](); }
     await step(0.52, 'Shaping terrain...');
     this.terrainMat = makeTerrainMaterial({ lambert: this.gfx.q.lambert });
@@ -371,6 +371,7 @@ class Game {
     this.builds.update(dt);
     this.animals.update(dt);
     this.rides.update(dt);
+    if (this.ui.overlayKind === 'bench' && (!this.player.alive || this.player.mode !== 'ground')) this.ui.closeOverlay();
     this.match.update(dt);
     // keep the camera's surroundings streamed in
     const focus = [P.pos];

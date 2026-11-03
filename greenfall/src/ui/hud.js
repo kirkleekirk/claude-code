@@ -334,6 +334,12 @@ export class HUD {
       c.beginPath(); c.arc(x, y, h.r * scale, 0, Math.PI * 2); c.fill(); c.stroke();
     }
     this.drawMarkers(c, toS, 1);
+    // workbenches in view
+    for (const b of this.benches()) {
+      if (Math.abs(b.x - P.pos.x) > range * 0.6 || Math.abs(b.z - P.pos.z) > range * 0.6) continue;
+      const [bx, by] = toS(b.x, b.z);
+      this.drawBench(c, bx, by, 1);
+    }
     // nearby vehicles
     if (G.rides) for (const v of G.rides.list) {
       if (v.driver || v.wrecked) continue;
@@ -347,6 +353,16 @@ export class HUD {
     c.fillStyle = '#ffd23f'; c.strokeStyle = '#000'; c.lineWidth = 1.5;
     c.beginPath(); c.moveTo(0, 9); c.lineTo(6, -6); c.lineTo(0, -3); c.lineTo(-6, -6); c.closePath(); c.fill(); c.stroke();
     c.restore();
+  }
+  benches() { return this._benches || (this._benches = this.G.world.buildings.filter((b) => b.bench)); }
+  // small orange wrench badge
+  drawBench(c, x, y, k) {
+    const r = 6 * k;
+    c.fillStyle = '#1c1d20'; c.strokeStyle = '#f0a020'; c.lineWidth = 1.6 * k;
+    c.beginPath(); c.rect(x - r, y - r, r * 2, r * 2); c.fill(); c.stroke();
+    c.strokeStyle = '#ffd38a'; c.lineWidth = 1.8 * k;
+    c.beginPath(); c.moveTo(x - r * 0.55, y + r * 0.55); c.lineTo(x + r * 0.2, y - r * 0.2); c.stroke();
+    c.beginPath(); c.arc(x + r * 0.32, y - r * 0.32, r * 0.32, 0, Math.PI * 2); c.stroke();
   }
   drawMarkers(c, toS, sz) {
     const G = this.G, M = G.match;

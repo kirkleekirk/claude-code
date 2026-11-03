@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { Survivor, MOVE, HOTBAR } from './survivor.js';
 import { ITEMS, WEAPONS, THROWABLES, AMMO } from '../data/items.js';
 import { PIECES } from './building.js';
+import { gunStats } from '../data/gunmods.js';
 import { clamp, lerp, dampAngle, wrapAngle } from '../core/math.js';
 import { COL } from '../world/buildings.js';
 
@@ -46,7 +47,7 @@ export class Player extends Survivor {
     // look
     if (this.mode !== 'dead' || true) {
       const { dx, dy } = I.lookDelta();
-      const sensMul = this.ads ? (this.scoped ? 0.32 : 0.65) : 1;
+      const sensMul = this.ads ? (this.scoped ? (this.gunSt?.zoom ?? 16) / 50 : 0.65) : 1;
       this.camYaw -= dx * sensMul;
       this.camPitch = clamp(this.camPitch - dy * sensMul, -1.35, 1.25);
     }
@@ -188,7 +189,9 @@ export class Player extends Survivor {
     this.crouch = I.down('crouch') && !this.swimming;
     const def = this.activeDef();
     this.ads = I.aim && !this.buildMode && !!def && def.type === 'weapon' && !def.melee && this.ws.reload <= 0 && !this.action;
-    this.scoped = this.ads && def?.scope;
+    const wslot = this.activeWeapon();
+    this.gunSt = wslot && !def.melee ? gunStats(wslot) : null;
+    this.scoped = this.ads && !!this.gunSt?.scope;
     const wantSprint = I.down('sprint') && moving && ax.y > 0.1 && !this.ads && !this.crouch && this.stamina > 1 && !this.legsHurt && !this.action;
     this.sprinting = wantSprint && this.onGround;
     let speed = this.swimming ? MOVE.swim : this.crouch ? MOVE.crouch : this.sprinting ? MOVE.sprint : this.ads ? MOVE.walk : MOVE.run;
@@ -196,6 +199,7 @@ export class Player extends Survivor {
     if (this.legsHurt) speed *= 0.62;
     if (this.thirst <= 0 || this.hunger <= 0) speed *= 0.85;
     speed *= this.mods.get('moveSpeed');
+    if (this.gunSt && !this.buildMode) speed *= this.gunSt.move; // heavy barrels, drums and scopes slow you down
     let jump = I.pressed('jump');
     if (jump && this.onGround && this.tryVault()) return;
     if (jump && this.action) jump = false;
@@ -322,6 +326,7 @@ export class Player extends Survivor {
     if (it.kind === 'item') return this.pickup(it.obj);
     if (it.kind === 'vehicle') { if (G.rides.enter(this, it.obj)) { this.mode = 'drive'; this.buildMode = false; G.builds.showGhost(null); this.interaction = null; } return; }
     if (it.kind === 'door') { G.inter.toggleDoor(it.obj, this); return; }
+    if (it.kind === 'bench') { G.ui.openWorkbench(it.obj); return; }
     const done = () => {
       switch (it.kind) {
         case 'board': case 'boarddoor': G.inter.board(it.obj, this); break;
@@ -351,12 +356,22 @@ export class Player extends Survivor {
   pickup(rec) {
     const G = this.G;
     const def = ITEMS[rec.id];
-    let left = this.addItem(rec.id, rec.n, rec.r, rec.mag);
+    if (def?.type === 'blueprint') {
+      if (this.mods.has('blueprints')) { G.hud.toast(true, 'Engineers already know every blueprint'); return; }
+      if (this.blueprints.has(def.mod)) { G.hud.toast(true, `You already know the ${def.name}`); return; }
+      this.addItem(rec.id, 1);
+      G.inter.removeWorldItem(rec);
+      G.audio?.play('pickup', null, { vol: 0.6 });
+      G.hud.announce(`LEARNED: ${def.name.toUpperCase()}`, 'blue');
+      G.hud.toast(true, 'Build it at any weapon workbench');
+      return;
+    }
+    let left = this.addItem(rec.id, rec.n, rec.r, rec.mag, rec.mods);
     if (left === rec.n && def && def.type === 'weapon' && this.inv.active > 0) {
       // swap with held item
       const cur = this.activeSlot();
       if (cur) G.inter.dropItem({ ...cur }, this.pos.x, this.pos.y + 0.5, this.pos.z);
-      this.inv.slots[this.inv.active - 1] = { id: rec.id, n: 1, r: rec.r, mag: rec.mag ?? def.mag };
+      this.inv.slots[this.inv.active - 1] = { id: rec.id, n: 1, r: rec.r, mag: rec.mag ?? def.mag, mods: { ...(rec.mods || {}) } };
       this.refreshModel();
       left = 0;
     }
@@ -448,7 +463,7 @@ export class Player extends Survivor {
       target = this.pos.clone().add(new THREE.Vector3(0, eye, 0));
       dist = this.ads ? 1.55 : this.buildMode ? 3.6 : this.camDist;
       shoulder = this.ads ? 0.55 : this.shoulder;
-      fovT = this.scoped ? 16 : this.ads ? 52 : (G.settings?.fov ?? 72);
+      fovT = this.scoped ? (this.gunSt?.zoom ?? 16) : this.ads ? (this.gunSt?.adsFov ?? 52) : (G.settings?.fov ?? 72);
       if (this.sprinting) fovT += 4;
     }
     this.fov = lerp(this.fov, fovT, Math.min(1, dt * 12));

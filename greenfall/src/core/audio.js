@@ -106,7 +106,7 @@ export class AudioEngine {
     if (!this.ctx || !this.enabled) return;
     if (this.voices > 40) return;
     const c = this.ctx, t = c.currentTime + 0.005;
-    const range = { explosion: 700, shot_sniper: 600, shot_shotgun: 450, shot_ar: 450, shot_smg: 380, shot_pistol: 350, shot_revolver: 420, thunder: 9999, car_alarm: 250, alarm: 180, boat_horn: 1600, zombie_groan: 45, zombie_chase: 55, zombie_alert: 60, footstep: 30 }[name] || 90;
+    const range = { explosion: 700, shot_sniper: 600, shot_scout: 550, shot_shotgun: 450, shot_ar: 450, shot_ak: 480, shot_smg: 380, shot_pistol: 350, shot_revolver: 420, thunder: 9999, car_alarm: 250, alarm: 180, boat_horn: 1600, zombie_groan: 45, zombie_chase: 55, zombie_alert: 60, footstep: 30 }[name] || 90;
     const r = this.route(pos, range, opts.bus || 'sfx', opts.verb ?? 0.15);
     if (!r) return;
     const v = (opts.vol ?? 1) * r.mul;
@@ -119,6 +119,9 @@ export class AudioEngine {
     const O = (dur, type, f0, f1, pk, a) => this.osc(o, t, dur, type, f0 * p, f1 * p, pk * v, a);
     switch (name) {
       case 'shot_ar': N(0.22, 'bandpass', 1300, 0.8, 1.0, 0.001, 500); N(0.06, 'highpass', 3000, 0.5, 0.5); O(0.18, 'sine', 90, 40, 0.9); this.echo(o, t, v, 1100); break;
+      case 'shot_ak': N(0.26, 'bandpass', 950, 0.7, 1.15, 0.001, 380); N(0.05, 'highpass', 2600, 0.5, 0.45); O(0.22, 'sine', 75, 32, 1.0); this.echo(o, t, v, 1000); break;
+      case 'shot_scout': N(0.06, 'highpass', 2800, 0.7, 0.9); N(0.6, 'lowpass', 1900, 0.45, 0.8, 0.001, 260); O(0.25, 'sine', 85, 35, 0.8); this.echo(o, t, v * 1.2, 950); this.later(0.45, () => this.play('bolt', pos, { vol: 0.5 })); break;
+      case 'bolt': N(0.04, 'bandpass', 2200, 3, 0.35); this.later(0.14, () => N(0.05, 'bandpass', 1500, 3, 0.4)); break;
       case 'shot_smg': N(0.12, 'bandpass', 1900, 0.9, 0.8, 0.001, 800); O(0.1, 'sine', 120, 60, 0.6); break;
       case 'shot_shotgun': N(0.45, 'lowpass', 2400, 0.5, 1.2, 0.001, 300); O(0.3, 'sine', 70, 30, 1.2); this.echo(o, t, v, 800); this.later(0.35, () => this.play('pump', pos, { vol: 0.5 })); break;
       case 'shot_sniper': N(0.08, 'highpass', 2500, 0.7, 1.0); N(0.9, 'lowpass', 1600, 0.4, 0.9, 0.001, 200); O(0.35, 'sine', 70, 30, 1.0); this.echo(o, t, v * 1.4, 900); break;

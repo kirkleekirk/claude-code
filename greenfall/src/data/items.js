@@ -2,30 +2,58 @@
 export const RARITY = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'];
 export const RARITY_HEX = ['#b0b4b8', '#5fcf3a', '#3a9ae8', '#b54ae8', '#f0a020'];
 export const AMMO = {
-  light: { name: 'Light Ammo', color: '#d8d0b0', pickup: 30 },
-  medium: { name: 'Medium Ammo', color: '#7aa8d8', pickup: 20 },
-  heavy: { name: 'Heavy Ammo', color: '#d87a5a', pickup: 6 },
-  shells: { name: 'Shells', color: '#e8c050', pickup: 8 },
-  bolts: { name: 'Bolts', color: '#9ad87a', pickup: 6 },
+  a45: { name: '.45 Rounds', short: '.45', color: '#e8c050', pickup: 14 },
+  a9: { name: '9mm Rounds', short: '9mm', color: '#d8d0b0', pickup: 30 },
+  g12: { name: '12 Gauge Shells', short: '12ga', color: '#d8503a', pickup: 8 },
+  a556: { name: '5.56 Rounds', short: '5.56', color: '#7aa8d8', pickup: 30 },
+  a762: { name: '7.62 Rounds', short: '7.62', color: '#c88a5a', pickup: 10 },
+  bolts: { name: 'Crossbow Bolts', short: 'Bolts', color: '#9ad87a', pickup: 6 },
 };
 export const MATERIALS = ['wood', 'stone', 'metal'];
 export const MAT_CAP = 999;
 
-// noise = meters a gunshot can be heard by the dead.
+// Guns. `rar` lists the rarities a gun can spawn in (0 Common … 4 Legendary); `dmg` and
+// `reload` are indexed by rarity. `hipRate` multiplies the fire rate when shooting from the
+// hip (revolvers can be fanned). `noise` = meters a gunshot can be heard by the dead.
+// Spread is in radians: `spread` from the hip, `adsSpread` aimed.
 export const WEAPONS = {
-  ar: { name: 'Ranch Rifle', model: 'ar', ammo: 'medium', mag: 30, rate: 5.5, dmg: [30, 31, 33, 35, 36], head: 1.5, spread: 0.022, adsSpread: 0.006, bloom: 0.012, reload: [2.6, 2.5, 2.4, 2.3, 2.2], range: 220, auto: true, noise: 170, recoil: 0.012, slotIcon: 'AR' },
-  scar: { name: 'Prairie Carbine', model: 'ar', ammo: 'medium', mag: 30, rate: 5.0, dmg: [0, 0, 0, 36, 38], head: 1.5, spread: 0.018, adsSpread: 0.004, bloom: 0.01, reload: [2.3, 2.3, 2.3, 2.2, 2.1], range: 240, auto: true, noise: 170, recoil: 0.011, minRarity: 3, slotIcon: 'AR' },
-  smg: { name: 'Tac SMG', model: 'smg', ammo: 'light', mag: 30, rate: 11, dmg: [16, 17, 18, 19, 20], head: 1.75, spread: 0.035, adsSpread: 0.022, bloom: 0.006, reload: [2.2, 2.1, 2.0, 1.9, 1.8], range: 90, auto: true, noise: 140, recoil: 0.006, slotIcon: 'SMG' },
-  ssmg: { name: 'Hush SMG', model: 'smg', ammo: 'light', mag: 25, rate: 10, dmg: [14, 15, 16, 17, 18], head: 1.75, spread: 0.035, adsSpread: 0.024, bloom: 0.007, reload: [2.3, 2.2, 2.1, 2.0, 1.9], range: 80, auto: true, noise: 28, recoil: 0.005, suppressed: true, slotIcon: 'SMG' },
-  pump: { name: 'Pump Shotgun', model: 'shotgun', ammo: 'shells', mag: 5, rate: 0.75, dmg: [9, 9.5, 10, 10.5, 11], pellets: 10, head: 1.6, spread: 0.075, adsSpread: 0.06, bloom: 0, reload: [0.55, 0.52, 0.5, 0.48, 0.45], perShell: true, range: 40, auto: false, noise: 190, recoil: 0.05, slotIcon: 'SG' },
-  sniper: { name: 'Hunting Rifle', model: 'sniper', ammo: 'heavy', mag: 1, rate: 0.7, dmg: [86, 90, 95, 100, 105], head: 2.5, spread: 0.06, adsSpread: 0.0005, bloom: 0, reload: [2.0, 1.9, 1.8, 1.7, 1.6], range: 700, auto: false, noise: 260, recoil: 0.06, scope: true, drop: 9, speed: 380, slotIcon: 'SR' },
-  bolt: { name: 'Longshot', model: 'sniper', ammo: 'heavy', mag: 4, rate: 0.5, dmg: [0, 0, 105, 110, 116], head: 2.5, spread: 0.08, adsSpread: 0.0003, bloom: 0, reload: [3, 3, 2.9, 2.8, 2.7], range: 900, auto: false, noise: 280, recoil: 0.07, scope: true, drop: 8, speed: 420, minRarity: 2, slotIcon: 'SR' },
-  pistol: { name: 'Sidearm', model: 'pistol', ammo: 'light', mag: 16, rate: 6.5, dmg: [23, 24, 25, 26, 28], head: 2, spread: 0.028, adsSpread: 0.012, bloom: 0.01, reload: [1.5, 1.45, 1.4, 1.35, 1.3], range: 80, auto: false, noise: 120, recoil: 0.01, slotIcon: 'P' },
-  spistol: { name: 'Quiet Pistol', model: 'pistol', ammo: 'light', mag: 12, rate: 5, dmg: [24, 25, 26, 27, 29], head: 2, spread: 0.026, adsSpread: 0.01, bloom: 0.01, reload: [1.6, 1.55, 1.5, 1.45, 1.4], range: 70, auto: false, noise: 22, recoil: 0.008, suppressed: true, slotIcon: 'P' },
-  revolver: { name: 'Six-Shooter', model: 'revolver', ammo: 'heavy', mag: 6, rate: 1.6, dmg: [52, 54, 57, 60, 63], head: 2, spread: 0.02, adsSpread: 0.006, bloom: 0.02, reload: [2.4, 2.3, 2.2, 2.1, 2.0], range: 110, auto: false, noise: 190, recoil: 0.04, slotIcon: 'R' },
-  crossbow: { name: 'Crossbow', model: 'crossbow', ammo: 'bolts', mag: 1, rate: 0.9, dmg: [68, 72, 78, 84, 90], head: 2.2, spread: 0.02, adsSpread: 0.002, bloom: 0, reload: [1.4, 1.35, 1.3, 1.25, 1.2], range: 160, auto: false, noise: 6, recoil: 0.02, projectile: true, speed: 75, drop: 9, suppressed: true, slotIcon: 'XB' },
-  machete: { name: 'Machete', model: 'machete', melee: true, rate: 1.7, dmg: [40, 42, 45, 48, 52], head: 1.3, range: 2.4, noise: 2, slotIcon: 'M' },
+  // ---- .45 revolvers ----
+  snub: { name: 'Snub-Nose Revolver', model: 'snub', sound: 'revolver', ammo: 'a45', rar: [1], mag: 8, rate: 3.0, hipRate: 1.6, dmg: [34, 34, 34, 34, 34], head: 1.8, spread: 0.06, adsSpread: 0.03, bloom: 0.018, reload: [2.2, 2.2, 2.2, 2.2, 2.2], range: 55, auto: false, noise: 170, recoil: 0.03, slotIcon: 'SN',
+    blurb: 'Eight short-barrel .45 rounds. Fast and wild — fan it from the hip.' },
+  longrev: { name: 'Long-Barrel Revolver', model: 'longrev', sound: 'revolver', ammo: 'a45', rar: [2], mag: 6, rate: 1.5, hipRate: 1.6, dmg: [62, 62, 62, 62, 62], head: 2.0, spread: 0.035, adsSpread: 0.005, bloom: 0.02, reload: [2.6, 2.6, 2.6, 2.6, 2.6], range: 140, auto: false, noise: 200, recoil: 0.045, slotIcon: 'LR',
+    blurb: 'Six heavy .45 rounds at a steady pace. Accurate when aimed, faster from the hip.' },
+  // ---- 9mm ----
+  pistol: { name: '9mm Pistol', model: 'pistol', sound: 'pistol', ammo: 'a9', rar: [0, 1, 2], mag: 15, rate: 6.0, dmg: [22, 23, 25, 25, 25], head: 2, spread: 0.026, adsSpread: 0.011, bloom: 0.01, reload: [1.45, 1.4, 1.3, 1.3, 1.3], range: 75, auto: false, noise: 120, recoil: 0.01, slotIcon: 'P',
+    blurb: 'Small, light and quick. Takes a suppressor well.' },
+  mp5: { name: 'MP5', model: 'mp5', sound: 'smg', ammo: 'a9', rar: [1, 2, 3], mag: 30, rate: 12, dmg: [16, 17, 18, 19, 19], head: 1.75, spread: 0.032, adsSpread: 0.018, bloom: 0.006, reload: [2.2, 2.2, 2.1, 2.0, 2.0], range: 85, auto: true, noise: 140, recoil: 0.006, slotIcon: 'SMG',
+    blurb: 'Full-auto 9mm. Shreds up close, falls off at range.' },
+  // ---- 12 gauge ----
+  pump: { name: 'Pump Shotgun', model: 'shotgun', sound: 'shotgun', ammo: 'g12', rar: [1, 2], mag: 5, rate: 0.75, dmg: [12, 12, 13, 13, 13], pellets: 9, head: 1.6, spread: 0.07, adsSpread: 0.058, bloom: 0, reload: [0.52, 0.52, 0.48, 0.48, 0.48], perShell: true, range: 40, auto: false, noise: 190, recoil: 0.05, slotIcon: 'SG',
+    blurb: 'Nine pellets of 12 gauge. Devastating inside a house, useless across a field.' },
+  // ---- 5.56 ----
+  m4: { name: 'M4 Carbine', model: 'm4', sound: 'ar', ammo: 'a556', rar: [0, 1, 2, 3, 4], mag: 30, rate: 6.5, dmg: [28, 29, 31, 33, 35], head: 1.5, spread: 0.02, adsSpread: 0.005, bloom: 0.009, reload: [2.4, 2.3, 2.2, 2.1, 2.0], range: 230, auto: true, noise: 170, recoil: 0.009, slotIcon: 'M4',
+    blurb: 'Controllable, accurate full-auto rifle. Takes almost every mod.' },
+  ak: { name: 'AK-47', model: 'ak', sound: 'ak', ammo: 'a556', rar: [1, 2, 3, 4], mag: 30, rate: 5.3, dmg: [34, 34, 36, 38, 40], head: 1.5, spread: 0.026, adsSpread: 0.008, bloom: 0.014, reload: [2.7, 2.7, 2.6, 2.5, 2.4], range: 220, auto: true, noise: 185, recoil: 0.016, slotIcon: 'AK',
+    blurb: 'Hits harder than the M4 but kicks like a mule.' },
+  // ---- 7.62 ----
+  scout: { name: 'Black Bolt-Action', model: 'scout', sound: 'scout', ammo: 'a762', rar: [2, 3], mag: 5, rate: 1.15, dmg: [78, 78, 78, 84, 84], head: 2.2, spread: 0.05, adsSpread: 0.0008, bloom: 0, reload: [2.4, 2.4, 2.4, 2.2, 2.2], range: 550, auto: false, noise: 230, recoil: 0.04, scope: true, zoom: 30, drop: 9, speed: 400, slotIcon: 'BA',
+    blurb: 'Compact black sniper with a quick bolt and a 2× scope.' },
+  longrifle: { name: 'Walnut Long Rifle', model: 'longrifle', sound: 'sniper', ammo: 'a762', rar: [2, 3, 4], mag: 4, rate: 0.55, dmg: [105, 105, 105, 112, 120], head: 2.5, spread: 0.08, adsSpread: 0.0003, bloom: 0, reload: [3.0, 3.0, 3.0, 2.8, 2.6], range: 900, auto: false, noise: 280, recoil: 0.07, scope: true, zoom: 14, drop: 8, speed: 440, slotIcon: 'SR',
+    blurb: 'Heavy wood-stock rifle with a long scope. One shot, one kill — at any range.' },
+  // ---- not guns ----
+  crossbow: { name: 'Crossbow', model: 'crossbow', ammo: 'bolts', rar: [0, 1, 2, 3, 4], mag: 1, rate: 0.9, dmg: [68, 72, 78, 84, 90], head: 2.2, spread: 0.02, adsSpread: 0.002, bloom: 0, reload: [1.4, 1.35, 1.3, 1.25, 1.2], range: 160, auto: false, noise: 6, recoil: 0.02, projectile: true, speed: 75, drop: 9, suppressed: true, slotIcon: 'XB',
+    blurb: 'Silent. The dead never hear it.' },
+  machete: { name: 'Machete', model: 'machete', melee: true, rar: [0, 1, 2, 3, 4], rate: 1.7, dmg: [40, 42, 45, 48, 52], head: 1.3, range: 2.4, noise: 2, slotIcon: 'M',
+    blurb: 'Quiet and never runs out of ammo.' },
 };
+// the rarity a gun actually spawns in: the allowed rarity closest to the roll
+export function clampRarity(id, r) {
+  const L = WEAPONS[id]?.rar;
+  if (!L || !L.length) return r;
+  let best = L[0];
+  for (const x of L) if (Math.abs(x - r) < Math.abs(best - r) || (Math.abs(x - r) === Math.abs(best - r) && x > best)) best = x;
+  return best;
+}
 export const THROWABLES = {
   grenade: { name: 'Frag Grenade', model: 'grenade', stack: 6, fuse: 2.2, radius: 7, dmg: 105, noise: 300 },
   molotov: { name: 'Molotov', model: 'molotov', stack: 4, fireRadius: 5, fireTime: 9, fireDps: 14, noise: 60 },
@@ -76,8 +104,8 @@ export const RECIPES = [
 // ---------- loot tables ----------
 const W = (arr) => arr; // [id, weight]
 export const LOOT = {
-  weapon: W([['ar', 22], ['smg', 16], ['ssmg', 6], ['pump', 18], ['pistol', 16], ['spistol', 6], ['revolver', 7], ['sniper', 6], ['crossbow', 5], ['machete', 6]]),
-  ammo: W([['light', 30], ['medium', 30], ['shells', 20], ['heavy', 12], ['bolts', 8]]),
+  weapon: W([['pistol', 18], ['snub', 10], ['longrev', 5], ['mp5', 13], ['pump', 16], ['m4', 15], ['ak', 11], ['scout', 5], ['longrifle', 3], ['crossbow', 4], ['machete', 5]]),
+  ammo: W([['a9', 28], ['a556', 28], ['g12', 18], ['a45', 13], ['a762', 9], ['bolts', 4]]),
   heal: W([['bandage', 40], ['medkit', 8], ['splint', 14], ['antibiotics', 10], ['painkillers', 12], ['armor', 16]]),
   food: W([['beans', 22], ['chips', 18], ['water', 24], ['soda', 12], ['energy', 5], ['apple', 8], ['dirtywater', 6], ['rawchicken', 3], ['corn', 2]]),
   throw: W([['grenade', 35], ['molotov', 30], ['noisemaker', 35]]),
@@ -90,14 +118,14 @@ export const CAT_WEIGHTS = {
   auto: [['auto', 55], ['food', 25], ['craft', 10], ['ammo', 10]],
   food: [['food', 70], ['ammo', 10], ['heal', 8], ['craft', 6], ['weapon', 6]],
   meds: [['heal', 70], ['food', 15], ['craft', 15]],
-  guns: [['weapon', 50], ['ammo', 40], ['throw', 10]],
-  tools: [['craft', 30], ['auto', 20], ['throw', 20], ['heal', 15], ['weapon', 10], ['ammo', 10]],
+  guns: [['weapon', 44], ['ammo', 38], ['blueprint', 10], ['throw', 8]],
+  tools: [['craft', 28], ['auto', 20], ['throw', 18], ['heal', 14], ['weapon', 10], ['ammo', 10], ['blueprint', 6]],
   farm: [['food', 32], ['ammo', 18], ['weapon', 18], ['craft', 16], ['auto', 12], ['throw', 4]],
 };
 export const CONTAINER_LOOT = {
   fridge: [['food', 100]], cabinet: [['food', 45], ['heal', 20], ['ammo', 25], ['valuable', 10]], dresser: [['craft', 35], ['valuable', 25], ['ammo', 25], ['weapon', 15]],
-  medcab: [['heal', 100]], toolbox: [['auto', 40], ['craft', 30], ['throw', 15], ['heal', 8], ['ammo', 7]], shelf: [['food', 30], ['heal', 20], ['ammo', 22], ['craft', 13], ['throw', 8], ['auto', 7]],
-  register: [['valuable', 85], ['ammo', 15]], crate: [['ammo', 40], ['weapon', 35], ['heal', 15], ['throw', 10]],
+  medcab: [['heal', 100]], toolbox: [['auto', 38], ['craft', 28], ['throw', 14], ['heal', 8], ['ammo', 7], ['blueprint', 5]], shelf: [['food', 30], ['heal', 20], ['ammo', 22], ['craft', 13], ['throw', 8], ['auto', 7]],
+  register: [['valuable', 85], ['ammo', 15]], crate: [['ammo', 36], ['weapon', 32], ['heal', 14], ['throw', 9], ['blueprint', 9]],
 };
 export const RARITY_WEIGHTS = {
   floor: [[0, 44], [1, 33], [2, 16], [3, 6], [4, 1]],
@@ -105,4 +133,3 @@ export const RARITY_WEIGHTS = {
   supply: [[1, 10], [2, 40], [3, 38], [4, 12]],
   airdrop: [[3, 55], [4, 45]],
 };
-export function weaponMinRarity(id) { return WEAPONS[id]?.minRarity ?? 0; }

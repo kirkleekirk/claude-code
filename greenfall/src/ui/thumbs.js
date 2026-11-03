@@ -59,7 +59,7 @@ export function thumbnail(item, equippedOutfit = null) {
       ch.playEmote(item.anim); ch.anim.emoteT = 0.6; ch.update(0.016); ch.anim.emoteT = 0.7; ch.update(0.1);
       obj.add(ch.root); target.set(0, 1.0, 0); dist = 4.8;
     } else if (item.type === 'wrap') {
-      const m = buildWeaponModel('ar', 4, item.wrap); m.rotation.y = Math.PI / 2; m.scale.setScalar(2.4); obj.add(m); target.set(0, 0, 0.3); dist = 2.6;
+      const m = buildWeaponModel('m4', 4, item.wrap); m.rotation.y = Math.PI / 2; m.scale.setScalar(2.4); obj.add(m); target.set(0, 0, 0.3); dist = 2.6;
     }
     if (item.type !== 'outfit' && item.type !== 'emote') {
       const box = new THREE.Box3().setFromObject(obj);
@@ -81,5 +81,35 @@ export function thumbnail(item, equippedOutfit = null) {
     url = bgCanvas(item.rarity).toDataURL();
   }
   cache.set(key, url);
+  return url;
+}
+
+// side view of a gun with its mods, for the workbench (transparent background)
+const gunCache = new Map();
+export function gunThumb(id, kind, rarity, mods, w = 360, h = 170) {
+  const key = id + '|' + rarity + '|' + Object.entries(mods || {}).sort().join(',');
+  if (gunCache.has(key)) return gunCache.get(key);
+  let url = '';
+  const { r, scene, cam, canvas } = renderer();
+  try {
+    r.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix();
+    const m = buildWeaponModel(kind, rarity, null, mods);
+    m.rotation.y = Math.PI / 2;
+    const obj = new THREE.Group(); obj.add(m);
+    const box = new THREE.Box3().setFromObject(obj);
+    const size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+    const dist = Math.max(size.x / cam.aspect, size.y) / (2 * Math.tan((cam.fov * Math.PI) / 360)) * 1.18 + size.z;
+    scene.add(obj);
+    scene.background = null;
+    cam.position.set(c.x + dist * 0.06, c.y + dist * 0.18, c.z + dist);
+    cam.lookAt(c);
+    r.setClearColor(0x000000, 0);
+    r.render(scene, cam);
+    url = canvas.toDataURL('image/png');
+    scene.remove(obj);
+  } catch (e) { console.warn('gun thumbnail failed', e); }
+  r.setSize(256, 300, false); cam.aspect = 256 / 300; cam.updateProjectionMatrix();
+  if (gunCache.size > 60) gunCache.clear();
+  gunCache.set(key, url);
   return url;
 }

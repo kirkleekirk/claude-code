@@ -25,7 +25,7 @@ class BCtx {
   constructor(b, gb, signs, detail) {
     this.b = b; this.gb = gb; this.signs = signs; this.detail = detail;
     this.c = Math.cos(b.rot); this.s = Math.sin(b.rot);
-    this.rt = { colliders: [], doors: [], windows: [], loot: [], containers: [], nav: { nodes: [], edges: [] }, rooms: [], lights: [], entrances: [] };
+    this.rt = { colliders: [], doors: [], windows: [], loot: [], containers: [], benches: [], nav: { nodes: [], edges: [] }, rooms: [], lights: [], entrances: [] };
     this.rng = new RNG(b.seed);
   }
   toW(lx, lz) { return [this.b.x + lx * this.c + lz * this.s, this.b.z - lx * this.s + lz * this.c]; }
@@ -345,6 +345,29 @@ function furnish(ctx, room, kind, y) {
     for (let k = 0; k < n; k++) ctx.loot(r.range(x0 + 0.7, x1 - 0.7), y + 0.05, r.range(z0 + 0.7, z1 - 0.7), tier, cat);
   };
   if (w < 1.8 || d < 1.8) return;
+  // weapon workbench against the back wall (z0), facing into the room
+  const bench = (bx) => {
+    if (ctx.benchDone) return;
+    ctx.benchDone = true;
+    const bz = z0 + 0.45;
+    ctx.col(bx, y + 0.47, bz, 2.3, 0.94, 0.85, 0, COL.SOLID | COL.BULLET | COL.WALK);
+    if (full) {
+      ctx.box(bx, y + 0.43, bz, 2.1, 0.86, 0.72, 0x3d5a46, TEX.METAL, 0.6);                    // green tool cabinet
+      ctx.box(bx, y + 0.9, bz, 2.3, 0.08, 0.85, 0x9a7048, TEX.PLANKS, 0.6);                     // butcher-block top
+      ctx.box(bx, y + 0.72, bz + 0.37, 2.12, 0.07, 0.02, 0xf0a020, TEX.WHITE, 0.5, { emit: 0.35 }); // orange stripe
+      ctx.box(bx, y + 1.62, z0 + 0.04, 2.2, 1.05, 0.04, 0xc8a070, TEX.PLANKS, 0.6);             // pegboard
+      ctx.box(bx - 0.15, y + 1.78, z0 + 0.08, 1.2, 0.07, 0.04, 0x1c1d20, TEX.METAL, 0.6);       // rifle on the wall
+      ctx.box(bx - 0.6, y + 1.72, z0 + 0.08, 0.3, 0.12, 0.04, 0x5a3220, TEX.PLANKS, 0.6);
+      ctx.box(bx + 0.62, y + 1.45, z0 + 0.08, 0.06, 0.4, 0.04, 0x8c939b, TEX.METAL, 0.6);      // wrenches
+      ctx.box(bx + 0.78, y + 1.45, z0 + 0.08, 0.06, 0.32, 0.04, 0x8c939b, TEX.METAL, 0.6);
+      ctx.box(bx + 0.85, y + 1.02, bz + 0.15, 0.2, 0.16, 0.24, 0x5a6068, TEX.METAL, 0.6);      // vise
+      ctx.box(bx - 0.3, y + 0.97, bz + 0.05, 0.75, 0.06, 0.12, 0x1c1d20, TEX.METAL, 0.6);      // gun on the bench
+      ctx.box(bx, y + 2.25, z0 + 0.35, 0.5, 0.06, 0.2, 0xfff0c0, TEX.WHITE, 0.5, { emit: 1.2 }); // work lamp
+    }
+    const [x, z] = ctx.toW(bx, bz + 0.9);
+    const [cx2, cz2] = ctx.toW(bx, bz);
+    ctx.rt.benches.push({ x, y: y + ctx.b.y, z, cx: cx2, cz: cz2, building: ctx.b.id });
+  };
   switch (kind) {
     case 'living': {
       const c = r.pick([0x7a4a3a, 0x3e5a7a, 0x5a6a3a, 0x8a7a5a, 0x6a3a5a]);
@@ -404,6 +427,7 @@ function furnish(ctx, room, kind, y) {
       }
       B(x1 - 1.6, 0.5, z1 - 2.2, 2.4, 1.0, 0.8, 0x6a5040, TEX.PLANKS);
       ctx.container(x1 - 1.6, y + 1.0, z1 - 2.2, 'register');
+      if (ctx.b.bench && y < 1.5) bench(x0 + 1.4);
       break;
     }
     case 'barn': {
@@ -413,15 +437,17 @@ function furnish(ctx, room, kind, y) {
         B(x1 - 1.6, 0.7, z, 3.2, 1.4, 0.12, 0x7a5a3a, TEX.PLANKS);
       }
       for (let k = 0; k < r.int(3, 7); k++) {
-        const hx = r.range(x0 + 1, x1 - 1), hz = r.range(z0 + 1, z1 - 4);
+        const hx = r.range(x0 + 1, x1 - 1), hz = r.range(z0 + (ctx.b.bench ? 2 : 1), z1 - 4);
         B(hx, 0.45, hz, 1.2, 0.9, 0.8, 0xd8b860, TEX.HAY);
       }
+      if (ctx.b.bench) bench(x0 + 1.5);
       lootFloor(1, 'farm', r.int(2, 4));
       ctx.container(x0 + 0.8, y + 0.6, z1 - 3, 'toolbox');
       break;
     }
     case 'garage': {
-      B(cx, 0.45, z0 + 0.45, Math.min(w - 0.5, 2.4), 0.9, 0.8, 0x7a5a3a, TEX.PLANKS);
+      if (ctx.b.bench && w > 2.8) bench(cx);
+      else B(cx, 0.45, z0 + 0.45, Math.min(w - 0.5, 2.4), 0.9, 0.8, 0x7a5a3a, TEX.PLANKS);
       ctx.container(cx, y + 0.95, z0 + 0.45, 'toolbox');
       B(x1 - 0.4, 0.9, cz, 0.6, 1.8, 1.6, 0x8a8f94, TEX.METAL);
       lootFloor(1, 'tools', 1);
@@ -438,6 +464,7 @@ function furnish(ctx, room, kind, y) {
         ctx.container(ax, y + 1.1, cz + r.range(-len / 3, len / 3), 'crate');
       }
       for (let k = 0; k < r.int(2, 5); k++) B(r.range(x0 + 2, x1 - 2), 0.6, r.range(z1 - 6, z1 - 2), 1.2, 1.2, 1.2, 0xa07850, TEX.PLANKS);
+      if (ctx.b.bench) bench(x0 + 1.5);
       break;
     }
     case 'church': {

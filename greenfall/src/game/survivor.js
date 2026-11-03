@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { ITEMS, WEAPONS, AMMO, MAT_CAP } from '../data/items.js';
 import { Character } from './character.js';
 import { CLASS_BY_ID, makeMods } from '../data/classes.js';
+import { gunStats } from '../data/gunmods.js';
 import { clamp, lerp } from '../core/math.js';
 
 export const HOTBAR = 5, PACK = 8;
@@ -25,11 +26,12 @@ export class Survivor {
     this.maxHealth = Math.round(100 * this.mods.get('maxHealth'));
     this.health = this.maxHealth; this.armor = 0; this.alive = true; this.extracted = false;
     this.vehicle = null;
+    this.blueprints = new Set(); // advanced gun mods this survivor has learned
     this.hunger = 100; this.thirst = 100; this.stamina = 100;
     this.bleed = 0; this.fracture = false; this.infection = 0; this.sick = 0; this.painkill = 0; this.boost = 0;
     this.onGround = false; this.crouch = false; this.sprinting = false; this.swimming = false; this.airTime = 0;
     this.height = MOVE.height;
-    this.inv = { slots: new Array(HOTBAR).fill(null), pack: new Array(Math.max(2, PACK + this.mods.get('packSlots'))).fill(null), active: 0, mats: { wood: 0, stone: 0, metal: 0 }, ammo: { light: 0, medium: 0, heavy: 0, shells: 0, bolts: 0 } };
+    this.inv = { slots: new Array(HOTBAR).fill(null), pack: new Array(Math.max(2, PACK + this.mods.get('packSlots'))).fill(null), active: 0, mats: { wood: 0, stone: 0, metal: 0 }, ammo: Object.fromEntries(Object.keys(AMMO).map((k) => [k, 0])) };
     this.ws = { cd: 0, reload: 0, bloom: 0, shotsFired: 0, lastShot: -9 };
     this.action = null;
     this.stats = { kills: 0, zombieKills: 0, damage: 0, damageTaken: 0, healed: 0, eaten: 0, built: 0, boarded: 0, searched: 0, distance: 0, timeAlive: 0 };
@@ -68,17 +70,22 @@ export class Survivor {
     else if (!s) this.character.setWeapon('none');
     else {
       const def = ITEMS[s.id];
-      if (def.type === 'weapon') this.character.setWeapon(def.model, s.r, this.cosmetics.wrap || null);
+      if (def.type === 'weapon') this.character.setWeapon(def.model, s.r, this.cosmetics.wrap || null, s.mods);
       else if (def.type === 'throw') this.character.setWeapon(def.model, 0);
       else this.character.setWeapon('item');
     }
   }
   // returns leftover count (0 = all picked)
-  addItem(id, n = 1, r = 0, mag = null) {
+  addItem(id, n = 1, r = 0, mag = null, mods = null) {
     if (AMMO[id]) { this.inv.ammo[id] = Math.min(999, this.inv.ammo[id] + n); return 0; }
     if (id === 'wood' || id === 'stone' || id === 'metal') { const take = Math.min(n, MAT_CAP - this.inv.mats[id]); this.inv.mats[id] += take; return n - take; }
     const def = ITEMS[id];
     if (!def) return n;
+    if (def.type === 'blueprint') { // learned on the spot, never takes a slot
+      if (!this.isPlayer || this.mods.has('blueprints') || this.blueprints.has(def.mod)) return n;
+      this.blueprints.add(def.mod);
+      return 0;
+    }
     const stack = def.stack || 1;
     const lists = [this.inv.slots, this.inv.pack];
     // merge into existing stacks first
@@ -89,7 +96,8 @@ export class Survivor {
     for (const L of lists) for (let i = 0; i < L.length; i++) {
       if (!L[i]) {
         const take = Math.min(n, stack);
-        L[i] = { id, n: take, r, mag: def.type === 'weapon' ? (mag ?? WEAPONS[id].mag ?? 0) : null };
+        L[i] = def.type === 'weapon' ? { id, n: take, r, mag: 0, mods: mods ? { ...mods } : {} } : { id, n: take, r, mag: null };
+        if (def.type === 'weapon') L[i].mag = mag ?? (def.melee ? 0 : gunStats(L[i]).mag);
         n -= take;
         if (L === this.inv.slots && this.inv.active === i + 1) this.refreshModel();
         if (!n) return 0;

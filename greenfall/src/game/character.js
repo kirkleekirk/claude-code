@@ -86,54 +86,135 @@ export function faceTexture(style = 'default', eye = '#2a1a10') {
 // Weapon / tool models (shared between player, bots, loot pickups)
 // ---------------------------------------------------------------------------
 export const RARITY_COLORS = [0xb0b4b8, 0x5fcf3a, 0x3a9ae8, 0xb54ae8, 0xf0a020, 0xf2d24a];
-export function buildWeaponModel(kind, rarity = 0, wrap = null) {
+// Gun models point down +z with the hand at the origin. Each gun reports anchor points so
+// workbench mods (barrels, muzzles, sights, stocks, grips, magazines) attach in the right place.
+export function buildWeaponModel(kind, rarity = 0, wrap = null, mods = null) {
   const g = new THREE.Group();
-  const body = M(wrap ? wrap.base : 0x3a3d42, { rough: 0.5, metal: 0.4 });
+  mods = mods || {};
+  const body = M(wrap ? wrap.base : 0x2c2f34, { rough: 0.5, metal: 0.45 });
+  const black = M(wrap ? wrap.base : 0x18191c, { rough: 0.6, metal: 0.3 });
+  const steel = M(0x8c939b, { rough: 0.32, metal: 0.8 });
   const accent = M(wrap ? wrap.accent : RARITY_COLORS[rarity] ?? 0xb0b4b8, { rough: 0.45, metal: 0.2, emissive: wrap?.glow ? 0.4 : 0 });
-  const wood = M(0x7a4a2a, { rough: 0.8 });
-  const add = (geo, mat, x, y, z, rx = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.x = rx; m.castShadow = true; g.add(m); return m; };
+  const wood = M(0x7a4a2a, { rough: 0.75 });
+  const walnut = M(0x5a3220, { rough: 0.6 });
+  const rubber = M(0x101012, { rough: 0.95 });
+  const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); m.castShadow = true; g.add(m); return m; };
+  const tube = (r, len, mat, x, y, z0) => add(G.cyl(r, r, len, 10), mat, x, y, z0 + len / 2, Math.PI / 2); // along +z from z0
+  // barrel length change from mods
+  const bm = mods.barrel;
+  const dBar = bm === 'long' ? 0.1 : bm === 'ext' ? 0.2 : bm === 'short' ? -0.1 : bm === 'sawed' ? -0.26 : 0;
+  const folding = mods.stock === 'folding';
+  let A = null; // anchors: muzzle {y,z,r}, top {y,z0,z1}, under {y,z}, stockEnd {y,z}, mag {y,z,w,h,d,rx,curved}
   switch (kind) {
-    case 'ar': {
-      add(G.box(0.07, 0.11, 0.55), body, 0, 0, 0.12);
-      add(G.box(0.05, 0.05, 0.4), body, 0, 0.02, 0.55);
-      add(G.box(0.06, 0.16, 0.08), accent, 0, -0.1, 0.18, 0.25);
-      add(G.box(0.06, 0.12, 0.06), body, 0, -0.08, 0.0, -0.2);
-      add(G.box(0.06, 0.1, 0.25), accent, 0, -0.01, -0.22);
-      add(G.box(0.03, 0.05, 0.12), body, 0, 0.09, 0.15);
+    case 'pistol': {
+      const bl = 0.05 + Math.max(0, dBar * 0.6);
+      add(G.box(0.044, 0.07, 0.2), black, 0, 0.035, 0.065);                // slide
+      add(G.box(0.04, 0.035, 0.17), body, 0, -0.005, 0.06);                // frame
+      add(G.box(0.012, 0.012, 0.15), accent, 0.022, 0.03, 0.06);           // rarity stripe
+      tube(0.011, bl, steel, 0, 0.035, 0.165);
+      add(G.box(0.04, 0.13, 0.055), mods.grip === 'rubber' ? rubber : body, 0, -0.07, -0.01, 0.25);
+      add(G.box(0.008, 0.035, 0.05), body, 0, -0.03, 0.05);                 // trigger guard
+      A = { muzzle: { y: 0.035, z: 0.165 + bl, r: 0.011 }, top: { y: 0.072, z: 0.05 }, magBottom: { y: -0.14, z: -0.03 } };
       break;
     }
-    case 'smg': {
-      add(G.box(0.07, 0.1, 0.38), body, 0, 0, 0.1);
-      add(G.box(0.04, 0.04, 0.18), body, 0, 0.02, 0.36);
-      add(G.box(0.05, 0.2, 0.06), accent, 0, -0.13, 0.12);
-      add(G.box(0.05, 0.1, 0.05), body, 0, -0.07, -0.02, -0.2);
-      add(G.box(0.05, 0.06, 0.14), accent, 0, 0.0, -0.14);
+    case 'snub': {
+      add(G.box(0.048, 0.07, 0.13), steel, 0, 0.03, 0.05);
+      add(G.cyl(0.042, 0.042, 0.07, 6), steel, 0, 0.022, 0.035, Math.PI / 2);
+      tube(0.016, 0.055, steel, 0, 0.045, 0.115);
+      add(G.box(0.03, 0.02, 0.04), steel, 0, 0.07, -0.015, 0.4);           // hammer
+      add(G.box(0.045, 0.11, 0.05), mods.grip === 'rubber' ? rubber : wood, 0, -0.055, -0.035, 0.38);
+      add(G.box(0.048, 0.03, 0.02), accent, 0, -0.03, -0.02, 0.38);        // grip medallion
+      A = { muzzle: { y: 0.045, z: 0.17, r: 0.016 }, top: { y: 0.07, z: 0.08 } };
+      break;
+    }
+    case 'longrev': {
+      const bl = 0.3 + Math.max(0, dBar * 0.6);
+      add(G.box(0.05, 0.075, 0.15), body, 0, 0.03, 0.05);
+      add(G.cyl(0.045, 0.045, 0.075, 6), steel, 0, 0.022, 0.04, Math.PI / 2);
+      tube(0.019, bl, body, 0, 0.048, 0.12);
+      add(G.box(0.03, 0.025, bl * 0.8), body, 0, 0.022, 0.12 + bl * 0.42); // ejector lug
+      add(G.box(0.006, 0.02, 0.015), accent, 0, 0.075, 0.11 + bl);        // front sight
+      add(G.box(0.03, 0.02, 0.04), body, 0, 0.075, -0.02, 0.4);
+      add(G.box(0.046, 0.12, 0.055), mods.grip === 'rubber' ? rubber : walnut, 0, -0.06, -0.04, 0.35);
+      add(G.box(0.05, 0.02, 0.12), accent, 0, 0.0, 0.07);                  // rarity band
+      A = { muzzle: { y: 0.048, z: 0.12 + bl, r: 0.019 }, top: { y: 0.082, z: 0.06 } };
+      break;
+    }
+    case 'mp5': {
+      const bl = 0.07 + dBar * 0.7;
+      add(G.box(0.062, 0.085, 0.34), black, 0, 0.0, 0.08);
+      add(G.box(0.075, 0.07, 0.14), black, 0, -0.01, 0.31);                // handguard
+      tube(0.014, Math.max(0.03, bl), steel, 0, 0.0, 0.38);
+      add(G.cyl(0.022, 0.022, 0.02, 10), black, 0, 0.065, -0.05, 0, 0, Math.PI / 2); // drum rear sight
+      add(G.box(0.012, 0.03, 0.012), black, 0, 0.055, 0.34);               // front sight hood
+      add(G.box(0.05, 0.11, 0.055), black, 0, -0.08, -0.03, 0.25);         // grip
+      A = { muzzle: { y: 0.0, z: 0.38 + Math.max(0.03, bl), r: 0.014 }, top: { y: 0.05, z: 0.12 }, under: { y: -0.05, z: 0.3 }, stock: { y: 0.0, z: -0.09 }, mag: { y: -0.06, z: 0.15, curve: 0.25, len: 0.2, w: 0.04, d: 0.06 } };
       break;
     }
     case 'shotgun': {
-      add(G.box(0.07, 0.09, 0.45), body, 0, 0, 0.18);
-      add(G.cyl(0.03, 0.03, 0.55, 8), body, 0, 0.02, 0.5, Math.PI / 2);
-      add(G.box(0.08, 0.07, 0.18), wood, 0, -0.04, 0.45);
-      add(G.box(0.06, 0.12, 0.3), accent, 0, -0.05, -0.18, 0.15);
+      const bl = 0.55 + dBar;
+      add(G.box(0.068, 0.09, 0.28), black, 0, 0.0, 0.05);
+      add(G.box(0.07, 0.03, 0.2), accent, 0, 0.02, 0.05);                  // receiver band
+      tube(0.022, bl, body, 0, 0.022, 0.19);
+      const tubeLen = mods.mag === 'tube' ? bl - 0.02 : Math.min(bl - 0.04, 0.38);
+      tube(0.019, Math.max(0.12, tubeLen), body, 0, -0.025, 0.19);
+      if (mods.mag === 'tube') add(G.box(0.05, 0.075, 0.025), steel, 0, 0.0, 0.17 + tubeLen);
+      add(G.box(0.08, 0.07, 0.17), wood, 0, -0.03, 0.19 + Math.min(0.32, bl * 0.55));   // pump
+      add(G.box(0.05, 0.1, 0.06), wood, 0, -0.07, -0.07, 0.35);           // grip
+      A = { muzzle: { y: 0.022, z: 0.19 + bl, r: 0.022 }, top: { y: 0.055, z: 0.06 }, under: { y: -0.07, z: 0.19 + Math.min(0.32, bl * 0.55) }, stock: { y: -0.02, z: -0.09, wood: true }, saddle: { y: 0.0, z: 0.06 } };
       break;
     }
-    case 'sniper': {
-      add(G.box(0.06, 0.09, 0.6), body, 0, 0, 0.18);
-      add(G.cyl(0.022, 0.022, 0.6, 8), body, 0, 0.01, 0.75, Math.PI / 2);
-      add(G.cyl(0.04, 0.04, 0.32, 10), M(0x1a1a1a, { rough: 0.3, metal: 0.6 }), 0, 0.1, 0.2, Math.PI / 2);
-      add(G.box(0.06, 0.13, 0.32), accent, 0, -0.05, -0.2, 0.12);
+    case 'm4': {
+      const bl = 0.18 + dBar;
+      add(G.box(0.058, 0.075, 0.3), black, 0, 0.0, 0.07);                   // upper
+      add(G.box(0.05, 0.05, 0.18), black, 0, -0.055, 0.06);                 // lower
+      add(G.box(0.07, 0.075, 0.26), body, 0, 0.0, 0.35);                    // handguard
+      add(G.box(0.072, 0.012, 0.26), accent, 0, -0.02, 0.35);               // rarity rail
+      tube(0.013, Math.max(0.05, bl), black, 0, 0.005, 0.48);
+      add(G.box(0.012, 0.06, 0.02), black, 0, 0.05, 0.47);                  // front sight post
+      if (mods.sight !== 'reddot' && mods.sight !== 'scope4') add(G.box(0.03, 0.04, 0.12), black, 0, 0.055, 0.02); // carry handle
+      add(G.box(0.045, 0.11, 0.05), black, 0, -0.09, -0.04, 0.3);           // grip
+      tube(0.018, 0.1, black, 0, 0.0, -0.18);                               // buffer tube
+      A = { muzzle: { y: 0.005, z: 0.48 + Math.max(0.05, bl), r: 0.013 }, top: { y: 0.04, z: 0.1 }, under: { y: -0.045, z: 0.36 }, stock: { y: -0.01, z: -0.15, collapsible: true }, mag: { y: -0.07, z: 0.12, curve: 0.12, len: 0.17, w: 0.035, d: 0.065 } };
       break;
     }
-    case 'pistol': {
-      add(G.box(0.05, 0.08, 0.22), body, 0, 0.02, 0.06);
-      add(G.box(0.045, 0.14, 0.06), accent, 0, -0.07, -0.02, 0.25);
+    case 'ak': {
+      const bl = 0.2 + dBar;
+      add(G.box(0.06, 0.08, 0.32), steel, 0, 0.0, 0.05);                    // receiver
+      add(G.box(0.075, 0.07, 0.19), wood, 0, -0.005, 0.32);                 // lower handguard
+      add(G.box(0.05, 0.035, 0.18), wood, 0, 0.05, 0.31);                   // gas tube cover
+      tube(0.014, Math.max(0.05, bl), body, 0, 0.0, 0.415);
+      add(G.box(0.014, 0.05, 0.02), body, 0, 0.04, 0.4 + Math.max(0.05, bl) - 0.03); // front sight
+      add(G.box(0.045, 0.1, 0.05), wood, 0, -0.085, -0.06, 0.3);            // grip
+      A = { muzzle: { y: 0.0, z: 0.415 + Math.max(0.05, bl), r: 0.014 }, top: { y: 0.045, z: 0.08 }, under: { y: -0.045, z: 0.32 }, stock: { y: -0.02, z: -0.11, wood: true, drop: 0.04 }, mag: { y: -0.06, z: 0.14, curve: 0.45, len: 0.22, w: 0.04, d: 0.07, mat: accent } };
       break;
     }
-    case 'revolver': {
-      add(G.box(0.05, 0.07, 0.26), body, 0, 0.03, 0.1);
-      add(G.cyl(0.04, 0.04, 0.07, 8), body, 0, 0.02, 0.0, Math.PI / 2);
-      add(G.box(0.045, 0.14, 0.06), wood, 0, -0.07, -0.05, 0.3);
-      add(G.box(0.02, 0.02, 0.05), accent, 0, 0.07, 0.2);
+    case 'scout': {
+      const bl = 0.36 + dBar;
+      add(G.box(0.058, 0.08, 0.5), black, 0, -0.015, 0.06);                 // synthetic stock/body
+      add(G.box(0.06, 0.012, 0.3), accent, 0, -0.045, 0.12);               // rarity stripe
+      tube(0.017, bl, black, 0, 0.012, 0.31);
+      add(G.cyl(0.026, 0.026, 0.2, 10), black, 0, 0.09, 0.1, Math.PI / 2);   // compact scope
+      add(G.cyl(0.033, 0.026, 0.05, 10), black, 0, 0.09, 0.22, Math.PI / 2);
+      for (const z of [0.05, 0.16]) add(G.box(0.02, 0.05, 0.02), black, 0, 0.05, z);
+      add(G.box(0.05, 0.012, 0.012), steel, 0.04, 0.02, -0.03);              // bolt handle
+      add(G.sph(0.014, 8, 6), steel, 0.065, 0.02, -0.03);
+      A = { muzzle: { y: 0.012, z: 0.31 + bl, r: 0.017 }, stock: { y: -0.02, z: -0.19 }, mag: { y: -0.06, z: 0.1, curve: 0, len: 0.06, w: 0.04, d: 0.07 } };
+      break;
+    }
+    case 'longrifle': {
+      const bl = 0.62 + dBar;
+      add(G.box(0.062, 0.075, 0.55), walnut, 0, -0.02, 0.15);               // fore-end + action bed
+      add(G.box(0.05, 0.05, 0.28), steel, 0, 0.03, 0.04);                    // action
+      tube(0.019, bl, body, 0, 0.03, 0.42);
+      add(G.cyl(0.032, 0.032, 0.36, 12), body, 0, 0.115, 0.08, Math.PI / 2);  // long scope
+      add(G.cyl(0.045, 0.032, 0.08, 12), body, 0, 0.115, 0.29, Math.PI / 2);
+      add(G.cyl(0.038, 0.032, 0.05, 12), body, 0, 0.115, -0.12, Math.PI / 2);
+      for (const z of [0.0, 0.18]) add(G.box(0.022, 0.06, 0.025), body, 0, 0.07, z);
+      add(G.box(0.055, 0.012, 0.012), steel, 0.04, 0.04, -0.06);
+      add(G.sph(0.016, 8, 6), steel, 0.07, 0.04, -0.06);
+      add(G.box(0.066, 0.02, 0.06), accent, 0, -0.05, 0.3);                 // rarity band
+      A = { muzzle: { y: 0.03, z: 0.42 + bl, r: 0.019 }, stock: { y: -0.04, z: -0.12, wood: true, drop: 0.06, long: true }, mag: { y: -0.065, z: 0.08, curve: 0, len: 0.05, w: 0.045, d: 0.08 } };
       break;
     }
     case 'crossbow': {
@@ -148,6 +229,61 @@ export function buildWeaponModel(kind, rarity = 0, wrap = null) {
     case 'machete': add(G.box(0.02, 0.06, 0.5), M(0xc8ccd0, { metal: 0.8, rough: 0.3 }), 0, 0, 0.3); add(G.box(0.04, 0.05, 0.13), accent, 0, 0, -0.02); break;
     default: add(G.box(0.08, 0.08, 0.2), accent, 0, 0, 0);
   }
+  if (!A) return g;
+  // ---- stock ----
+  if (A.stock) {
+    const s = A.stock;
+    if (folding) {
+      add(G.box(0.012, 0.012, 0.22), steel, 0.02, s.y + 0.02, s.z - 0.11);
+      add(G.box(0.012, 0.012, 0.22), steel, 0.02, s.y - 0.04, s.z - 0.11);
+      add(G.box(0.014, 0.08, 0.02), steel, 0.02, s.y - 0.01, s.z - 0.22);
+    } else if (s.collapsible) {
+      add(G.box(0.055, 0.09, 0.14), black, 0, s.y - 0.02, s.z - 0.12);
+    } else {
+      const len = s.long ? 0.32 : 0.28;
+      add(G.box(0.058, 0.11, len), s.wood ? (kind === 'longrifle' ? walnut : wood) : black, 0, s.y - (s.drop || 0.02), s.z - len / 2, 0.1);
+    }
+    if (mods.stock === 'padded') add(G.box(0.065, 0.12, 0.035), rubber, folding ? 0.02 : 0, s.y - (s.drop || 0.02) - 0.03, s.z - (s.long ? 0.34 : s.collapsible ? 0.2 : 0.3));
+  }
+  // ---- magazine ----
+  if (A.mag) {
+    const m = A.mag, mat = m.mat || accent;
+    if (mods.mag === 'drum') {
+      add(G.cyl(0.085, 0.085, 0.075, 16), black, 0, m.y - 0.09, m.z, 0, 0, Math.PI / 2);
+      add(G.cyl(0.03, 0.03, 0.08, 8), accent, 0, m.y - 0.09, m.z, 0, 0, Math.PI / 2);
+    } else {
+      const len = m.len * (mods.mag === 'extmag' ? 1.5 : 1);
+      const segs = m.curve > 0.1 ? 3 : 1;
+      for (let i = 0; i < segs; i++) {
+        const t = (i + 0.5) / segs, a = m.curve * t;
+        add(G.box(m.w, len / segs + 0.004, m.d), mat, 0, m.y - len * t * Math.cos(a * 0.5), m.z + len * t * Math.sin(a * 0.5) * 1.1, -a);
+      }
+    }
+  }
+  if (A.magBottom && mods.mag === 'extmag') add(G.box(0.036, 0.05, 0.05), accent, 0, A.magBottom.y - 0.015, A.magBottom.z, 0.25);
+  // ---- grip under the handguard ----
+  if (A.under && mods.grip === 'vgrip') add(G.cyl(0.018, 0.02, 0.1, 8), black, 0, A.under.y - 0.06, A.under.z);
+  if (A.under && mods.grip === 'agrip') add(G.box(0.035, 0.05, 0.1), black, 0, A.under.y - 0.03, A.under.z, -0.5);
+  // ---- shells on the receiver ----
+  if (A.saddle && mods.mag === 'saddle') for (let i = 0; i < 4; i++) add(G.cyl(0.011, 0.011, 0.05, 6), M(0xc8402a, { rough: 0.5 }), 0.04, A.saddle.y + 0.02 - (i % 2) * 0.03, A.saddle.z - 0.05 + Math.floor(i / 2) * 0.05);
+  // ---- sights ----
+  if (A.top && mods.sight === 'reddot') {
+    const housing = M(0x4a4f56, { rough: 0.5, metal: 0.4 });
+    add(G.box(0.04, 0.04, 0.055), housing, 0, A.top.y + 0.022, A.top.z);
+    add(G.box(0.032, 0.025, 0.006), M(0xff3a2a, { emissive: 1.4 }), 0, A.top.y + 0.028, A.top.z - 0.029);
+  }
+  if (A.top && mods.sight === 'scope4') {
+    add(G.cyl(0.024, 0.024, 0.2, 10), black, 0, A.top.y + 0.045, A.top.z, Math.PI / 2);
+    add(G.cyl(0.032, 0.024, 0.04, 10), black, 0, A.top.y + 0.045, A.top.z + 0.11, Math.PI / 2);
+    for (const dz of [-0.05, 0.05]) add(G.box(0.018, 0.035, 0.02), black, 0, A.top.y + 0.015, A.top.z + dz);
+  }
+  // ---- muzzle ----
+  const mz = A.muzzle;
+  if (bm === 'ext') add(G.box(mz.r * 2.6, mz.r * 2.6, 0.03), steel, 0, mz.y, mz.z + 0.015);
+  if (mods.muzzle === 'suppressor') tube(mz.r * 2.3, 0.2, black, 0, mz.y, mz.z);
+  else if (mods.muzzle === 'comp') { add(G.box(mz.r * 2.6, mz.r * 2.6, 0.06), steel, 0, mz.y, mz.z + 0.03); add(G.box(mz.r * 2.8, 0.006, 0.04), black, 0, mz.y + mz.r * 0.6, mz.z + 0.03); }
+  else if (mods.muzzle === 'fullchoke') add(G.cyl(mz.r * 1.15, mz.r * 1.3, 0.035, 10), M(0xc8a040, { metal: 0.7, rough: 0.3 }), 0, mz.y, mz.z + 0.017, Math.PI / 2);
+  else if (mods.muzzle === 'spreadchoke') add(G.cyl(mz.r * 1.9, mz.r * 1.2, 0.045, 10), steel, 0, mz.y, mz.z + 0.022, Math.PI / 2);
   return g;
 }
 
@@ -387,13 +523,13 @@ export class Character {
     this.glider.visible = false;
     this.parts.gliderMount.add(this.glider);
   }
-  setWeapon(kind, rarity = 0, wrap = null) {
+  setWeapon(kind, rarity = 0, wrap = null, mods = null) {
     if (this.weaponModel) this.parts.weaponR.remove(this.weaponModel);
     this.weaponModel = null;
     this.anim.weapon = kind || 'none';
     if (this.pickaxe) this.pickaxe.visible = kind === 'pickaxe';
     if (!kind || kind === 'pickaxe' || kind === 'none' || kind === 'item') return;
-    this.weaponModel = buildWeaponModel(kind, rarity, wrap);
+    this.weaponModel = buildWeaponModel(kind, rarity, wrap, mods);
     this.weaponModel.traverse((o) => { if (o.isMesh) o.castShadow = this.shadow; });
     this.parts.weaponR.add(this.weaponModel);
   }
@@ -451,7 +587,7 @@ export class Character {
       P.shR.rotation.x = -0.35 + Math.sin(ph) * armAmp * 0.4; P.shR.rotation.z = -0.15; P.elR.rotation.x = -0.9;
     } else {
       // two-handed aim pose (pistols use one hand plus support)
-      const oneHand = w === 'pistol' || w === 'revolver';
+      const oneHand = w === 'pistol' || w === 'snub' || w === 'longrev';
       const lean = P.spine.rotation.x;
       P.chest.rotation.x = -aimP * 0.5;
       P.spine.rotation.x = lean - aimP * 0.25;

@@ -2,7 +2,8 @@
 // supply crates, campfires, water, car alarms. Also building lookups + nav pathfinding.
 import * as THREE from 'three';
 import { COL } from '../world/buildings.js';
-import { ITEMS, WEAPONS, AMMO, LOOT, CAT_WEIGHTS, CONTAINER_LOOT, RARITY_WEIGHTS, weaponMinRarity, RARITY_HEX } from '../data/items.js';
+import { ITEMS, WEAPONS, AMMO, LOOT, CAT_WEIGHTS, CONTAINER_LOOT, RARITY_WEIGHTS, clampRarity, RARITY_HEX } from '../data/items.js';
+import { gunStats, randomMods } from '../data/gunmods.js';
 import { buildWeaponModel, M, RARITY_COLORS } from './character.js';
 import { RNG } from '../core/rng.js';
 import { clamp } from '../core/math.js';
@@ -216,10 +217,12 @@ export class Interact {
     if (cat === 'ammo') return { id, n: AMMO[id].pickup, r: 0 };
     const def = ITEMS[id];
     if (def.type === 'weapon') {
-      let r = this.rollRarity(rarityTable);
-      r = Math.max(r, weaponMinRarity(id));
-      if (!def.dmg[r]) r = def.dmg.findIndex((v) => v > 0);
-      return { id, n: 1, r, mag: def.mag ?? 0, ammo: def.ammo };
+      const r = clampRarity(id, this.rollRarity(rarityTable));
+      // supply drops sometimes carry a gun someone already modded
+      const mods = !def.melee && (rarityTable === 'supply' || rarityTable === 'airdrop') && this.rng.chance(0.5) ? randomMods(id, this.rng, 1) : {};
+      const it = { id, n: 1, r, mag: 0, mods, ammo: def.ammo };
+      it.mag = def.melee ? 0 : gunStats(it).mag;
+      return it;
     }
     let n = 1;
     if (id === 'cloth') n = this.rng.int(1, 3);
@@ -281,10 +284,14 @@ export class Interact {
       model = new THREE.Mesh(Interact.matGeo || (Interact.matGeo = new THREE.BoxGeometry(0.4, 0.25, 0.3)), M({ wood: 0xa0784a, stone: 0x9a9a9a, metal: 0x7a8a9a }[rec.id]));
       model.position.y = 0.12;
     } else if (def?.type === 'weapon') {
-      model = buildWeaponModel(def.model, rec.r);
+      model = buildWeaponModel(def.model, rec.r, null, rec.mods);
       model.rotation.set(0, 0, Math.PI / 2);
       model.position.y = 0.12;
       model.scale.setScalar(1.3);
+    } else if (def?.type === 'blueprint') {
+      // a rolled-up blue sheet
+      model = new THREE.Mesh(Interact.bpGeo || (Interact.bpGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.42, 12)), M(0x2f7fd8, { rough: 0.5, emissive: 0.25 }));
+      model.rotation.z = Math.PI / 2; model.position.y = 0.06;
     } else if (def?.type === 'throw') {
       model = buildWeaponModel(def.model, 0);
       model.position.y = 0.1;
@@ -340,6 +347,8 @@ export class Interact {
       this.dropItem(it, c.x, c.y + 0.6, c.z);
       if (it.ammo) this.dropItem({ id: it.ammo, n: AMMO[it.ammo].pickup * 2, r: 0 }, c.x, c.y + 0.6, c.z);
     }
+    // every supply crate carries a gun-mod blueprint (two in an airdrop)
+    for (let k = 0; k < (c.kind === 'airdrop' ? 2 : 1); k++) this.dropItem(this.rollItem('blueprint'), c.x, c.y + 0.6, c.z);
     this.dropItem({ id: 'wood', n: 30, r: 0 }, c.x, c.y + 0.6, c.z);
     this.G.audio?.play('crate_open', c, { vol: 1 });
     this.G.emitNoise(c.x, c.z, 12, by, 'crate');
@@ -565,6 +574,7 @@ export class Interact {
       const def = ITEMS[it.id];
       const name = AMMO[it.id] ? AMMO[it.id].name : def ? def.name : it.id;
       const rar = def?.type === 'weapon' ? ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'][it.r] + ' ' : '';
+      if (def?.type === 'blueprint') { const known = s.mods?.has('blueprints') || s.blueprints?.has(def.mod); consider('item', it, it.x, it.y + 0.2, it.z, 2.6, known ? `${name} (already known)` : `Learn ${name}`); continue; }
       consider('item', it, it.x, it.y + 0.2, it.z, 2.6, `Pick up ${rar}${name}${it.n > 1 ? ' x' + it.n : ''}`);
     }
     for (const c of this.crates) if (!c.opened && Math.abs(c.x - s.pos.x) < 3 && Math.abs(c.z - s.pos.z) < 3) consider('crate', c, c.x, c.y + 0.5, c.z, 2.6, 'Open Supply Crate', 0.9);
@@ -588,6 +598,10 @@ export class Interact {
         if (c.searched || Math.abs(c.x - s.pos.x) > 3 || Math.abs(c.z - s.pos.z) > 3) continue;
         const names = { fridge: 'Fridge', cabinet: 'Cabinet', dresser: 'Dresser', medcab: 'Medicine Cabinet', toolbox: 'Toolbox', shelf: 'Shelf', register: 'Cash Register', crate: 'Crate' };
         consider('search', c, c.x, c.y, c.z, 2.3, `Search ${names[c.kind] || 'Container'}`, 1.2);
+      }
+      if (s.isPlayer) for (const bn of rt.benches || []) {
+        if (Math.abs(bn.cx - s.pos.x) > 3.5 || Math.abs(bn.cz - s.pos.z) > 3.5 || Math.abs(bn.y - s.pos.y) > 2) continue;
+        consider('bench', bn, bn.cx, bn.y + 1.0, bn.cz, 2.8, 'Use Weapon Workbench');
       }
     }
     for (const cf of this.campfires) consider('cook', cf, cf.x, cf.y + 0.4, cf.z, 2.6, 'Cook food / boil water', 3.5);

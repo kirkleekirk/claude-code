@@ -194,6 +194,7 @@ export class WorldData {
       ['Paving Route 9', () => this.applyRoads()],
       ['Building Greenfall County', () => this.placeContent()],
       ['Pouring foundations', () => this.flattenPads()],
+      ['Setting up workbenches', () => this.placeBenches()],
       ['Painting the land', () => this.classifySurface()],
       ['Planting forests', () => this.placeTrees()],
       ['Stringing power lines', () => this.placeRoadside()],
@@ -477,6 +478,17 @@ export class WorldData {
     }
     for (let i = 0; i < this.height.length; i++) {
       if (this.roadW[i] > 0) this.height[i] = lerp(this.height[i], this.roadH[i], this.roadW[i]);
+    }
+  }
+
+  // Weapon workbenches: every gun shop, pawn shop, sheriff's office and hardware store has
+  // one, plus a share of garages, barns, gas stations and warehouses. Decided here
+  // (deterministically) so the map can show them before their buildings stream in.
+  placeBenches() {
+    const GUN_SIGNS = ['GUNS', 'SHERIFF', 'ARMY SURPLUS', 'PAWN', 'HARDWARE'];
+    for (const b of this.buildings) {
+      const h = ((b.seed >>> 4) % 1000) / 1000;
+      b.bench = ((b.kind === 'store' || b.kind === 'shop') && GUN_SIGNS.includes(b.sign)) || (b.kind === 'garage' && h < 0.5) || (b.kind === 'barn' && h < 0.4) || (b.kind === 'gas' && h < 0.6) || (b.kind === 'warehouse' && h < 0.5);
     }
   }
 

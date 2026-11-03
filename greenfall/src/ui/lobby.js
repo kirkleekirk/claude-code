@@ -80,7 +80,7 @@ export class Lobby {
   }
   playEmote(name) { if (this.character) { this.character.playEmote(name || this.emote); this.emoteT = 8; } }
   showPickaxe(v) { if (this.character?.pickaxe) { this.character.setWeapon(v ? 'pickaxe' : 'none'); } }
-  showWeapon(wrap) { this.character?.setWeapon('ar', 4, wrap); this.character.anim.aimPitch = 0; }
+  showWeapon(wrap) { this.character?.setWeapon('m4', 4, wrap); this.character.anim.aimPitch = 0; }
   update(dt) {
     this.t += dt;
     const W = window.innerWidth, H = window.innerHeight;

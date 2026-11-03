@@ -3,7 +3,8 @@
 // OG-style panic building.
 import * as THREE from 'three';
 import { Survivor } from './survivor.js';
-import { ITEMS, WEAPONS, AMMO } from '../data/items.js';
+import { ITEMS, WEAPONS, AMMO, clampRarity } from '../data/items.js';
+import { gunStats, randomMods } from '../data/gunmods.js';
 import { POIS } from '../world/layout.js';
 import { RNG } from '../core/rng.js';
 import { clamp, wrapAngle, dampAngle } from '../core/math.js';
@@ -76,13 +77,18 @@ export class Bot extends Survivor {
     const r = this.rng, g = this.gear;
     const rar = () => clamp(Math.floor(g * 3.2 + r.range(-0.6, 1.2)), 0, 4);
     const pickW = (opts) => r.weighted(opts);
+    // better-geared survivors have found a workbench or two
+    const give = (id, ammo) => {
+      const nm = g > 0.35 && r.chance(g * 0.8) ? 1 + (g > 0.7 && r.chance(0.5) ? 1 : 0) : 0;
+      this.addItem(id, 1, clampRarity(id, rar()), null, nm ? randomMods(id, r, nm) : null);
+      this.inv.ammo[WEAPONS[id].ammo] += ammo;
+    };
     if (g > 0.05 || r.chance(0.6)) {
-      const w1 = pickW([['ar', 4], ['smg', 2], ['ssmg', 1], ['pistol', 2], ['scar', g > 0.6 ? 2 : 0]]);
-      this.addItem(w1, 1, Math.max(rar(), WEAPONS[w1].minRarity || 0));
-      this.inv.ammo[WEAPONS[w1].ammo] += 40 + Math.floor(g * 120);
+      const w1 = pickW([['m4', 4], ['ak', g > 0.3 ? 3 : 1], ['mp5', 2], ['pistol', 2], ['snub', 1], ['longrev', g > 0.5 ? 1 : 0]]);
+      give(w1, w1 === 'snub' || w1 === 'longrev' ? 16 + Math.floor(g * 30) : 40 + Math.floor(g * 120));
     }
-    if (g > 0.25 || r.chance(0.35)) { this.addItem('pump', 1, rar()); this.inv.ammo.shells += 10 + Math.floor(g * 25); }
-    if (g > 0.55 && r.chance(0.4)) { this.addItem('sniper', 1, rar()); this.inv.ammo.heavy += 8; }
+    if (g > 0.25 || r.chance(0.35)) give('pump', 10 + Math.floor(g * 25));
+    if (g > 0.55 && r.chance(0.4)) give(r.chance(0.6) ? 'scout' : 'longrifle', 8 + Math.floor(g * 10));
     if (g > 0.15) this.addItem('bandage', r.int(2, 6));
     if (g > 0.4 && r.chance(0.6)) this.addItem('medkit', 1);
     if (g > 0.3) { this.armor = Math.floor(r.range(0, 1) * g * 100); }
@@ -99,10 +105,11 @@ export class Bot extends Survivor {
       const def = WEAPONS[s.id];
       if (!def || def.melee) continue;
       if ((s.mag <= 0) && (this.inv.ammo[def.ammo] || 0) <= 0) continue;
-      let score = (def.dmg[s.r] || 30) * def.rate * (def.pellets || 1) * 0.1;
-      if (def.pellets) score *= dist < 12 ? 3 : dist < 25 ? 0.8 : 0.1;
-      if (def.scope) score *= dist > 60 ? 3 : dist < 20 ? 0.1 : 0.6;
-      if (def.range < 100 && !def.pellets) score *= dist > 60 ? 0.3 : 1.2;
+      const st = gunStats(s);
+      let score = st.dmg * st.rate * (st.pellets || 1) * 0.1;
+      if (st.pellets) score *= dist < 12 ? 3 : dist < 25 ? 0.8 : 0.1;
+      if (st.scope) score *= dist > 60 ? 3 : dist < 20 ? 0.1 : 0.6;
+      if (st.range < 100 && !st.pellets) score *= dist > 60 ? 0.3 : 1.2;
       if (score > bs) { bs = score; best = i; }
     }
     this.equip(best >= 0 ? best + 1 : 0);
@@ -340,7 +347,7 @@ export class Bot extends Survivor {
     for (const it of G.inter.items) {
       if (Math.abs(it.x - this.pos.x) > 2.2 || Math.abs(it.z - this.pos.z) > 2.2 || Math.abs(it.y - this.pos.y) > 2) continue;
       const def = ITEMS[it.id];
-      const left = this.addItem(it.id, it.n, it.r, it.mag);
+      const left = this.addItem(it.id, it.n, it.r, it.mag, it.mods);
       if (left < it.n) {
         if (left <= 0) G.inter.removeWorldItem(it); else it.n = left;
         if (def?.type === 'weapon') this.gear = Math.min(1, this.gear + 0.05 + it.r * 0.04);

@@ -4,11 +4,12 @@ import { COSMETICS, BY_ID, RARITIES, TYPE_NAMES, shopForDay, currentDay, msToNex
 import { ITEMS, WEAPONS, AMMO, RECIPES, RARITY, RARITY_HEX } from '../data/items.js';
 import { PRESETS } from '../game/match.js';
 import { QUALITY } from '../game/graphics.js';
-import { thumbnail } from './thumbs.js';
+import { thumbnail, gunThumb } from './thumbs.js';
 import { POIS, WORLD } from '../world/layout.js';
 import { formatTime, clamp } from '../core/math.js';
 import { DEFAULT_BINDS } from '../core/input.js';
 import { CLASSES, CLASS_BY_ID, classBudget } from '../data/classes.js';
+import { gunStats, MODS, modsFor, slotsFor, modLines, canMod, canAfford, costText, installMod, removeMod, knowsMod, costFor, BLUEPRINT_MODS } from '../data/gunmods.js';
 
 const el = (tag, cls, parent, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; if (parent) parent.appendChild(e); return e; };
 const TIPS = [
@@ -445,12 +446,129 @@ export class UI {
       <div>${p.bleed ? '🩸 Bleeding — bandage!' : '✔ Not bleeding'}</div><div>${p.fracture ? '🦴 Fractured leg — splint' : '✔ Legs OK'}</div><div>${p.infection > 0 ? `☣ Infection ${Math.floor(p.infection)}% — antibiotics` : '✔ No infection'}</div><div>${p.sick > 0 ? '🤢 Food poisoning' : '✔ Stomach OK'}</div>`;
     const al = el('div', 'ammo-list', right);
     al.innerHTML = Object.keys(AMMO).map((k) => `<span style="border-left:3px solid ${AMMO[k].color}">${AMMO[k].name}: ${p.inv.ammo[k]}</span>`).join('') + `<span>Wood ${p.inv.mats.wood}</span><span>Stone ${p.inv.mats.stone}</span><span>Metal ${p.inv.mats.metal}</span>`;
+    const bpText = p.mods.has('blueprints') ? 'You know every gun mod blueprint (Engineer).' : p.blueprints.size ? `Blueprints learned: ${[...p.blueprints].map((id) => MODS[id].name).join(', ')} (${p.blueprints.size}/${BLUEPRINT_MODS.length})` : `No gun mod blueprints yet (0/${BLUEPRINT_MODS.length}). Find them in gun shops, crates and supply drops.`;
+    el('div', 'desc', right, `<br>📐 ${bpText}`);
     el('div', 'desc', right, `<br>Carried loot value: <b style="color:#ffd23f">${p.lootValue()}</b> — extract to cash it in as Shards.`);
+  }
+  // ---------------- weapon workbench ----------------
+  openWorkbench(bench) {
+    const o = this.openOverlay();
+    this.overlayKind = 'bench';
+    this.bench = bench;
+    this.benchPreview = null;
+    const p = this.G.player;
+    const guns = this.benchGuns();
+    const held = p.activeWeapon();
+    this.benchSel = guns.find((g) => g.s === held && canMod(g.s.id)) || guns.find((g) => canMod(g.s.id)) || guns[0] || null;
+    this.benchBox = el('div', 'bench', o);
+    this.renderWorkbench();
+    o.onclick = (e) => { if (e.target === o) this.closeOverlay(); };
+  }
+  benchGuns() {
+    const p = this.G.player, out = [];
+    for (const list of [p.inv.slots, p.inv.pack]) for (let i = 0; i < list.length; i++) { const s = list[i]; if (s && WEAPONS[s.id] && !WEAPONS[s.id].melee) out.push({ list, i, s }); }
+    return out;
+  }
+  renderWorkbench() {
+    const G = this.G, p = G.player, box = this.benchBox;
+    if (!box) return;
+    box.innerHTML = '';
+    const top = el('div', 'bench-top', box);
+    el('h1', 'display', top, 'Workbench');
+    el('div', 'bench-mats', top, `<span>Wood <b>${p.inv.mats.wood}</b></span><span>Metal <b>${p.inv.mats.metal}</b></span>`);
+    const close = el('button', 'btn ghost', top, 'Close'); close.onclick = () => { this.click(); this.closeOverlay(); };
+    const guns = this.benchGuns();
+    if (!guns.length) { el('div', 'desc', box, 'You have no guns to work on. Find one and come back — benches stay where they are.'); return; }
+    if (this.benchSel && this.benchSel.list[this.benchSel.i] !== this.benchSel.s) this.benchSel = guns[0];
+    const tabs = el('div', 'bench-guns', box);
+    for (const gref of guns) {
+      const def = WEAPONS[gref.s.id], n = Object.keys(gref.s.mods || {}).length;
+      const t = el('button', 'bench-gun' + (this.benchSel?.s === gref.s ? ' sel' : ''), tabs, `<b>${def.name}</b><small>${RARITY[gref.s.r]}${canMod(gref.s.id) ? (n ? ` · ${n} mod${n > 1 ? 's' : ''}` : '') : ' · can\'t be modded'}</small>`);
+      t.style.setProperty('--rc', RARITY_HEX[gref.s.r]);
+      t.onclick = () => { this.click(); this.benchSel = gref; this.benchPreview = null; this.renderWorkbench(); };
+    }
+    const s = this.benchSel.s, def = WEAPONS[s.id];
+    const main = el('div', 'bench-main', box);
+    const L = el('div', 'bench-left', main), R = el('div', 'bench-right', main);
+    const pic = el('div', 'bench-pic', L);
+    pic.style.setProperty('--rc', RARITY_HEX[s.r]);
+    const img = el('img', '', pic); img.src = gunThumb(s.id, def.model, s.r, s.mods); img.alt = def.name;
+    el('div', 'bench-name', L, `<span style="color:${RARITY_HEX[s.r]}">${RARITY[s.r]}</span> ${def.name} <small>${AMMO[def.ammo].name}</small>`);
+    this.benchStatsEl = el('div', 'bench-stats', L);
+    this.renderBenchStats();
+    if (!canMod(s.id)) { el('div', 'desc', R, `The ${def.name} can't be modified.`); return; }
+    el('div', 'desc bench-help', R, 'Every mod has a trade-off. Installing replaces what\'s in that slot. Working here is noisy.');
+    // advanced mods stay hidden until you have their blueprint
+    const locked = Object.values(MODS).filter((m) => m.guns.includes(s.id) && !knowsMod(p, m)).length;
+    if (locked) el('div', 'bench-locked', R, `📐 <b>${locked} more mod${locked > 1 ? 's' : ''}</b> for this gun need${locked > 1 ? '' : 's'} a blueprint. Find blueprints in gun shops, crates and supply drops — or play as the Engineer, who knows them all.`);
+    for (const [k, label] of slotsFor(s.id)) {
+      const cur = s.mods?.[k];
+      const options = modsFor(s.id, k).filter((m) => knowsMod(p, m) || m.id === cur);
+      if (!options.length) continue;
+      const row = el('div', 'bench-slot', R);
+      const head = el('div', 'bench-slot-h', row, `<b>${label}</b><span>${cur ? MODS[cur].name : 'Standard'}</span>`);
+      if (cur) {
+        const rm = el('button', 'btn ghost small', head, 'Remove');
+        rm.onclick = () => { this.click(); removeMod(p, s, k); p.refreshModel(); G.audio?.play('reload', null, { vol: 0.4 }); this.renderWorkbench(); };
+      }
+      const opts = el('div', 'bench-opts', row);
+      for (const m of options) {
+        const cost = costFor(p, m), on = cur === m.id, afford = canAfford(p, cost);
+        const c = el('div', 'modcard' + (on ? ' on' : ''), opts);
+        c.innerHTML = `<div class="mc-name">${m.name}</div><ul>${modLines(m).map((l) => `<li class="${l.good ? 'up' : 'down'}">${l.good ? '▲' : '▼'} ${l.text}</li>`).join('')}</ul><div class="mc-cost${afford || on ? '' : ' short'}">${costText(cost)}</div>`;
+        const b = el('button', 'btn small' + (on ? ' ghost' : afford ? ' lime' : ''), c, on ? 'Installed' : afford ? 'Install' : 'Need materials');
+        b.disabled = on || !afford || !knowsMod(p, m);
+        b.onclick = (e) => {
+          e.stopPropagation();
+          if (!installMod(p, s, m.id)) return;
+          this.click();
+          G.audio?.play('hammer', null, { vol: 0.55 });
+          G.emitNoise(p.pos.x, p.pos.z, 30, p, 'craft');
+          G.hud.toast(true, `${m.name} installed on your ${def.name}`);
+          p.refreshModel();
+          this.benchPreview = null;
+          this.renderWorkbench();
+        };
+        c.onmouseenter = () => { this.benchPreview = on ? null : m.id; this.renderBenchStats(); };
+        c.onmouseleave = () => { this.benchPreview = null; this.renderBenchStats(); };
+      }
+    }
+  }
+  renderBenchStats() {
+    const s = this.benchSel?.s, host = this.benchStatsEl;
+    if (!s || !host) return;
+    const st = gunStats(s);
+    let pv = null;
+    if (this.benchPreview) { const m = MODS[this.benchPreview]; pv = gunStats({ id: s.id, r: s.r, mods: { ...(s.mods || {}), [m.slot]: m.id } }); }
+    const accScore = (sp, ref) => Math.round(100 * (1 - Math.min(1, Math.sqrt(sp / ref))));
+    const rows = [
+      [st.pellets ? 'Damage (all pellets)' : 'Damage', (x) => x.dmg * (x.pellets || 1), (v) => Math.round(v), 130],
+      ['Fire rate', (x) => x.rate * x.hipRate, (v, x) => v.toFixed(1) + '/s' + (x.hipRate > 1 ? ` hip · ${x.rate.toFixed(1)} aimed` : ''), 13],
+      ['Aimed accuracy', (x) => accScore(x.adsSpread, 0.07), (v) => v, 100],
+      ['Hip accuracy', (x) => accScore(x.spread, 0.12), (v) => v, 100],
+      ['Range', (x) => x.range, (v) => Math.round(v) + ' m', 900],
+      ['Magazine', (x) => x.mag, (v) => v, 75],
+      ['Reload', (x) => 4 - x.reload, (v, x) => x.reload.toFixed(1) + ' s', 3.6],
+      ['Recoil control', (x) => 100 - Math.min(100, x.recoil * 1300), (v) => Math.round(v), 100],
+      ['Quietness', (x) => 300 - x.noise, (v, x) => `heard ${Math.round(x.noise)} m`, 300],
+      ['Move speed', (x) => x.move * 100, (v) => Math.round(v) + '%', 110],
+    ];
+    host.innerHTML = rows.map(([label, f, fmt, max]) => {
+      const v = f(st), w = Math.max(2, Math.min(100, (v / max) * 100));
+      let delta = '';
+      if (pv) { const v2 = f(pv); if (Math.abs(v2 - v) > 1e-6) { const w2 = Math.max(2, Math.min(100, (v2 / max) * 100)); delta = `<i class="${v2 > v ? 'up' : 'down'}" style="left:${Math.min(w, w2)}%;width:${Math.abs(w2 - w)}%"></i>`; } }
+      const txt = pv && Math.abs(f(pv) - v) > 1e-6 ? `${fmt(v, st)} → <b class="${f(pv) > v ? 'up' : 'down'}">${fmt(f(pv), pv)}</b>` : fmt(v, st);
+      return `<div class="bs-row"><span>${label}</span><div class="bs-bar"><em style="width:${w}%"></em>${delta}</div><span class="bs-val">${txt}</span></div>`;
+    }).join('');
   }
   describe(def, s) {
     if (def.type === 'weapon') {
-      if (def.melee) return `Melee · ${def.dmg[s.r]} damage · silent`;
-      return `${def.dmg[s.r]}${def.pellets ? '×' + def.pellets : ''} dmg · ${def.rate}/s · mag ${def.mag} · ${AMMO[def.ammo].name}${def.suppressed ? ' · <b style="color:#9bff57">Quiet</b>' : ` · heard ${def.noise}m away`}`;
+      if (def.melee) return `Melee · ${def.dmg[s.r]} damage · silent<br><small>${def.blurb || ''}</small>`;
+      const st = gunStats(s);
+      const rate = st.hipRate > 1 ? `${(st.rate * st.hipRate).toFixed(1)}/s hip · ${st.rate.toFixed(1)}/s aimed` : `${st.rate.toFixed(1)}/s`;
+      const modNames = Object.values(s.mods || {}).map((id) => MODS[id]?.name).filter(Boolean);
+      return `${Math.round(st.dmg)}${st.pellets ? '×' + st.pellets : ''} dmg · ${rate} · mag ${st.mag} · ${AMMO[st.ammo].name}${st.suppressed ? ' · <b style="color:#9bff57">Quiet</b>' : ` · heard ${Math.round(st.noise)}m away`}`
+        + (modNames.length ? `<br><b style="color:#ffd23f">Mods:</b> ${modNames.join(', ')}` : '') + `<br><small>${def.blurb || ''}</small>`;
     }
     const parts = [];
     if (def.heal) parts.push(`Heals ${def.heal}${def.healCap < 100 ? ` (up to ${def.healCap})` : ''}`);
@@ -483,7 +601,7 @@ export class UI {
     const c = el('canvas', '', box);
     c.width = 1600; c.height = 1000;
     el('div', 'maptitle', box, 'Greenfall County');
-    el('div', 'maplegend', box, '<span style="color:#9bff57">●</span> Horde &nbsp; <span style="color:#ffd23f">●</span> Riverboat &nbsp; <span style="color:#ff4d4d">●</span> Evac &nbsp; <span style="color:#4fb3ff">●</span> Supply drop &nbsp; <span style="color:#ff8a3a">●</span> Your marker<br>Click to place a marker · M / Esc to close');
+    el('div', 'maplegend', box, '<span style="color:#9bff57">●</span> Horde &nbsp; <span style="color:#ffd23f">●</span> Riverboat &nbsp; <span style="color:#ff4d4d">●</span> Evac &nbsp; <span style="color:#4fb3ff">●</span> Supply drop &nbsp; <span style="color:#ff8a3a">●</span> Your marker &nbsp; <span style="color:#f0a020">■</span> Workbench<br>Click to place a marker · M / Esc to close');
     const draw = () => {
       if (!document.body.contains(c)) return;
       const x = c.getContext('2d');
@@ -498,6 +616,7 @@ export class UI {
         if (h.migrating > 0 || Math.hypot(h.tx - h.x, h.tz - h.z) > 20) { const [tx, ty] = toS(h.tx, h.tz); x.strokeStyle = 'rgba(200,255,120,.8)'; x.setLineDash([8, 6]); x.beginPath(); x.moveTo(hx, hy); x.lineTo(tx, ty); x.stroke(); x.setLineDash([]); }
         x.font = '18px "Lilita One"'; x.fillStyle = '#e8ffd0'; x.textAlign = 'center'; x.fillText('☠', hx, hy + 6);
       }
+      for (const b of G.hud.benches()) { const [bx, by] = toS(b.x, b.z); G.hud.drawBench(x, bx, by, 1.4); }
       x.textAlign = 'center';
       for (const p of POIS) {
         const [px, py] = toS(p.x, p.z);

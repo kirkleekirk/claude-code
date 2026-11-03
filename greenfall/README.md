@@ -22,6 +22,7 @@ There are two ways out:
 | | |
 |---|---|
 | ![Choose a class](docs/classes.png) | ![Riding a dirt bike through Hollow Creek](docs/bike.png) |
+| ![The gun lineup, stock and modded](docs/guns.png) | ![Modding an AK-47 at a workbench](docs/workbench.png) |
 | ![Dusk over Cedar Ridge](docs/dusk-country.png) | ![Night at a Hollow Creek farm](docs/night-farm.png) |
 | ![Bellerose](docs/bellerose.png) | ![A horde rolling over the hills](docs/horde.png) |
 | ![Item shop](docs/item-shop.png) | ![Island map](docs/map.png) |
@@ -80,6 +81,9 @@ To sell Shards later, you also need the small wallet server. See
 handbrake, H honks the horn and L turns the headlights on and off. The camera follows behind
 you; move the mouse to look around.
 
+**Workbenches:** walk up to one and press E. Revolvers fire faster from the hip than when
+aiming (right mouse).
+
 ## What's in the game
 
 ### The island
@@ -135,6 +139,7 @@ always match (`src/data/classes.js` checks the budget; every class is within ±4
 | **Scout** | +8% move speed, +50% stamina, −25% noise | −25% max health, −10% gun damage, −2 backpack slots | Energy drink |
 | **Farmer** | −35% hunger and thirst, raw food and dirty water are safe, +30% materials | −15% gun damage, −15% accuracy, −20% reload speed | 3 apples, campfire kit |
 | **Hunter** | +30% accuracy, −20% noise, +5% gun damage | −15% max health, −30% healing from meds, −20% melee damage | Crossbow, 8 bolts |
+| **Engineer** | Knows every gun mod blueprint, −40% gun mod cost, +10% reload speed | −15% max health, −30% stamina, −15% melee damage | 60 metal |
 | **Scavenger** | +100% search speed, +30% extra loot, +2 backpack slots | −20% max health, −10% gun damage, −30% stamina, −15% melee damage | 3 cloth, chips |
 
 AI survivors pick random classes too, and the same rules apply to them.
@@ -182,13 +187,58 @@ homes (about 90 per match). They're simple but grounded:
 * Every action makes noise: footsteps, doors, hammering, gunfire (suppressed weapons are
   quiet), engines. Shooting a car can trip its alarm. An alarm clock lures the dead away.
 
-### OG-style combat and building
+### Guns
 
-* Common-to-Legendary weapons: rifles, SMGs, a pump shotgun, a hunting rifle with bullet
-  drop, pistols, a revolver, a silent crossbow and a machete.
-* Frags, molotovs and alarm clocks.
-* Harvest wood, stone and metal, then build walls, floors, ramps and roofs. Pieces build up
-  health over time and collapse when they lose support.
+Five calibers, two or three guns each. Each gun only spawns in the rarities listed; higher
+rarities hit harder and reload faster.
+
+| Gun | Ammo | Rarity | Mag | What it's for |
+|---|---|---|---|---|
+| **Snub-Nose Revolver** | .45 | Uncommon | 8 | Fast and inaccurate. Fires 4.8 shots/s from the hip, 3/s aimed |
+| **Long-Barrel Revolver** | .45 | Rare | 6 | Heavy hits (62) at a steady pace. 2.4 shots/s from the hip, 1.5/s aimed |
+| **9mm Pistol** | 9mm | Common–Rare | 15 | Small, light, quick |
+| **MP5** | 9mm | Uncommon–Epic | 30 | Full auto, 12 rounds/s, weak at range |
+| **Pump Shotgun** | 12 gauge | Uncommon, Rare | 5 | 9 pellets, about 110 damage point-blank |
+| **M4 Carbine** | 5.56 | Common–Legendary | 30 | Accurate, controllable full auto |
+| **AK-47** | 5.56 | Uncommon–Legendary | 30 | Hits harder than the M4, kicks more |
+| **Black Bolt-Action** | 7.62 | Rare, Epic | 5 | Compact sniper with a quick bolt and a 2× scope |
+| **Walnut Long Rifle** | 7.62 | Rare–Legendary | 4 | Wood-stock heavy rifle with a long scope and bullet drop |
+
+The silent crossbow and the machete are still in the game, plus frags, molotovs and alarm
+clocks. AI survivors carry the same guns, and better-geared ones may already have a mod or
+two.
+
+### Workbenches and gun mods
+
+About 40 **weapon workbenches** (an orange wrench square on the map and minimap) stand in
+every gun shop, pawn shop, sheriff's office and hardware store, and in some barns, garages,
+gas stations and warehouses. At a bench you can fit one mod per slot: **barrel, muzzle,
+sight, stock, grip and magazine**. Mods cost metal (and some wood), show up on the gun, and
+stay on it if you drop it or die. Working at a bench makes noise.
+
+Every mod has a trade-off, shown as ▲/▼ lines. Hover a mod to preview how it changes the
+gun's stats.
+
+| Slot | Basic mods (anyone) | Advanced mods (blueprint needed) |
+|---|---|---|
+| Barrel | Long Barrel, Short Barrel, Sawed-Off (pump) | Extended Barrel |
+| Muzzle | Compensator | Suppressor, Full Choke and Spreader Choke (pump) |
+| Sight | Red Dot | 4× Scope |
+| Stock | Padded Stock, Folding Stock | — |
+| Grip | Vertical Grip, Rubber Grip (handguns) | Angled Grip |
+| Magazine | Extended Mag, Speed Loader (revolvers), Side Saddle (pump) | Drum Mag, Tube Extension (pump) |
+
+**Blueprints:** advanced mods don't appear at the bench until you can build them. The
+**Engineer** class knows every blueprint and pays 40% less for mods. Every other class can
+unlock advanced mods one by one with **blueprints**: blue rolled-up sheets found in gun shops,
+hardware stores, toolboxes and crates. Every supply crate has one, and airdrops have two.
+Walk over a blueprint and press E to learn it for the rest of the match. It doesn't take a
+slot. When a gun still has locked mods, the bench says how many; Tab shows the blueprints you
+know.
+
+### Building
+Harvest wood, stone and metal, then build walls, floors, ramps and roofs. Pieces build up
+health over time and collapse when they lose support.
 
 ### Rivals
 
@@ -336,7 +386,8 @@ src/
     interact.js (doors, barricades, loot, campfires, siphoning) building.js match.js
     animals.js fx.js physics.js graphics.js
   ui/                hud, menus/shop/locker/class picker, thumbnails, lobby scene, touch controls
-  data/              items & loot tables, cosmetics + shop rotation, classes, rewards
+  data/              items & loot tables, gun mods + blueprints, cosmetics + shop rotation,
+                     classes, rewards
 server/
   server.mjs         optional wallet/account server (Shards, purchases, rewards, itch.io codes)
 scripts/
@@ -345,8 +396,9 @@ scripts/
 ```
 
 Run `npm run build && npm run test:smoke` for an automated end-to-end check. It boots the
-game in headless Chromium, checks that nobody spawned in the harbor or Bellerose, drives a
-vehicle, and fast-forwards a Quick match through the riverboat and the helicopter.
+game in headless Chromium, checks that nobody spawned in the harbor or Bellerose, mods a gun
+at a workbench (and checks that advanced mods stay hidden until their blueprint is learned),
+drives a vehicle, and fast-forwards a Quick match through the riverboat and the helicopter.
 
 ## Roadmap ideas
 
