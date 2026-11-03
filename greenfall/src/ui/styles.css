@@ -283,3 +283,40 @@ kbd { font-family: var(--font-display); background: rgba(255,255,255,.12); paddi
   .inv { grid-template-columns: 1fr; } .playbtn { font-size: 34px; } .tab { font-size: 15px; padding: 6px 8px; } .brand { font-size: 22px; }
   .locker { flex-direction: column; } .locker-grid { width: 100%; margin: 0; }
 }
+
+/* ---------- touch / phone layout ---------- */
+body.touchmode .minimap { width: 112px; height: 112px; top: 8px; right: 8px; border-width: 2px; }
+body.touchmode .mapinfo { top: 46px; right: 128px; width: auto; font-size: 11px; }
+body.touchmode .objective { display: none; }
+body.touchmode .compass { top: 4px; width: 38vw; height: 26px; }
+body.touchmode .compass canvas { height: 26px; }
+body.touchmode .hordewarn { top: 32px; font-size: 13px; }
+body.touchmode .vitals { left: 10px; top: 8px; bottom: auto; width: 210px; }
+body.touchmode .vbar { height: 16px; }
+body.touchmode .vbar > .num { font-size: 13px; top: -2px; }
+body.touchmode .meters { gap: 4px; margin-top: 5px; }
+body.touchmode .meter { font-size: 11px; padding: 2px 5px; }
+body.touchmode .statuses { position: absolute; top: 72px; left: 0; }
+body.touchmode .status { font-size: 10px; padding: 2px 5px; }
+body.touchmode .killfeed { top: 104px; left: 10px; font-size: 11px; max-width: 240px; }
+body.touchmode .hotbar { right: auto; left: 50%; transform: translateX(-50%); bottom: 8px; gap: 4px; }
+body.touchmode .hotbar, body.touchmode .hotbar * { pointer-events: auto; }
+body.touchmode .hslot { width: 46px; height: 46px; border-width: 2px; }
+body.touchmode .hslot .ico { font-size: 15px; }
+body.touchmode .hslot .key { font-size: 10px; }
+body.touchmode .hslot .cnt { font-size: 12px; }
+body.touchmode .hslot.active { transform: translateY(-5px); }
+body.touchmode .resources { right: auto; left: 50%; transform: translateX(-50%); bottom: 66px; flex-direction: row; align-items: center; gap: 8px; }
+body.touchmode .mat { font-size: 13px; padding: 2px 6px; }
+body.touchmode .ammo { font-size: 20px; }
+body.touchmode .ammo small { font-size: 13px; }
+body.touchmode .bpiece { width: 40px; height: 40px; }
+body.touchmode .announce { font-size: 24px; top: 26%; }
+body.touchmode .prompt { top: 62%; font-size: 13px; }
+body.touchmode .pickups { right: auto; left: 10px; bottom: 150px; align-items: flex-start; }
+body.touchmode .pk { font-size: 11px; }
+body.touchmode .toast { top: 70%; font-size: 13px; }
+body.touchmode .hint { display: none; }
+.touch .tstick { left: 3vw; bottom: 4vh; width: 132px; height: 132px; }
+.touch .tbtn.small { width: 54px; height: 54px; font-size: 11px; }
+.touch .tbtn.top { width: 50px; height: 34px; border-radius: 8px; font-size: 11px; }

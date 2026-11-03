@@ -8,10 +8,10 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 
 export const QUALITY = {
-  low: { label: 'Low', pixelRatio: 0.75, shadows: 0, post: false, bloom: false, msaa: 0, lambert: true, grass: 0, treeNear: 160, detailDist: 260, maxZombies: 45 },
-  medium: { label: 'Medium', pixelRatio: 1, shadows: 1024, post: true, bloom: false, msaa: 0, lambert: false, grass: 0.5, treeNear: 240, detailDist: 340, maxZombies: 70 },
-  high: { label: 'High', pixelRatio: 1.25, shadows: 2048, post: true, bloom: true, msaa: 4, lambert: false, grass: 1, treeNear: 320, detailDist: 420, maxZombies: 100 },
-  ultra: { label: 'Ultra', pixelRatio: 2, shadows: 4096, post: true, bloom: true, msaa: 4, lambert: false, grass: 1.4, treeNear: 420, detailDist: 520, maxZombies: 140 },
+  low: { label: 'Low', pixelRatio: 0.75, shadows: 0, post: false, bloom: false, msaa: 0, lambert: true, grass: 0, treeNear: 120, detailDist: 210, maxZombies: 40, staticDist: 650, farTrees: 850, farBuildings: 1500 },
+  medium: { label: 'Medium', pixelRatio: 1, shadows: 1024, post: true, bloom: false, msaa: 0, lambert: false, grass: 0.5, treeNear: 220, detailDist: 320, maxZombies: 70, staticDist: 1000, farTrees: 1400, farBuildings: 2200 },
+  high: { label: 'High', pixelRatio: 1.25, shadows: 2048, post: true, bloom: true, msaa: 4, lambert: false, grass: 1, treeNear: 300, detailDist: 420, maxZombies: 100, staticDist: 1300, farTrees: 1800, farBuildings: 2800 },
+  ultra: { label: 'Ultra', pixelRatio: 2, shadows: 4096, post: true, bloom: true, msaa: 4, lambert: false, grass: 1.4, treeNear: 400, detailDist: 520, maxZombies: 140, staticDist: 1700, farTrees: 2400, farBuildings: 3600 },
 };
 
 const GradeShader = {

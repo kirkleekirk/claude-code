@@ -264,11 +264,11 @@ export class Grass {
     const rr = new RNG(42);
     for (let b = 0; b < 7; b++) {
       const a = rr.next() * Math.PI, ox = rr.range(-0.35, 0.35), oz = rr.range(-0.35, 0.35);
-      const h = rr.range(0.35, 0.7), w = 0.07;
+      const h = rr.range(0.28, 0.55), w = 0.075;
       const ca = Math.cos(a) * w, sa = Math.sin(a) * w;
       const lean = rr.range(-0.12, 0.12);
       gb.setSway(1.0);
-      gb.setColor(0x6a9a40);
+      gb.setColor(0x9ac060);
       gb.vert(ox - ca, 0, oz - sa, 0, 1, 0, 0, 0);
       gb.vert(ox + ca, 0, oz + sa, 0, 1, 0, 1, 0);
       gb.setColor(0xe8ffb0);

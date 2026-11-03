@@ -6,7 +6,7 @@ import { MAX_HORDES, U } from '../world/materials.js';
 import { NOISE_GLSL } from '../world/sky.js';
 import { clamp, lerp } from '../core/math.js';
 import { RNG } from '../core/rng.js';
-import { WORLD, POIS } from '../world/layout.js';
+import { WORLD, POIS, GW, GH } from '../world/layout.js';
 
 let HID = 1;
 export class Hordes {
@@ -22,23 +22,34 @@ export class Hordes {
     this.spawnAcc = new Map();
     this.ambientT = 0;
     this.surge = 0;
+    // terrain height texture so the mist hugs the ground
+    if (!Hordes.heightTex) {
+      const data = new Uint8Array(GW * GH);
+      for (let i = 0; i < data.length; i++) data[i] = Math.max(0, Math.min(255, (G.world.height[i] + 10) * 2));
+      const t = new THREE.DataTexture(data, GW, GH, THREE.RedFormat, THREE.UnsignedByteType);
+      t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearFilter; t.needsUpdate = true;
+      Hordes.heightTex = t;
+    }
     this.mat = new THREE.ShaderMaterial({
-      uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uTime: { value: 0 }, uNight: { value: 0 }, uColor: { value: new THREE.Color(0x6fbf4a) } }]),
+      uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uTime: { value: 0 }, uNight: { value: 0 }, uColor: { value: new THREE.Color(0x6fbf4a) }, uHeight: { value: null }, uWorldSize: { value: new THREE.Vector2(WORLD.W, WORLD.H) } }]),
       transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true,
       vertexShader: `varying vec2 vUv; varying vec3 vW;
         #include <fog_pars_vertex>
         void main(){ vUv = uv; vec4 w = modelMatrix * vec4(position,1.0); vW = w.xyz; vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition;
         #include <fog_vertex>
         }`,
-      fragmentShader: `uniform float uTime; uniform float uNight; uniform vec3 uColor; varying vec2 vUv; varying vec3 vW;
+      fragmentShader: `uniform float uTime; uniform float uNight; uniform vec3 uColor; uniform sampler2D uHeight; uniform vec2 uWorldSize; varying vec2 vUv; varying vec3 vW;
         #include <fog_pars_fragment>
         ${NOISE_GLSL}
         void main(){
-          float h = vUv.y;
-          float n = fbm(vec2(vUv.x * 40.0 + uTime * 0.05, h * 3.0 - uTime * 0.12));
-          float a = (1.0 - smoothstep(0.0, 0.9, h)) * (0.25 + 0.75 * n);
-          a *= 0.55 + 0.25 * uNight;
-          vec3 col = mix(uColor, uColor * 0.45, h) * (0.8 + 0.6 * n);
+          float gh = texture2D(uHeight, vW.xz / uWorldSize).r * 127.5 - 10.0;
+          float rel = vW.y - gh;
+          if (rel < -2.0) discard;
+          float h = clamp(rel / 60.0, 0.0, 1.0);
+          float n = fbm(vec2(vUv.x * 46.0 + uTime * 0.05, rel * 0.05 - uTime * 0.14));
+          float a = (1.0 - smoothstep(0.0, 1.0, h)) * (0.3 + 0.7 * n);
+          a *= 0.85 + 0.15 * uNight;
+          vec3 col = mix(uColor * 1.15, uColor * 0.5, h) * (0.75 + 0.6 * n);
           col = mix(col, col * vec3(0.5, 0.9, 0.55), uNight);
           gl_FragColor = vec4(col, a);
           #include <tonemapping_fragment>
@@ -46,7 +57,8 @@ export class Hordes {
           #include <fog_fragment>
         }`,
     });
-    this.cyl = new THREE.CylinderGeometry(1, 1, 1, 72, 1, true);
+    this.mat.uniforms.uHeight.value = Hordes.heightTex;
+    this.cyl = new THREE.CylinderGeometry(1, 1, 1, 96, 1, true);
     this.cyl.translate(0, 0.5, 0);
   }
   get(id) { return this.list.find((h) => h.id === id); }
@@ -61,7 +73,7 @@ export class Hordes {
     return h;
   }
   remove(h) { this.group.remove(h.mesh); this.list.splice(this.list.indexOf(h), 1); }
-  syncMesh(h) { h.mesh.position.set(h.x, -5, h.z); h.mesh.scale.set(h.r, 70, h.r); }
+  syncMesh(h) { h.mesh.position.set(h.x, -30, h.z); h.mesh.scale.set(h.r, 180, h.r); }
   maxRadius() { const p = this.G.match?.progress || 0; return 90 + p * 600 + this.surge * 350; }
   // returns {inside, depth} for a point
   zoneAt(x, z) {

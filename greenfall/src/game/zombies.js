@@ -399,7 +399,8 @@ export class Zombies {
     const d = Math.hypot(t.pos.x - zb.pos.x, t.pos.z - zb.pos.z);
     if (d < 1.75 * zb.scale && Math.abs(t.pos.y - zb.pos.y) < 1.7) {
       const T = TYPES[zb.type];
-      t.takeDamage(T.dmg, null, { type: 'zombie', heavy: zb.type === 'brute', infect: zb.type === 'runner' ? 0.14 : 0.1 });
+      const scale = 0.72 + Math.min(1, G.match?.progress || 0) * 0.5;
+      t.takeDamage(Math.round(T.dmg * scale), null, { type: 'zombie', heavy: zb.type === 'brute', infect: zb.type === 'runner' ? 0.14 : 0.1 });
       G.audio?.play('zombie_hit', t.pos, { vol: 0.9 });
       if (t.isPlayer) { G.hud.damageFrom(zb.pos); G.player.shake(zb.type === 'brute' ? 0.6 : 0.25); }
       if (zb.type === 'brute') { const k = 7 / (d || 1); t.vel.x += (t.pos.x - zb.pos.x) * k; t.vel.z += (t.pos.z - zb.pos.z) * k; t.vel.y = 4; }

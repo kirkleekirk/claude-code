@@ -259,9 +259,15 @@ export class Interact {
     return rec;
   }
   dropItem(it, x, y, z) {
-    const a = Math.random() * Math.PI * 2;
-    const gy = this.G.physics.groundAt(x + Math.cos(a) * 0.8, z + Math.sin(a) * 0.8, y + 1.5);
-    return this.addWorldItem(it, x + Math.cos(a) * 0.8, gy + 0.02, z + Math.sin(a) * 0.8);
+    // scatter a little, but never through a wall
+    let px = x, pz = z;
+    for (let tries = 0; tries < 4; tries++) {
+      const a = Math.random() * Math.PI * 2, r = 0.5 + Math.random() * 0.5;
+      const tx = x + Math.cos(a) * r, tz = z + Math.sin(a) * r;
+      if (this.G.physics.lineOfSight(x, y + 0.3, z, tx, y + 0.3, tz)) { px = tx; pz = tz; break; }
+    }
+    const gy = this.G.physics.groundAt(px, pz, y + 1.0);
+    return this.addWorldItem(it, px, gy + 0.02, pz);
   }
   makeItemMesh(rec) {
     const g = new THREE.Group();

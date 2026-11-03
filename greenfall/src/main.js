@@ -101,6 +101,7 @@ class Game {
     await step(0.62, 'Building the skyline...');
     this.physics = new Physics(this.world);
     this.view = new WorldView(this.world, this.physics, this.gfx.q);
+    this.view.qGetter = () => this.gfx.q;
     this.view.buildStatic();
     this.scene.add(this.view.group);
     await step(0.78, 'Filling the ocean...');
@@ -119,6 +120,8 @@ class Game {
       const off = b.d / 2 + (b.kind === 'farmhouse' ? 1.6 : 0.6);
       this.lampSpots.push({ x: b.x + fx * off, y: b.y + (b.kind === 'barn' ? 5.2 : 2.7), z: b.z + fz * off, c: b.kind === 'barn' ? 0xffd890 : 0xffb060 });
     }
+    this.fillLight = new THREE.PointLight(0xb8e8c0, 0, 14, 1.4);
+    this.scene.add(this.fillLight);
     this.lampLights = [];
     const nLamps = this.gfx.q.lambert ? 3 : 6;
     for (let i = 0; i < nLamps; i++) { const l = new THREE.PointLight(0xffc070, 0, 26, 1.6); this.scene.add(l); this.lampLights.push(l); }
@@ -172,7 +175,8 @@ class Game {
     this.seed = (Math.random() * 1e9) | 0;
     this.resetWorldState();
     // removed-tree tracking for reset
-    const origRemove = this.view.removeTree.bind(this.view);
+    if (!this.view._origRemoveTree) this.view._origRemoveTree = this.view.removeTree.bind(this.view);
+    const origRemove = this.view._origRemoveTree;
     this.view.removeTree = (i) => { this._removedTrees.add(i); const ch = this.view.chunkOf(this.world.trees.x[i], this.world.trees.z[i]); ch._treesDirty = true; origRemove(i); };
     this.survivors = [];
     this.fx = new FX(this); this.scene.add(this.fx.group);
@@ -390,6 +394,11 @@ class Game {
     this.water.uniforms.uFlash.value = flash;
     U.uLampGlow.value = e.lamp;
     this.view.setLampGlow(e.lamp);
+    if (this.fillLight && P) {
+      const cp = this.camera.position;
+      this.fillLight.position.set(cp.x * 0.6 + P.pos.x * 0.4, Math.max(cp.y, P.pos.y + 1.8) + 0.6, cp.z * 0.6 + P.pos.z * 0.4);
+      this.fillLight.intensity = e.night * 2.2 + 0.15;
+    }
     if (e.lamp > 0.05 && this.lampSpots) {
       if ((this.frame & 15) === 0 || !this._lampSorted) {
         const cp = this.camera.position;
@@ -404,14 +413,14 @@ class Game {
       const gu = g.grade.uniforms;
       gu.uTime.value += dt;
       gu.uHorde.value = hk;
-      gu.uExposure.value = 1.0 + e.night * 0.22;
+      gu.uExposure.value = 1.12 + e.night * 0.18;
       gu.uTint.value.setRGB(0.85, 1.08, 0.86); gu.uTintAmt.value = e.night * 0.35;
       gu.uDesat.value = P && P.alive ? clamp((35 - P.health) / 35, 0, 1) * 0.7 : 0.6;
       this.hud.flashDamage = Math.max(0, (this.hud.flashDamage || 0) - dt * 1.5);
       gu.uDamage.value = this.hud.flashDamage + (P && P.alive && P.health < 25 ? 0.25 + Math.sin(this.time * 4) * 0.1 : 0);
       gu.uVignette.value = 0.28 + e.night * 0.15;
     } else {
-      g.renderer.toneMappingExposure = 1.0 + e.night * 0.2;
+      g.renderer.toneMappingExposure = 1.12 + e.night * 0.2;
     }
   }
 }

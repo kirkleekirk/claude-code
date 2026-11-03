@@ -82,7 +82,14 @@ export class HUD {
     this.mStam = el('div', 'meter', this.meters, '<span class="ic">⚡</span><div class="mb"><div style="background:#f0e060"></div></div>');
     this.hotbar = el('div', 'hotbar', r);
     this.slots = [];
-    for (let i = 0; i < 6; i++) this.slots.push(el('div', 'hslot', this.hotbar, `<span class="key">${i + 1}</span><span class="ico"></span><span class="cnt"></span><span class="lbl"></span>`));
+    for (let i = 0; i < 6; i++) {
+      const s = el('div', 'hslot', this.hotbar, `<span class="key">${i + 1}</span><span class="ico"></span><span class="cnt"></span><span class="lbl"></span>`);
+      // tap a slot to equip it (touch) / click (desktop when unlocked)
+      const pick = (e) => { e.preventDefault(); e.stopPropagation(); const P = this.G.player; if (P && P.alive && !P.buildMode) P.equip(i); };
+      s.addEventListener('touchstart', pick, { passive: false });
+      s.addEventListener('mousedown', (e) => { if (!this.G.input.locked) pick(e); });
+      this.slots.push(s);
+    }
     this.res = el('div', 'resources', r);
     this.buildbar = el('div', 'buildbar hidden', this.res);
     const svg = { wall: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" fill="none" stroke="#fff" stroke-width="2"/></svg>', floor: '<svg viewBox="0 0 24 24"><path d="M2 16 L12 10 L22 16 L12 22 Z" fill="none" stroke="#fff" stroke-width="2"/></svg>', ramp: '<svg viewBox="0 0 24 24"><path d="M3 20 L21 6 L21 20 Z" fill="none" stroke="#fff" stroke-width="2"/></svg>', cone: '<svg viewBox="0 0 24 24"><path d="M3 18 L12 6 L21 18 Z" fill="none" stroke="#fff" stroke-width="2"/></svg>' };
@@ -335,10 +342,9 @@ export class HUD {
     const yaw = P.camYaw; // facing = -z rotated
     const heading = ((-yaw * 180 / Math.PI) % 360 + 360) % 360; // 0 = north (-z)
     c.font = '15px "Lilita One", sans-serif'; c.textAlign = 'center';
-    for (let a = -90; a <= 90; a += 5) {
-      const deg = Math.round(heading + a);
+    for (let deg = Math.ceil((heading - 90) / 5) * 5; deg <= heading + 90; deg += 5) {
       const d = ((deg % 360) + 360) % 360;
-      const x = W / 2 + a * (W / 180);
+      const x = W / 2 + (deg - heading) * (W / 180);
       if (d % 45 === 0) {
         const lbl = { 0: 'N', 45: 'NE', 90: 'E', 135: 'SE', 180: 'S', 225: 'SW', 270: 'W', 315: 'NW' }[d];
         c.fillStyle = d % 90 === 0 ? '#ffd23f' : '#fff'; c.fillText(lbl, x, 22);

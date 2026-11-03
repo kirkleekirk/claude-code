@@ -18,7 +18,8 @@ export class WorldView {
   constructor(data, physics, quality) {
     this.data = data;
     this.physics = physics;
-    this.q = quality;
+    this._q = quality;
+    this.qGetter = null;
     this.group = new THREE.Group();
     this.group.name = 'world';
     const lambert = !!quality.lambert;
@@ -62,6 +63,7 @@ export class WorldView {
     this.buildTimeMs = 0;
   }
 
+  get q() { return this.qGetter ? this.qGetter() : this._q; }
   // build always-present static groups + far LOD for every chunk (called during loading)
   buildStatic(progress) {
     let i = 0;
@@ -273,7 +275,8 @@ export class WorldView {
     // shadows only for close chunks; detailed trees only within treeNear
     const treeNear = this.q.treeNear;
     const alt = Math.max(0, camPos.y - 60);
-    const dDetail = 1100 + alt * 2, dTrees = 1500 + alt * 2.5, dFarB = 2400 + alt * 3;
+    const q = this.q;
+    const dDetail = (q.staticDist || 1100) + alt * 2, dTrees = (q.farTrees || 1500) + alt * 2.5, dFarB = (q.farBuildings || 2400) + alt * 3;
     for (const ch of this.chunks) {
       const dd = Math.hypot(Math.max(0, Math.abs(camPos.x - ch.center.x) - CHUNK / 2), Math.max(0, Math.abs(camPos.z - ch.center.z) - CHUNK / 2));
       if (ch.staticDetail) ch.staticDetail.visible = dd < dDetail;
