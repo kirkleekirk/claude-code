@@ -360,20 +360,27 @@ const Creator = {
    INPUT
    ===================================================================== */
 const Input = {
-  keys: {}, mx: 0, mz: 0, lookDX: 0, lookDY: 0, locked: false, joy: { id: null, x: 0, y: 0 }, look: { id: null, x: 0, y: 0 }, runToggle: false,
+  keys: {}, mx: 0, mz: 0, lookDX: 0, lookDY: 0, locked: false, noLock: false, drag: null, joy: { id: null, x: 0, y: 0 }, look: { id: null, x: 0, y: 0 }, runToggle: false,
   init() {
     const canvas = G.sceneEl.canvas;
     addEventListener('keydown', (e) => this.key(e, true)); addEventListener('keyup', (e) => this.key(e, false));
-    canvas.addEventListener('mousedown', (e) => { if (G.mode !== 'play' || IS_TOUCH) return; SFX.init(); if (!this.locked) { canvas.requestPointerLock && canvas.requestPointerLock(); return; } if (e.button === 0) this.castSlot(0); if (e.button === 2) this.castSlot(1); });
+    /* mouse capture is asked for on the first click; where a page is embedded and capture is refused, fall back to drag-to-look, click-to-bend */
+    canvas.addEventListener('mousedown', (e) => { if (G.mode !== 'play' || IS_TOUCH) return; SFX.init();
+      if (!this.locked && !this.noLock) { if (!canvas.requestPointerLock) { this.lockFailed(); } else { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => this.lockFailed()); return; } }
+      if (this.noLock && !this.locked) { this.drag = { moved: 0, button: e.button }; return; }
+      if (e.button === 0) this.castSlot(0); if (e.button === 2) this.castSlot(1); });
+    addEventListener('mouseup', (e) => { const d = this.drag; this.drag = null; if (!d || G.mode !== 'play' || this.panelBlock()) return; if (d.moved <= 6) { if (d.button === 0) this.castSlot(0); if (d.button === 2) this.castSlot(1); } });
+    document.addEventListener('pointerlockerror', () => this.lockFailed());
     canvas.addEventListener('contextmenu', (e) => e.preventDefault()); document.addEventListener('contextmenu', (e) => { if (G.mode === 'play') e.preventDefault(); });
     document.addEventListener('pointerlockchange', () => { this.locked = document.pointerLockElement === canvas; });
-    addEventListener('mousemove', (e) => { if (this.locked) { this.lookDX += e.movementX; this.lookDY += e.movementY; } else if (G.mode === 'creator' && e.buttons & 1 && e.target === canvas) { Creator.orbit = (Creator.orbit || 0) - e.movementX * 0.01; } });
-    addEventListener('wheel', (e) => { if (G.mode !== 'play' || this.panelBlock()) return; if (e.ctrlKey) return; if (this.locked) this.cycleElement(e.deltaY > 0 ? 1 : -1); }, { passive: true });
+    addEventListener('mousemove', (e) => { if (this.locked) { this.lookDX += e.movementX; this.lookDY += e.movementY; } else if (this.drag && G.mode === 'play') { this.drag.moved += Math.abs(e.movementX) + Math.abs(e.movementY); if (this.drag.moved > 6) { this.lookDX += e.movementX; this.lookDY += e.movementY; } } else if (G.mode === 'creator' && e.buttons & 1 && e.target === canvas) { Creator.orbit = (Creator.orbit || 0) - e.movementX * 0.01; } });
+    addEventListener('wheel', (e) => { if (G.mode !== 'play' || this.panelBlock()) return; if (e.ctrlKey) return; if (this.locked || this.noLock) this.cycleElement(e.deltaY > 0 ? 1 : -1); }, { passive: true });
     if (IS_TOUCH) this.initTouch(canvas);
     addEventListener('blur', () => { this.keys = {}; });
   },
   panelBlock() { return G.ui.panelOpen || G.ui.dialogOpen || G.ui.storyOpen; },
   unlock() { if (document.pointerLockElement) document.exitPointerLock(); },
+  lockFailed() { if (this.noLock) return; this.noLock = true; G.ui.note('Mouse capture isn\'t available here: <b>drag</b> to look, <b>click</b> to bend.'); },
   key(e, down) {
     if (e.target && e.target.tagName === 'INPUT') return; const k = e.code; this.keys[k] = down; if (!down) return; SFX.init();
     if (G.ui.dialogOpen) { if (/^Digit[1-9]$/.test(k)) Dialog.pick(+k.slice(5) - 1); if (k === 'Escape') Dialog.close(); return; }
@@ -688,7 +695,13 @@ const Boot = {
   },
   title() {
     G.mode = 'title'; $('#title').classList.remove('hidden'); $('#hud').classList.add('hidden'); $('#touch').classList.add('hidden'); const save = Game.loadData(); $('#bCont').disabled = !save; $('#bCont').style.display = save ? '' : 'none';
-    $('#bNew').onclick = () => { SFX.init(); SFX.ui(); if (save && !confirm('Begin a new life? Your current journey will be overwritten when you next save.')) return; $('#title').classList.add('hidden'); Creator.open(); };
+    /* starting over with a save present asks once more on the button itself (browser dialogs are unavailable where the game is embedded) */
+    const bNew = $('#bNew'); bNew.textContent = 'Begin a New Life'; bNew.classList.remove('warn'); let armed = 0;
+    bNew.onclick = () => { SFX.init(); SFX.ui(); if (save && performance.now() > armed) { armed = performance.now() + 4000; bNew.textContent = 'Replace My Saved Journey'; bNew.classList.add('warn');
+        setTimeout(() => { if (performance.now() >= armed) { bNew.textContent = 'Begin a New Life'; bNew.classList.remove('warn'); } }, 4100); return; }
+      armed = 0; bNew.textContent = 'Begin a New Life'; bNew.classList.remove('warn'); $('#title').classList.add('hidden'); Creator.open(); };
+    let failed = false; try { failed = sessionStorage.getItem('avatar_lost_era_loadfail') === '1'; sessionStorage.removeItem('avatar_lost_era_loadfail'); } catch (e) { /* storage unavailable */ }
+    $('#titleMsg').textContent = failed ? 'That save could not be loaded. You can begin a new life, or try again later.' : ''; $('#titleMsg').classList.toggle('hidden', !failed);
     $('#bCont').onclick = () => { SFX.init(); SFX.ui(); $('#title').classList.add('hidden'); this.load(save); };
     $('#bHow').onclick = () => { SFX.ui(); UI.story([`<p><b>How to Play</b></p><p>You are a new Avatar in an age long before Kyoshi, Roku, Aang or Korra. Survive the wilds of Tienhai Valley with bending: hunt and cook, find water, keep warm, rest safely at night — and fight the beasts and outlaws who threaten the valley.</p><p>Every technique is learned through a <b>trial</b> drawn from the show's lore — meditating at sunrise, sitting with the badgermoles, practising under the moon. Elements beyond your own must be <b>awakened</b> from their original teachers. The element opposite your own is hardest of all.</p>${CONTROLS_HTML}`], null); };
   },
@@ -720,7 +733,7 @@ const Boot = {
       Object.assign(P, { hp: d.hp, chi: d.chi, maxHp: d.maxHp, maxChi: d.maxChi, hunger: d.hunger, thirst: d.thirst, warmth: d.warmth, water: d.water }); if (G.flags.bigSkin) P.waterMax += 2; if (d.respawn) P.respawn = V3(d.respawn[0], 0, d.respawn[1]);
       if (G.flags.banyanVision && !LORE.find(l => l.k === 'vision')) { const prev = PAST_AVATARS[prevElement(P.native)]; LORE.push({ k: 'vision', t: `The Vision of Avatar ${prev.name}`, b: 'Your past life spoke of something crossing between worlds in the far west, near the Great Divide — and of a spiral marked on the daofei map.' }); }
       UI.banner(`Welcome back, Avatar ${d.profile.name}`, `Day ${G.day}`);
-    } catch (e) { console.error(e); alert('That save could not be loaded.'); location.reload(); }
+    } catch (e) { console.error(e); try { sessionStorage.setItem('avatar_lost_era_loadfail', '1'); } catch (e2) { /* storage unavailable */ } location.reload(); }
   },
 };
 (function waitScene() {

@@ -299,6 +299,13 @@
         return (q.native === 'air' && Game.state.level === 4 && Game.count('peach') === 5 && G.stats.meditate_time === 77 && G.flags.talkedBao && G.day === 3 && Math.abs(q.pos.x - 40) < 0.1 && Math.round(q.hunger) === 42 && Game.elementOpen('earth')) || 'mismatch';
       });
       await t('corrupt saves do not crash the title screen', () => { localStorage.setItem('avatar_lost_era_v1', '{oops'); const d = Game.loadData(); localStorage.removeItem('avatar_lost_era_v1'); return d === null; });
+      await t('starting over with a save asks on the button, then opens the creator', () => { const orig = Game.loadData; Game.loadData = () => ({ example: true }); const mode = G.mode;
+        try { Boot.title(); const b = document.getElementById('bNew'); b.click(); const asked = b.textContent === 'Replace My Saved Journey' && !document.getElementById('title').classList.contains('hidden');
+          b.click(); const opened = G.mode === 'creator' && !document.getElementById('creator').classList.contains('hidden');
+          document.getElementById('cBack').click(); if (Creator.model) { G.scene.remove(Creator.model.root); Creator.model = null; } const back = !document.getElementById('bNew').classList.contains('warn');
+          return asked && opened && back || `asked ${asked} opened ${opened} reset ${back}`; } finally { Game.loadData = orig; Boot.title(); document.getElementById('title').classList.add('hidden'); G.mode = mode; } });
+      await t('a failed load returns to the title with a message, not a browser dialog', () => { try { sessionStorage.setItem('avatar_lost_era_loadfail', '1'); } catch (e) { return true; } const mode0 = G.mode; Boot.title(); const m = document.getElementById('titleMsg'); const shown = !m.classList.contains('hidden') && /could not be loaded/.test(m.textContent);
+        const mode = G.mode; Boot.title(); document.getElementById('title').classList.add('hidden'); G.mode = mode; return shown && m.classList.contains('hidden') || `shown ${shown} cleared ${m.classList.contains('hidden')}`; });
       await t('test mode never overwrites real saves', () => { localStorage.removeItem('avatar_lost_era_v1'); Game.save(); return localStorage.getItem('avatar_lost_era_v1') === null; });
     }
 
@@ -310,6 +317,10 @@
       await t('knocked-out pose lies down', () => { const H = buildHumanoid(defaultLook('fire')); for (let i = 0; i < 90; i++) animateHumanoid(H, 1 / 30, { dead: true, grounded: true }); return H.J.hips.rotation.x < -1.2 && H.J.hips.position.y < 0.35 || `${H.J.hips.rotation.x} ${H.J.hips.position.y}`; });
       for (const el of ['fire', 'earth', 'water', 'air']) await t(`combat stance: ${el}`, () => { const H = buildHumanoid(defaultLook('air')); for (let i = 0; i < 60; i++) animateHumanoid(H, 1 / 30, { combat: true, element: el, grounded: true }); return H.stance > 0.9 && finiteObj(H.root); });
       await t('walk cycle swings the legs', () => { const H = buildHumanoid(defaultLook('water')); let mx = 0, mn = 0; for (let i = 0; i < 90; i++) { animateHumanoid(H, 1 / 60, { speed: 4.6, grounded: true }); mx = Math.max(mx, H.J.hipL.rotation.x); mn = Math.min(mn, H.J.hipL.rotation.x); } return mx - mn > 0.6 || mx - mn; });
+      await t('without mouse capture, dragging looks around and a click still bends', () => { fresh('fire'); isolate(); const I = Input, cv = G.sceneEl.canvas; const was = I.noLock; I.locked = false; I.lockFailed();
+        const yaw0 = G.camYaw; cv.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true })); for (let i = 0; i < 4; i++) dispatchEvent(new MouseEvent('mousemove', { movementX: 40, movementY: 0, buttons: 1 })); dispatchEvent(new MouseEvent('mouseup', { button: 0 })); tick(0.05);
+        const turned = Math.abs(U.angDiff(G.camYaw, yaw0)) > 0.1; let cast = false; const orig = I.castSlot; I.castSlot = () => { cast = true; }; cv.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true })); dispatchEvent(new MouseEvent('mouseup', { button: 0 })); I.castSlot = orig; I.noLock = was;
+        return turned && cast || `turned ${turned} cast ${cast}`; });
       await t('hit flash fades', () => { const H = buildHumanoid(defaultLook('water')); H.emissiveT = 0.18; animateHumanoid(H, 0.01, {}); const a = H.mat.emissive.r; for (let i = 0; i < 20; i++) animateHumanoid(H, 0.02, {}); return a > 0.3 && H.mat.emissive.r < 0.01; });
     }
 

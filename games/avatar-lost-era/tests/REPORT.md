@@ -1,7 +1,7 @@
 # Automated test report
 
-Ran 770 tests in 114s — **770 passed, 0 failed**.
-Average simulation tick in a busy scene: 1.08 ms.
+Ran 773 tests in 158s — **773 passed, 0 failed**.
+Average simulation tick in a busy scene: 1.29 ms.
 
 | Area | Passed | Failed |
 |---|---|---|
@@ -15,8 +15,8 @@ Average simulation tick in a busy scene: 1.08 ms.
 | People | 21 | 0 |
 | Quests | 11 | 0 |
 | UI | 64 | 0 |
-| Save | 3 | 0 |
-| Animation | 52 | 0 |
+| Save | 5 | 0 |
+| Animation | 53 | 0 |
 | Rig & fit | 21 | 0 |
 | Render | 12 | 0 |
 | Performance | 3 | 0 |
@@ -682,6 +682,8 @@ Average simulation tick in a busy scene: 1.08 ms.
 - ✅ [UI] ceremony overlay shows and fades
 - ✅ [Save] save → load round-trip restores the journey
 - ✅ [Save] corrupt saves do not crash the title screen
+- ✅ [Save] starting over with a save asks on the button, then opens the creator
+- ✅ [Save] a failed load returns to the title with a message, not a browser dialog
 - ✅ [Save] test mode never overwrites real saves
 - ✅ [Animation] humanoid action plays and returns to rest: punchR (frame A)
 - ✅ [Animation] humanoid action plays and returns to rest: punchR (frame B)
@@ -734,6 +736,7 @@ Average simulation tick in a busy scene: 1.08 ms.
 - ✅ [Animation] combat stance: water
 - ✅ [Animation] combat stance: air
 - ✅ [Animation] walk cycle swings the legs
+- ✅ [Animation] without mouse capture, dragging looks around and a click still bends
 - ✅ [Animation] hit flash fades
 - ✅ [Rig & fit] both base meshes decode with the 30-bone skeleton
 - ✅ [Rig & fit] frame A: every vertex is fully weighted to real bones
