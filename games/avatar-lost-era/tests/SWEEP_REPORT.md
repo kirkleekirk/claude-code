@@ -1,6 +1,6 @@
 # Sweep report
 
-Ran 10046 checks in 320s — **10046 passed, 0 failed**.
+Ran 10046 checks in 281s — **10046 passed, 0 failed**.
 
 | Area | Passed | Failed |
 |---|---|---|

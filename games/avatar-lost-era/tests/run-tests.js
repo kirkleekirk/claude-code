@@ -1,5 +1,5 @@
 // Automated test runner: boots the real game in headless Chromium and runs tests/suite.js inside it.
-// usage: node tests/run-tests.js [group,group]   (groups: world creation rules techniques trials survival creatures people quests ui save animation rig render perf mobile)
+// usage: node tests/run-tests.js [group,group]   (groups: world creation rules techniques trials survival creatures people quests ui save animation rig render perf mobile realtime)
 const { launch } = require('./harness.js'); const path = require('path'); const fs = require('fs');
 const GROUPS = ['world', 'creation', 'rules', 'techniques', 'trials', 'survival', 'creatures', 'people', 'quests', 'ui', 'save', 'animation', 'rig', 'render', 'perf'];
 (async () => {
@@ -34,6 +34,11 @@ const GROUPS = ['world', 'creation', 'rules', 'techniques', 'trials', 'survival'
     all.push(...res); const f = res.filter(r => !r.ok); console.log(`mobile      ${String(res.length - f.length).padStart(4)}/${String(res.length).padEnd(4)} passed`); for (const r of f) console.log(`   ✗ ${r.name} — ${r.detail}`);
     if (m.errors.length) { all.push({ group: 'Console', name: 'no errors on mobile', ok: false, detail: m.errors.slice(0, 3).join(' || ') }); console.log(m.errors.slice(0, 3)); } else all.push({ group: 'Console', name: 'no errors on mobile', ok: true });
     await m.close();
+  }
+  if (!only.length || only.includes('realtime')) { // the real frame loop with real input, title to play, desktop and touch
+    const { runRealtime } = require('./realtime.js'); const s = Date.now(); const { R: res, errors: rtErr } = await runRealtime(); all.push(...res); const f = res.filter(r => !r.ok);
+    console.log(`realtime    ${String(res.length - f.length).padStart(4)}/${String(res.length).padEnd(4)} passed  (${((Date.now() - s) / 1000).toFixed(1)}s)`); for (const r of f) console.log(`   ✗ ${r.name} — ${r.detail}`);
+    all.push({ group: 'Console', name: 'no errors in real-time play', ok: !rtErr.length, detail: rtErr.slice(0, 3).join(' || ') }); if (rtErr.length) console.log(rtErr.slice(0, 3));
   }
   const pass = all.filter(r => r.ok).length; const fail = all.length - pass;
   const groups = {}; for (const r of all) { groups[r.group] = groups[r.group] || { pass: 0, fail: 0 }; groups[r.group][r.ok ? 'pass' : 'fail']++; }

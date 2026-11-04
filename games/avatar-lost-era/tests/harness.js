@@ -20,6 +20,10 @@ async function launch(opts = {}) {
   await page.goto(`http://localhost:${port}/index.html?test=1${opts.query || ''}`);
   await page.waitForFunction(() => window.GAME || window.BOOT_ERROR, null, { timeout: 120000 });
   const bootErr = await page.evaluate(() => window.BOOT_ERROR); if (bootErr) throw new Error('BOOT: ' + bootErr);
+  // the browser's own frame loop must drive the game (a dead loop leaves the camera under the map while every manual-tick test still passes)
+  const looped = await page.waitForFunction(() => (GAME.G.loopTicks || 0) >= 3, null, { timeout: 30000 }).then(() => true, () => false);
+  if (!looped) { await browser.close(); srv.close(); throw new Error('The A-Frame render loop is not driving the game: Main.tick never ran from a real frame.'); }
+  if (opts.realtime) return { browser, page, errors, close: async () => { await browser.close(); srv.close(); } };
   // software GL is far slower than a real GPU: stop the free-running loop and render on demand
   await page.evaluate(() => { const s = GAME.G.sceneEl; s.renderer.setAnimationLoop(null); window.__render = () => { const t = performance.now(); s.renderer.render(s.object3D, s.camera); const gl = s.renderer.getContext(); const px = new Uint8Array(4); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); return performance.now() - t; }; });
   return { browser, page, errors, close: async () => { await browser.close(); srv.close(); } };

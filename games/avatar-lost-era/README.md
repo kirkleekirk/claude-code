@@ -73,7 +73,9 @@ node tests/mobile.js shots-mobile   # phone layout screenshots
 The suite drives the real game in headless Chromium: it walks the stairs and bridges, casts every
 technique at targets, lets predators hunt, sleeps through nights, plays through the story, walks
 every dialogue tree, checks every model and animation for invalid values, and checks that rendered
-frames contain real content. See `tests/REPORT.md` for the latest run.
+frames contain real content. It also plays the game in real time on the browser's own frame loop, from the
+title screen through character creation into play, with real mouse, keyboard and touch input, and every
+test run first checks that the frame loop is driving the game. See `tests/REPORT.md` for the latest run.
 
 The sweep (`tests/run-sweep.js`) checks the whole world object by object:
 - every tree, rock, bush, reed and bamboo clump, for floating, water, roads, buildings, stairs and overlap;

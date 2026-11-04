@@ -1,7 +1,7 @@
 # Automated test report
 
-Ran 773 tests in 158s — **773 passed, 0 failed**.
-Average simulation tick in a busy scene: 1.29 ms.
+Ran 798 tests in 262s — **798 passed, 0 failed**.
+Average simulation tick in a busy scene: 0.95 ms.
 
 | Area | Passed | Failed |
 |---|---|---|
@@ -20,8 +20,9 @@ Average simulation tick in a busy scene: 1.29 ms.
 | Rig & fit | 21 | 0 |
 | Render | 12 | 0 |
 | Performance | 3 | 0 |
-| Console | 2 | 0 |
+| Console | 3 | 0 |
 | Mobile | 24 | 0 |
+| Real-time play | 24 | 0 |
 
 
 
@@ -800,3 +801,28 @@ Average simulation tick in a busy scene: 1.29 ms.
 - ✅ [Mobile] HUD fits the phone screen
 - ✅ [Mobile] skill tree visible on phone
 - ✅ [Console] no errors on mobile
+- ✅ [Real-time play] the browser frame loop drives the game
+- ✅ [Real-time play] title: the frame loop keeps ticking
+- ✅ [Real-time play] title: the camera flies above the valley, not under the map
+- ✅ [Real-time play] title: the camera moves on its own
+- ✅ [Real-time play] creator opens over the scene
+- ✅ [Real-time play] creator: the camera frames the character above ground
+- ✅ [Real-time play] the story opens after creation
+- ✅ [Real-time play] play starts with every menu closed
+- ✅ [Real-time play] the player spawns standing on the ground
+- ✅ [Real-time play] the camera is above ground and close behind the player
+- ✅ [Real-time play] holding W walks the player forward
+- ✅ [Real-time play] the player stays on the ground while walking
+- ✅ [Real-time play] the camera follows the player
+- ✅ [Real-time play] the captured mouse turns the camera
+- ✅ [Real-time play] without capture, dragging the mouse turns the camera
+- ✅ [Real-time play] Space jumps
+- ✅ [Real-time play] the player lands back on the ground
+- ✅ [Real-time play] a click bends the first technique (chi is spent)
+- ✅ [Real-time play] Escape pauses and resumes
+- ✅ [Real-time play] the frame loop is still ticking at the end
+- ✅ [Real-time play] touch: play starts with the stick and buttons on screen
+- ✅ [Real-time play] touch: pushing the stick walks the player
+- ✅ [Real-time play] touch: the player stays on the ground
+- ✅ [Real-time play] touch: the camera is above the ground
+- ✅ [Console] no errors in real-time play

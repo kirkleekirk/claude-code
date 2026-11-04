@@ -687,7 +687,10 @@ const Boot = {
     G.campfires.push(new Campfire(-19, -7, true, { permanent: true })); G.campfires.push(new Campfire(LOC.daofei.x, LOC.daofei.z, true, { permanent: true }));
     for (const v of VILLAGERS) { const z = v.id === 'dorje' ? World.pagodaTop.z + 4.6 : v.z, x = v.x; const h = new Human(v, x, z, 'villager'); if (v.id === 'dorje') { h.pos.y = groundH(x, z, 1e9); } G.ents.push(h); }
     G.buildMs = performance.now() - t0;
-    sceneEl.addBehavior({ el: sceneEl, tick: (t, dt) => { try { Main.tick(Math.min((dt || 16) / 1000, 0.05)); } catch (e) { console.error(e); G.lastError = String(e && e.stack || e); } } });
+    /* the game loop runs as a real A-Frame component: A-Frame 1.6 only ticks behaviors that belong to registered components (an anonymous
+       sceneEl.addBehavior object is silently skipped), and a component keeps ticking inside a VR session too */
+    if (!AFRAME.components['game-loop']) AFRAME.registerComponent('game-loop', { tick(t, dt) { G.loopTicks = (G.loopTicks || 0) + 1; try { Main.tick(Math.min((dt || 16) / 1000, 0.05)); } catch (e) { console.error(e); G.lastError = String(e && e.stack || e); } } });
+    sceneEl.setAttribute('game-loop', '');
     // villagers that meditate (the monk at the pagoda)
     const dj = G.ents.find(e => e.def && e.def.id === 'dorje'); if (dj) { const orig = dj.update.bind(dj); dj.update = (dt) => { dj.H.root.position.copy(dj.pos); dj.H.root.rotation.y = dj.yaw; animateHumanoid(dj.H, dt, { meditate: true, grounded: true, glow: 0.04 }); if (Math.random() < 0.05) FX.air(V3(dj.pos.x, dj.pos.y + 1, dj.pos.z), V3(0, 1, 0), 1, 0.5, 0.5); void orig; }; }
     $('#loading').classList.add('hidden'); this.title();
