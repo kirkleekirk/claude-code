@@ -92,14 +92,23 @@ class Zombie {
     let tx = 0, tz = 0, speed = 0;
     if (this.stagger > 0) { this.stagger -= dt; }
     else if (this.state === 'chase' || this.state === 'investigate') {
-      const t = this.target;
+      // stuck against a building: head for a doorway first
+      if (this.blocked > 1.0 && !this.waypoint) this.findDoorway(this.target);
+      if (this.waypoint) {
+        this.wpT -= dt;
+        const w = this.waypoint[this.wpStage];
+        if (Math.hypot(w.x - this.pos.x, w.z - this.pos.z) < 0.7) { this.wpStage++; this.blocked = 0; }
+        if (this.wpStage >= this.waypoint.length || this.wpT <= 0) this.waypoint = null;
+      }
+      const t = this.waypoint ? this.waypoint[this.wpStage] : this.target;
       const ex = t.x - this.pos.x, ez = t.z - this.pos.z;
       const el = Math.hypot(ex, ez);
-      if (this.state === 'investigate' && el < 1.5) { this.state = 'wander'; this.home.copy(this.pos); }
+      if (this.state === 'investigate' && !this.waypoint && el < 1.5) { this.state = 'wander'; this.home.copy(this.pos); }
       tx = ex / (el || 1); tz = ez / (el || 1);
       speed = this.state === 'chase' ? this.chaseSpeed : 0.9;
       if (this.state === 'chase' && dist < 1.25 && Math.abs(pp.y - this.pos.y) < 1.2) { speed = 0; this.tryAttack(player); }
     } else {
+      this.waypoint = null;
       this.wanderT -= dt;
       if (this.wanderT <= 0) {
         this.wanderT = 3 + Math.random() * 6;
@@ -163,6 +172,28 @@ class Zombie {
     this.char.root.position.set(this.pos.x, this.visualY, this.pos.z);
     this.char.root.rotation.y = this.facing;
     return true;
+  }
+  // Pick the door that best links us to the target; walk to a point just
+  // outside it, then through it.
+  findDoorway(target) {
+    const g = this.mgr.game;
+    let best = null, bs = Infinity;
+    for (const d of g.world.doors) {
+      const c = d.center;
+      if (Math.abs(c[1] - 1 - this.pos.y) > 1.5) continue;
+      const dz = Math.hypot(c[0] - this.pos.x, c[2] - this.pos.z);
+      if (dz > 18) continue;
+      const s = dz + Math.hypot(c[0] - target.x, c[2] - target.z);
+      if (s < bs) { bs = s; best = d; }
+    }
+    if (!best) return;
+    const c = best.center, n = best.def.nAxis;
+    const side = Math.sign((this.pos.x - c[0]) * n[0] + (this.pos.z - c[2]) * n[2]) || 1;
+    this.waypoint = [
+      new THREE.Vector3(c[0] + n[0] * side * 1.3, c[1], c[2] + n[2] * side * 1.3),
+      new THREE.Vector3(c[0] - n[0] * side * 0.9, c[1], c[2] - n[2] * side * 0.9),
+    ];
+    this.wpStage = 0; this.wpT = 9;
   }
   tryAttack(player) {
     if (this.attackCd > 0) return;

@@ -134,12 +134,13 @@ export class Game {
   respawn() {
     const p = this.player;
     const c = this.claims.list[0];
-    const at = c ? [c.flag[0] + 1.5, c.flag[2] + 1.5] : FEATURES.spawn;
-    p.spawn(at[0], at[1]);
+    const at = c ? [c.flag[0] + 1.5, c.flag[2] + 1.5, c.flag[1]] : FEATURES.spawn;
+    p.spawn(at[0], at[1], at[2]);
     p.char.root.rotation.x = 0;
     this.inventory.res.food = Math.floor(this.inventory.res.food / 2);
     this.inventory.res.ammo = Math.floor(this.inventory.res.ammo / 2);
-    for (const z of this.zombies.list) if (z.pos.distanceTo(p.pos) < 35) { z.dead = true; z.deadT = 25; }
+    // the ones that got you have wandered off
+    this.zombies.list = this.zombies.list.filter((z) => { const near = z.pos.distanceTo(p.pos) < 35; if (near) z.dispose(); return !near; });
     this.hud.hideDeath();
     this.hud.toast('You came to, aching. Some supplies are gone.', 3);
   }
@@ -150,9 +151,11 @@ export class Game {
 
   handleKeys() {
     const inp = this.input, hud = this.hud;
+    if (inp.lockLost) { inp.lockLost = false; if (!hud.paused && !this.buildMode.active && !this.modalOpen && !this.player.dead) hud.togglePause(true); }
     if (inp.pressed('Escape')) {
-      if (this.buildMode.designer && !this.buildMode.designer.el.hidden) this.buildMode.designer.close();
-      else if (!this.map.el.hidden) this.map.toggle(false);
+      // one Esc closes one thing
+      if (this.buildMode.designer && !this.buildMode.designer.el.hidden) { this.buildMode.designer.close(); inp.pressedSet.delete('Escape'); }
+      else if (!this.map.el.hidden) { this.map.toggle(false); inp.pressedSet.delete('Escape'); }
       else if (!this.buildMode.active) hud.togglePause();
     }
     if (hud.paused || this.player.dead) return;
@@ -166,7 +169,7 @@ export class Game {
     if (this.buildMode.active) return;
     if (inp.pressed('KeyG')) {
       const f = this.tpc.forward;
-      this.claims.plant(this.player.pos.x + f.x * 2, this.player.pos.z + f.z * 2);
+      this.claims.plant(this.player.pos.x + f.x * 2, this.player.pos.z + f.z * 2, false, this.player.pos.y);
     }
     if (inp.pressed('KeyQ')) {
       if (this.player.weapon.kind === 'gun') this.setWeapon('bat');
@@ -199,6 +202,7 @@ export class Game {
         this.buildMode.update(dt);
         this.player.char.animate(dt, { speed: 0, mode: 'idle', weapon: this.player.weapon.kind === 'gun' ? 'gun' : 'bat' });
         this.player.syncModel(dt);
+        this.player.char.mesh.visible = true;
       } else if (!this.modalOpen) {
         const ld = inp.lookDelta();
         const dragging = !inp.locked && (inp.mouse.buttons & 1) && inp.dragMoved;
@@ -208,6 +212,10 @@ export class Game {
         if (this.player.weapon.kind === 'gun' && this.player.attackT >= 0 && !this.player._shotFired) { this.combat.shoot(this.player); this.player._shotFired = true; }
         if (this.player.attackT < 0) this.player._shotFired = false;
         this.tpc.update(dt, this.player.char.root.position, this.player.aiming, this.player.crouch);
+        // in a tight corner the camera ends up inside the player: hide the model
+        const close = this.tpc.curDist < 0.6;
+        this.player.char.mesh.visible = !close;
+        if (close) this.player.weaponMesh.visible = false;
         this.interaction.update(dt);
         this.zombies.update(dt);
       }

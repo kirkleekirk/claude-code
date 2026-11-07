@@ -95,7 +95,7 @@ export function loadGame(game) {
   game.day = data.day || 1;
   if (data.weather) game.sky.setWeather(data.weather, true);
   if (data.player) {
-    game.player.spawn(data.player.x, data.player.z);
+    game.player.spawn(data.player.x, data.player.z, data.player.y);
     game.player.health = Math.max(20, data.player.health || 100);
     if (data.player.weapon === 'gun' && game.inventory.weapons.pistol) game.setWeapon('pistol');
   }

@@ -33,7 +33,7 @@ export class Claims {
     if (this.game.world.terrain.height(vx * CELL, vz * CELL) < T.water + 0.6) return { ok: false, why: 'The ground is too wet here.' };
     return { ok: true, vx, vz, x0, x1, z0, z1 };
   }
-  plant(x, z, silent = false) {
+  plant(x, z, silent = false, y = null) {
     const r = this.check(x, z);
     if (!r.ok) { if (!silent) this.game.hud.toast(r.why, 3); return null; }
     const g = this.game;
@@ -64,8 +64,10 @@ export class Claims {
       c.structure = S;
       if (!silent) g.hud.toast('Claim planted. Press B to build.', 3);
     }
-    const fy = g.physics.groundAt(r.vx * CELL, r.vz * CELL, 1e9);
-    c.flag = [r.vx * CELL, fy, r.vz * CELL];
+    const fx = r.vx * CELL, fz = r.vz * CELL;
+    // on the floor you're standing on (not a counter, never the roof)
+    const fy = g.physics.groundAt(fx, fz, y == null ? g.world.terrain.height(fx, fz) + 0.9 : y + 0.3);
+    c.flag = [fx, fy, fz];
     this.list.push(c);
     this.buildMarkers(c);
     g.markDirty && g.markDirty();
@@ -108,12 +110,12 @@ export class Claims {
     const m4 = new THREE.Matrix4();
     const tapePos = [];
     pts.forEach(([x, z], i) => {
-      const y = g.physics.groundAt(x, z, tr.height(x, z) + 6);
+      const y = g.physics.groundAt(x, z, tr.height(x, z) + 0.7);
       m4.makeTranslation(x, y + 0.45, z);
       stakes.setMatrixAt(i, m4);
       if (i) {
         const [px, pz] = pts[i - 1];
-        const py = g.physics.groundAt(px, pz, tr.height(px, pz) + 6);
+        const py = g.physics.groundAt(px, pz, tr.height(px, pz) + 0.7);
         tapePos.push(px, py + 0.75, pz, x, y + 0.75, z);
       }
     });

@@ -42,8 +42,12 @@ export class Player {
     this.weaponMesh.updateMatrixWorld(true);
     return out.copy(this.muzzleLocal).applyMatrix4(this.weaponMesh.matrixWorld);
   }
-  spawn(x, z) {
-    const g = this.game.physics.groundAt(x, z, 1e9);
+  // y: the height to look for ground below (defaults to the terrain, so a
+  // spawn point never lands on a roof)
+  spawn(x, z, y = null) {
+    const ph = this.game.physics;
+    const top = (y == null ? ph.terrain.height(x, z) : y) + 0.9;
+    const g = ph.groundAt(x, z, top);
     this.pos.set(x, g, z);
     this.vel.set(0, 0, 0);
     this.visualY = g;

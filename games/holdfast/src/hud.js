@@ -91,7 +91,7 @@ export class HUD {
       this.$('hud-weapon').textContent = p.weapon.name + (p.weapon.kind === 'gun' ? ` · ${inv.res.ammo} rounds` : '');
     }
     const claim = g.claims && g.claims.at(p.pos.x, p.pos.z);
-    this.$('hud-claim').textContent = claim ? 'Inside your claim · B to build' : '';
+    this.$('hud-claim').textContent = claim ? (isTouch ? 'Inside your claim · tap Build' : 'Inside your claim · B to build') : '';
     this.$('vignette').style.opacity = Math.max(p.hurtFlash * 2.2, p.health < 30 ? 0.35 + 0.15 * Math.sin(performance.now() / 300) : 0).toFixed(2);
     this.$('crosshair').classList.toggle('aim', p.aiming);
   }

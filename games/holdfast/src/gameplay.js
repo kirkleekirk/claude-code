@@ -45,6 +45,7 @@ export function rollLoot(table, inv) {
     const n = a + Math.floor(Math.random() * (b - a + 1));
     if (k === 'pistol') {
       if (!inv.weapons.pistol) { inv.weapons.pistol = true; got.push('a pistol (Q to switch)'); inv.res.ammo += 6; }
+      else { inv.res.ammo += 6; got.push('6 Ammo'); }
       continue;
     }
     if (k === 'kit') { inv.claimKits += 1; got.push('a claim kit'); continue; }
@@ -61,6 +62,17 @@ export class Interaction {
     this.target = null;
     this.hold = 0;
   }
+  // nothing solid between the player's chest and the point (within slack)
+  canReach(pt, slack) {
+    const g = this.game, p = g.player.pos;
+    const ox = p.x, oy = p.y + 1.2, oz = p.z;
+    const dx = pt[0] - ox, dy = pt[1] - oy, dz = pt[2] - oz;
+    const len = Math.hypot(dx, dy, dz);
+    if (len < slack) return true;
+    const hit = g.physics.raycast(ox, oy, oz, dx / len, dy / len, dz / len, len, { noTerrain: true, skipGlass: false,
+      filter: (b) => b.kind !== 'door' && b.kind !== 'tree' && b.kind !== 'car' && b.kind !== 'walk' && b.kind !== 'fence' });
+    return hit.dist >= len - slack;
+  }
   candidates() {
     const g = this.game, p = g.player.pos;
     const out = [];
@@ -68,13 +80,13 @@ export class Interaction {
       const c = d.center;
       if (Math.abs(c[1] - 1 - p.y) > 1.5) continue;
       const dist = Math.hypot(c[0] - p.x, c[2] - p.z);
-      if (dist < 2.1) out.push({ kind: 'door', ref: d, pos: c, dist });
+      if (dist < 2.1 && this.canReach(c, 0.35)) out.push({ kind: 'door', ref: d, pos: c, dist });
     }
     const pushLoot = (it) => {
       if (it.searched) return;
       if (Math.abs(it.pos[1] - p.y - 0.8) > 1.6) return;
       const dist = Math.hypot(it.pos[0] - p.x, it.pos[2] - p.z);
-      if (dist < 1.9) out.push({ kind: 'loot', ref: it, pos: it.pos, dist });
+      if (dist < 1.9 && this.canReach(it.pos, 0.7)) out.push({ kind: 'loot', ref: it, pos: it.pos, dist });
     };
     for (const S of g.world.structures) {
       const b = S._bb || (S._bb = S.bounds());
@@ -102,7 +114,8 @@ export class Interaction {
       const s = facing * 1.5 - c.dist;
       if (s > bs) { bs = s; best = c; }
     }
-    if (best !== this.target) this.hold = 0;
+    // candidates are rebuilt every frame: compare what they point at
+    if (!best || !this.target || best.ref !== this.target.ref) this.hold = 0;
     this.target = best;
     if (!best) { g.hud.setPrompt(null); return; }
     if (best.kind === 'door') {
@@ -171,8 +184,10 @@ export class Combat {
     dir.normalize();
     const o = cam.position.clone();
     // world hit distance
-    const wr = g.physics.raycast(o.x, o.y, o.z, dir.x, dir.y, dir.z, 120, { skipGlass: false, filter: (b) => b.kind !== 'tree' || true });
+    const wr = g.physics.raycast(o.x, o.y, o.z, dir.x, dir.y, dir.z, 120, { skipGlass: false });
     let best = wr.dist, target = null, head = false;
+    // the shot leaves the gun, not the camera: nothing behind the player counts
+    const tMin = Math.max(0, o.distanceTo(player.pos) - 0.8);
     for (const z of g.zombies.list) {
       if (z.dead) continue;
       // ray vs vertical capsule (approximate as cylinder r=0.33)
@@ -183,7 +198,7 @@ export class Combat {
       const disc = b * b - 4 * a * c;
       if (disc < 0) continue;
       const t = (-b - Math.sqrt(disc)) / (2 * a);
-      if (t < 0 || t > best) continue;
+      if (t < tMin || t > best) continue;
       const y = o.y + dir.y * t - z.pos.y;
       if (y < 0 || y > 1.8) continue;
       best = t; target = z; head = y > 1.48;

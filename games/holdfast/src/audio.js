@@ -6,7 +6,7 @@ export class Audio {
     this.master = null;
     this.enabled = true;
     const start = () => {
-      if (this.ctx) return;
+      if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {}); return; }
       try {
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
         this.master = this.ctx.createGain();
@@ -17,6 +17,7 @@ export class Audio {
       } catch (e) { this.enabled = false; }
     };
     addEventListener('pointerdown', start, { once: false });
+    addEventListener('touchend', start, { once: false });
     addEventListener('keydown', start, { once: false });
   }
   makeNoise() {

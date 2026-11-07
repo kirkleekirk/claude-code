@@ -208,14 +208,20 @@ export class BuildMode {
     }, { passive: true });
     // pinch zoom
     let pinch = null;
-    cv.addEventListener('touchstart', (e) => { if (this.active && e.touches.length === 2) { pinch = dist2(e.touches); drag = null; } }, { passive: true });
+    // two fingers: pinch to zoom, drag to pan
+    let mid = null;
+    const midOf = (t) => [(t[0].clientX + t[1].clientX) / 2, (t[0].clientY + t[1].clientY) / 2];
+    cv.addEventListener('touchstart', (e) => { if (this.active && e.touches.length === 2) { pinch = dist2(e.touches); mid = midOf(e.touches); drag = null; } }, { passive: true });
     cv.addEventListener('touchmove', (e) => {
       if (!this.active || !pinch || e.touches.length !== 2) return;
       const d = dist2(e.touches);
       this.cam.dist = Math.max(6, Math.min(70, this.cam.dist * pinch / d));
       pinch = d;
+      const m = midOf(e.touches);
+      if (mid) this.pan(-(m[0] - mid[0]) * this.cam.dist * 0.0018, -(m[1] - mid[1]) * this.cam.dist * 0.0018);
+      mid = m;
     }, { passive: true });
-    cv.addEventListener('touchend', () => { pinch = null; });
+    cv.addEventListener('touchend', () => { pinch = null; mid = null; });
   }
   pan(dx, dz) {
     // dx: screen right, dz: toward the camera
@@ -241,6 +247,7 @@ export class BuildMode {
   update(dt) {
     if (!this.active) return;
     const inp = this.game.input;
+    if (this.game.modalOpen) return; // the wall designer has the keyboard
     // keyboard
     const sp = this.cam.dist * 0.9 * dt;
     if (inp.down('KeyW')) this.pan(0, -sp);
@@ -409,7 +416,8 @@ export class BuildMode {
     else if (t.type === 'remove-prop') { G.props.push({ ...t.prop }); removing = true; }
     const lvl = new Map();
     const builders = { get: (l) => { if (!lvl.has(l)) lvl.set(l, new GeoBuilder([S.ox, S.oy, S.oz])); return lvl.get(l); }, cap: () => builders.get(99) };
-    try { meshStructure(G, builders, () => -50); } catch (e) { console.warn(e); }
+    const tr = this.game.world.terrain;
+    try { meshStructure(G, builders, (lx, lz) => tr.height(lx + S.ox, lz + S.oz) - S.oy); } catch (e) { console.warn(e); }
     const cost = removing ? null : this.cost(t);
     const afford = !cost || this.game.inventory.can(cost);
     const ok = t.ok && afford;
@@ -445,8 +453,11 @@ export class BuildMode {
     else if (t.type === 'roof') S.roofs.set(t.key, t.val);
     else if (t.type === 'stairs') {
       S.stairs.set(t.key, t.val);
-      // open the floor above the stairwell
-      for (const [cx, cz] of t.cells) S.floors.delete(`${cx},${cz},${this.level + 1}`);
+      // open the floor above the stairwell (its materials come back)
+      for (const [cx, cz] of t.cells) {
+        const k = `${cx},${cz},${this.level + 1}`;
+        if (S.floors.has(k)) { inv.add(this.refund('floors', k, S)); S.floors.delete(k); }
+      }
     } else if (t.type === 'column') S.columns.set(t.key, t.val);
     else if (t.type === 'prop') S.props.push({ ...t.prop });
     this.commit(S, t);

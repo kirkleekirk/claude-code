@@ -17,6 +17,8 @@ export class Input {
   bind() {
     addEventListener('keydown', (e) => {
       if (e.repeat) return;
+      const tag = e.target && e.target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return; // typing a name
       if (this.uiCapture && !['Escape', 'Tab', 'KeyB', 'KeyM', 'KeyI'].includes(e.code)) return;
       this.keys.add(e.code);
       this.pressedSet.add(e.code);
@@ -44,7 +46,13 @@ export class Input {
     });
     c.addEventListener('wheel', (e) => { this.mouse.wheel += Math.sign(e.deltaY); e.preventDefault(); }, { passive: false });
     c.addEventListener('contextmenu', (e) => e.preventDefault());
-    document.addEventListener('pointerlockchange', () => { this.locked = document.pointerLockElement === c; });
+    document.addEventListener('pointerlockchange', () => {
+      const was = this.locked;
+      this.locked = document.pointerLockElement === c;
+      // Esc releases the mouse before the page sees the key: treat it as Esc
+      if (was && !this.locked && !this.releasing) this.lockLost = true;
+      this.releasing = false;
+    });
   }
   requestLock() {
     try {
@@ -52,7 +60,7 @@ export class Input {
       if (p && p.catch) p.catch(() => {});
     } catch (e) { /* not allowed here */ }
   }
-  exitLock() { if (document.pointerLockElement) document.exitPointerLock(); }
+  exitLock() { if (document.pointerLockElement) { this.releasing = true; document.exitPointerLock(); } }
   down(code) { return this.keys.has(code); }
   pressed(code) { return this.pressedSet.has(code); }
   btn(name) { return this.actionsDown.has(name); }
