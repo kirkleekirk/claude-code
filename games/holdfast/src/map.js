@@ -2,6 +2,7 @@
 // claims and the player's position.
 import { T } from './world/terrain.js';
 import { STREETS, FIELDS, TOWN_NAME } from './world/layout.js';
+import { isTouch } from './platform.js';
 
 export class MapView {
   constructor(game) {
@@ -9,7 +10,7 @@ export class MapView {
     const el = this.el = document.createElement('div');
     el.className = 'overlay map';
     el.hidden = true;
-    el.innerHTML = `<div class="map-wrap"><canvas id="map-cv"></canvas><div class="map-legend"><b>Bridger County</b><span>You</span><span class="lg-claim">Your claims</span><button id="map-close">Close (M)</button></div></div>`;
+    el.innerHTML = `<div class="map-wrap"><canvas id="map-cv"></canvas><div class="map-legend"><b>Bridger County</b><span>You</span><span class="lg-claim">Your claims</span><button id="map-close">${isTouch ? 'Close' : 'Close (M)'}</button></div></div>`;
     document.getElementById('ui').appendChild(el);
     el.querySelector('#map-close').addEventListener('click', () => this.toggle(false));
     this.base = null;
@@ -57,7 +58,7 @@ export class MapView {
     }
     ctx.fillStyle = '#1e2a20'; ctx.font = '600 15px Oswald, Arial Narrow, sans-serif'; ctx.textAlign = 'center';
     ctx.fillText(TOWN_NAME.toUpperCase(), X(130), Z(-80));
-    ctx.fillText('MISSISSIPPI', X(212), Z(200));
+    ctx.save(); ctx.textAlign = 'right'; ctx.fillText('MISSISSIPPI', X(T.play.x1) - 6, Z(200)); ctx.restore();
     this.base = cv;
   }
   toggle(v) {
