@@ -189,7 +189,7 @@ export class Combat {
       best = t; target = z; head = y > 1.48;
     }
     const end = o.clone().addScaledVector(dir, best);
-    const hand = player.char.handWorld(new THREE.Vector3());
+    const hand = player.muzzleWorld ? player.muzzleWorld(new THREE.Vector3()) : player.char.handWorld(new THREE.Vector3());
     const geo = new THREE.BufferGeometry().setFromPoints([hand, end]);
     const line = new THREE.Line(geo, this.tracerMat);
     g.scene.add(line);

@@ -54,10 +54,12 @@ class Zombie {
     const g = this.mgr.game, ph = g.physics;
     if (this.dead) {
       this.deadT += dt;
-      // fall over
-      const k = Math.min(1, this.deadT * 2.5);
-      this.char.root.rotation.x = -k * Math.PI / 2 * 0.98;
-      this.char.root.position.y = this.visualY + 0.12 * k - Math.max(0, this.deadT - 20) * 0.2;
+      // knees go, then the body tips over backwards and goes limp
+      const k = Math.min(1, Math.max(0, this.deadT - 0.12) * 2.4);
+      const fall = Math.sin(k * Math.PI / 2);
+      this.char.root.rotation.x = -fall * Math.PI / 2 * 0.98;
+      this.char.root.position.y = this.visualY + 0.12 * fall - Math.max(0, this.deadT - 20) * 0.2;
+      if (this.deadT < 2) this.char.animate(dt, { mode: 'dead' });
       return this.deadT < 26;
     }
     const pp = player.pos;
@@ -154,7 +156,8 @@ class Zombie {
     if (this.groanT <= 0) { this.groanT = 5 + Math.random() * 10; if (dist < 30) g.audio && g.audio.groan(this.pos, dist); }
     this.visualY += (this.pos.y - this.visualY) * Math.min(1, dt * 12);
     if (full || !this.lastAnim || performance.now() - this.lastAnim > 120) {
-      this.char.animate(full ? dt : dt * 4, { mode: 'zombie', speed: hs, attack: this.attackT >= 0 ? this.attackT : null });
+      this.char.animate(full ? dt : dt * 4, { mode: 'zombie', speed: hs, attack: this.attackT >= 0 ? this.attackT : null,
+        stagger: this.stagger > 0 ? Math.min(1, this.stagger / 0.3) : 0 });
       this.lastAnim = performance.now();
     }
     this.char.root.position.set(this.pos.x, this.visualY, this.pos.z);

@@ -2,6 +2,7 @@
 // camera, stamina, health, melee & pistol combat, interaction.
 import * as THREE from 'three';
 import { T } from './world/terrain.js';
+import { makeWeaponMeshes } from './characters.js';
 
 const RADIUS = 0.32, HEIGHT = 1.75, STEP = 0.48, GRAV = 22;
 
@@ -31,20 +32,15 @@ export class Player {
     this.makeWeaponMesh();
   }
   makeWeaponMesh() {
-    const g = new THREE.CylinderGeometry(0.035, 0.02, 0.85, 8);
-    g.translate(0, 0.32, 0);
-    g.rotateX(Math.PI / 2);
-    const bat = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0x9a6a3a, roughness: 0.6 }));
-    bat.castShadow = true;
-    const gun = new THREE.Group();
-    const dark = new THREE.MeshStandardMaterial({ color: 0x222426, roughness: 0.4, metalness: 0.6 });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.05, 0.2), dark); body.position.set(0, 0.02, 0.08);
-    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.1, 0.045), dark); grip.position.set(0, -0.03, 0); grip.rotation.x = 0.25;
-    gun.add(body, grip);
-    this.weaponMesh = new THREE.Group();
-    this.weaponMesh.add(bat, gun);
-    this.batMesh = bat; this.gunMesh = gun;
+    const w = makeWeaponMeshes();
+    this.weaponMesh = w.group;
+    this.batMesh = w.bat; this.gunMesh = w.gun; this.muzzleLocal = w.muzzle;
     this.game.scene.add(this.weaponMesh);
+  }
+  // world position of the pistol's muzzle (or the hand)
+  muzzleWorld(out = new THREE.Vector3()) {
+    this.weaponMesh.updateMatrixWorld(true);
+    return out.copy(this.muzzleLocal).applyMatrix4(this.weaponMesh.matrixWorld);
   }
   spawn(x, z) {
     const g = this.game.physics.groundAt(x, z, 1e9);
@@ -53,10 +49,12 @@ export class Player {
     this.visualY = g;
     this.lastSafe.copy(this.pos);
     this.health = this.maxHealth; this.stamina = this.maxStamina; this.dead = false;
+    this.deadT = 0; this.airT = 0; this.attackT = -1;
+    this.char.root.rotation.x = 0;
   }
   update(dt, input, cam) {
     const ph = this.game.physics;
-    if (this.dead) { this.char.animate(dt, { mode: 'dead' }); this.syncModel(dt); return; }
+    if (this.dead) { this.deadT = (this.deadT || 0) + dt; this.char.animate(dt, { mode: 'dead' }); this.syncModel(dt); return; }
     const ax = input.moveAxis();
     const sprintHeld = input.down('ShiftLeft') || input.down('ShiftRight') || input.btn('sprint') || input.btn('sprint-stick');
     if (input.pressed('KeyC') || input.pressed('ControlLeft')) this.crouch = !this.crouch;
@@ -93,6 +91,7 @@ export class Player {
     const terr = ph.terrain.height(nx, nz);
     if (terr < T.water - 1.15) { nx = ox; nz = oz; this.vel.x = 0; this.vel.z = 0; this.game.hud && this.game.hud.toast('The current is too strong to swim here.', 2); }
     // vertical
+    const fallSpeed = -this.vel.y;
     let ny = this.pos.y + this.vel.y * dt;
     const g = ph.groundAt(nx, nz, Math.max(this.pos.y, ny) + STEP, 0.18);
     if (ny <= g + 0.02) {
@@ -110,6 +109,11 @@ export class Player {
       if (ny + HEIGHT > c) { ny = Math.min(ny, c - HEIGHT); this.vel.y = 0; }
     }
     this.pos.set(nx, ny, nz);
+    // airborne only counts after a moment (steps and slopes flicker)
+    this.airT = this.onGround ? 0 : (this.airT || 0) + dt;
+    if (this.onGround && this.wasAirborne) this.landV = fallSpeed;
+    else if (!this.onGround) this.landV = 0;
+    this.wasAirborne = this.airT > 0.12;
     if (this.onGround) this.lastSafe.copy(this.pos);
     if (this.pos.y < T.water - 6) this.pos.copy(this.lastSafe);
     const hs = Math.hypot(this.vel.x, this.vel.z);
@@ -133,10 +137,23 @@ export class Player {
       if (this.attackT >= 1) this.attackT = -1;
     }
     this.hurtFlash = Math.max(0, this.hurtFlash - dt);
+    // head turns toward where the camera looks
+    let look = Math.atan2(f.x, f.z) - this.facing;
+    while (look > Math.PI) look -= Math.PI * 2;
+    while (look < -Math.PI) look += Math.PI * 2;
+    if (Math.abs(look) > 2.2) look = 0;
+    const it = this.game.interaction;
+    const searching = !!(it && it.target && it.target.kind === 'loot' && it.hold > 0.05);
     this.char.animate(dt, {
       speed: hs, mode: hs > 0.2 ? 'walk' : 'idle', crouch: this.crouch,
-      attack: this.attackT >= 0 ? this.attackT : null, aim: this.aiming && this.weapon.kind === 'gun', holding: true,
+      attack: this.attackT >= 0 ? this.attackT : null,
+      weapon: this.weapon.kind === 'gun' ? 'gun' : this.weapon.kind === 'bat' ? 'bat' : null,
+      aim: this.aiming && this.weapon.kind === 'gun', aimPitch: cam.pitch != null ? cam.pitch + 0.12 : 0,
+      air: this.airT > 0.12, vy: this.vel.y, landV: this.landV || 0, search: searching && hs < 0.5,
+      lookYaw: this.aiming ? 0 : look,
+      stagger: this.hurtFlash > 0 ? (this.hurtFlash / 0.35) * 0.55 : 0,
     });
+    this.landV = 0;
     this.syncModel(dt);
     this.inside = ph.ceilingAt(this.pos.x, this.pos.z, this.pos.y + 1.9, 0.1) < this.pos.y + 6;
   }
@@ -144,13 +161,18 @@ export class Player {
     // smooth stair steps
     this.visualY += (this.pos.y - this.visualY) * Math.min(1, dt * 18);
     if (Math.abs(this.pos.y - this.visualY) > 1) this.visualY = this.pos.y;
-    this.char.root.position.set(this.pos.x, this.visualY, this.pos.z);
-    this.char.root.rotation.y = this.facing;
-    // weapon follows the right hand
-    const h = this.char.handWorld(new THREE.Vector3());
-    this.weaponMesh.position.copy(h);
-    const fw = this.char.bones.handR.getWorldQuaternion(new THREE.Quaternion());
-    this.weaponMesh.quaternion.copy(fw).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2 + 0.3, 0, 0)));
+    const root = this.char.root;
+    root.position.set(this.pos.x, this.visualY, this.pos.z);
+    root.rotation.y = this.facing;
+    // a dead survivor falls onto their back
+    const fall = this.dead ? Math.min(1, (this.deadT || 0) * 2.2) : 0;
+    root.rotation.x = -Math.sin(fall * Math.PI / 2) * Math.PI / 2 * 0.98;
+    root.position.y += 0.12 * fall;
+    root.updateMatrixWorld(true);
+    // weapon sits in the right fist, oriented by the animation
+    const gp = this.char.grip;
+    this.weaponMesh.position.copy(gp.pos).applyMatrix4(root.matrixWorld);
+    this.weaponMesh.quaternion.copy(root.quaternion).multiply(gp.quat);
     this.weaponMesh.visible = !this.dead && this.weapon.kind !== 'none';
     this.batMesh.visible = this.weapon.kind !== 'gun';
     this.gunMesh.visible = this.weapon.kind === 'gun';

@@ -140,10 +140,34 @@ function rig(gltf, targetH, name) {
     J['hand' + side] = slice(0.8, 0.86) || S.clone().addScaledVector(d, 0.83);
     J['handTip' + side] = tip.clone();
     const lxs = side === 'L' ? legL : legR;
-    J['thigh' + side] = v(lxs * 0.95, 0.5 * H);
-    J['shin' + side] = v(lxs, 0.285 * H, 0.01 * H);
-    J['foot' + side] = v(lxs, 0.055 * H);
-    J['toe' + side] = v(lxs, 0.01 * H, 0.08 * H);
+    // leg joints at the centre of the leg at hip, knee and ankle height
+    // (hands of an A-posed model hang beside the hips: stay inside the leg)
+    const band = (y0, y1, maxX = 0.2) => {
+      let cx = 0, cz = 0, k = 0;
+      for (let i = 0; i < pts.count; i++) {
+        const x = pts.getX(i), y = pts.getY(i) / H;
+        if (y < y0 || y > y1 || Math.sign(x) !== Math.sign(lxs) || Math.abs(x) < 0.01 * H || Math.abs(x) > maxX * H) continue;
+        cx += x; cz += pts.getZ(i); k++;
+      }
+      return k ? [cx / k, cz / k] : [lxs, 0];
+    };
+    const th = band(0.4, 0.47, Math.abs(lxs) / H + 0.04), kn = band(0.26, 0.31), an = band(0.06, 0.09);
+    J['thigh' + side] = v(th[0], 0.5 * H, 0);
+    J['shin' + side] = v(kn[0], 0.285 * H, kn[1]);
+    J['foot' + side] = v(an[0], 0.06 * H, an[1]);
+    J['toe' + side] = v(an[0], 0.01 * H, an[1] + 0.08 * H);
+    // sole: heel and toe tip of the shoe (ground contact points)
+    let zMin = Infinity, zMax = -Infinity;
+    for (let i = 0; i < pts.count; i++) {
+      const x = pts.getX(i), y = pts.getY(i);
+      if (y > 0.04 * H || Math.sign(x) !== Math.sign(lxs)) continue;
+      const z = pts.getZ(i);
+      if (z < zMin) zMin = z;
+      if (z > zMax) zMax = z;
+    }
+    if (!isFinite(zMin)) { zMin = -0.035 * H; zMax = 0.09 * H; }
+    J['heel' + side] = v(lxs, 0, zMin + 0.01 * H);
+    J['toeTip' + side] = v(lxs, 0, zMax - 0.01 * H);
   }
   // bone capsules: [from, to, radius]
   const seg = {
@@ -220,7 +244,19 @@ function rig(gltf, targetH, name) {
   geo.setAttribute('region', new THREE.Float32BufferAttribute(region, 1));
   // rest arm angle (angle of arm from horizontal, negative = below)
   const restArm = Math.atan2(armDirL.y, armDirL.x);
-  return { geo, joints: J, height: H, restArm, name };
+  // per-segment rotations that straighten each limb segment to hang straight
+  // down (arms) or stand straight (legs) from whatever the model's rest pose is
+  const down = new THREE.Vector3(0, -1, 0);
+  const hangOf = (a, b) => new THREE.Quaternion().setFromUnitVectors(J[b].clone().sub(J[a]).normalize(), down);
+  const hang = {};
+  for (const sd of ['L', 'R']) {
+    hang['upperArm' + sd] = hangOf('upperArm' + sd, 'foreArm' + sd);
+    hang['foreArm' + sd] = hangOf('foreArm' + sd, 'hand' + sd);
+    hang['hand' + sd] = hangOf('hand' + sd, 'handTip' + sd);
+    hang['thigh' + sd] = hangOf('thigh' + sd, 'shin' + sd);
+    hang['shin' + sd] = hangOf('shin' + sd, 'foot' + sd);
+  }
+  return { geo, joints: J, height: H, restArm, hang, name };
 }
 
 // ---------------- material with palette ----------------
@@ -277,6 +313,109 @@ export function randomPalette(rng, zombie = false) {
 }
 
 // ---------------- character instance ----------------
+// ---------------- procedural animation ----------------
+// Poses are built from a flat set of joint angles (radians), blended between
+// locomotion, actions and overrides, then turned into bone rotations.
+// Character space: +Y up, +Z forward, +X the character's left.
+
+// Gait keyframes in degrees at u = k/12 over one stride, u = 0 at this leg's
+// heel strike. hip: thigh forward (+); knee: flexion; ankle: toes up (+).
+const GAIT = {
+  walk: {
+    stance: 0.6,
+    hip: [28, 25, 19, 12, 5, -2, -8, -10, -2, 12, 24, 29],
+    knee: [4, 14, 17, 12, 6, 4, 8, 25, 50, 60, 38, 12],
+    ankle: [0, -6, 2, 6, 9, 10, 5, -12, -14, -2, 2, 1],
+  },
+  run: {
+    stance: 0.38,
+    hip: [32, 24, 12, 0, -12, -18, -10, 8, 28, 42, 44, 38],
+    knee: [22, 36, 40, 30, 20, 28, 55, 90, 105, 85, 55, 32],
+    ankle: [6, 10, 14, 8, -10, -24, -16, -5, 5, 10, 8, 6],
+  },
+};
+const DEG = Math.PI / 180;
+for (const g of Object.values(GAIT)) for (const k of ['hip', 'knee', 'ankle']) g[k] = g[k].map((d) => d * DEG);
+function curve(arr, u) {
+  const n = arr.length, f = (((u % 1) + 1) % 1) * n;
+  const i = Math.floor(f), t = f - i;
+  const p0 = arr[(i - 1 + n) % n], p1 = arr[i % n], p2 = arr[(i + 1) % n], p3 = arr[(i + 2) % n];
+  return 0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (-p0 + 3 * p1 - 3 * p2 + p3) * t * t * t);
+}
+const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
+const sstep = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+const lerp = (a, b, t) => a + (b - a) * t;
+
+// pose keys: pelvis yaw/roll/pitch, spine & chest yaw/pitch/roll, head
+// yaw/pitch/roll, legs (hip flex, hip abduction, knee, ankle), arms (flex,
+// abduction, horizontal yaw across the body, roll, elbow, wrist), extra hip
+// lift, held weapon direction in chest space (wc*) and root space (wr*).
+const POSE_KEYS = ['pY', 'pR', 'pP', 'sY', 'sP', 'sR', 'cY', 'cP', 'cR', 'hY', 'hP', 'hR',
+  'lHF', 'lHA', 'lK', 'lA', 'rHF', 'rHA', 'rK', 'rA',
+  'aLF', 'aLA', 'aLY', 'aLR', 'aLE', 'aLW', 'aRF', 'aRA', 'aRY', 'aRR', 'aRE', 'aRW',
+  'lift', 'wcx', 'wcy', 'wcz', 'wrx', 'wry', 'wrz', 'wm',
+  'ik', 'gx', 'gy', 'gz', 'two', 'twoD', 'twoX', 'twoY'];
+const newPose = () => { const o = {}; for (const k of POSE_KEYS) o[k] = 0; return o; };
+function setArm(P, side, f, a, y, r, e, w = 0) { const k = 'a' + side; P[k + 'F'] = f; P[k + 'A'] = a; P[k + 'Y'] = y; P[k + 'R'] = r; P[k + 'E'] = e; P[k + 'W'] = w; }
+function mixArm(P, side, Q, t) { for (const s of ['F', 'A', 'Y', 'R', 'E', 'W']) { const k = 'a' + side + s; P[k] = lerp(P[k], Q[k], t); } }
+function mixKeys(P, Q, t, keys) { for (const k of keys) P[k] = lerp(P[k], Q[k], t); }
+const ARM_R = ['aRF', 'aRA', 'aRY', 'aRR', 'aRE', 'aRW'], ARM_L = ['aLF', 'aLA', 'aLY', 'aLR', 'aLE', 'aLW'];
+const TORSO = ['pY', 'pR', 'pP', 'sY', 'sP', 'sR', 'cY', 'cP', 'cR', 'hY', 'hP', 'hR'];
+const LEGS = ['lHF', 'lHA', 'lK', 'lA', 'rHF', 'rHA', 'rK', 'rA'];
+const WEAPON = ['wcx', 'wcy', 'wcz', 'wrx', 'wry', 'wrz', 'wm', 'ik', 'gx', 'gy', 'gz', 'two', 'twoD', 'twoX', 'twoY'];
+
+// Keyframed actions: [time, ease ('io' in/out, 'in' accelerate, 'out'), {keys}]
+// Held items are posed by where the right fist grips (gx, gy, gz: chest
+// space, metres for a 1.78 m body; the arm reaches it by IK) and which way
+// the item points (wc*). two > 0 brings the left hand onto the handle.
+// Bat: carried on the right shoulder; a two-handed swing that winds up over
+// the right shoulder, sweeps flat through the front and wraps round the left.
+const BAT_CARRY = { ik: 1, gx: -0.21, gy: 0.07, gz: 0.23, wcx: -0.13, wcy: 0.62, wcz: -0.77, wm: 0, two: 0, twoD: 0.11, twoX: 0, twoY: 0 };
+const BAT_SWING = [
+  [0, 'io', { ...BAT_CARRY, cY: 0, sY: 0, pY: 0, cP: 0 }],
+  [0.22, 'out', { ik: 1, gx: -0.2, gy: 0.2, gz: 0.1, wcx: 0.12, wcy: 0.78, wcz: -0.62, two: 1, cY: -0.62, sY: -0.28, pY: -0.12, cP: -0.04 }],
+  [0.31, 'in', { ik: 1, gx: -0.22, gy: 0.22, gz: 0.05, wcx: 0.25, wcy: 0.72, wcz: -0.65, two: 1, cY: -0.72, sY: -0.32, pY: -0.15, cP: -0.05 }],
+  [0.36, 'in', { ik: 1, gx: -0.3, gy: 0.04, gz: 0.2, wcx: -0.62, wcy: 0.28, wcz: -0.73, two: 1, cY: -0.42, sY: -0.2, pY: -0.08, cP: 0.02 }],
+  [0.42, 'out', { ik: 1, gx: -0.1, gy: -0.06, gz: 0.52, wcx: 0.55, wcy: 0.04, wcz: 0.83, two: 1, cY: 0.12, sY: 0.04, pY: 0.04, cP: 0.1 }],
+  [0.5, 'out', { ik: 1, gx: 0.1, gy: -0.04, gz: 0.42, wcx: 0.96, wcy: -0.04, wcz: 0.15, two: 1, cY: 0.5, sY: 0.2, pY: 0.1, cP: 0.12 }],
+  [0.62, 'out', { ik: 1, gx: 0.2, gy: 0.08, gz: 0.18, wcx: 0.55, wcy: 0.35, wcz: -0.76, two: 1, cY: 0.75, sY: 0.3, pY: 0.14, cP: 0.08 }],
+  [0.8, 'io', { ik: 1, gx: -0.02, gy: 0.06, gz: 0.3, wcx: 0.1, wcy: 0.72, wcz: -0.68, two: 0.4, cY: 0.3, sY: 0.12, pY: 0.05, cP: 0.03 }],
+  [1, 'io', { ...BAT_CARRY, cY: 0, sY: 0, pY: 0, cP: 0 }],
+];
+// Zombie lunge: arms come up, then the body pitches in and the hands claw down.
+const ZOMBIE_GRAB = [
+  [0, 'io', {}],
+  [0.3, 'out', { aLF: 2.0, aLA: 0.35, aLY: 0.1, aLE: 0.6, aRF: 2.05, aRA: 0.3, aRY: 0.1, aRE: 0.55, cP: -0.12, sP: -0.05, hP: -0.15 }],
+  [0.48, 'in', { aLF: 1.05, aLA: 0.2, aLY: 0.25, aLE: 0.2, aRF: 1.0, aRA: 0.2, aRY: 0.25, aRE: 0.2, cP: 0.42, sP: 0.18, hP: 0.1 }],
+  [0.7, 'io', { aLF: 0.95, aLA: 0.2, aLY: 0.25, aLE: 0.35, aRF: 0.9, aRA: 0.2, aRY: 0.25, aRE: 0.35, cP: 0.32, sP: 0.12, hP: 0.1 }],
+  [1, 'io', {}],
+];
+function ease(t, kind) {
+  if (kind === 'in') return t * t;
+  if (kind === 'out') return 1 - (1 - t) * (1 - t);
+  return t * t * (3 - 2 * t);
+}
+// Sample keyframes into P (keys missing from a frame keep P's value there).
+function playKeys(P, frames, t, weight = 1) {
+  let i = 0;
+  while (i < frames.length - 2 && t > frames[i + 1][0]) i++;
+  const [t0, , A] = frames[i], [t1, kind, B] = frames[i + 1];
+  const k = ease(clamp01((t - t0) / (t1 - t0)), kind);
+  const keys = new Set([...Object.keys(A), ...Object.keys(B)]);
+  for (const key of keys) {
+    const a = key in A ? A[key] : P[key], b = key in B ? B[key] : P[key];
+    P[key] = lerp(P[key], lerp(a, b, k), weight);
+  }
+}
+
+// small quaternion pool (no per-frame allocation)
+const QPOOL = Array.from({ length: 96 }, () => new THREE.Quaternion());
+let qp = 0;
+const qx = (a) => QPOOL[qp++ % 96].setFromAxisAngle(AX, a);
+const qy = (a) => QPOOL[qp++ % 96].setFromAxisAngle(AY, a);
+const qz = (a) => QPOOL[qp++ % 96].setFromAxisAngle(AZ, a);
+const V = Array.from({ length: 8 }, () => new THREE.Vector3());
+
 export class Character {
   constructor(modelName, palette) {
     const M = models[modelName];
@@ -308,16 +447,39 @@ export class Character {
     mesh.frustumCulled = false;
     this.mesh = mesh;
     this.root = new THREE.Group();
+    this.root.rotation.order = 'YXZ'; // yaw first, so a fall tips along the facing
     this.root.add(mesh);
-    this.restQuat = {};
-    for (const b of BONES) this.restQuat[b] = bones[b].quaternion.clone();
-    this.t = Math.random() * 10;
     this.restArm = M.restArm;
-    // reusable
-    this._q = new THREE.Quaternion(); this._q2 = new THREE.Quaternion();
     this._world = {};
     for (const b of BONES) this._world[b] = new THREE.Quaternion();
-    this.heldItem = null;
+    // animation state
+    this.P = newPose();
+    this.Q = newPose();
+    this.ph = Math.random();
+    this.clock = Math.random() * 100;
+    this.b = { move: 0, run: 0, sprint: 0, crouch: 0, aim: 0, air: 0, search: 0, dead: 0, bat: 0, gun: 0, look: 0, stagger: 0 };
+    this.landK = 0;
+    this.wasAir = false;
+    this.lookYaw = 0;
+    // a zombie's own way of moving
+    const r = Math.random;
+    this.zv = { reach: r() < 0.62, limpSide: r() < 0.5 ? 'l' : 'r', limp: 0.25 + r() * 0.6, lean: 0.18 + r() * 0.25, tilt: (r() - 0.5) * 0.5, seed: r() * 10 };
+    // leg geometry for ground contact (sagittal plane, relative to the hip joint)
+    const J = M.joints;
+    this.leg = {};
+    for (const s of ['L', 'R']) {
+      const kv = J['shin' + s].clone().sub(J['thigh' + s]).applyQuaternion(M.hang['thigh' + s]);
+      const av = J['foot' + s].clone().sub(J['shin' + s]).applyQuaternion(M.hang['shin' + s]);
+      this.leg[s] = {
+        knee: [kv.z, kv.y],
+        ankle: [av.z, av.y],
+        heel: [J['heel' + s].z - J['foot' + s].z, J['heel' + s].y - J['foot' + s].y],
+        toe: [J['toeTip' + s].z - J['foot' + s].z, J['toeTip' + s].y - J['foot' + s].y],
+        hipY: J['thigh' + s].y,
+      };
+    }
+    // where the held weapon sits: root-space position + orientation
+    this.grip = { pos: new THREE.Vector3(), quat: new THREE.Quaternion(), dir: new THREE.Vector3(0, 0, 1), visible: true };
   }
   setGore(v) { this.material.userData.gore = v; if (this.material.userData.shader) this.material.userData.shader.uniforms.uGore.value = v; }
 
@@ -332,84 +494,404 @@ export class Character {
     }
   }
 
-  // state: {speed (m/s), mode: 'idle'|'walk'|'run'|'zombie'|'dead', attack: 0..1, aim: bool, crouch}
+  // Sagittal forward kinematics of one leg: [z, y] of heel, toe and knee
+  // relative to the hip joint.
+  legFK(s, hip, knee, ankle) {
+    const L = this.leg[s];
+    const rot = (v, a) => [v[0] * Math.cos(a) - v[1] * Math.sin(a), v[0] * Math.sin(a) + v[1] * Math.cos(a)];
+    const k = rot(L.knee, hip);
+    const sh = hip - knee;
+    const a2 = rot(L.ankle, sh);
+    const A = [k[0] + a2[0], k[1] + a2[1]];
+    const fa = sh + ankle;
+    const he = rot(L.heel, fa), to = rot(L.toe, fa);
+    return { knee: k, heel: [A[0] + he[0], A[1] + he[1]], toe: [A[0] + to[0], A[1] + to[1]] };
+  }
+
+  // st: { speed, mode: 'idle'|'walk'|'zombie'|'dead', attack (0..1|null),
+  //       weapon: 'bat'|'gun'|null, aim, aimPitch, crouch, air, vy, search,
+  //       stagger (0..1), lookYaw }
   animate(dt, st) {
-    const W = this._world;
-    for (const b of BONES) W[b].identity();
-    const sp = st.speed || 0;
+    dt = Math.min(dt, 0.1);
+    qp = 0;
+    const P = this.P, b = this.b, zv = this.zv;
+    for (const k of POSE_KEYS) P[k] = 0;
     const zombie = st.mode === 'zombie';
-    const stride = zombie ? 1.6 : sp > 3.5 ? 2.6 : 1.8;
-    this.t += dt * (sp / stride) * Math.PI * 2 * (zombie ? 0.9 : 1);
-    const ph = this.t;
-    const move = Math.min(1, sp / (zombie ? 1.2 : 1.6));
-    const run = Math.max(0, Math.min(1, (sp - 2.5) / 2.5));
-    const idleB = Math.sin(performance.now() / 1000 * 1.6) * (1 - move);
-    const X = (a) => new THREE.Quaternion().setFromAxisAngle(AX, a);
-    const Y = (a) => new THREE.Quaternion().setFromAxisAngle(AY, a);
-    const Z = (a) => new THREE.Quaternion().setFromAxisAngle(AZ, a);
-    // body lean & bob
-    const lean = (zombie ? 0.18 : 0.05 + run * 0.18) * move + (st.crouch ? 0.35 : 0);
-    W.hips.copy(Y(Math.sin(ph) * 0.12 * move));
-    W.spine.copy(W.hips).multiply(X(lean * 0.5)).multiply(Y(-Math.sin(ph) * 0.18 * move));
-    W.chest.copy(W.spine).multiply(X(lean * 0.5 + idleB * 0.015));
-    W.neck.copy(W.chest);
-    W.head.copy(W.chest).multiply(X(-lean * 0.6 + (zombie ? 0.25 : 0))).multiply(Z(zombie ? Math.sin(ph * 0.5) * 0.2 : 0));
-    // legs
-    for (const [side, s] of [['L', 1], ['R', -1]]) {
-      const legPh = ph + (s > 0 ? 0 : Math.PI);
-      const swing = Math.sin(legPh) * (0.45 + run * 0.35) * move;
-      const knee = Math.max(0, -Math.cos(legPh)) * (0.7 + run * 0.6) * move + (st.crouch ? 0.9 : 0) + (zombie ? 0.15 : 0);
-      const thighA = -swing - (st.crouch ? 0.6 : 0);
-      W['thigh' + side].copy(W.hips).multiply(X(thighA));
-      W['shin' + side].copy(W.hips).multiply(X(thighA + knee));
-      W['foot' + side].copy(W.hips).multiply(X(thighA + knee - knee * 0.6 + swing * 0.2));
+    const dead = st.mode === 'dead';
+    const sp = dead ? 0 : (st.speed || 0);
+    const go = (k, target, rate) => { b[k] += (target - b[k]) * (1 - Math.exp(-rate * dt)); };
+    go('move', sp > 0.12 ? 1 : 0, 9);
+    go('run', zombie ? sstep(1.9, 3.2, sp) * 0.7 : sstep(2.0, 3.1, sp), 6);
+    go('sprint', zombie ? 0 : sstep(4.0, 6.0, sp), 5);
+    go('crouch', st.crouch ? 1 : 0, 8);
+    go('aim', st.aim ? 1 : 0, 12);
+    go('air', st.air ? 1 : 0, st.air ? 10 : 18);
+    go('search', st.search ? 1 : 0, 6);
+    go('dead', dead ? 1 : 0, 3.2);
+    go('bat', st.weapon === 'bat' && !zombie ? 1 : 0, 10);
+    go('gun', st.weapon === 'gun' && !zombie ? 1 : 0, 10);
+    go('stagger', st.stagger || 0, 14);
+    this.clock += dt;
+    const t = this.clock;
+    if (this.wasAir && !st.air && (st.landV || 0) > 3) this.landK = Math.min(1, (st.landV - 2) / 6);
+    this.wasAir = !!st.air;
+    this.landK = Math.max(0, this.landK - dt * 3.5);
+
+    // ---------------- locomotion ----------------
+    const run = b.run, sprint = b.sprint, mv = b.move;
+    const stanceF = lerp(GAIT.walk.stance, GAIT.run.stance, run);
+    // short, slow steps when barely moving; long strides when sprinting
+    const amp = (zombie ? 0.75 : Math.min(1, 0.5 + sp / 2.8)) * (1 + sprint * 0.22) * (1 - b.crouch * 0.25);
+    const gaitAt = (u, s) => {
+      const limp = zombie && zv.limpSide === s ? zv.limp : 0;
+      let hip = lerp(curve(GAIT.walk.hip, u), curve(GAIT.run.hip, u), run) * amp * (1 - limp * 0.35);
+      let knee = lerp(curve(GAIT.walk.knee, u), curve(GAIT.run.knee, u), run) * amp * (1 + sprint * 0.12) * (1 - limp * 0.55);
+      let ankle = lerp(curve(GAIT.walk.ankle, u), curve(GAIT.run.ankle, u), run) * amp - limp * 0.25;
+      return [hip, knee, ankle];
+    };
+    // cadence so the planted foot doesn't slide: travel of the contact point
+    // during stance must equal the distance the body covers
+    if (sp > 0.05) {
+      const [h0, k0, a0] = gaitAt(0, 'n'), [h1, k1, a1] = gaitAt(stanceF, 'n');
+      const fk0 = this.legFK('L', h0, k0, a0), fk1 = this.legFK('L', h1, k1, a1);
+      const travel = Math.max(0.25, fk0.heel[0] - fk1.toe[0]);
+      this.ph = (this.ph + dt * sp * stanceF / travel) % 1;
     }
-    // arms: lower from rest pose to hanging, then swing
-    const lowerTo = -1.38; // radians from horizontal (arms down, slightly out)
-    for (const [side, s] of [['L', 1], ['R', -1]]) {
-      const lower = (lowerTo - this.restArm) * s; // rotate about Z (sign by side)
-      const armPh = ph + (s > 0 ? Math.PI : 0);
-      let swing = Math.sin(armPh) * (0.35 + run * 0.5) * move;
-      let elbow = 0.15 + run * 0.9 * move + (1 - move) * 0.05;
-      let twist = 0;
-      let outward = 0;
-      if (zombie) {
-        swing = -1.35 + Math.sin(ph * 0.5 + s) * 0.12;
-        elbow = 0.25 + Math.sin(ph * 0.7 + s) * 0.1;
-        outward = 0.15 * s;
-      }
-      if (st.attack != null && st.attack >= 0 && side === 'R') {
-        // overhead/side swing with the held weapon (attack 0..1)
-        const a = st.attack;
-        const L = (x, y, t) => x + (y - x) * t;
-        if (a < 0.3) { const t = a / 0.3; swing = L(-0.4, -2.5, t); elbow = L(0.3, 1.5, t); twist = L(0, 0.5, t); }
-        else if (a < 0.5) { const t = (a - 0.3) / 0.2; swing = L(-2.5, -0.2, t); elbow = L(1.5, 0.1, t); twist = L(0.5, -0.2, t); }
-        else { const t = (a - 0.5) / 0.5; swing = L(-0.2, -0.35, t); elbow = L(0.1, 0.35, t); twist = L(-0.2, 0, t); }
-      } else if (st.holding && side === 'R' && !zombie) {
-        elbow = Math.max(elbow, 0.45);
-      }
-      if (st.aim && side === 'R') { swing = -1.45; elbow = 0.05; }
-      if (st.aim && side === 'L') { swing = -1.35; elbow = 0.35; outward = -0.35; }
-      W['shoulder' + side].copy(W.chest);
-      W['upperArm' + side].copy(W.chest).multiply(Z(outward)).multiply(X(swing)).multiply(Y(twist * s)).multiply(Z(lower));
-      W['foreArm' + side].copy(W.chest).multiply(Z(outward)).multiply(X(swing - elbow)).multiply(Y(twist * s)).multiply(Z(lower));
-      W['hand' + side].copy(W['foreArm' + side]);
+    const uL = this.ph, uR = (this.ph + 0.5) % 1;
+    const gL = gaitAt(uL, 'l'), gR = gaitAt(uR, 'r');
+    // standing pose: soft knees, feet a little apart, slow weight shift
+    const sway = Math.sin(t * 0.55 + zv.seed) * (1 - mv);
+    const stand = [0.04, 0.07, 0.03];
+    P.lHF = lerp(stand[0] + sway * 0.03, gL[0], mv); P.lK = lerp(stand[1] + Math.max(0, sway) * 0.06, gL[1], mv); P.lA = lerp(stand[2], gL[2], mv);
+    P.rHF = lerp(stand[0] - sway * 0.03, gR[0], mv); P.rK = lerp(stand[1] + Math.max(0, -sway) * 0.06, gR[1], mv); P.rA = lerp(stand[2], gR[2], mv);
+    P.lHA = 0.05 + 0.02 * (1 - mv); P.rHA = 0.05 + 0.02 * (1 - mv);
+    P.pR = sway * 0.025;
+    // arms swing against the legs
+    const mid = lerp(9, 13, run) * DEG * amp, half = lerp(19, 31, run) * DEG * amp;
+    const nL = (gR[0] - mid) / half, nR = (gL[0] - mid) / half; // left arm follows the right leg
+    for (const [side, n] of [['L', nL], ['R', nR]]) {
+      const swingAmp = lerp(0.3, 0.55, run) + sprint * 0.3;
+      const f = lerp(0.06, 0.22, run) + swingAmp * n * mv;
+      const e = lerp(0.22, 1.45, run) + sprint * 0.15 + (n > 0 ? n * lerp(0.18, 0.25, run) : 0) * mv;
+      setArm(P, side, f * mv + 0.04 * (1 - mv), lerp(0.13, 0.16, run), lerp(0, 0.22, run) * mv, 0.15, lerp(0.12, e, mv));
     }
-    if (st.mode === 'dead') {
-      for (const b of BONES) W[b].identity();
-      W.hips.copy(X(0));
-      const lower = (lowerTo - this.restArm);
-      W.upperArmL.copy(Z(lower * 0.3)); W.foreArmL.copy(W.upperArmL);
-      W.upperArmR.copy(Z(-lower * 0.3)); W.foreArmR.copy(W.upperArmR);
+    // torso: pelvis turns with the forward leg, chest counter-turns
+    const nLeg = Math.max(-1.2, Math.min(1.2, (gL[0] - mid) / half)) * mv;
+    P.pY = -0.09 * nLeg * (1 + run * 0.3);
+    P.cY = 0.13 * nLeg * (1 + run * 0.4);
+    const lean = (lerp(0.04, 0.13, run) + sprint * 0.12) * mv;
+    P.sP = lean * 0.5; P.cP = lean * 0.5 + Math.sin(t * 1.6) * 0.012 * (1 - mv);
+    P.hP = -lean * 0.75;
+    // run: a little air between steps
+    const flightG = (uL % 0.5);
+    const st2 = stanceF % 0.5;
+    if (flightG > st2) P.lift = run * mv * 0.05 * Math.sin(Math.PI * (flightG - st2) / (0.5 - st2));
+    // head looks where the camera looks
+    this.lookYaw += ((st.lookYaw || 0) - this.lookYaw) * (1 - Math.exp(-8 * dt));
+    const ly = Math.max(-0.9, Math.min(0.9, this.lookYaw));
+    P.hY = ly * 0.65; P.cY += ly * 0.2;
+
+    // ---------------- crouch / sneak ----------------
+    if (b.crouch > 0.001) {
+      const c = b.crouch;
+      // a low, forward-leaning stalk rather than a squat
+      P.lHF += 0.62 * c; P.rHF += 0.62 * c; P.lK += 0.95 * c; P.rK += 0.95 * c; P.lA += 0.33 * c; P.rA += 0.33 * c;
+      P.sP += 0.38 * c; P.cP += 0.42 * c; P.hP -= 0.55 * c;
+      P.aLF += 0.3 * c; P.aRF += 0.3 * c; P.aLE += 0.45 * c; P.aRE += 0.45 * c;
+    }
+
+    // ---------------- zombie ----------------
+    if (zombie) {
+      const sw = Math.sin(this.ph * Math.PI * 2);
+      P.sP += zv.lean * 0.5; P.cP += zv.lean * 0.6;
+      P.cR = sw * 0.12 * mv + Math.sin(t * 0.7 + zv.seed) * 0.04;
+      P.pR = -sw * 0.05 * mv;
+      P.hP = -zv.lean * 0.55 + 0.18 + Math.sin(t * 0.9 + zv.seed) * 0.05;
+      P.hR = zv.tilt + Math.sin(t * 0.6 + zv.seed) * 0.08;
+      P.hY = Math.sin(t * 0.4 + zv.seed * 2) * 0.12;
+      for (const [side, s] of [['L', 1], ['R', -1]]) {
+        const w = Math.sin(t * 1.3 + zv.seed + s);
+        if (zv.reach) setArm(P, side, 1.25 + w * 0.08 + sw * s * 0.06 * mv, 0.12, 0.12, 0.2, 0.32 + w * 0.12, 0.35);
+        else setArm(P, side, 0.06 + (s > 0 ? -sw : sw) * 0.3 * mv, 0.16, 0, 0.3, 0.18 + Math.abs(w) * 0.1, 0.2);
+      }
+      if (st.attack != null && st.attack >= 0) {
+        const Q = this.Q; Object.assign(Q, P);
+        playKeys(Q, ZOMBIE_GRAB, st.attack);
+        Object.assign(P, Q);
+      }
+    }
+
+    // ---------------- held weapons ----------------
+    if (b.bat > 0.001) {
+      const Q = this.Q; Object.assign(Q, P);
+      Object.assign(Q, BAT_CARRY);
+      // the carrying hand moves a little with the stride
+      Q.gy += Math.abs(nR) * 0.015 * mv; Q.gz += nR * 0.02 * mv;
+      // leaning forward: keep the bat's slope in world terms so it stays
+      // back over the shoulder instead of standing up beside the head
+      Q.wrx = -0.2; Q.wry = 0.5; Q.wrz = -0.84; Q.wm = b.crouch * 0.85;
+      Q.gy -= 0.04 * b.crouch; Q.gx -= 0.02 * b.crouch;
+      mixKeys(P, Q, b.bat, WEAPON);
+      if (st.attack != null && st.attack >= 0 && st.weapon === 'bat') {
+        // torso turns are added on top of whatever the legs are doing
+        const tb = [P.cY, P.sY, P.pY, P.cP];
+        P.cY = 0; P.sY = 0; P.pY = 0; P.cP = 0;
+        playKeys(P, BAT_SWING, st.attack);
+        P.cY += tb[0] * 0.3; P.sY += tb[1]; P.pY += tb[2] * 0.5; P.cP += tb[3];
+      }
+    }
+    if (b.gun > 0.001) {
+      const Q = this.Q; Object.assign(Q, P);
+      // low ready: pistol forward and down in the right hand
+      Object.assign(Q, { ik: 1, gx: -0.13, gy: -0.3, gz: 0.3 + nR * 0.02 * mv, wcx: 0.06, wcy: -0.5, wcz: 0.86, wm: 0, two: 0, twoD: 0, twoX: 0.035, twoY: -0.045 });
+      // aiming: both hands out along the line of sight, sights under the eye
+      const pitch = st.aimPitch || 0;
+      const chestP = P.cP + P.sP;
+      const cpitch = pitch - chestP;
+      const reach = 0.5;
+      const ax = -0.05, ay = 0.2 + Math.sin(cpitch) * reach, az = Math.cos(cpitch) * reach;
+      Q.gx = lerp(Q.gx, ax, b.aim); Q.gy = lerp(Q.gy, ay, b.aim); Q.gz = lerp(Q.gz, az, b.aim);
+      Q.wrx = 0; Q.wry = Math.sin(pitch); Q.wrz = Math.cos(pitch); Q.wm = b.aim; Q.two = b.aim;
+      Q.hP = lerp(Q.hP, -pitch * 0.6 - chestP * 0.5, b.aim); Q.cY = lerp(Q.cY, 0.12, b.aim); Q.hY = lerp(Q.hY, -0.1, b.aim);
+      for (const k of ARM_L) Q[k] = lerp(P[k], 0, 0);
+      // recoil kick when a shot goes off
+      if (st.attack != null && st.attack >= 0) {
+        const k = Math.max(0, 1 - st.attack * 3.5);
+        Q.gy += 0.05 * k; Q.gz -= 0.06 * k; Q.wry += 0.25 * k; Q.wcy += 0.3 * k; Q.cP -= 0.04 * k;
+      }
+      mixKeys(P, Q, b.gun, [...WEAPON, 'hP', 'cY', 'hY', 'cP']);
+    }
+    if (!zombie && b.bat < 0.5 && b.gun < 0.5 && st.attack != null && st.attack >= 0) {
+      // bare-handed shove
+      const a = st.attack, k = a < 0.35 ? sstep(0, 0.35, a) : 1 - sstep(0.45, 1, a);
+      P.aRF = lerp(P.aRF, 1.45, k); P.aRE = lerp(P.aRE, 0.15, k); P.aLF = lerp(P.aLF, 1.35, k); P.aLE = lerp(P.aLE, 0.2, k); P.cP += 0.15 * k;
+    }
+
+    // ---------------- searching (kneel and rummage) ----------------
+    if (b.search > 0.001) {
+      const Q = this.Q; Object.assign(Q, P);
+      const r1 = Math.sin(t * 7), r2 = Math.sin(t * 6.1 + 1.3);
+      Object.assign(Q, { lHF: 1.45, lHA: 0.12, lK: 1.55, lA: 0.35, rHF: -0.05, rHA: 0.08, rK: 1.65, rA: -0.55,
+        pY: 0.1, pP: 0, sP: 0.28, cP: 0.32, cY: 0.05, hP: 0.15, hY: 0, lift: 0 });
+      setArm(Q, 'L', 1.05 + r1 * 0.12, 0.05, 0.35, 0.3, 0.55 + r2 * 0.2, 0.2);
+      if (b.bat > 0.5 || b.gun > 0.5) Object.assign(Q, { ik: 1, gx: -0.22, gy: -0.42, gz: 0.25, wcx: -0.15, wcy: -0.75, wcz: 0.65, wm: 0, two: 0 });
+      else { setArm(Q, 'R', 1.0 + r2 * 0.12, 0.05, 0.35, 0.3, 0.6 + r1 * 0.2, 0.2); Q.ik = 0; }
+      mixKeys(P, Q, b.search, [...TORSO, ...LEGS, ...ARM_L, ...ARM_R, ...WEAPON, 'lift']);
+    }
+
+    // ---------------- airborne & landing ----------------
+    if (b.air > 0.001) {
+      const up = Math.max(0, Math.min(1, ((st.vy || 0) + 2) / 6));
+      const Q = this.Q; Object.assign(Q, P);
+      Object.assign(Q, { lHF: lerp(0.35, 0.75, up), lK: lerp(0.45, 1.0, up), lA: 0.1, rHF: lerp(0.05, 0.25, up), rK: lerp(0.3, 0.8, up), rA: -0.1, lift: 0 });
+      Q.aLA = 0.55; Q.aLF = 0.35; Q.aLE = 0.5;
+      if (b.bat < 0.5 && b.gun < 0.5) { Q.aRA = 0.55; Q.aRF = 0.3; Q.aRE = 0.5; }
+      mixKeys(P, Q, b.air, [...LEGS, 'aLA', 'aLF', 'aLE', 'aRA', 'aRF', 'aRE', 'lift']);
+    }
+    if (this.landK > 0) {
+      const k = Math.sin(Math.min(1, this.landK) * Math.PI * 0.5);
+      P.lHF += 0.5 * k; P.rHF += 0.5 * k; P.lK += 0.9 * k; P.rK += 0.9 * k; P.lA += 0.35 * k; P.rA += 0.35 * k; P.cP += 0.2 * k;
+    }
+
+    // ---------------- hit reaction ----------------
+    if (b.stagger > 0.001) {
+      const k = b.stagger;
+      P.cP -= 0.45 * k; P.sP -= 0.2 * k; P.hP -= 0.22 * k; P.cR += 0.15 * k;
+      P.aLA += 0.6 * k; P.aRA += 0.5 * k; P.aLF -= 0.5 * k; P.aRF -= 0.4 * k; P.aLE += 0.3 * k; P.aRE += 0.3 * k;
+      P.lHF -= 0.15 * k; P.rHF += 0.2 * k; P.rK += 0.3 * k;
+    }
+
+    // ---------------- dead (on the back; the owner tips the root over) ----------------
+    if (b.dead > 0.001) {
+      const Q = this.Q;
+      for (const k of POSE_KEYS) Q[k] = 0;
+      Object.assign(Q, { lHF: 0.25, lHA: 0.14, lK: 0.45, lA: -0.2, rHF: 0.08, rHA: 0.2, rK: 0.18, rA: -0.3,
+        hY: 0.55, hR: 0.15, hP: -0.1, cR: 0.06 });
+      setArm(Q, 'L', 0.15, 0.95, 0, 0.3, 0.45, 0.2);
+      setArm(Q, 'R', 0.25, 0.7, 0, -0.2, 0.25, 0.1);
+      for (const k of WEAPON) Q[k] = P[k];
+      Q.ik = 0; Q.two = 0;
+      const k = sstep(0, 1, b.dead);
+      for (const key of POSE_KEYS) P[key] = lerp(P[key], Q[key], k);
+    }
+
+    // lean comes from the hips as well as the back
+    const tl = P.sP + P.cP;
+    P.pP += tl * 0.45; P.sP *= 0.55; P.cP *= 0.55;
+    this.buildPose(P, b.dead < 0.5 && b.air < 0.9);
+  }
+
+  // Turn the angle set into bone rotations, keep the lowest foot on the
+  // ground, solve arm IK for held items, and work out where the item goes.
+  buildPose(P, ground) {
+    const W = this._world, J = this.model.joints, hg = this.model.hang;
+    const legBase = TQ1.copy(W.hips.identity().multiply(qy(P.pY)).multiply(qz(P.pR)));
+    W.hips.multiply(qx(P.pP));
+    W.spine.copy(W.hips).multiply(qy(P.sY)).multiply(qx(P.sP)).multiply(qz(P.sR));
+    W.chest.copy(W.spine).multiply(qy(P.cY)).multiply(qx(P.cP)).multiply(qz(P.cR));
+    W.neck.copy(W.chest).multiply(qx(P.hP * 0.35)).multiply(qy(P.hY * 0.3));
+    W.head.copy(W.chest).multiply(qy(P.hY)).multiply(qx(P.hP)).multiply(qz(P.hR));
+    // legs: thigh = pelvis yaw/roll * abduction * flexion; knee and ankle hinge
+    for (const [side, sg, k] of [['L', 1, 'l'], ['R', -1, 'r']]) {
+      const th = TQ3.copy(legBase).multiply(qz(sg * P[k + 'HA'])).multiply(qx(-P[k + 'HF']));
+      W['thigh' + side].copy(th).multiply(hg['thigh' + side]);
+      th.multiply(qx(P[k + 'K']));
+      W['shin' + side].copy(th).multiply(hg['shin' + side]);
+      W['foot' + side].copy(th).multiply(qx(-P[k + 'A']));
+    }
+    // ground contact: lowest heel, toe or kneeling knee rests on y = 0
+    let off = 0;
+    if (ground) {
+      let lowest = Infinity;
+      for (const [side, k] of [['L', 'l'], ['R', 'r']]) {
+        const fk = this.legFK(side, P[k + 'HF'], P[k + 'K'], P[k + 'A']);
+        const hy = this.leg[side].hipY;
+        lowest = Math.min(lowest, hy + fk.heel[1], hy + fk.toe[1], hy + fk.knee[1] - 0.05);
+      }
+      off = -lowest;
+    }
+    const hipsPos = V[7].set(J.hips.x, J.hips.y + off + P.lift, J.hips.z);
+    this.bones.hips.position.copy(hipsPos);
+    const chestPos = V[0].copy(hipsPos)
+      .add(V[1].copy(J.spine).sub(J.hips).applyQuaternion(W.hips))
+      .add(V[1].copy(J.chest).sub(J.spine).applyQuaternion(W.spine));
+    // arms: hang from the rest pose, then shoulder (yaw across the body,
+    // abduction, flexion, roll), elbow hinge, wrist
+    for (const [side, sg] of [['L', 1], ['R', -1]]) {
+      const a = 'a' + side;
+      const base = TQ2.copy(W['shoulder' + side].copy(W.chest));
+      base.multiply(qy(-sg * P[a + 'Y'])).multiply(qz(sg * P[a + 'A'])).multiply(qx(-P[a + 'F'])).multiply(qy(-sg * P[a + 'R']));
+      W['upperArm' + side].copy(base).multiply(hg['upperArm' + side]);
+      const fore = base.multiply(qx(-P[a + 'E']));
+      W['foreArm' + side].copy(fore).multiply(hg['foreArm' + side]);
+      W['hand' + side].copy(fore).multiply(qx(-P[a + 'W'])).multiply(hg['hand' + side]);
+    }
+    // item direction (root space)
+    const dc = V[2].set(P.wcx, P.wcy, P.wcz);
+    if (dc.lengthSq() < 1e-6) dc.set(0, -0.5, 0.86);
+    dc.normalize().applyQuaternion(W.chest);
+    const dr = V[3].set(P.wrx, P.wry, P.wrz);
+    if (dr.lengthSq() < 1e-6) dr.copy(dc);
+    const dir = this.grip.dir.copy(dc).lerp(dr.normalize(), P.wm).normalize();
+    // IK: right fist to the grip target, left hand onto the handle
+    if (P.ik > 0.001) {
+      const sc = this.model.height / 1.78;
+      const tgt = V[4].set(P.gx * sc, P.gy * sc, P.gz * sc).applyQuaternion(W.chest).add(chestPos);
+      this.armIK('R', tgt, chestPos, P.ik);
+      if (P.two > 0.001) {
+        const side = V[5].set(1, 0, 0).applyQuaternion(W.chest);
+        const up = V[6].set(0, 1, 0).applyQuaternion(W.chest);
+        const lt = V[4].copy(this.fistPos('R', chestPos)).addScaledVector(dir, -P.twoD).addScaledVector(side, P.twoX).addScaledVector(up, P.twoY);
+        this.armIK('L', lt, chestPos, P.two);
+      }
     }
     this.applyWorld(W);
+    // held item: in the right fist, pointing along dir
+    this.grip.pos.copy(this.fistPos('R', chestPos));
+    const up = V[4].set(0, 1, 0).applyQuaternion(W.chest);
+    const x = V[5].crossVectors(up, dir);
+    if (x.lengthSq() < 1e-6) x.set(1, 0, 0);
+    x.normalize();
+    const y = V[6].crossVectors(dir, x).normalize();
+    M4.makeBasis(x, y, dir);
+    this.grip.quat.setFromRotationMatrix(M4);
   }
+
+  // shoulder joint position (root space) for the current chest rotation
+  shoulderPos(side, chestPos, out = TV1) {
+    const J = this.model.joints;
+    return out.copy(J['upperArm' + side]).sub(J.chest).applyQuaternion(this._world.chest).add(chestPos);
+  }
+  // centre of the fist from the current arm rotations
+  fistPos(side, chestPos, out = TV2) {
+    const J = this.model.joints, W = this._world;
+    this.shoulderPos(side, chestPos, out);
+    out.add(TV3.copy(J['foreArm' + side]).sub(J['upperArm' + side]).applyQuaternion(W['upperArm' + side]));
+    out.add(TV3.copy(J['hand' + side]).sub(J['foreArm' + side]).applyQuaternion(W['foreArm' + side]));
+    out.add(TV3.copy(J['handTip' + side]).sub(J['hand' + side]).multiplyScalar(0.5).applyQuaternion(W['hand' + side]));
+    return out;
+  }
+  // Two-bone arm IK: put the fist on target (root space), elbow down and
+  // out; blends with the angle-based arm by weight.
+  armIK(side, target, chestPos, weight) {
+    const J = this.model.joints, W = this._world, hg = this.model.hang;
+    const sg = side === 'L' ? 1 : -1;
+    const S = this.shoulderPos(side, chestPos, IK.S);
+    const a = J['foreArm' + side].distanceTo(J['upperArm' + side]);
+    const b = J['hand' + side].distanceTo(J['foreArm' + side]) + 0.5 * J['handTip' + side].distanceTo(J['hand' + side]);
+    const d = IK.d.copy(target).sub(S);
+    let dl = d.length();
+    if (dl < 1e-5) return;
+    const n = d.divideScalar(dl);
+    dl = Math.max(Math.abs(a - b) + 0.01, Math.min(a + b - 0.002, dl));
+    const cosA = (a * a + dl * dl - b * b) / (2 * a * dl), sinA = Math.sqrt(Math.max(0, 1 - cosA * cosA));
+    // elbow hangs down and a little out to the side and back
+    const pole = IK.p.set(sg * 0.6, -1, -0.25).applyQuaternion(W.chest);
+    pole.addScaledVector(n, -pole.dot(n));
+    if (pole.lengthSq() < 1e-6) pole.set(0, -1, 0).addScaledVector(n, -n.y);
+    pole.normalize();
+    const E = IK.e.copy(S).addScaledVector(n, a * cosA).addScaledVector(pole, a * sinA);
+    const T = IK.t.copy(S).addScaledVector(n, dl);
+    const dU = IK.u.copy(E).sub(S).normalize();
+    const dF = IK.f.copy(T).sub(E).normalize();
+    // frames: local -Y along the bone, local +Z the way the elbow bends
+    const zU = IK.z.copy(dF).addScaledVector(dU, -dF.dot(dU));
+    if (zU.lengthSq() < 1e-6) zU.copy(pole).multiplyScalar(-1);
+    zU.normalize();
+    const yU = IK.y.copy(dU).negate();
+    const xU = IK.x.crossVectors(yU, zU).normalize();
+    M4.makeBasis(xU, yU, zU);
+    IK.qU.setFromRotationMatrix(M4).multiply(hg['upperArm' + side]);
+    const yF = IK.y.copy(dF).negate();
+    const zF = IK.z.crossVectors(xU, yF).normalize();
+    M4.makeBasis(xU, yF, zF);
+    IK.qF.setFromRotationMatrix(M4);
+    IK.qH.copy(IK.qF).multiply(hg['hand' + side]);
+    IK.qF.multiply(hg['foreArm' + side]);
+    W['upperArm' + side].slerp(IK.qU, weight);
+    W['foreArm' + side].slerp(IK.qF, weight);
+    W['hand' + side].slerp(IK.qH, weight);
+  }
+
   // world position of the right hand (for weapons)
   handWorld(out = new THREE.Vector3()) {
-    this.bones.handR.updateWorldMatrix(true, false);
-    return out.setFromMatrixPosition(this.bones.handR.matrixWorld);
+    this.root.updateMatrixWorld(true);
+    return out.copy(this.grip.pos).applyMatrix4(this.root.matrixWorld);
   }
 }
 const AX = new THREE.Vector3(1, 0, 0), AY = new THREE.Vector3(0, 1, 0), AZ = new THREE.Vector3(0, 0, 1);
 const IDENT = new THREE.Quaternion();
+const M4 = new THREE.Matrix4();
+const TQ1 = new THREE.Quaternion(), TQ2 = new THREE.Quaternion(), TQ3 = new THREE.Quaternion();
+const TV1 = new THREE.Vector3(), TV2 = new THREE.Vector3(), TV3 = new THREE.Vector3();
+const IK = { S: new THREE.Vector3(), d: new THREE.Vector3(), p: new THREE.Vector3(), e: new THREE.Vector3(), t: new THREE.Vector3(),
+  u: new THREE.Vector3(), f: new THREE.Vector3(), x: new THREE.Vector3(), y: new THREE.Vector3(), z: new THREE.Vector3(),
+  qU: new THREE.Quaternion(), qF: new THREE.Quaternion(), qH: new THREE.Quaternion() };
+
+// Held weapon meshes: a bat and a pistol, origin at the grip, +Z along the
+// weapon. Shared by the player and the animation lab.
+export function makeWeaponMeshes() {
+  const wood = new THREE.MeshStandardMaterial({ color: 0xa8784a, roughness: 0.55 });
+  const tape = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 });
+  const bat = new THREE.Group();
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.016, 0.74, 10), wood);
+  barrel.geometry.rotateX(Math.PI / 2); barrel.position.z = 0.27;
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.034, 10, 6), wood);
+  cap.scale.set(1, 1, 0.45); cap.position.z = 0.64;
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.2, 8), tape);
+  grip.geometry.rotateX(Math.PI / 2); grip.position.z = -0.02;
+  const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.025, 10), tape);
+  knob.geometry.rotateX(Math.PI / 2); knob.position.z = -0.13;
+  bat.add(barrel, cap, grip, knob);
+  const gun = new THREE.Group();
+  const dark = new THREE.MeshStandardMaterial({ color: 0x232527, roughness: 0.4, metalness: 0.6 });
+  const slide = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.042, 0.19), dark); slide.position.set(0, 0.045, 0.06);
+  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.1, 0.045), dark); handle.position.set(0, -0.005, -0.005); handle.rotation.x = -0.25;
+  gun.add(slide, handle);
+  for (const g of [bat, gun]) g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  const group = new THREE.Group();
+  group.add(bat, gun);
+  // muzzle point in the group's space
+  return { group, bat, gun, muzzle: new THREE.Vector3(0, 0.045, 0.16) };
+}
 export { REG, BONES };

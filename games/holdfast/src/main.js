@@ -197,7 +197,8 @@ export class Game {
     if (inp && !this.freeCam) {
       if (this.buildMode.active) {
         this.buildMode.update(dt);
-        this.player.char.animate(dt, { speed: 0, mode: 'idle' });
+        this.player.char.animate(dt, { speed: 0, mode: 'idle', weapon: this.player.weapon.kind === 'gun' ? 'gun' : 'bat' });
+        this.player.syncModel(dt);
       } else if (!this.modalOpen) {
         const ld = inp.lookDelta();
         const dragging = !inp.locked && (inp.mouse.buttons & 1) && inp.dragMoved;
