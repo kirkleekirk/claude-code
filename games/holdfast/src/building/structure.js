@@ -7,6 +7,7 @@ import { materialForBucket as materialFor } from '../atlas.js';
 import { meshStructure } from './mesher.js';
 import { CELL, STORY, getStyle } from './defs.js';
 import { hashStr, mulberry32 } from '../util.js';
+import { doorPool } from './doors.js';
 
 let NEXT_ID = 1;
 export function bumpStructureIds(n) { NEXT_ID = Math.max(NEXT_ID, n); }
@@ -131,7 +132,6 @@ export class Structure {
     for (const d of out.doors) {
       const door = new Door(this, d, rng);
       this.doors.push(door);
-      (this.levelGroups[d.level] || this.group).add(door.pivot);
     }
     if (this.cutaway != null) this.setCutaway(this.cutaway);
     this.interact = out.interact.map((it) => ({ ...it, owner: this,
@@ -143,6 +143,7 @@ export class Structure {
   // Show levels up to `level` (with wall caps on top); null shows everything.
   setCutaway(level) {
     this.cutaway = level;
+    for (const d of this.doors) d.setVisible(level == null || d.def.level <= level);
     (this.levelGroups || []).forEach((g, l) => { g.visible = level == null || l <= level; });
     (this.capGroups || []).forEach((g, l) => { g.visible = level != null && l === level; });
   }
@@ -174,81 +175,17 @@ export class Door {
     this.open = false;
     this.angle = 0;       // current
     this.target = 0;
-    this.pivot = new THREE.Group();
-    this.pivot.position.set(d.hinge[0], d.hinge[1], d.hinge[2]);
     this.health = d.barn ? 160 : 100;
-    const b = new GeoBuilder([0, 0, 0]);
-    const w = d.width - 0.01, h = d.height - 0.01, t = 0.05;
-    // leaf geometry in pivot space: along local +X from hinge (or -X), thickness in Z
     const sgnE = d.hingeLow ? 1 : -1;
-    const x0 = sgnE > 0 ? 0.005 : -w - 0.005, x1 = x0 + w;
     const st = getStyle(d.style);
-    if (d.barn) {
-      const c = rgb(st.a.color);
-      b.box(st.a.mat, x0, 0.005, -t / 2, x1, h, t / 2, c);
-      // Z brace and frame in white trim
-      const tc = rgb(st.trim);
-      const fr = 0.12;
-      for (const s of [-1, 1]) {
-        const z = s * (t / 2 + 0.015);
-        const zz0 = Math.min(z, s * t / 2), zz1 = Math.max(z, s * t / 2);
-        b.box('plain:paint', x0, 0.005, zz0, x1, fr, zz1, tc);
-        b.box('plain:paint', x0, h - fr, zz0, x1, h, zz1, tc);
-        b.box('plain:paint', x0, h / 2 - fr / 2, zz0, x1, h / 2 + fr / 2, zz1, tc);
-        b.box('plain:paint', x0, fr, zz0, x0 + fr, h - fr, zz1, tc);
-        b.box('plain:paint', x1 - fr, fr, zz0, x1, h - fr, zz1, tc);
-        // diagonal brace (approximated by stepped boxes)
-        const steps = 10;
-        for (let i = 0; i < steps; i++) {
-          const ta = i / steps, tb = (i + 1) / steps;
-          const xa = x0 + fr + (x1 - x0 - 2 * fr) * ta, xb = x0 + fr + (x1 - x0 - 2 * fr) * tb;
-          const ya = fr + (h / 2 - 1.5 * fr) * ta, yb = fr + (h / 2 - 1.5 * fr) * tb + fr * 0.7;
-          b.box('plain:paint', xa, ya, zz0, xb, yb, zz1, tc);
-        }
-      }
-    } else if (d.glass) {
-      const c = rgb('#2b2f33');
-      const f = 0.09;
-      b.box('plain:metal', x0, 0.005, -t / 2, x1, f * 1.4, t / 2, c);
-      b.box('plain:metal', x0, h - f, -t / 2, x1, h, t / 2, c);
-      b.box('plain:metal', x0, f * 1.4, -t / 2, x0 + f, h - f, t / 2, c);
-      b.box('plain:metal', x1 - f, f * 1.4, -t / 2, x1, h - f, t / 2, c);
-      b.box('plain:metal', x0 + f, 0.95, -t / 2 - 0.01, x1 - f, 1.02, t / 2 + 0.01, mulc(c, 1.6));
-      b.quad('glass', [x0 + f, f * 1.4, 0], [x1 - f, f * 1.4, 0], [x1 - f, h - f, 0], [x0 + f, h - f, 0], [1, 1, 1]);
-    } else {
-      const col = rgb(d.color || DOOR_COLORS[Math.floor(rng() * DOOR_COLORS.length)]);
-      b.box('plain:paint', x0, 0.005, -t / 2, x1, h, t / 2, col);
-      // raised panels on both faces
-      const pw = (w - 0.3) / 2;
-      for (const s of [-1, 1]) {
-        const z0 = s > 0 ? t / 2 : -t / 2 - 0.012, z1 = s > 0 ? t / 2 + 0.012 : -t / 2;
-        const panels = [[0.12, 0.12 + pw, 0.15, h * 0.42], [w - 0.12 - pw, w - 0.12, 0.15, h * 0.42],
-          [0.12, 0.12 + pw, h * 0.5, h - 0.15], [w - 0.12 - pw, w - 0.12, h * 0.5, h - 0.15]];
-        for (const [a0, a1, b0, b1] of panels) b.box('plain:paint', x0 + a0, b0, z0, x0 + a1, b1, z1, mulc(col, 0.88));
-      }
-      // knob on the far side from the hinge
-      const kx = sgnE > 0 ? x1 - 0.08 : x0 + 0.08;
-      for (const s of [-1, 1]) {
-        const kz = s * (t / 2 + 0.03);
-        b.box('plain:chrome', kx - 0.03, 0.95, Math.min(kz, s * t / 2) - 0.01, kx + 0.03, 1.01, Math.max(kz, s * t / 2) + 0.01, [0.85, 0.75, 0.45]);
-      }
-    }
-    this.leaf = new THREE.Group();
-    for (const [key, geo] of b.build()) {
-      const m = new THREE.Mesh(geo, materialFor(key));
-      m.castShadow = key !== 'glass';
-      m.receiveShadow = true;
-      this.leaf.add(m);
-    }
+    this.color = new THREE.Color(d.barn ? st.a.color : (d.color || DOOR_COLORS[Math.floor(rng() * DOOR_COLORS.length)]));
     // orient: local X along the wall's e axis, local Z along normal axis
-    const yaw = d.a === 0 ? 0 : -Math.PI / 2; // e axis +X (a=0) or +Z (a=1)
-    this.baseYaw = yaw;
-    this.pivot.rotation.y = yaw;
-    this.pivot.add(this.leaf);
-    // opening direction: rotate so the free edge moves toward swing side
-    // rotating +90deg about Y moves local +X toward -Z (local)
+    this.baseYaw = d.a === 0 ? 0 : -Math.PI / 2; // e axis +X (a=0) or +Z (a=1)
+    // opening direction: rotating +90deg about Y moves local +X toward -Z (local)
     const localNormalSign = d.a === 0 ? d.swing : -d.swing; // map wall normal axis to local Z
-    this.openDir = (sgnE > 0 ? 1 : -1) * (localNormalSign > 0 ? -1 : 1);
+    this.openDir = sgnE * (localNormalSign > 0 ? -1 : 1);
+    const pool = doorPool();
+    if (pool) pool.alloc(this);
   }
   get worldHinge() {
     const s = this.structure;
@@ -260,6 +197,13 @@ export class Door {
     const e = d.hingeLow ? d.width / 2 : -d.width / 2;
     return [d.hinge[0] + d.eAxis[0] * e + s.ox, d.hinge[1] + 1 + s.oy, d.hinge[2] + d.eAxis[2] * e + s.oz];
   }
+  setVisible(v) {
+    const pool = doorPool();
+    if (!pool || !this.slots) return;
+    this.hidden = !v;
+    if (v) pool.place(this);
+    else { const z = new THREE.Matrix4().makeScale(0, 0, 0); for (const { p, i } of this.slots) { p.mesh.setMatrixAt(i, z); p.mesh.instanceMatrix.needsUpdate = true; } }
+  }
   toggle() { this.setOpen(!this.open); }
   setOpen(v) {
     this.open = v;
@@ -269,7 +213,8 @@ export class Door {
     if (Math.abs(this.angle - this.target) < 1e-3) return false;
     const sp = 4.5 * dt;
     this.angle += Math.max(-sp, Math.min(sp, this.target - this.angle));
-    this.leaf.rotation.y = this.angle;
+    const pool = doorPool();
+    if (pool && this.slots && !this.hidden) pool.place(this);
     return true;
   }
   // Collision box (world) of the leaf in its current target state.
@@ -297,7 +242,7 @@ export class Door {
     return { min: [Math.min(minx, maxx), hy, Math.min(minz, maxz)], max: [Math.max(minx, maxx), hy + d.height, Math.max(minz, maxz)], kind: 'door', owner: s, door: this };
   }
   dispose() {
-    this.leaf.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
-    if (this.pivot.parent) this.pivot.parent.remove(this.pivot);
+    const pool = doorPool();
+    if (pool && this.slots) pool.free(this);
   }
 }

@@ -209,7 +209,7 @@ export class Terrain {
   build(material, splatFn, opts = {}) {
     this.splatFn = splatFn;
     this.material = material;
-    const CH = 64;
+    const CH = 128;
     for (let cz = T.z0; cz < T.z1; cz += CH) {
       for (let cx = T.x0; cx < T.x1; cx += CH) {
         const x1 = Math.min(cx + CH, T.x1), z1 = Math.min(cz + CH, T.z1);

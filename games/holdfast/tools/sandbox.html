@@ -6,6 +6,7 @@
 <script type="module">
 import * as THREE from 'three';
 import { Structure } from '../src/building/structure.js';
+import { DoorPool, setDoorPool } from '../src/building/doors.js';
 globalThis.__FURNISH_DEBUG = new URLSearchParams(location.search).get('dbg') || true; if (new URLSearchParams(location.search).get('conn')) globalThis.__CONN_DEBUG = true;
 import { buildSample } from './samples.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
@@ -34,6 +35,7 @@ scene.add(sun);
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: 0x6f8f4f, roughness: 1 }));
 ground.rotation.x = -Math.PI / 2; ground.position.y = -0.45; ground.receiveShadow = true; scene.add(ground);
 scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+setDoorPool(new DoorPool(scene, 256));
 const which = new URLSearchParams(location.search).get('s') || 'house';
 const S = buildSample(which);
 S.rebuild(() => -0.45);

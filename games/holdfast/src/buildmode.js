@@ -55,7 +55,7 @@ export class BuildMode {
       </div>
       <div class="b-bottom">
         <div class="b-opts" id="b-opts"></div>
-        <div class="b-tools" id="b-tools">${TOOLS.map(([k, n]) => `<button data-tool="${k}">${n}</button>`).join('')}</div>
+        <div class="b-tools" id="b-tools">${TOOLS.map(([k, n]) => `<button data-tool="${k}">${n}</button>`).join('')}<button id="b-hide" title="Show or hide options">Options ▾</button></div>
       </div>
       <div class="b-info" id="b-info"></div>
       <div class="b-touch" ${isTouch ? '' : 'hidden'}>
@@ -65,6 +65,7 @@ export class BuildMode {
     const $ = (id) => el.querySelector('#' + id);
     this.$ = $;
     $('b-done').addEventListener('click', () => this.exit());
+    $('b-hide').addEventListener('click', () => { const o = $('b-opts'); o.classList.toggle('collapsed'); $('b-hide').textContent = o.classList.contains('collapsed') ? 'Options ▴' : 'Options ▾'; });
     $('b-lvl-up').addEventListener('click', () => this.setLevel(this.level + 1));
     $('b-lvl-dn').addEventListener('click', () => this.setLevel(this.level - 1));
     for (const b of el.querySelectorAll('[data-tool]')) b.addEventListener('click', () => this.setTool(b.dataset.tool));
@@ -88,8 +89,8 @@ export class BuildMode {
     this.updateGridLines();
     this.dirtyGhost = true;
   }
-  swatch(color, label, active, data) {
-    return `<button class="sw ${active ? 'on' : ''}" ${data} title="${label}"><span class="chip" style="background:${color}"></span><span>${label}</span></button>`;
+  swatch(color, label, active, data, compact = false) {
+    return `<button class="sw ${compact ? 'compact' : ''} ${active ? 'on' : ''}" ${data} title="${label}" aria-label="${label}"><span class="chip" style="background:${color}"></span><span>${label}</span></button>`;
   }
   renderOptions() {
     const o = this.opt, box = this.$('b-opts');
@@ -99,7 +100,7 @@ export class BuildMode {
       h += `<div class="row small">Foundation: ${Object.entries(FOUNDATIONS).map(([k, f]) => `<button class="chipbtn ${o.found === k ? 'on' : ''}" data-found="${k}">${f.name}</button>`).join('')}</div>`;
     } else if (this.tool === 'wall') {
       h += `<div class="row shapes">${Object.entries(shapes).map(([k, s]) => `<button class="shape ${o.shape === k ? 'on' : ''}" data-shape="${k}" title="${s.name}"><canvas width="32" height="48" data-thumb="${k}"></canvas><span>${s.name}</span></button>`).join('')}</div>`;
-      h += `<div class="row">${Object.entries(styles).map(([k, st]) => this.swatch(st.a.color === '#ffffff' ? matColor(st.a.mat) : st.a.color, st.name, o.style === k, `data-style="${k}"`)).join('')}</div>`;
+      h += `<div class="row swatches">${Object.entries(styles).map(([k, st]) => this.swatch(st.a.color === '#ffffff' ? matColor(st.a.mat) : st.a.color, st.name, o.style === k, `data-style="${k}"`, true)).join('')}<span class="b-cur">${(styles[o.style] || {}).name || ''}</span></div>`;
       h += `<div class="row small"><button class="chipbtn ${o.flip ? 'on' : ''}" data-act="flip">Flip inside/outside (F)</button><button class="chipbtn ${o.mirror ? 'on' : ''}" data-act="mirror">Mirror (M)</button><button class="chipbtn accent" data-act="design">Wall designer…</button></div>`;
     } else if (this.tool === 'roof') {
       h += `<div class="row">${Object.entries(ROOF_STYLES).map(([k, r]) => this.swatch(r.top.color === '#ffffff' ? matColor(r.top.mat) : r.top.color, r.name, o.roofStyle === k, `data-roof="${k}"`)).join('')}</div>`;
@@ -151,6 +152,9 @@ export class BuildMode {
     this.setLevel(this.level);
     this.setTool(this.tool);
     g.input.uiCapture = false;
+    // clear the view: no trees over the claim, no grass tufts
+    if (g.world.trees) g.world.trees.setHidden([claim.x0 - 6, claim.z0 - 6, claim.x1 + 6, claim.z1 + 6]);
+    if (g.world.grass) for (const m of g.world.grass.meshes) m.visible = false;
     this.updateCam(0);
   }
   exit() {
@@ -159,6 +163,8 @@ export class BuildMode {
     this.el.hidden = true;
     g.hud.setVisible(true);
     if (this.claim) this.claim.structure.setCutaway(null);
+    if (g.world.trees) g.world.trees.setHidden(null);
+    if (g.world.grass) for (const m of g.world.grass.meshes) m.visible = true;
     this.clearGhost();
     if (this.gridLines) { g.scene.remove(this.gridLines); this.gridLines.geometry.dispose(); this.gridLines = null; }
     g.markDirty && g.markDirty();

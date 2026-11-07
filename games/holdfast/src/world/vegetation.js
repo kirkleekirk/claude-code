@@ -179,7 +179,8 @@ export class Trees {
     this.scene = scene;
     this.quality = quality;
     this.items = KINDS.map(() => []); // per archetype: [x, y, z, rotY, scale, color]
-    this.lodDist = quality.level === 'low' ? 110 : 170;
+    this.lodDist = quality.level === 'low' ? 85 : 170;
+    this.cullDist = quality.viewDistance + 40;
   }
   add(x, y, z, kindIdx, scale, rng) {
     const col = new THREE.Color(1, 1, 1);
@@ -207,16 +208,22 @@ export class Trees {
     this.q = new THREE.Quaternion();
     this.lastPos = new THREE.Vector3(1e9, 0, 0);
   }
+  // hide trees inside a rect (build mode keeps the view clear); null shows all
+  setHidden(rect) { this.hiddenRect = rect; this.lastPos.set(1e9, 0, 0); }
   update(camPos) {
     if (camPos.distanceToSquared(this.lastPos) < 25) return;
+    const hr = this.hiddenRect;
     this.lastPos.copy(camPos);
     const d2 = this.lodDist * this.lodDist;
     const v = new THREE.Vector3(), s = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
     for (const { near, far, list } of this.meshes) {
       let a = 0, b = 0;
       for (const t of list) {
+        if (hr && t.x > hr[0] && t.x < hr[2] && t.z > hr[1] && t.z < hr[3]) continue;
         const dx = t.x - camPos.x, dz = t.z - camPos.z;
-        const isNear = dx * dx + dz * dz < d2;
+        const dd = dx * dx + dz * dz;
+        if (dd > this.cullDist * this.cullDist) continue;
+        const isNear = dd < d2;
         this.q.setFromAxisAngle(up, t.r);
         v.set(t.x, t.y, t.z); s.setScalar(t.s);
         this.m4.compose(v, this.q, s);

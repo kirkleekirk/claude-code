@@ -27,7 +27,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #101210; col
 /* ---------------- HUD ---------------- */
 #ui > * { pointer-events: none; }
 #ui button, #ui .overlay, #ui .dead, #ui select, #ui input, #ui .touch .tbtns, #ui .touch .tbtns-top { pointer-events: auto; }
-.hud-hidden > :not(.overlay):not(.dead):not(#menu-btn) { display: none !important; }
+.hud-hidden > :not(.overlay):not(.dead):not(#menu-btn):not(.build-ui) { display: none !important; }
+.hud-hidden > #menu-btn { display: none !important; }
 .hud-top-left { position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); font-family: var(--font-display); letter-spacing: 0.06em; text-shadow: 0 1px 3px rgba(0,0,0,.7); }
 #hud-clock { font-size: 22px; }
 #hud-weather { font-size: 13px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.14em; }
@@ -108,7 +109,13 @@ table.keys td:first-child { font-family: var(--font-display); color: var(--ink-d
 .b-tools { display: flex; gap: 6px; flex-wrap: wrap; }
 .b-tools button { font-family: var(--font-display); letter-spacing: 0.06em; background: var(--panel); }
 .b-tools button.on { background: var(--accent); color: #1a1a14; border-color: var(--accent); }
-.b-opts { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px; max-height: 34vh; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.b-opts { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px; max-height: 26vh; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.b-opts.collapsed { display: none; }
+.b-opts .row.swatches { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+.sw.compact { padding: 4px; }
+.sw.compact span:not(.chip) { display: none; }
+.sw.compact .chip { width: 22px; height: 22px; }
+.b-cur { font-size: 12px; color: var(--ink-dim); margin-left: 6px; }
 .b-opts:empty { display: none; }
 .b-opts .row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
 .b-opts .row.small { font-size: 13px; color: var(--ink-dim); }

@@ -7,6 +7,7 @@ import { GeoBuilder, rgb } from '../geom.js';
 import { buildingMaterial } from '../atlas.js';
 import { PLANS, townBlock } from '../building/prefabs.js';
 import { PropBuilder } from './props.js';
+import { DoorPool, setDoorPool } from '../building/doors.js';
 import { rotateStructure, validateReachability } from '../building/planner.js';
 import { CELL, STORY, HALF_T, shapeGrid as shapeGridOf } from '../building/defs.js';
 const HALF_T_STEP = 0.1;
@@ -31,6 +32,7 @@ export class World {
 
   async generate(opts) {
     const P = this.progress;
+    setDoorPool(new DoorPool(this.scene, 512));
     this.terrain = new Terrain();
     physicsBounds(this.physics);
     this.physics.terrain = this.terrain;

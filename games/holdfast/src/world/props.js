@@ -247,8 +247,9 @@ export class PropBuilder {
     for (const gz of gate) {
       this.box('plain:metal', x - 0.2, H(x, gz) - 0.2, gz - (gz < 0 ? 0.6 : 0), x + 1.2, topY + 0.6, gz + (gz < 0 ? 0 : 0.6), '#5a6a62');
     }
-    this.signQueue.push({ type: 'mural', x: x + 1.02, z0: 14, z1: 98, y0: H(x + 1.5, 50) + 0.3, y1: topY - 0.1 });
-    this.signQueue.push({ type: 'mural2', x: x + 1.02, z0: -98, z1: -14, y0: H(x + 1.5, -50) + 0.3, y1: topY - 0.1 });
+    const my0 = Math.max(H(x + 1.5, 30), H(x + 1.5, -30)) + 0.35;
+    this.signQueue.push({ type: 'mural', x: x + 1.02, z0: 12, z1: 46, y0: my0, y1: topY - 0.12 });
+    this.signQueue.push({ type: 'mural2', x: x + 1.02, z0: -46, z1: -12, y0: my0, y1: topY - 0.12 });
   }
 
   // ---------------- cars ----------------
@@ -397,7 +398,7 @@ export class PropBuilder {
     sy += 140; sx = 0;
     for (const it of items) {
       if (it.type !== 'mural' && it.type !== 'mural2') continue;
-      const W = SZ, Hh = 380;
+      const W = SZ, Hh = Math.round(SZ * (it.y1 - it.y0) / (it.z1 - it.z0));
       const r = [0, sy, W, sy + Hh];
       paintMural(ctx, r, it.type === 'mural');
       sy += Hh + 8;
