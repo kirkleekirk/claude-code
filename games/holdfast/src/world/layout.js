@@ -20,7 +20,6 @@ export const STREETS = {
   lots: [
     { x0: 140, z0: -56, x1: 166, z1: -36 }, { x0: 96, z0: -56, x1: 118, z1: -36 },
     { x0: 140, z0: 36, x1: 166, z1: 56 }, { x0: 96, z0: 36, x1: 118, z1: 56 },
-    { x0: 36, z0: 8, x1: 64, z1: 30 },
   ],
 };
 
@@ -160,6 +159,6 @@ export const TOWN_LOTS = [
 export const FEATURES = {
   waterTower: [106, 118],
   floodwall: { x: 190, z0: -134, z1: 134, gate: [-6, 6] },
-  spawn: [36, 6],
+  spawn: [14, 2],
   churchCountry: { at: [-138, 46], rot: 2 },
 };

@@ -9,6 +9,7 @@ import { CELL, STORY, getStyle } from './defs.js';
 import { hashStr, mulberry32 } from '../util.js';
 
 let NEXT_ID = 1;
+export function bumpStructureIds(n) { NEXT_ID = Math.max(NEXT_ID, n); }
 
 export class Structure {
   constructor(opts = {}) {

@@ -79,12 +79,12 @@ export class Physics {
   }
   // Resolve a circle (x,z,r) for a body spanning [y0, y1]; boxes whose top is
   // below y0+step are ignored (they can be stepped onto). Returns new [x,z].
-  collide(x, z, r, y0, y1, step = 0.45, ignore = null) {
+  collide(x, z, r, y0, y1, step = 0.45, ignore = null, ignoreKind = null) {
     for (let iter = 0; iter < 4; iter++) {
       const list = this.query(x - r - 0.1, z - r - 0.1, x + r + 0.1, z + r + 0.1, this._c || (this._c = []));
       let moved = false;
       for (const b of list) {
-        if (b === ignore || b.owner === ignore) continue;
+        if (b === ignore || (ignore && b.owner === ignore) || (ignoreKind && b.kind === ignoreKind)) continue;
         if (b.max[1] <= y0 + step || b.min[1] >= y1) continue;
         // closest point on box (XZ)
         const cx = Math.max(b.min[0], Math.min(x, b.max[0]));

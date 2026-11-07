@@ -28,13 +28,19 @@ export class Input {
     c.addEventListener('mousedown', (e) => {
       this.mouse.buttons |= 1 << e.button;
       this.pressedSet.add('Mouse' + e.button);
+      if (e.button === 0) { this.downX = e.clientX; this.downY = e.clientY; this.dragMoved = false; }
       if (!this.locked && this.wantLock && !this.uiCapture) this.requestLock();
     });
-    addEventListener('mouseup', (e) => { this.mouse.buttons &= ~(1 << e.button); this.releasedSet.add('Mouse' + e.button); });
+    addEventListener('mouseup', (e) => {
+      this.mouse.buttons &= ~(1 << e.button);
+      this.releasedSet.add('Mouse' + e.button);
+      // without pointer lock, a click (not a drag) is an attack
+      if (e.button === 0 && !this.dragMoved && e.target === this.canvas) this.pressedSet.add('Mouse0Click');
+    });
     addEventListener('mousemove', (e) => {
       this.mouse.x = e.clientX; this.mouse.y = e.clientY;
-      if (this.locked) { this.mouse.dx += e.movementX; this.mouse.dy += e.movementY; }
-      else if (this.mouse.buttons & 4 || (this.mouse.buttons & 1 && this.dragLook)) { this.mouse.dx += e.movementX; this.mouse.dy += e.movementY; }
+      if (this.mouse.buttons & 1 && Math.hypot(e.clientX - (this.downX || 0), e.clientY - (this.downY || 0)) > 6) this.dragMoved = true;
+      if (this.locked || this.mouse.buttons & 4 || this.mouse.buttons & 1) { this.mouse.dx += e.movementX; this.mouse.dy += e.movementY; }
     });
     c.addEventListener('wheel', (e) => { this.mouse.wheel += Math.sign(e.deltaY); e.preventDefault(); }, { passive: false });
     c.addEventListener('contextmenu', (e) => e.preventDefault());

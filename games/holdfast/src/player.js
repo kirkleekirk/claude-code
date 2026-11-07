@@ -34,10 +34,17 @@ export class Player {
     const g = new THREE.CylinderGeometry(0.035, 0.02, 0.85, 8);
     g.translate(0, 0.32, 0);
     g.rotateX(Math.PI / 2);
-    const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0x9a6a3a, roughness: 0.6 }));
-    m.castShadow = true;
-    this.weaponMesh = m;
-    this.game.scene.add(m);
+    const bat = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0x9a6a3a, roughness: 0.6 }));
+    bat.castShadow = true;
+    const gun = new THREE.Group();
+    const dark = new THREE.MeshStandardMaterial({ color: 0x222426, roughness: 0.4, metalness: 0.6 });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.05, 0.2), dark); body.position.set(0, 0.02, 0.08);
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.1, 0.045), dark); grip.position.set(0, -0.03, 0); grip.rotation.x = 0.25;
+    gun.add(body, grip);
+    this.weaponMesh = new THREE.Group();
+    this.weaponMesh.add(bat, gun);
+    this.batMesh = bat; this.gunMesh = gun;
+    this.game.scene.add(this.weaponMesh);
   }
   spawn(x, z) {
     const g = this.game.physics.groundAt(x, z, 1e9);
@@ -51,7 +58,7 @@ export class Player {
     const ph = this.game.physics;
     if (this.dead) { this.char.animate(dt, { mode: 'dead' }); this.syncModel(dt); return; }
     const ax = input.moveAxis();
-    const sprintHeld = input.down('ShiftLeft') || input.down('ShiftRight') || input.btn('sprint');
+    const sprintHeld = input.down('ShiftLeft') || input.down('ShiftRight') || input.btn('sprint') || input.btn('sprint-stick');
     if (input.pressed('KeyC') || input.pressed('ControlLeft')) this.crouch = !this.crouch;
     this.aiming = (input.mouse.buttons & 4) !== 0 || input.btn('aim');
     const moving = Math.hypot(ax.x, ax.y) > 0.1;
@@ -69,15 +76,19 @@ export class Player {
     const acc = this.onGround ? 14 : 3;
     this.vel.x += (tx - this.vel.x) * Math.min(1, acc * dt);
     this.vel.z += (tz - this.vel.z) * Math.min(1, acc * dt);
-    // jump
-    if ((input.pressed('Space') || input.btn('jump-tap')) && this.onGround && this.stamina > 8) {
+    // jump (vaults low fences in front)
+    if (input.pressed('Space') && this.onGround && this.stamina > 8) {
       this.vel.y = 6.2; this.onGround = false; this.stamina -= 8;
+      const fx = Math.sin(this.facing), fz = Math.cos(this.facing);
+      const near = ph.query(this.pos.x + fx * 0.8 - 0.6, this.pos.z + fz * 0.8 - 0.6, this.pos.x + fx * 0.8 + 0.6, this.pos.z + fz * 0.8 + 0.6, []);
+      if (near.some((b) => b.kind === 'fence')) { this.vaultT = 0.7; this.vel.y = 5.2; }
     }
+    this.vaultT = Math.max(0, (this.vaultT || 0) - dt);
     this.vel.y -= GRAV * dt;
     // integrate horizontally, then collide
     const ox = this.pos.x, oz = this.pos.z;
     let nx = this.pos.x + this.vel.x * dt, nz = this.pos.z + this.vel.z * dt;
-    [nx, nz] = ph.collide(nx, nz, RADIUS, this.pos.y, this.pos.y + (this.crouch ? 1.2 : HEIGHT), STEP);
+    [nx, nz] = ph.collide(nx, nz, RADIUS, this.pos.y, this.pos.y + (this.crouch ? 1.2 : HEIGHT), STEP, null, this.vaultT > 0 ? 'fence' : null);
     // deep water & world edge
     const terr = ph.terrain.height(nx, nz);
     if (terr < T.water - 1.15) { nx = ox; nz = oz; this.vel.x = 0; this.vel.z = 0; this.game.hud && this.game.hud.toast('The current is too strong to swim here.', 2); }
@@ -110,7 +121,7 @@ export class Player {
     this.noise = sprinting ? 22 : moving ? (this.crouch ? 3 : 9) : 1;
     // attacks
     this.attackCd -= dt;
-    const attackPressed = input.pressed('Mouse0') || input.btn('attack-tap');
+    const attackPressed = input.pressed(input.locked ? 'Mouse0' : 'Mouse0Click') || input.pressed('TouchAttack');
     if (attackPressed && this.attackCd <= 0 && !input.uiCapture && this.stamina > 6) {
       this.attackT = 0; this.attackCd = this.weapon.speed; this.hitDone = false;
       this.stamina -= 7;
@@ -118,7 +129,7 @@ export class Player {
     }
     if (this.attackT >= 0) {
       this.attackT += dt / this.weapon.speed;
-      if (!this.hitDone && this.attackT > 0.42) { this.hitDone = true; this.game.combat && this.game.combat.melee(this); }
+      if (!this.hitDone && this.attackT > 0.42) { this.hitDone = true; if (this.weapon.kind !== 'gun' && this.game.combat) this.game.combat.melee(this); }
       if (this.attackT >= 1) this.attackT = -1;
     }
     this.hurtFlash = Math.max(0, this.hurtFlash - dt);
@@ -141,6 +152,8 @@ export class Player {
     const fw = this.char.bones.handR.getWorldQuaternion(new THREE.Quaternion());
     this.weaponMesh.quaternion.copy(fw).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2 + 0.3, 0, 0)));
     this.weaponMesh.visible = !this.dead && this.weapon.kind !== 'none';
+    this.batMesh.visible = this.weapon.kind !== 'gun';
+    this.gunMesh.visible = this.weapon.kind === 'gun';
   }
   damage(n, source) {
     if (this.dead || this.godMode) return;

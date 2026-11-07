@@ -287,6 +287,25 @@ export class World {
     }, (x, z) => tr.height(x, z));
   }
 
+  // Remove trees and grass from a rect (when a foundation goes down there).
+  clearVegetation(x0, z0, x1, z1) {
+    if (this.trees) {
+      let changed = false;
+      for (const list of this.trees.items) {
+        for (let i = list.length - 1; i >= 0; i--) {
+          const t = list[i];
+          if (t.x > x0 - 1 && t.x < x1 + 1 && t.z > z0 - 1 && t.z < z1 + 1) { list.splice(i, 1); changed = true; }
+        }
+      }
+      if (changed) {
+        for (const b of this.physics.query(x0 - 1, z0 - 1, x1 + 1, z1 + 1, [])) if (b.kind === 'tree') this.physics.remove(b);
+        this.trees.lastPos.set(1e9, 0, 0);
+      }
+    }
+    this.occupied.push([x0, z0, x1, z1, 'claim']);
+    if (this.grass) this.grass.center.set(1e9, 0, 0);
+  }
+
   update(dt, camPos) {
     if (this.trees) this.trees.update(camPos);
     if (this.grass) this.grass.update(camPos);
@@ -525,8 +544,24 @@ export class World {
     }
     // gas pumps under the canopy
     if (this.gasStation) {
-      const G = this.gasStation;
+      // concrete apron and pumps under the canopy
+      const G = this.gasStation, b = G.bounds();
+      const y = G.oy - 0.12;
+      P.box('concrete', b.wx0 - 3, y - 0.4, b.wz0 - 3, b.wx1 + 3, y, b.wz1 + 1, '#cfcbc2', { ny: false });
+      this.physics.add({ min: [b.wx0 - 3, y - 0.4, b.wz0 - 3], max: [b.wx1 + 3, y, b.wz1 + 1], kind: 'walk' }, 'props');
+      const can = G.props.length ? null : null; void can;
       for (const p of G.props) if (p.type === 'anchor_pump') { /* reserved */ }
+      // pump islands between the canopy columns
+      const cx = (b.wx0 + b.wx1) / 2;
+      const front = G.oz + 2; // canopy side after rotation lies toward the highway (north)
+      for (const dx of [-2.6, 2.6]) {
+        const px = cx + dx, pz = b.wz0 + 5;
+        P.box('concrete', px - 0.6, y, pz - 1.6, px + 0.6, y + 0.18, pz + 1.6, '#d8d4cc');
+        P.box('plain:paint', px - 0.3, y + 0.18, pz - 0.4, px + 0.3, y + 1.7, pz + 0.4, '#c4332a');
+        P.box('plain:paint', px - 0.31, y + 1.2, pz - 0.41, px + 0.31, y + 1.55, pz + 0.41, '#efe9dc');
+        P.solid(px - 0.6, y, pz - 1.6, px + 0.6, y + 1.7, pz + 1.6);
+      }
+      void front;
     }
     P.finish(this.scene);
     this.lampPositions = P.lampPositions;
