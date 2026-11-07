@@ -143,6 +143,7 @@ export function buildFromPlan(spec) {
 
   // ---- roof ----
   if (spec.roof) addRoof(S, spec, L);
+  if (spec.roofs) for (const r of spec.roofs) gableRoof(S, r);
 
   // ---- furniture ----
   const rooms = collectRooms(spec);
@@ -192,14 +193,25 @@ function addRoof(S, spec, L) {
   const D = top.length, W = Math.max(...top.map((row) => row.length));
   const has = (x, z) => z >= 0 && z < D && x >= 0 && x < top[z].length && top[z][x] !== '.' && top[z][x] !== ' ';
   if (r.type === 'flat') {
-    for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) if (has(x, z)) S.setFloor(x, z, L, 'tar', spec.found);
-    // parapet walls
-    for (let z = -1; z <= D; z++) for (let x = -1; x <= W; x++) {
-      for (const a of [0, 1]) {
-        const c1 = a === 0 ? has(x, z - 1) : has(x - 1, z);
-        const c2 = has(x, z);
-        if (c1 === c2) continue;
-        S.setWall(x, z, L, a, r.parapet || 'half_wall', r.parapetStyle || spec.ext, c1);
+    // a roof slab over every cell that has nothing above it (handles mixed heights)
+    const cellAt = (l, x, z) => { const lv = spec.levels[l]; if (!lv || z < 0 || z >= lv.length || x < 0 || x >= lv[z].length) return false; const c = lv[z][x]; return c !== '.' && c !== ' '; };
+    for (let l = 0; l < L; l++) {
+      const lv = spec.levels[l];
+      const Wl = Math.max(...lv.map((row) => row.length));
+      const roofAt = (x, z) => cellAt(l, x, z) && !cellAt(l + 1, x, z);
+      for (let z = 0; z < lv.length; z++) for (let x = 0; x < Wl; x++) if (roofAt(x, z)) S.setFloor(x, z, l + 1, 'tar', spec.found);
+      for (let z = -1; z <= lv.length; z++) for (let x = -1; x <= Wl; x++) {
+        for (const a of [0, 1]) {
+          const c1 = a === 0 ? roofAt(x, z - 1) : roofAt(x - 1, z);
+          const c2 = roofAt(x, z);
+          if (c1 === c2) continue;
+          // skip where a taller part's wall already stands on this edge
+          if (S.walls.has(`${x},${z},${l + 1},${a}`)) continue;
+          const other = c1 ? (a === 0 ? [x, z] : [x, z]) : (a === 0 ? [x, z - 1] : [x - 1, z]);
+          if (cellAt(l + 1, other[0], other[1])) continue;
+          const style = (spec.parapetStyleAt && spec.parapetStyleAt(x, z, a)) || r.parapetStyle || spec.ext;
+          S.setWall(x, z, l + 1, a, r.parapet || 'half_wall', style, c1);
+        }
       }
     }
     return;
@@ -229,6 +241,27 @@ function addRoof(S, spec, L) {
       const p = pitches ? pitches[i] : pitch;
       S.setRoof(x0 + i, z, L, 2, p, style);
       S.setRoof(x1 - i, z, L, 0, p, style);
+    }
+  }
+}
+
+// Gable roof over a rectangle of cells at a level. r = {x0,z0,x1,z1,level,axis,pitch|pitches,style,attic}
+export function gableRoof(S, r) {
+  const style = r.style || 'black_shingle';
+  if (r.attic) for (let z = r.z0; z <= r.z1; z++) for (let x = r.x0; x <= r.x1; x++) S.setFloor(x, z, r.level, r.attic === true ? 'attic' : r.attic, 'concrete');
+  if (r.axis === 'x') {
+    const depth = r.z1 - r.z0 + 1, half = depth / 2;
+    for (let x = r.x0; x <= r.x1; x++) for (let i = 0; i < half; i++) {
+      const p = r.pitches ? r.pitches[i] : r.pitch;
+      S.setRoof(x, r.z0 + i, r.level, 3, p, style);
+      S.setRoof(x, r.z1 - i, r.level, 1, p, style);
+    }
+  } else {
+    const width = r.x1 - r.x0 + 1, half = width / 2;
+    for (let z = r.z0; z <= r.z1; z++) for (let i = 0; i < half; i++) {
+      const p = r.pitches ? r.pitches[i] : r.pitch;
+      S.setRoof(r.x0 + i, z, r.level, 2, p, style);
+      S.setRoof(r.x1 - i, z, r.level, 0, p, style);
     }
   }
 }
@@ -336,11 +369,8 @@ export function validateReachability(S) {
     }
   }
   const unreachable = [];
-  for (const k of S.floors.keys()) {
-    const [, , l] = k.split(',').map(Number);
-    const top = Math.max(...[...S.floors.keys()].map((kk) => +kk.split(',')[2]));
-    if (S.roofs.size && l === top) continue; // attic
-    if (S.plan && S.plan.roof && S.plan.roof.type === 'flat' && l === S.plan.levels.length) continue;
+  for (const [k, f] of S.floors) {
+    if (f.style === 'tar' || f.style === 'attic') continue; // roofs & attics aren't meant to be walked
     if (!seen.has(k)) unreachable.push(k);
   }
   return { ok: unreachable.length === 0, unreachable };

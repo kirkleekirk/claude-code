@@ -20,8 +20,18 @@ T.nz = Math.round((T.z1 - T.z0) / T.res) + 1;
 
 const n1 = makeNoise2D(1337), n2 = makeNoise2D(4242), n3 = makeNoise2D(777), n4 = makeNoise2D(9001);
 
-// Town terrace: gentle slope down toward the river (east).
-export function townPlane(x) { return 11.5 - 0.03 * (x - 70); }
+// Town terrace: downtown blocks sit level; the streets slope between them
+// and drop toward the river on the last block (like an old river town).
+export const TOWN_KNOTS = [[40, 11.9], [90, 11.1], [122, 11.1], [134, 10.3], [170, 10.3], [192, 8.5], [240, 8.5]];
+export function townPlane(x) {
+  const K = TOWN_KNOTS;
+  if (x <= K[0][0]) return K[0][1];
+  for (let i = 0; i < K.length - 1; i++) {
+    const [x0, y0] = K[i], [x1, y1] = K[i + 1];
+    if (x <= x1) return y0 + (y1 - y0) * (x - x0) / (x1 - x0);
+  }
+  return K[K.length - 1][1];
+}
 // River edges
 export function riverNear(z) {
   const inTown = 1 - smoothstep(130, 175, Math.abs(z));

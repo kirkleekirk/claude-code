@@ -259,13 +259,20 @@ export function meshStructure(S, builders, ground) {
     {
       const saved = builder;
       if (covered) builder = builders.cap(l);
+      // a floor above continues across the wall top (no stripe in the floor)
+      const cellsAbove = a === 0 ? [[x, z - 1], [x, z]] : [[x - 1, z], [x, z]];
+      let topMat = st.a.mat, topCol = rgb(st.a.color);
+      for (const [cx, cz] of cellsAbove) {
+        const f = F(cx, cz, l + 1);
+        if (f) { const fs = FLOOR_STYLES[f.style] || FLOOR_STYLES.wood; topMat = fs.top.mat; topCol = rgb(fs.top.color); break; }
+      }
       let k = 0;
       while (k < SHAPE_COLS) {
         if (!isSolid(SHAPE_ROWS - 1, k)) { k++; continue; }
         let k1 = k;
         while (k1 + 1 < SHAPE_COLS && isSolid(SHAPE_ROWS - 1, k1 + 1)) k1++;
         const e0 = eLo(k), e1 = eHi(k1), y = STORY;
-        quadN(st.a.mat, P(e0, y, -HALF_T), P(e1, y, -HALF_T), P(e1, y, HALF_T), P(e0, y, HALF_T), [0, 1, 0], rgb(st.a.color));
+        quadN(topMat, P(e0, y, -HALF_T), P(e1, y, -HALF_T), P(e1, y, HALF_T), P(e0, y, HALF_T), [0, 1, 0], topCol);
         k = k1 + 1;
       }
       builder = saved;
@@ -492,8 +499,14 @@ export function meshStructure(S, builders, ground) {
     {
       const yt = y0 + (top + 1) * SUB;
       const m = byDir.find(Boolean);
-      const capC = m ? rgb(getStyle(m.w.style).a.color) : [0.9, 0.9, 0.9];
-      const capKey = m ? getStyle(m.w.style).a.mat : 'trim';
+      let capC = m ? rgb(getStyle(m.w.style).a.color) : [0.9, 0.9, 0.9];
+      let capKey = m ? getStyle(m.w.style).a.mat : 'trim';
+      if (top === SHAPE_ROWS - 1) {
+        for (const [cx, cz] of [[vx - 1, vz - 1], [vx, vz - 1], [vx - 1, vz], [vx, vz]]) {
+          const f = F(cx, cz, l + 1);
+          if (f) { const fs = FLOOR_STYLES[f.style] || FLOOR_STYLES.wood; capKey = fs.top.mat; capC = rgb(fs.top.color); break; }
+        }
+      }
       (top === SHAPE_ROWS - 1 && abovePosted ? builders.cap(l) : builder).quad(capKey, [X - HALF_T, yt, Z + HALF_T], [X + HALF_T, yt, Z + HALF_T], [X + HALF_T, yt, Z - HALF_T], [X - HALF_T, yt, Z - HALF_T], capC, null, [0, 1, 0]);
     }
     // collision per contiguous run
@@ -779,6 +792,8 @@ export function meshStructure(S, builders, ground) {
       else { wa = 1; wz = z; wx = side === 0 ? x : x + 1; }
       const wb = W(wx, wz, l - 1, wa);
       if (!wb || !fullTop(wb, `${wx},${wz},${l - 1},${wa}`, wa)) continue;
+      // a taller part of the building already has walls here (e.g. a tower)
+      if (W(wx, wz, l, wa) || W(wx, wz, l + 1, wa)) continue;
       const yl = yOf(l);
       const q0 = eave ? -HALF_T : 0;
       const n = d === 0 || d === 2 ? [0, 0, 1] : [1, 0, 0];

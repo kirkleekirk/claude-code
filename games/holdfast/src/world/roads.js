@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { GeoBuilder, rgb, mulc } from '../geom.js';
 import { resample, catmullRom, clamp } from '../util.js';
-import { townPlane } from './terrain.js';
+import { townPlane, TOWN_KNOTS } from './terrain.js';
 
 // Turn a control polyline into a smooth, profiled centreline.
 export function roadCentreline(terrain, road) {
@@ -70,6 +70,7 @@ export function buildRoadRibbon(builder, samples, road) {
 }
 
 // ---------------- town streets ----------------
+const KNOT_X = new Set(TOWN_KNOTS.map((k) => k[0]));
 // raster at 1 m: 0 none, 1 road, 2 sidewalk
 export function buildTownStreets(builder, streets, bounds, out) {
   const { x0, z0, x1, z1 } = bounds;
@@ -82,6 +83,7 @@ export function buildTownStreets(builder, streets, bounds, out) {
       grid[k] = v;
     }
   };
+  for (const l of streets.lots || []) mark(l.x0, l.z0, l.x1, l.z1, 1);
   for (const s of streets.ns) mark(s.x0, s.z0, s.x1, s.z1, 1);
   for (const s of streets.ew) mark(s.x0, s.z0, s.x1, s.z1, 1);
   for (const s of streets.ns) { mark(s.x0 - s.walk, s.z0, s.x0, s.z1, 2, true); mark(s.x1, s.z0, s.x1 + s.walk, s.z1, 2, true); }
@@ -96,7 +98,8 @@ export function buildTownStreets(builder, streets, bounds, out) {
     const k = (z - z0) * W + (x - x0);
     if (!t || used[k]) continue;
     let xe = x;
-    while (xe + 1 < x1 && at(xe + 1, z) === t && !used[(z - z0) * W + (xe + 1 - x0)]) xe++;
+    // never merge across a slope change (keeps quads planar)
+    while (xe + 1 < x1 && at(xe + 1, z) === t && !used[(z - z0) * W + (xe + 1 - x0)] && !KNOT_X.has(xe + 1)) xe++;
     let ze = z;
     outer: while (ze + 1 < z1) {
       for (let xx = x; xx <= xe; xx++) if (at(xx, ze + 1) !== t || used[(ze + 1 - z0) * W + (xx - x0)]) break outer;

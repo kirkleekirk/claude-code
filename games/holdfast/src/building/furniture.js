@@ -77,7 +77,7 @@ export const PROPS = {
       const x0 = -w / 2 + 0.1 + i * (pw + 0.1);
       c.box('fabric', x0, 0.52, -L / 2 + 0.1, x0 + pw, 0.64, -L / 2 + 0.48, '#f6f4ee');
     }
-    c.box('woodFurn', -w / 2 - 0.03, 0, -L / 2 - 0.05, w / 2 + 0.03, 1.05, -L / 2 + 0.02, DARKWOOD, null, true);
+    c.box('woodFurn', -w / 2 - 0.03, 0, -L / 2 - 0.05, w / 2 + 0.03, 0.93, -L / 2 + 0.02, DARKWOOD, null, true);
     c.box('woodFurn', -w / 2 - 0.03, 0, L / 2, w / 2 + 0.03, 0.6, L / 2 + 0.05, DARKWOOD);
   },
   couch(c, p) {

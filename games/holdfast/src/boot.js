@@ -29,6 +29,7 @@ const params = new URLSearchParams(location.search);
   if (params.get('still')) {
     // render a single frame on demand (screenshots)
     window.__shot = (p, t, opts = {}) => {
+      game.freeCam = true;
       if (opts.time != null) game.sky.setTime(opts.time);
       if (opts.weather) game.sky.setWeather(opts.weather, true);
       game.camera.position.set(...p);
@@ -42,6 +43,7 @@ const params = new URLSearchParams(location.search);
     // deterministic simulation for automated play-tests
     window.__sim = (o) => {
       const inp = game.input;
+      game.freeCam = false;
       if (o.pos) game.player.spawn(o.pos[0], o.pos[1]);
       if (o.yaw != null) game.tpc.yaw = o.yaw;
       if (o.pitch != null) game.tpc.pitch = o.pitch;

@@ -10,7 +10,7 @@ const FREE = 1, BLOCK = 0, OCC = 2, CLEAR = 3;
 
 // footprint [x0, x1, z0, z1] in prop space (front = +z), height, flags
 const ITEMS = {
-  bed: (p) => ({ fp: [-(p.w || 1.5) / 2 - 0.03, (p.w || 1.5) / 2 + 0.03, -1.08, 1.08], h: 1.05, front: 0.7 }),
+  bed: (p) => ({ fp: [-(p.w || 1.5) / 2 - 0.03, (p.w || 1.5) / 2 + 0.03, -1.08, 1.08], h: 0.95, front: 0.7 }),
   nightstand: () => ({ fp: [-0.24, 0.24, -0.2, 0.2], h: 1.0, front: 0 }),
   dresser: (p) => ({ fp: [-(p.w || 1.1) / 2, (p.w || 1.1) / 2, -0.25, 0.25], h: 0.85, front: 0.7 }),
   couch: (p) => ({ fp: [-(p.w || 2) / 2, (p.w || 2) / 2, -0.45, 0.45], h: 0.92, front: 0.8 }),
@@ -79,14 +79,14 @@ const PROGRAMS = {
     { t: 'picture', p: { w: 0.8, h: 0.6 }, wall: true, hung: true, optional: true },
   ],
   bedroom: [
-    { t: 'bed', wall: true, solidBehind: true, prefer: 'opposite-door' },
+    { t: 'bed', wall: true, prefer: 'opposite-door' },
     { t: 'nightstand', wall: true, near: 'bed', optional: true },
     { t: 'dresser', wall: true, optional: true },
     { t: 'rug', center: true, decor: true, p: { w: 1.6, d: 1.0, color: '#5a6a7a' }, optional: true },
     { t: 'picture', p: { w: 0.6, h: 0.45 }, wall: true, hung: true, optional: true },
   ],
   kidroom: [
-    { t: 'bed', p: { w: 1.0, color: '#9a4a3a' }, wall: true, solidBehind: true },
+    { t: 'bed', p: { w: 1.0, color: '#9a4a3a' }, wall: true },
     { t: 'dresser', p: { w: 0.9, color: '#c8a070' }, wall: true, optional: true },
     { t: 'desk', wall: true, optional: true },
   ],
@@ -162,7 +162,7 @@ const PROGRAMS = {
     { t: 'pew_rows', center: true },
   ],
   apartment: [
-    { t: 'bed', wall: true, solidBehind: true },
+    { t: 'bed', wall: true },
     { t: 'couch', p: { w: 1.8 }, wall: true, optional: true },
     { t: 'counter', p: { sink: true, w: 1.5 }, wall: true },
     { t: 'stove', wall: true, near: 'counter' },

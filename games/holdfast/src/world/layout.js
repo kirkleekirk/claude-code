@@ -16,6 +16,12 @@ export const STREETS = {
     { name: 'Main St', z0: -6, z1: 6, x0: 66, x1: 190, walk: 4 },
     { name: 'Broadway', z0: 64, z1: 72, x0: 66, x1: 186, walk: 4 },
   ],
+  // asphalt lots (no markings)
+  lots: [
+    { x0: 140, z0: -56, x1: 166, z1: -36 }, { x0: 96, z0: -56, x1: 118, z1: -36 },
+    { x0: 140, z0: 36, x1: 166, z1: 56 }, { x0: 96, z0: 36, x1: 118, z1: 56 },
+    { x0: 36, z0: 8, x1: 64, z1: 30 },
+  ],
 };
 
 // Roads outside town: centreline polylines (x, z); type: 'paved' | 'gravel'
@@ -108,33 +114,32 @@ export const WOODS = [
 // Town lots. type -> generator; at = [x, z] of the lot's min corner; rot quarter turns.
 export const TOWN_LOTS = [
   // ---- downtown, north side of Main St (fronts face +Z / south toward Main St) ----
-  { type: 'block', at: [136, -26], rot: 0, units: [
-    { w: 4, d: 8, levels: 2, kind: 'hardware', sign: 'HARDWARE', style: 'red_brick' },
-    { w: 4, d: 8, levels: 3, kind: 'store', sign: 'MERCANTILE', style: 'tan_brick' },
-    { w: 4, d: 8, levels: 2, kind: 'diner', sign: 'RIVER DINER', style: 'painted_brick' },
+  { type: 'block', at: [136, -30], rot: 0, units: [
+    { w: 4, d: 10, levels: 2, kind: 'hardware', sign: 'HARDWARE', style: 'red_brick' },
+    { w: 4, d: 10, levels: 3, kind: 'store', sign: 'MERCANTILE', style: 'tan_brick' },
+    { w: 4, d: 9, levels: 2, kind: 'diner', sign: 'RIVER DINER', style: 'painted_brick' },
     { w: 4, d: 7, levels: 2, kind: 'pharmacy', sign: 'PHARMACY', style: 'dark_brick' },
   ] },
-  { type: 'block', at: [92, -26], rot: 0, units: [
-    { w: 5, d: 8, levels: 2, kind: 'store', sign: 'FEED & SEED', style: 'red_brick' },
+  { type: 'block', at: [92, -30], rot: 0, units: [
+    { w: 5, d: 10, levels: 2, kind: 'store', sign: 'FEED & SEED', style: 'red_brick' },
     { w: 4, d: 8, levels: 2, kind: 'bar', sign: 'TAVERN', style: 'dark_brick' },
-    { w: 5, d: 8, levels: 2, kind: 'office', sign: 'BANK', style: 'tan_brick' },
+    { w: 5, d: 9, levels: 2, kind: 'office', sign: 'BANK', style: 'tan_brick' },
   ] },
   // ---- south side of Main St (fronts face -Z / north) ----
   { type: 'block', at: [136, 10], rot: 2, units: [
     { w: 4, d: 8, levels: 2, kind: 'store', sign: 'ANTIQUES', style: 'red_brick' },
     { w: 4, d: 8, levels: 2, kind: 'office', sign: 'POST OFFICE', style: 'painted_brick' },
-    { w: 4, d: 8, levels: 3, kind: 'store', sign: 'DRY GOODS', style: 'red_brick' },
+    { w: 4, d: 10, levels: 3, kind: 'store', sign: 'DRY GOODS', style: 'red_brick' },
     { w: 4, d: 8, levels: 2, kind: 'bar', sign: 'RIVER BAR', style: 'tan_brick' },
   ] },
   { type: 'block', at: [92, 10], rot: 2, units: [
-    { w: 5, d: 8, levels: 2, kind: 'store', sign: 'GROCERY', style: 'tan_brick' },
+    { w: 5, d: 10, levels: 2, kind: 'store', sign: 'GROCERY', style: 'tan_brick' },
     { w: 4, d: 8, levels: 2, kind: 'pharmacy', sign: 'DRUGS', style: 'red_brick' },
     { w: 5, d: 8, levels: 2, kind: 'office', sign: 'GAZETTE', style: 'dark_brick' },
   ] },
   // ---- residential ----
   { type: 'house', plan: 'foursquare', at: [96, -98], rot: 0, ext: 'blue_siding', roof: 'gray_shingle' },
   { type: 'house', plan: 'cottage', at: [110, -96], rot: 0, ext: 'white_siding', roof: 'black_shingle' },
-  { type: 'house', plan: 'cottage', at: [96, -128], rot: 1, ext: 'yellow_siding', roof: 'brown_shingle' },
   { type: 'church', at: [140, -124], rot: 0 },
   { type: 'house', plan: 'foursquare', at: [156, -98], rot: 0, ext: 'sage_siding', roof: 'black_shingle' },
   { type: 'house', plan: 'cottage', at: [96, 80], rot: 2, ext: 'white_siding', roof: 'green_shingle' },
@@ -142,6 +147,12 @@ export const TOWN_LOTS = [
   { type: 'house', plan: 'ranch', at: [138, 80], rot: 2, ext: 'yellow_siding', roof: 'brown_shingle' },
   { type: 'house', plan: 'cottage', at: [156, 80], rot: 2, ext: 'blue_siding', roof: 'gray_shingle' },
   { type: 'house', plan: 'ranch', at: [138, 110], rot: 0, ext: 'white_siding', roof: 'black_shingle' },
+  { type: 'house', plan: 'ranch', at: [94, -122], rot: 0, ext: 'gray_siding', roof: 'black_shingle' },
+  { type: 'house', plan: 'cottage', at: [156, -128], rot: 0, ext: 'yellow_siding', roof: 'brown_shingle' },
+  { type: 'house', plan: 'foursquare', at: [96, 104], rot: 2, ext: 'white_siding', roof: 'green_shingle' },
+  { type: 'house', plan: 'cottage', at: [156, 108], rot: 2, ext: 'sage_siding', roof: 'black_shingle' },
+  { type: 'house', plan: 'cottage', at: [62, 40], rot: 1, ext: 'white_siding', roof: 'gray_shingle' },
+  { type: 'house', plan: 'foursquare', at: [60, -48], rot: 1, ext: 'yellow_siding', roof: 'black_shingle' },
   { type: 'gas', at: [44, 8], rot: 2 },
 ];
 

@@ -466,7 +466,7 @@ const DEFS = {
     tile: [4, 4], gen: () => pixelTex('asphalt', 512, 512, (u, v, x, y) => {
       const n = tfbm(u, v, 8, 5, 281);
       const agg = hash2(x, y, 77);
-      const crack = Math.abs(tfbm(u, v, 4, 4, 282) - 0.5) < 0.006 ? 0.65 : 1;
+      const crack = Math.abs(tfbm(u, v, 4, 4, 282) - 0.5) < 0.0035 ? 0.82 : 1;
       const k = (0.3 + n * 0.12 + (agg > 0.9 ? 0.08 : 0) + (agg - 0.5) * 0.04) * crack;
       return [k * 255, k * 255, k * 252, agg * 0.3];
     }, 0.8),
