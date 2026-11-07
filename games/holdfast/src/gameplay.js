@@ -37,11 +37,11 @@ const TABLES = {
 };
 const NAMES = { wood: 'Wood', metal: 'Metal', stone: 'Stone', food: 'Food', meds: 'Meds', ammo: 'Ammo', fuel: 'Fuel' };
 
-export function rollLoot(table, inv) {
+export function rollLoot(table, inv, luck = 1) {
   const t = TABLES[table] || TABLES.crate;
   const got = [];
   for (const [k, a, b, p] of t) {
-    if (Math.random() > p) continue;
+    if (Math.random() > p * luck) continue;
     const n = a + Math.floor(Math.random() * (b - a + 1));
     if (k === 'pistol') {
       if (!inv.weapons.pistol) { inv.weapons.pistol = true; got.push('a pistol (Q to switch)'); inv.res.ammo += 6; }
@@ -125,14 +125,14 @@ export class Interaction {
     } else if (best.kind === 'loot') {
       const holding = inp.down('KeyE');
       if (holding) this.hold += dt; else this.hold = Math.max(0, this.hold - dt * 2);
-      const T = 1.3;
+      const T = 1.3 * (g.mods ? g.mods.search : 1);
       g.hud.setPrompt(best.ref.label || 'Search', 'Hold E', this.hold > 0 ? this.hold / T : null);
       g.player.noise = Math.max(g.player.noise, holding ? 4 : 0);
       if (this.hold >= T) {
         this.hold = 0;
         best.ref.searched = true;
         if (best.ref.prop) best.ref.prop.searched = true;
-        const got = rollLoot(best.ref.table, g.inventory);
+        const got = rollLoot(best.ref.table, g.inventory, g.mods ? g.mods.loot : 1);
         g.hud.toast(got.length ? 'Found ' + got.join(', ') : 'Nothing useful here', 2.5);
         g.markDirty && g.markDirty();
       }
@@ -179,7 +179,7 @@ export class Combat {
     const cam = g.camera;
     const dir = new THREE.Vector3();
     cam.getWorldDirection(dir);
-    const spread = player.aiming ? 0.008 : 0.04;
+    const spread = (player.aiming ? 0.008 : 0.04) * (g.mods ? g.mods.spread : 1);
     dir.x += (Math.random() - 0.5) * spread; dir.y += (Math.random() - 0.5) * spread; dir.z += (Math.random() - 0.5) * spread;
     dir.normalize();
     const o = cam.position.clone();
@@ -212,7 +212,7 @@ export class Combat {
     this.muzzle.position.copy(hand);
     this.muzzle.intensity = 6;
     if (target) {
-      target.hurt(head ? 140 : 45, dir.x, dir.z, head ? 'head' : 'shot');
+      target.hurt((head ? 140 : 45) * (g.mods ? g.mods.gun : 1), dir.x, dir.z, head ? 'head' : 'shot');
       if (head) g.hud.toast('Headshot', 0.8);
     }
     // gunshots are loud

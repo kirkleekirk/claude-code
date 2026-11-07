@@ -18,6 +18,7 @@ export function saveGame(game) {
   const data = {
     v: 1,
     time: game.sky.time, day: game.day, weather: game.sky.weather,
+    profile: game.profile,
     player: { x: game.player.pos.x, y: game.player.pos.y, z: game.player.pos.z, health: game.player.health, weapon: game.player.weapon.kind },
     inventory: game.inventory.toJSON(),
     claims: game.claims.toJSON(),
@@ -42,6 +43,7 @@ export function loadGame(game) {
   try { data = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { data = null; }
   if (!data || data.v !== 1) return false;
   const w = game.world;
+  if (data.profile && game.applyProfile) game.applyProfile(data.profile, false);
   for (const [id, s] of Object.entries(data.customShapes || {})) { registerShape(id, s); game.customShapes[id] = s; }
   for (const [id, s] of Object.entries(data.customStyles || {})) { registerStyle(id, s); game.customStyles[id] = s; }
   const byId = new Map(w.structures.map((S) => [S.id, S]));

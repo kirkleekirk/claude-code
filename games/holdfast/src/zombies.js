@@ -11,18 +11,26 @@ class Zombie {
   constructor(mgr, x, z, rng) {
     this.mgr = mgr;
     const model = rng() < 0.5 ? 'man' : 'woman';
-    this.char = new Character(model, randomPalette(rng, true));
-    this.char.setGore(0.35 + rng() * 0.5);
+    // most shamble, some lurch along fast, a few run
+    const r = rng();
+    this.type = r < 0.08 ? 'runner' : r < 0.32 ? 'lurcher' : 'shambler';
+    const build = rng() < 0.22 ? 1.12 + rng() * 0.08 : rng() < 0.35 ? 0.85 + rng() * 0.06 : 1;
+    this.char = new Character(model, randomPalette(rng, true), {
+      zombie: { seed: rng() * 40, decay: rng(), blood: 0.3 + rng() * 0.7, tear: 0.35 + rng() * 0.65, build },
+    });
+    this.char.zv.type = this.type;
+    this.char.setGore(0.1 + rng() * 0.25);
     mgr.game.scene.add(this.char.root);
     const y = mgr.game.physics.groundAt(x, z, 1e9);
     this.pos = new THREE.Vector3(x, y, z);
     this.home = this.pos.clone();
     this.vel = new THREE.Vector3();
     this.facing = rng() * Math.PI * 2;
-    this.health = 90 + rng() * 40;
+    this.health = this.type === 'runner' ? 60 + rng() * 20 : this.type === 'lurcher' ? 80 + rng() * 30 : 95 + rng() * 40;
     this.state = 'wander';
     this.speed = 0;
-    this.chaseSpeed = 1.5 + rng() * 1.6;
+    this.chaseSpeed = this.type === 'runner' ? 3.7 + rng() * 0.5 : this.type === 'lurcher' ? 2.0 + rng() * 0.6 : 1.15 + rng() * 0.7;
+    this.downT = 0;
     this.target = null;
     this.wanderT = 0;
     this.attackCd = 0;
@@ -40,6 +48,11 @@ class Zombie {
     if (this.dead) return;
     this.health -= dmg;
     this.stagger = kind === 'melee' ? 0.45 : 0.25;
+    // hit from behind: they go down on their face, otherwise on their back
+    this.fallDir = (kx * Math.sin(this.facing) + kz * Math.cos(this.facing)) > 0.3 ? 1 : -1;
+    // a solid bat hit can knock a shambler or lurcher off its feet
+    const kd = 0.25 * ((this.mgr.game.mods && this.mgr.game.mods.knockdown) || 1);
+    if (kind === 'melee' && this.health > 0 && this.downT <= 0 && this.type !== 'runner' && Math.random() < kd) { this.downT = 2.6; this.fallDir = -1; }
     this.vel.x += kx * (kind === 'melee' ? 4 : 2); this.vel.z += kz * (kind === 'melee' ? 4 : 2);
     this.state = 'chase';
     this.memory = 8;
@@ -57,10 +70,22 @@ class Zombie {
       // knees go, then the body tips over backwards and goes limp
       const k = Math.min(1, Math.max(0, this.deadT - 0.12) * 2.4);
       const fall = Math.sin(k * Math.PI / 2);
-      this.char.root.rotation.x = -fall * Math.PI / 2 * 0.98;
+      const fd = this.fallDir || -1;
+      this.char.root.rotation.x = fd * fall * Math.PI / 2 * 0.98;
       this.char.root.position.y = this.visualY + 0.12 * fall - Math.max(0, this.deadT - 20) * 0.2;
-      if (this.deadT < 2) this.char.animate(dt, { mode: 'dead' });
+      if (this.deadT < 2) this.char.animate(dt, { mode: 'dead', deadDir: fd });
       return this.deadT < 26;
+    }
+    if (this.downT > 0) {
+      // knocked down: fall back, lie there, get up again
+      this.downT -= dt;
+      const t = 2.6 - this.downT;
+      const k = t < 0.45 ? Math.sin(Math.min(1, t / 0.45) * Math.PI / 2) : this.downT < 0.8 ? Math.max(0, this.downT / 0.8) : 1;
+      this.char.root.rotation.x = -k * Math.PI / 2 * 0.98;
+      this.char.root.position.set(this.pos.x, this.visualY + 0.12 * k, this.pos.z);
+      this.char.animate(dt, { mode: this.downT > 0.8 ? 'dead' : 'zombie', speed: 0, deadDir: -1 });
+      if (this.downT <= 0) { this.char.root.rotation.x = 0; this.state = 'chase'; this.memory = 6; }
+      return true;
     }
     const pp = player.pos;
     const dx = pp.x - this.pos.x, dz = pp.z - this.pos.z;
@@ -70,7 +95,7 @@ class Zombie {
     if (this.senseT <= 0 && !player.dead) {
       this.senseT = full ? 0.25 : 1;
       const dark = g.sky.darkness;
-      const sight = (player.crouch ? 14 : 24) * (1 - dark * 0.45) * (player.flashlightOn && dark > 0.5 ? 1.5 : 1);
+      const sight = (player.crouch ? 14 : 24) * (1 - dark * 0.45) * (player.flashlightOn && dark > 0.5 ? 1.5 : 1) * (dark > 0.5 && g.mods ? g.mods.nightSight : 1);
       let sees = false;
       if (dist < sight && Math.abs(pp.y - this.pos.y) < 4) {
         const fx = Math.sin(this.facing), fz = Math.cos(this.facing);

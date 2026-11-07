@@ -184,6 +184,13 @@ function rig(gltf, targetH, name) {
     seg['foot' + side] = [J['foot' + side], J['toe' + side], 0.028];
   }
   const armDirL = J.handTipL.clone().sub(J.upperArmL).normalize();
+  // front of the face at eye height (the hair/face split is measured from it)
+  let faceZ = -Infinity;
+  for (let i = 0; i < pts.count; i++) {
+    const y = pts.getY(i) / H;
+    if (y > 0.92 && y < 0.95 && Math.abs(pts.getX(i)) < 0.05 * H) faceZ = Math.max(faceZ, pts.getZ(i));
+  }
+  if (!isFinite(faceZ)) faceZ = 0.05 * H;
   const n = pts.count;
   const skinIndex = new Uint16Array(n * 4), skinWeight = new Float32Array(n * 4), region = new Float32Array(n);
   const tmp = new THREE.Vector3(), cp = new THREE.Vector3();
@@ -229,7 +236,7 @@ function rig(gltf, targetH, name) {
       reg = sd.t > 0.35 ? REG.SKIN : REG.SHIRT;
     } else if (primary === 'head' || primary === 'neck' || (y > 0.85 && !isArm) || (y > 0.83 && Math.abs(p.x) < 0.05 * H && p.z > 0)) {
       reg = REG.SKIN;
-      if (y > 0.955 || (y > 0.905 && p.z < -0.015 * H)) reg = REG.HAIR;
+      if (y > 0.955 || (y > 0.905 && p.z < faceZ - 0.085 * H)) reg = REG.HAIR;
     }
     region[i] = reg;
   }
@@ -256,37 +263,121 @@ function rig(gltf, targetH, name) {
     hang['thigh' + sd] = hangOf('thigh' + sd, 'shin' + sd);
     hang['shin' + sd] = hangOf('shin' + sd, 'foot' + sd);
   }
-  return { geo, joints: J, height: H, restArm, hang, name };
+  // face landmarks (rest pose): eyes and mouth on the front of the head
+  const front = (y0, y1, xMax) => {
+    let zf = -Infinity;
+    for (let i = 0; i < pts.count; i++) {
+      const y = pts.getY(i) / H;
+      if (y < y0 || y > y1 || Math.abs(pts.getX(i)) > xMax * H) continue;
+      zf = Math.max(zf, pts.getZ(i));
+    }
+    return isFinite(zf) ? zf : 0.05 * H;
+  };
+  const ze = front(0.925, 0.955, 0.05), zm = front(0.895, 0.915, 0.03);
+  const face = {
+    eyeL: new THREE.Vector3(0.03 * H, 0.938 * H, ze),
+    eyeR: new THREE.Vector3(-0.03 * H, 0.938 * H, ze),
+    mouth: new THREE.Vector3(0, 0.903 * H, zm),
+  };
+  return { geo, joints: J, height: H, restArm, hang, face, name };
 }
 
 // ---------------- material with palette ----------------
-function makeMaterial(palette) {
+// Character material: per-region palette colours on one shared mesh. Survivors
+// get eyes; zombies (z = { seed, decay, blood, tear, build }) get mottled
+// grey skin, dark sockets with a faint glow, blood, torn and filthy clothes.
+const NOISE_GLSL = `
+float zh3(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float zn(vec3 x){ vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(zh3(i), zh3(i + vec3(1,0,0)), f.x), mix(zh3(i + vec3(0,1,0)), zh3(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(zh3(i + vec3(0,0,1)), zh3(i + vec3(1,0,1)), f.x), mix(zh3(i + vec3(0,1,1)), zh3(i + vec3(1,1,1)), f.x), f.y), f.z); }
+float zf(vec3 p){ return 0.55 * zn(p) + 0.3 * zn(p * 2.07) + 0.15 * zn(p * 4.3); }
+`;
+function makeMaterial(palette, model, z = null) {
   const m = new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0, flatShading: false });
   const cols = palette.map((h) => new THREE.Color(h));
   m.userData.palette = cols;
+  const face = model.face, H = model.height;
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uPal = { value: cols };
     sh.uniforms.uGore = { value: m.userData.gore || 0 };
+    sh.uniforms.uH = { value: H };
+    sh.uniforms.uEyeL = { value: face.eyeL };
+    sh.uniforms.uEyeR = { value: face.eyeR };
+    sh.uniforms.uMouth = { value: face.mouth };
+    sh.uniforms.uZ = { value: z ? new THREE.Vector4(z.seed, z.decay, z.blood, z.tear) : new THREE.Vector4() };
+    sh.uniforms.uBuild = { value: z ? z.build : 1 };
     m.userData.shader = sh;
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float region;\nflat varying float vRegion;\nvarying vec3 vLocal;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRegion = region;\nvLocal = position;');
+      .replace('#include <common>', '#include <common>\nattribute float region;\nflat varying float vRegion;\nvarying vec3 vLocal;\nuniform float uBuild;\nuniform float uH;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vRegion = region;
+        vLocal = position;
+        ${z ? `// gaunt or bloated: the torso narrows or swells
+        float ty = position.y / uH;
+        if (abs(position.x) < 0.13 * uH && ty > 0.5 && ty < 0.86) {
+          float k = smoothstep(0.5, 0.56, ty) * (1.0 - smoothstep(0.8, 0.86, ty));
+          transformed.x *= mix(1.0, uBuild, k);
+          transformed.z *= mix(1.0, uBuild + max(0.0, uBuild - 1.0) * step(0.0, position.z) * 0.8, k);
+        }` : ''}`);
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform vec3 uPal[6];\nuniform float uGore;\nflat varying float vRegion;\nvarying vec3 vLocal;\nfloat ch(vec3 p){ return fract(sin(dot(p, vec3(12.9898,78.233,45.164))) * 43758.5453); }')
+      .replace('#include <common>', '#include <common>\nuniform vec3 uPal[6];\nuniform float uGore;\nuniform float uH;\nuniform vec3 uEyeL;\nuniform vec3 uEyeR;\nuniform vec3 uMouth;\nuniform vec4 uZ;\nflat varying float vRegion;\nvarying vec3 vLocal;\nfloat ch(vec3 p){ return fract(sin(dot(p, vec3(12.9898,78.233,45.164))) * 43758.5453); }' + NOISE_GLSL)
       .replace('#include <color_fragment>', `
         int ri = int(vRegion + 0.5);
         vec3 pc = uPal[0];
         if (ri == 1) pc = uPal[1]; else if (ri == 2) pc = uPal[2]; else if (ri == 3) pc = uPal[3]; else if (ri == 4) pc = uPal[4]; else if (ri == 5) pc = uPal[5];
         // subtle cloth/skin variation
         float v = 0.92 + 0.08 * ch(floor(vLocal * 40.0));
-        diffuseColor.rgb *= pc * v;
+        vec3 col = pc * v;
+        float eyeGlow = 0.0;
+        // eyes are matched across the front of the head (x/y only)
+        float frontOk = step(uEyeL.z - 0.07 * uH, vLocal.z);
+        float de = mix(1.0, min(distance(vLocal.xy, uEyeL.xy), distance(vLocal.xy, uEyeR.xy)) / uH, frontOk);
+        ${z ? `
+        vec3 P = vLocal / uH + uZ.x;
+        vec3 skin = uPal[0] * (0.7 + 0.3 * zf(P * 15.0));
+        if (ri == 0) {
+          col = skin;
+          // veins and bruising
+          if (abs(zn(P * 34.0) - 0.5) < 0.035) col *= 0.62;
+          float br = zf(P * 6.0 + 4.0);
+          if (br > 0.66 - uZ.y * 0.08) col = mix(col, vec3(0.32, 0.22, 0.3), 0.55);
+          // bloody hands
+          if (vLocal.y < 0.62 * uH && abs(vLocal.x) > 0.15 * uH && zf(P * 12.0 + 2.0) > 0.55) col = mix(col, vec3(0.22, 0.03, 0.02), 0.7);
+        } else if (ri == 1 || ri == 2) {
+          // filthy, faded, torn: holes show grey skin with dark frayed edges
+          col *= 0.72 + 0.32 * zf(P * 5.0 + 7.0);
+          float tn = zf(P * vec3(9.0, 6.5, 9.0) + 3.1);
+          float th = 1.0 - uZ.w * 0.42;
+          if (tn > th) col = skin * 0.7;
+          else if (tn > th - 0.035) col *= 0.38;
+          // blood: splotches soaked in from the collar, a few running drips
+          float bl = zf(P * vec3(16.0, 7.0, 16.0) + 11.0);
+          float hi = smoothstep(0.55, 0.84, vLocal.y / uH);
+          float drip = step(0.93, zn(vec3(P.x * 60.0, 0.0, P.z * 60.0) + 5.0)) * hi * step(0.3, uZ.z);
+          if (bl * (0.5 + 0.65 * hi) > 1.0 - uZ.z * 0.36 || drip > 0.5) col = mix(col, vec3(0.2, 0.025, 0.02), 0.82);
+        } else if (ri == 4) {
+          if (zf(P * 13.0) > 0.66 - uZ.y * 0.1) col = skin * 0.8; // hair coming out in patches
+        }
+        // mouth: blood down the chin
+        vec3 mo = vLocal - uMouth;
+        float mw = 0.017 * uH * (0.7 + 0.5 * zn(vec3(vLocal.y * 90.0, 1.0, uZ.x)));
+        if (frontOk > 0.5 && abs(mo.x) < mw && mo.y < 0.004 * uH && mo.y > -0.035 * uH * (0.4 + uZ.z) * (0.6 + 0.8 * zn(vec3(vLocal.x * 120.0, 2.0, uZ.x)))) col = mix(col, vec3(0.18, 0.02, 0.02), 0.85);
+        // eyes: sunken dark sockets, a dull yellow shine
+        if (de < 0.02) { col = mix(vec3(0.04, 0.02, 0.02), col, smoothstep(0.013, 0.02, de)); eyeGlow = 1.0 - smoothstep(0.002, 0.007, de); }
+        ` : `
+        // eyes
+        if (de < 0.0085) col = mix(col * 0.2, col, smoothstep(0.0045, 0.0085, de));
+        `}
+        diffuseColor.rgb *= col;
         if (uGore > 0.0) {
           float g = ch(floor(vLocal * 9.0));
           if (g > 1.0 - uGore * 0.35) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.28, 0.04, 0.03), 0.8);
         }
-      `);
+      `)
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance += vec3(0.8, 0.68, 0.3) * eyeGlow * 0.32;');
   };
-  m.customProgramCacheKey = () => 'holdfast-char-v1';
+  m.customProgramCacheKey = () => (z ? 'holdfast-zombie-v2' : 'holdfast-char-v2');
   return m;
 }
 
@@ -299,12 +390,13 @@ const SHIRTS = ['#3b5f7a', '#7a3a32', '#5a6a3a', '#c8b88a', '#3a3a3a', '#6a5a8a'
 const PANTS = ['#3a4458', '#4a4a52', '#5a4a3a', '#2e3238', '#6a6a5a'];
 const HAIRS = ['#2a1e16', '#4a3020', '#8a6a3a', '#1a1a1a', '#6a5a4a', '#b0a090'];
 
+const ZSKIN = ['#7d8670', '#6f7a63', '#8a8f7e', '#717d84', '#857a70', '#5d6652', '#7a7268'];
 export function randomPalette(rng, zombie = false) {
   const pick = (a) => a[Math.floor(rng() * a.length)];
   let skin = pick(SKIN_TONES);
   let shirt = pick(SHIRTS), pants = pick(PANTS), hair = pick(HAIRS);
   if (zombie) {
-    const c = new THREE.Color(skin).lerp(new THREE.Color('#7a8a6a'), 0.6).multiplyScalar(0.8);
+    const c = new THREE.Color(pick(ZSKIN)).lerp(new THREE.Color(skin), 0.18).multiplyScalar(0.85 + rng() * 0.2);
     skin = '#' + c.getHexString();
     const dirty = (h) => '#' + new THREE.Color(h).lerp(new THREE.Color('#4a4030'), 0.45).multiplyScalar(0.8).getHexString();
     shirt = dirty(shirt); pants = dirty(pants);
@@ -354,13 +446,13 @@ const POSE_KEYS = ['pY', 'pR', 'pP', 'sY', 'sP', 'sR', 'cY', 'cP', 'cR', 'hY', '
   'lHF', 'lHA', 'lK', 'lA', 'rHF', 'rHA', 'rK', 'rA',
   'aLF', 'aLA', 'aLY', 'aLR', 'aLE', 'aLW', 'aRF', 'aRA', 'aRY', 'aRR', 'aRE', 'aRW',
   'lift', 'wcx', 'wcy', 'wcz', 'wrx', 'wry', 'wrz', 'wm',
-  'ik', 'gx', 'gy', 'gz', 'two', 'twoD', 'twoX', 'twoY'];
+  'ik', 'gx', 'gy', 'gz', 'two', 'twoD', 'twoX', 'twoY', 'px', 'sLY', 'sRY'];
 const newPose = () => { const o = {}; for (const k of POSE_KEYS) o[k] = 0; return o; };
 function setArm(P, side, f, a, y, r, e, w = 0) { const k = 'a' + side; P[k + 'F'] = f; P[k + 'A'] = a; P[k + 'Y'] = y; P[k + 'R'] = r; P[k + 'E'] = e; P[k + 'W'] = w; }
 function mixArm(P, side, Q, t) { for (const s of ['F', 'A', 'Y', 'R', 'E', 'W']) { const k = 'a' + side + s; P[k] = lerp(P[k], Q[k], t); } }
 function mixKeys(P, Q, t, keys) { for (const k of keys) P[k] = lerp(P[k], Q[k], t); }
 const ARM_R = ['aRF', 'aRA', 'aRY', 'aRR', 'aRE', 'aRW'], ARM_L = ['aLF', 'aLA', 'aLY', 'aLR', 'aLE', 'aLW'];
-const TORSO = ['pY', 'pR', 'pP', 'sY', 'sP', 'sR', 'cY', 'cP', 'cR', 'hY', 'hP', 'hR'];
+const TORSO = ['pY', 'pR', 'pP', 'sY', 'sP', 'sR', 'cY', 'cP', 'cR', 'hY', 'hP', 'hR', 'px', 'sLY', 'sRY'];
 const LEGS = ['lHF', 'lHA', 'lK', 'lA', 'rHF', 'rHA', 'rK', 'rA'];
 const WEAPON = ['wcx', 'wcy', 'wcz', 'wrx', 'wry', 'wrz', 'wm', 'ik', 'gx', 'gy', 'gz', 'two', 'twoD', 'twoX', 'twoY'];
 
@@ -417,7 +509,8 @@ const qz = (a) => QPOOL[qp++ % 96].setFromAxisAngle(AZ, a);
 const V = Array.from({ length: 8 }, () => new THREE.Vector3());
 
 export class Character {
-  constructor(modelName, palette) {
+  // opts.zombie: { seed, decay, blood, tear, build } for the infected look
+  constructor(modelName, palette, opts = {}) {
     const M = models[modelName];
     this.model = M;
     const bones = {};
@@ -435,7 +528,7 @@ export class Character {
       } else bones[b].position.copy(jw);
     }
     this.bones = bones;
-    this.material = makeMaterial(palette);
+    this.material = makeMaterial(palette, M, opts.zombie || null);
     const mesh = new THREE.SkinnedMesh(M.geo, this.material);
     mesh.add(bones.hips);
     mesh.updateMatrixWorld(true);
@@ -478,8 +571,16 @@ export class Character {
         hipY: J['thigh' + s].y,
       };
     }
+    this.hipW = (Math.abs(J.thighL.x) + Math.abs(J.thighR.x)) / 2;
+    this.legLen = J.thighL.y - J.footL.y + 0.05;
+    this.turnLean = 0;
     // where the held weapon sits: root-space position + orientation
     this.grip = { pos: new THREE.Vector3(), quat: new THREE.Quaternion(), dir: new THREE.Vector3(0, 0, 1), visible: true };
+  }
+  // recolour (character creation): skin, shirt, pants, shoes, hair, belt
+  setPalette(palette) {
+    const cols = this.material.userData.palette;
+    palette.forEach((h, i) => { if (cols[i]) cols[i].set(h); });
   }
   setGore(v) { this.material.userData.gore = v; if (this.material.userData.shader) this.material.userData.shader.uniforms.uGore.value = v; }
 
@@ -521,7 +622,7 @@ export class Character {
     const sp = dead ? 0 : (st.speed || 0);
     const go = (k, target, rate) => { b[k] += (target - b[k]) * (1 - Math.exp(-rate * dt)); };
     go('move', sp > 0.12 ? 1 : 0, 9);
-    go('run', zombie ? sstep(1.9, 3.2, sp) * 0.7 : sstep(2.0, 3.1, sp), 6);
+    go('run', zombie ? sstep(1.9, 3.2, sp) * (zv.type === 'runner' ? 1 : 0.7) : sstep(2.0, 3.1, sp), 6);
     go('sprint', zombie ? 0 : sstep(4.0, 6.0, sp), 5);
     go('crouch', st.crouch ? 1 : 0, 8);
     go('aim', st.aim ? 1 : 0, 12);
@@ -541,7 +642,7 @@ export class Character {
     const run = b.run, sprint = b.sprint, mv = b.move;
     const stanceF = lerp(GAIT.walk.stance, GAIT.run.stance, run);
     // short, slow steps when barely moving; long strides when sprinting
-    const amp = (zombie ? 0.75 : Math.min(1, 0.5 + sp / 2.8)) * (1 + sprint * 0.22) * (1 - b.crouch * 0.25);
+    const amp = (zombie ? (zv.type === 'runner' ? 1.05 : zv.type === 'lurcher' ? 0.85 : 0.75) : Math.min(1, 0.5 + sp / 2.8)) * (1 + sprint * 0.22) * (1 - b.crouch * 0.25);
     const gaitAt = (u, s) => {
       const limp = zombie && zv.limpSide === s ? zv.limp : 0;
       let hip = lerp(curve(GAIT.walk.hip, u), curve(GAIT.run.hip, u), run) * amp * (1 - limp * 0.35);
@@ -564,24 +665,42 @@ export class Character {
     const stand = [0.04, 0.07, 0.03];
     P.lHF = lerp(stand[0] + sway * 0.03, gL[0], mv); P.lK = lerp(stand[1] + Math.max(0, sway) * 0.06, gL[1], mv); P.lA = lerp(stand[2], gL[2], mv);
     P.rHF = lerp(stand[0] - sway * 0.03, gR[0], mv); P.rK = lerp(stand[1] + Math.max(0, -sway) * 0.06, gR[1], mv); P.rA = lerp(stand[2], gR[2], mv);
-    P.lHA = 0.05 + 0.02 * (1 - mv); P.rHA = 0.05 + 0.02 * (1 - mv);
-    P.pR = sway * 0.025;
-    // arms swing against the legs
+    // feet come in under the body when moving: steps land near the middle
+    const sc = this.model.height / 1.78;
+    const footX = lerp(0.11, lerp(0.075, 0.05, run) * (zombie ? 1.5 : 1), mv) * sc;
+    const add = Math.atan2(this.hipW - footX, this.legLen);
+    P.lHA = -add; P.rHA = -add;
+    // weight shifts over the planted foot; the free side's hip drops
+    const s2 = Math.sin(uL * Math.PI * 2) * mv;
+    P.px = (0.03 - 0.016 * run) * sc * s2 + sway * 0.012;
+    P.pR = (0.05 - 0.025 * run) * s2 + sway * 0.025;
+    // arms swing against the legs, a beat behind them
     const mid = lerp(9, 13, run) * DEG * amp, half = lerp(19, 31, run) * DEG * amp;
-    const nL = (gR[0] - mid) / half, nR = (gL[0] - mid) / half; // left arm follows the right leg
+    const lag = 0.035;
+    const nL = (gaitAt((uR - lag + 1) % 1, 'r')[0] - mid) / half, nR = (gaitAt((uL - lag + 1) % 1, 'l')[0] - mid) / half;
     for (const [side, n] of [['L', nL], ['R', nR]]) {
-      const swingAmp = lerp(0.3, 0.55, run) + sprint * 0.3;
+      const swingAmp = lerp(0.32, 0.55, run) + sprint * 0.3;
       const f = lerp(0.06, 0.22, run) + swingAmp * n * mv;
-      const e = lerp(0.22, 1.45, run) + sprint * 0.15 + (n > 0 ? n * lerp(0.18, 0.25, run) : 0) * mv;
-      setArm(P, side, f * mv + 0.04 * (1 - mv), lerp(0.13, 0.16, run), lerp(0, 0.22, run) * mv, 0.15, lerp(0.12, e, mv));
+      const e = lerp(0.24, 1.45, run) + sprint * 0.15 + (n > 0 ? n * lerp(0.28, 0.3, run) : 0) * mv;
+      // the forward swing comes a little across the body
+      const across = (lerp(0, 0.2, run) + Math.max(0, n) * lerp(0.12, 0.1, run)) * mv;
+      setArm(P, side, f * mv + 0.04 * (1 - mv), lerp(0.14, 0.17, run), across, 0.15, lerp(0.12, e, mv));
+      // the shoulder itself rolls forward and back with its arm
+      P['s' + side + 'Y'] = -(side === 'L' ? 1 : -1) * 0.13 * n * mv;
     }
-    // torso: pelvis turns with the forward leg, chest counter-turns
+    // torso: pelvis turns with the forward leg, chest counter-turns and the
+    // spine bends against the hip drop, so the shoulders stay level
     const nLeg = Math.max(-1.2, Math.min(1.2, (gL[0] - mid) / half)) * mv;
-    P.pY = -0.09 * nLeg * (1 + run * 0.3);
-    P.cY = 0.13 * nLeg * (1 + run * 0.4);
+    P.pY = -0.1 * nLeg * (1 + run * 0.3);
+    P.cY = 0.16 * nLeg * (1 + run * 0.4);
+    P.sR = -P.pR * 0.7; P.cR = -P.pR * 0.25;
     const lean = (lerp(0.04, 0.13, run) + sprint * 0.12) * mv;
     P.sP = lean * 0.5; P.cP = lean * 0.5 + Math.sin(t * 1.6) * 0.012 * (1 - mv);
     P.hP = -lean * 0.75;
+    // lean into turns
+    const turnL = Math.max(-0.25, Math.min(0.25, -(st.turn || 0) * sp * 0.03));
+    this.turnLean += (turnL - this.turnLean) * (1 - Math.exp(-6 * dt));
+    P.sR += this.turnLean * 0.55; P.cR += this.turnLean * 0.35;
     // run: a little air between steps
     const flightG = (uL % 0.5);
     const st2 = stanceF % 0.5;
@@ -589,7 +708,8 @@ export class Character {
     // head looks where the camera looks
     this.lookYaw += ((st.lookYaw || 0) - this.lookYaw) * (1 - Math.exp(-8 * dt));
     const ly = Math.max(-0.9, Math.min(0.9, this.lookYaw));
-    P.hY = ly * 0.65; P.cY += ly * 0.2;
+    P.hY = ly * 0.65 - (P.cY + P.pY) * 0.6; P.cY += ly * 0.2;
+    P.hR = -(P.pR + P.sR + P.cR) * 0.7;
 
     // ---------------- crouch / sneak ----------------
     if (b.crouch > 0.001) {
@@ -602,16 +722,38 @@ export class Character {
 
     // ---------------- zombie ----------------
     if (zombie) {
+      const ty = zv.type || 'shambler';
       const sw = Math.sin(this.ph * Math.PI * 2);
-      P.sP += zv.lean * 0.5; P.cP += zv.lean * 0.6;
-      P.cR = sw * 0.12 * mv + Math.sin(t * 0.7 + zv.seed) * 0.04;
+      const lurch = ty === 'lurcher' ? 1 : 0, runner = ty === 'runner' ? 1 : 0;
+      const lean = zv.lean + lurch * 0.15 + runner * 0.2 * mv;
+      P.sP += lean * 0.5; P.cP += lean * 0.6;
+      // the body rolls over each planted foot, harder for a lurcher
+      P.cR = sw * (0.12 + lurch * 0.1) * mv + Math.sin(t * 0.7 + zv.seed) * (0.04 + 0.05 * (1 - mv));
       P.pR = -sw * 0.05 * mv;
-      P.hP = -zv.lean * 0.55 + 0.18 + Math.sin(t * 0.9 + zv.seed) * 0.05;
+      P.pY += Math.sin(t * 0.33 + zv.seed) * 0.05 * (1 - mv);
+      P.hP = -lean * 0.55 + 0.18 + Math.sin(t * 0.9 + zv.seed) * 0.05 + runner * 0.15;
       P.hR = zv.tilt + Math.sin(t * 0.6 + zv.seed) * 0.08;
       P.hY = Math.sin(t * 0.4 + zv.seed * 2) * 0.12;
+      // twitches: a sudden jerk of the head and a shoulder now and then
+      this.twitchT = (this.twitchT ?? 1 + Math.random() * 4) - dt;
+      if (this.twitchT <= 0) { this.twitchT = 1.5 + Math.random() * 5; this.twitch = 1; this.twitchDir = Math.random() < 0.5 ? -1 : 1; }
+      if (this.twitch > 0) {
+        this.twitch = Math.max(0, this.twitch - dt * 4.5);
+        const k = Math.sin(this.twitch * Math.PI) * this.twitch;
+        P.hR += this.twitchDir * 0.45 * k; P.hY += this.twitchDir * 0.3 * k; P.cR += this.twitchDir * 0.08 * k;
+        P['s' + (this.twitchDir > 0 ? 'L' : 'R') + 'Y'] = -0.25 * k;
+      }
       for (const [side, s] of [['L', 1], ['R', -1]]) {
         const w = Math.sin(t * 1.3 + zv.seed + s);
-        if (zv.reach) setArm(P, side, 1.25 + w * 0.08 + sw * s * 0.06 * mv, 0.12, 0.12, 0.2, 0.32 + w * 0.12, 0.35);
+        if (runner) {
+          // clawing forward as it runs
+          const pump = Math.sin(this.ph * Math.PI * 2 + (s > 0 ? Math.PI : 0));
+          setArm(P, side, 1.15 + pump * 0.35 * mv, 0.2, 0.15, 0.2, 0.7 + pump * 0.25, 0.3);
+        } else if (lurch) {
+          // arms thrown about by the lurching body
+          const swing = (s > 0 ? -sw : sw) * 0.55 * mv;
+          setArm(P, side, 0.15 + swing + Math.abs(w) * 0.1, 0.22 + Math.abs(sw) * 0.15 * mv, 0.05, 0.4, 0.25 + Math.max(0, swing) * 0.5, 0.25);
+        } else if (zv.reach) setArm(P, side, 1.25 + w * 0.08 + sw * s * 0.06 * mv, 0.12, 0.12, 0.2, 0.32 + w * 0.12, 0.35);
         else setArm(P, side, 0.06 + (s > 0 ? -sw : sw) * 0.3 * mv, 0.16, 0, 0.3, 0.18 + Math.abs(w) * 0.1, 0.2);
       }
       if (st.attack != null && st.attack >= 0) {
@@ -705,10 +847,18 @@ export class Character {
     if (b.dead > 0.001) {
       const Q = this.Q;
       for (const k of POSE_KEYS) Q[k] = 0;
-      Object.assign(Q, { lHF: 0.25, lHA: 0.14, lK: 0.45, lA: -0.2, rHF: 0.08, rHA: 0.2, rK: 0.18, rA: -0.3,
-        hY: 0.55, hR: 0.15, hP: -0.1, cR: 0.06 });
-      setArm(Q, 'L', 0.15, 0.95, 0, 0.3, 0.45, 0.2);
-      setArm(Q, 'R', 0.25, 0.7, 0, -0.2, 0.25, 0.1);
+      if ((st.deadDir || -1) > 0) {
+        // face down: legs out straight, arms flung up past the head, head turned
+        Object.assign(Q, { lHF: -0.08, lHA: 0.12, lK: 0.25, lA: -0.6, rHF: 0.05, rHA: 0.22, rK: 0.4, rA: -0.6,
+          hY: 0.9, hR: 0.1, hP: -0.25, cR: -0.05 });
+        setArm(Q, 'L', 2.6, 0.45, 0, 0, 0.6, 0.2);
+        setArm(Q, 'R', 0.3, 0.55, 0, 0.6, 0.5, 0.1);
+      } else {
+        Object.assign(Q, { lHF: 0.25, lHA: 0.14, lK: 0.45, lA: -0.2, rHF: 0.08, rHA: 0.2, rK: 0.18, rA: -0.3,
+          hY: 0.55, hR: 0.15, hP: -0.1, cR: 0.06 });
+        setArm(Q, 'L', 0.15, 0.95, 0, 0.3, 0.45, 0.2);
+        setArm(Q, 'R', 0.25, 0.7, 0, -0.2, 0.25, 0.1);
+      }
       for (const k of WEAPON) Q[k] = P[k];
       Q.ik = 0; Q.two = 0;
       const k = sstep(0, 1, b.dead);
@@ -732,8 +882,11 @@ export class Character {
     W.neck.copy(W.chest).multiply(qx(P.hP * 0.35)).multiply(qy(P.hY * 0.3));
     W.head.copy(W.chest).multiply(qy(P.hY)).multiply(qx(P.hP)).multiply(qz(P.hR));
     // legs: thigh = pelvis yaw/roll * abduction * flexion; knee and ankle hinge
+    // legs keep their own line: undo the pelvis roll and sideways shift
+    const shiftA = P.px / this.legLen;
     for (const [side, sg, k] of [['L', 1, 'l'], ['R', -1, 'r']]) {
-      const th = TQ3.copy(legBase).multiply(qz(sg * P[k + 'HA'])).multiply(qx(-P[k + 'HF']));
+      const ha = P[k + 'HA'] - sg * P.pR - sg * shiftA;
+      const th = TQ3.copy(legBase).multiply(qz(sg * ha)).multiply(qx(-P[k + 'HF']));
       W['thigh' + side].copy(th).multiply(hg['thigh' + side]);
       th.multiply(qx(P[k + 'K']));
       W['shin' + side].copy(th).multiply(hg['shin' + side]);
@@ -750,7 +903,7 @@ export class Character {
       }
       off = -lowest;
     }
-    const hipsPos = V[7].set(J.hips.x, J.hips.y + off + P.lift, J.hips.z);
+    const hipsPos = V[7].set(J.hips.x + P.px, J.hips.y + off + P.lift, J.hips.z);
     this.bones.hips.position.copy(hipsPos);
     const chestPos = V[0].copy(hipsPos)
       .add(V[1].copy(J.spine).sub(J.hips).applyQuaternion(W.hips))
@@ -759,7 +912,7 @@ export class Character {
     // abduction, flexion, roll), elbow hinge, wrist
     for (const [side, sg] of [['L', 1], ['R', -1]]) {
       const a = 'a' + side;
-      const base = TQ2.copy(W['shoulder' + side].copy(W.chest));
+      const base = TQ2.copy(W['shoulder' + side].copy(W.chest).multiply(qy(P['s' + side + 'Y'])));
       base.multiply(qy(-sg * P[a + 'Y'])).multiply(qz(sg * P[a + 'A'])).multiply(qx(-P[a + 'F'])).multiply(qy(-sg * P[a + 'R']));
       W['upperArm' + side].copy(base).multiply(hg['upperArm' + side]);
       const fore = base.multiply(qx(-P[a + 'E']));
@@ -799,8 +952,9 @@ export class Character {
 
   // shoulder joint position (root space) for the current chest rotation
   shoulderPos(side, chestPos, out = TV1) {
-    const J = this.model.joints;
-    return out.copy(J['upperArm' + side]).sub(J.chest).applyQuaternion(this._world.chest).add(chestPos);
+    const J = this.model.joints, W = this._world;
+    out.copy(J['shoulder' + side]).sub(J.chest).applyQuaternion(W.chest).add(chestPos);
+    return out.add(TV3.copy(J['upperArm' + side]).sub(J['shoulder' + side]).applyQuaternion(W['shoulder' + side]));
   }
   // centre of the fist from the current arm rotations
   fistPos(side, chestPos, out = TV2) {

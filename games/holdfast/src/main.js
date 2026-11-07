@@ -21,6 +21,8 @@ import { BuildMode } from './buildmode.js';
 import { MapView } from './map.js';
 import { Audio } from './audio.js';
 import { saveGame, loadGame, clearSave, hasSave } from './save.js';
+import { SurvivorSetup, SPAWNS, traitMods, profilePalette } from './survivor.js';
+import { START_RES } from './gameplay.js';
 
 import { isTouch } from './platform.js';
 export { isTouch };
@@ -72,6 +74,8 @@ export class Game {
     this.customStyles = {};
     this.dirtyT = -1;
     this.autosaveT = 60;
+    this.mods = traitMods([]);
+    this.profile = null;
     addEventListener('resize', () => this.resize());
   }
   resize() {
@@ -115,18 +119,59 @@ export class Game {
     this.scene.add(this.flashlight, this.flashlight.target);
     this.player.flashlightOn = false;
     this.setWeapon('bat');
-    const loaded = !new URLSearchParams(location.search).get('fresh') && loadGame(this);
+    const qs = new URLSearchParams(location.search);
+    const loaded = !qs.get('fresh') && loadGame(this);
     this.onProgress('Ready', 1);
-    if (!loaded) {
-      setTimeout(() => this.hud.toast("Welcome to Bridger County. Find a place worth holding, then press G to plant your claim flag.", 7), 800);
-      setTimeout(() => this.hud.toast(isTouch ? 'Left side: move · Right side: look · Buttons: hit, use, jump' : 'WASD move · Mouse look · Click to swing · E to use · Esc for help', 6), 4000);
+    if (loaded) {
+      setTimeout(() => this.hud.toast(`Welcome back${this.profile ? ', ' + this.profile.name.split(' ')[0] : ''}. Your claims are where you left them.`, 4), 800);
+    } else if (qs.get('still') && !qs.get('setup')) {
+      // automated checks skip the creation screens
+      this.applyProfile({ name: 'Test Survivor', model: 'man', skin: PALETTES.survivorM[0], shirt: PALETTES.survivorM[1], pants: PALETTES.survivorM[2], hair: PALETTES.survivorM[4], traits: [], spawn: 'highway' }, true);
     } else {
-      setTimeout(() => this.hud.toast('Welcome back. Your claims are where you left them.', 4), 800);
+      // a new game: make a survivor, then pick where to start
+      this.setupOpen = true;
+      this.hud.setVisible(false);
+      new SurvivorSetup(this, (p) => {
+        this.setupOpen = false;
+        this.hud.setVisible(true);
+        this.applyProfile(p, true);
+        this.save();
+        setTimeout(() => this.hud.toast(`${p.name.split(' ')[0]}, find a place worth holding, then ${isTouch ? 'tap Build after planting your claim flag' : 'press G to plant your claim flag'}.`, 7), 600);
+        setTimeout(() => this.hud.toast(isTouch ? 'Left side: move · Right side: look · Buttons: hit, use, jump' : 'WASD move · Mouse look · Click to swing · E to use · Esc for help', 6), 3800);
+      });
     }
+  }
+  // Put the survivor into the world: body and colours, trait effects, and
+  // (for a new game) starting kit and spawn point.
+  applyProfile(p, fresh) {
+    this.profile = p;
+    this.mods = traitMods(p.traits || []);
+    const pl = this.player;
+    const old = pl.char;
+    const ch = new Character(p.model === 'woman' ? 'woman' : 'man', profilePalette(p));
+    this.scene.remove(old.root);
+    this.scene.add(ch.root);
+    pl.char = ch;
+    pl.maxHealth = this.mods.maxHealth;
+    pl.maxStamina = this.mods.maxStamina;
+    pl.health = Math.min(pl.health, pl.maxHealth);
+    pl.stamina = Math.min(pl.stamina, pl.maxStamina);
+    this.setWeapon(pl.weapon && pl.weapon.kind === 'gun' ? 'pistol' : 'bat');
+    if (fresh) {
+      Object.assign(this.inventory.res, START_RES);
+      if (p.traits.includes('prepper')) this.inventory.add({ food: 4, meds: 2, wood: 15, metal: 6, stone: 6 });
+      const sp = SPAWNS.find((s) => s.id === p.spawn) || SPAWNS[0];
+      pl.spawn(sp.at[0], sp.at[1]);
+      pl.health = pl.maxHealth; pl.stamina = pl.maxStamina;
+      this.tpc.yaw = -Math.PI / 2;
+    }
+    pl.syncModel(0.016);
   }
   setWeapon(k) {
     if (k === 'pistol' && !this.inventory.weapons.pistol) return;
-    this.player.weapon = { ...WEAPONS[k] };
+    const w = { ...WEAPONS[k] };
+    if (w.kind === 'bat') { w.damage *= this.mods.melee; w.speed *= this.mods.swing; }
+    this.player.weapon = w;
   }
   markDirty() { this.dirtyT = 4; }
   save() { return saveGame(this); }
@@ -180,9 +225,10 @@ export class Game {
     if (inp.pressed('KeyH')) {
       const p = this.player, inv = this.inventory;
       if (p.health >= p.maxHealth) hud.toast("You're not hurt.", 1.5);
-      else if (inv.res.meds > 0 && p.health < 60) { inv.res.meds--; p.heal(45); hud.toast('Patched up (+45 health)', 2); }
-      else if (inv.res.food > 0) { inv.res.food--; p.heal(15); p.stamina = p.maxStamina; hud.toast('Ate something (+15 health)', 2); }
-      else if (inv.res.meds > 0) { inv.res.meds--; p.heal(45); hud.toast('Patched up (+45 health)', 2); }
+      const hm = Math.round(45 * this.mods.heal), hf = Math.round(15 * this.mods.heal);
+      if (inv.res.meds > 0 && p.health < p.maxHealth * 0.6) { inv.res.meds--; p.heal(hm); hud.toast(`Patched up (+${hm} health)`, 2); }
+      else if (inv.res.food > 0) { inv.res.food--; p.heal(hf); p.stamina = p.maxStamina; hud.toast(`Ate something (+${hf} health)`, 2); }
+      else if (inv.res.meds > 0) { inv.res.meds--; p.heal(hm); hud.toast(`Patched up (+${hm} health)`, 2); }
       else hud.toast('No food or meds.', 1.5);
     }
     if (inp.pressed('KeyI')) {
@@ -193,6 +239,16 @@ export class Game {
 
   update(dt) {
     const inp = this.input;
+    if (this.setupOpen) {
+      // behind the creation screens: a slow look over Harlan's Landing
+      this.setupT = (this.setupT || 0) + dt;
+      const a = -0.6 + Math.sin(this.setupT * 0.05) * 0.25;
+      this.camera.position.set(110 + Math.cos(a) * 95, 42, Math.sin(a) * 95);
+      this.camera.lookAt(120, 12, 0);
+      this.sky.update(dt * 0.2, this.camera.position);
+      this.world.update(dt, this.camera.position);
+      return;
+    }
     if (inp && this.hud) {
       this.handleKeys();
       if (this.hud.paused) return;

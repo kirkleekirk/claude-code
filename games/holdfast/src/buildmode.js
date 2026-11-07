@@ -373,7 +373,17 @@ export class BuildMode {
   }
 
   // ---------------- costs ----------------
-  cost(t) {
+  // trait-scaled price; refunds use the same scale so nothing is free
+  scaled(c) {
+    const m = this.game.mods ? this.game.mods.build : 1;
+    if (m === 1) return c;
+    const o = {};
+    for (const k in c) o[k] = c[k] > 0 ? Math.max(1, Math.round(c[k] * m)) : 0;
+    return o;
+  }
+  cost(t) { return this.scaled(this.baseCost(t)); }
+  refund(map, key, S, prop) { return this.scaled(this.baseRefund(map, key, S, prop)); }
+  baseCost(t) {
     if (!t) return {};
     if (t.type === 'floor') return t.key.endsWith(',0') ? { stone: 2, wood: 1 } : { wood: 2 };
     if (t.type === 'wall') return wallCost(t.val.shape, t.val.style);
@@ -383,7 +393,7 @@ export class BuildMode {
     if (t.type === 'prop') return (FURNITURE_CATALOG.find((f) => f.type === t.prop.type) || {}).cost || { wood: 2 };
     return {};
   }
-  refund(map, key, S, prop) {
+  baseRefund(map, key, S, prop) {
     if (prop) return (FURNITURE_CATALOG.find((f) => f.type === prop.type) || {}).cost || { wood: 1 };
     const v = S[map].get(key);
     if (map === 'walls') return wallCost(v.shape, v.style);

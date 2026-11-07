@@ -27,7 +27,9 @@ window.__strip = (o) => {
   actors = [];
   const n = o.n || 8, sp = o.spacing || 1.0;
   for (let i = 0; i < n; i++) {
-    const c = new Character(o.model || 'man', randomPalette(mulberry32(o.seed || 7), !!o.zombie));
+    const zr = mulberry32((o.seed || 7) * 31 + i * 7);
+    const zlook = o.zombie ? { seed: zr() * 40, decay: zr(), blood: 0.3 + zr() * 0.7, tear: 0.35 + zr() * 0.65, build: [1, 1.15, 0.87, 1][i % 4], ...(o.zlook || {}) } : null;
+    const c = new Character(o.models ? o.models[i % o.models.length] : (o.model || 'man'), randomPalette(mulberry32((o.seed || 7) + i * 13), !!o.zombie), { zombie: zlook });
     if (o.zv) Object.assign(c.zv, o.zv);
     const st = { ...o.st };
     // settle blends at this state

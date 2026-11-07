@@ -67,8 +67,9 @@ export class Player {
     let speed = this.crouch ? 1.6 : 3.4;
     const canSprint = this.stamina > 4 && moving && !this.crouch && !this.aiming;
     const sprinting = sprintHeld && canSprint;
-    if (sprinting) { speed = 6.0; this.stamina = Math.max(0, this.stamina - dt * 14); }
-    else this.stamina = Math.min(this.maxStamina, this.stamina + dt * (moving ? 9 : 16));
+    const mods = this.game.mods || {};
+    if (sprinting) { speed = mods.sprint || 6.0; this.stamina = Math.max(0, this.stamina - dt * 14); }
+    else this.stamina = Math.min(this.maxStamina, this.stamina + dt * (moving ? 9 : 16) * (mods.staminaRegen || 1));
     if (this.aiming) speed = Math.min(speed, 2.2);
     // desired horizontal velocity
     const f = cam.forward, r = cam.right;
@@ -122,11 +123,16 @@ export class Player {
     if (this.pos.y < T.water - 6) this.pos.copy(this.lastSafe);
     const hs = Math.hypot(this.vel.x, this.vel.z);
     this.speed = hs;
-    // facing
+    // facing (and how fast it is turning, for leaning into turns)
+    const prevFacing = this.facing;
     if (this.aiming || this.attackT >= 0) this.facing = turnTo(this.facing, Math.atan2(f.x, f.z), dt * 14);
     else if (hs > 0.3) this.facing = turnTo(this.facing, Math.atan2(this.vel.x, this.vel.z), dt * 10);
+    let dFace = this.facing - prevFacing;
+    while (dFace > Math.PI) dFace -= Math.PI * 2;
+    while (dFace < -Math.PI) dFace += Math.PI * 2;
+    this.turnRate = dt > 0 ? dFace / dt : 0;
     // noise level (zombies hear running)
-    this.noise = sprinting ? 22 : moving ? (this.crouch ? 3 : 9) : 1;
+    this.noise = (sprinting ? 22 : moving ? (this.crouch ? 3 : 9) : 1) * (mods.noise || 1);
     // attacks
     this.attackCd -= dt;
     const attackPressed = input.pressed(input.locked ? 'Mouse0' : 'Mouse0Click') || input.pressed('TouchAttack');
@@ -154,7 +160,7 @@ export class Player {
       weapon: this.weapon.kind === 'gun' ? 'gun' : this.weapon.kind === 'bat' ? 'bat' : null,
       aim: this.aiming && this.weapon.kind === 'gun', aimPitch: cam.pitch != null ? cam.pitch + 0.12 : 0,
       air: this.airT > 0.12, vy: this.vel.y, landV: this.landV || 0, search: searching && hs < 0.5,
-      lookYaw: this.aiming ? 0 : look,
+      lookYaw: this.aiming ? 0 : look, turn: this.turnRate,
       stagger: this.hurtFlash > 0 ? (this.hurtFlash / 0.35) * 0.55 : 0,
     });
     this.landV = 0;
