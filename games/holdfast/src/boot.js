@@ -14,7 +14,8 @@ const params = new URLSearchParams(location.search);
     await game.init();
   } catch (e) {
     console.error(e);
-    text.textContent = 'Something went wrong while building the world: ' + e.message;
+    const msg = String(e && e.message || e);
+    text.textContent = 'Something went wrong while building the world: ' + (msg.length > 160 ? msg.slice(0, 160) + '…' : msg);
     return;
   }
   if (params.get('time')) game.sky.setTime(+params.get('time'));

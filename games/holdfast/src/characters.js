@@ -19,10 +19,21 @@ const PARENT = { hips: null, spine: 'hips', chest: 'spine', neck: 'chest', head:
 
 const models = {};
 
+// Each entry is { url, height }. A url ending in .js names a module whose
+// default export is the .glb file as base64: it is decoded and parsed in
+// place, so hosts that only allow loading scripts can still serve models.
 export async function loadCharacterModels(urls) {
   const loader = new GLTFLoader();
   for (const [name, { url, height }] of Object.entries(urls)) {
-    const gltf = await loader.loadAsync(url);
+    let gltf;
+    if (/\.js($|\?)/.test(url)) {
+      const b64 = (await import(new URL(url, location.href).href)).default;
+      const bin = atob(b64), bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      gltf = await loader.parseAsync(bytes.buffer, '');
+    } else {
+      gltf = await loader.loadAsync(url);
+    }
     models[name] = rig(gltf, height, name);
   }
   return models;

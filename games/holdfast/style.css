@@ -21,7 +21,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #101210; col
 .load-inner .sub { margin: 4px 0 26px; letter-spacing: 0.25em; text-transform: uppercase; color: var(--ink-dim); font-size: 13px; }
 .bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
 #load-fill { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
-#load-text { color: var(--ink-dim); font-size: 13px; margin-top: 12px; }
+#load-text { color: var(--ink-dim); font-size: 13px; margin-top: 12px; overflow-wrap: anywhere; }
 #ui { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
 
 /* ---------------- HUD ---------------- */
@@ -106,7 +106,7 @@ table.keys td:first-child { font-family: var(--font-display); color: var(--ink-d
   .res { padding: 2px 5px; min-width: 38px; }
   .res-n { font-size: 14px; }
   .res-l { font-size: 8px; letter-spacing: 0.08em; }
-  .hud-toasts { top: calc(56px + env(safe-area-inset-top, 0px)); width: min(400px, 44vw); }
+  .hud-toasts { top: calc(56px + env(safe-area-inset-top, 0px)); width: min(380px, 40vw); }
   .toast { font-size: 12px; padding: 5px 10px; }
   .is-touch .hud-bars { top: calc(62px + env(safe-area-inset-top, 0px)); }
   .tbtns-top { top: calc(64px + env(safe-area-inset-top, 0px)); }
