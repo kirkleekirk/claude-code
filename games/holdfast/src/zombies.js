@@ -16,7 +16,7 @@ class Zombie {
     this.type = r < 0.08 ? 'runner' : r < 0.32 ? 'lurcher' : 'shambler';
     const build = rng() < 0.22 ? 1.12 + rng() * 0.08 : rng() < 0.35 ? 0.85 + rng() * 0.06 : 1;
     this.char = new Character(model, randomPalette(rng, true), {
-      zombie: { seed: rng() * 40, decay: rng(), blood: 0.3 + rng() * 0.7, tear: 0.35 + rng() * 0.65, build },
+      zombie: { seed: rng() * 8, decay: rng(), blood: 0.3 + rng() * 0.7, tear: 0.35 + rng() * 0.65, build },
     });
     this.char.zv.type = this.type;
     this.char.setGore(0.1 + rng() * 0.25);

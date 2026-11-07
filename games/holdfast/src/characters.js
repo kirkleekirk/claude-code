@@ -5,7 +5,9 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-const REG = { SKIN: 0, SHIRT: 1, PANTS: 2, SHOES: 3, HAIR: 4, BELT: 5 };
+// TORSO and FOREARM are split in the shader (straight hem and sleeve
+// lines no matter how the low-poly triangles run)
+const REG = { SKIN: 0, SHIRT: 1, PANTS: 2, SHOES: 3, HAIR: 4, BELT: 5, TORSO: 6, FOREARM: 7 };
 
 // bone order (indices used for skinning)
 const BONES = ['hips', 'spine', 'chest', 'neck', 'head',
@@ -231,13 +233,13 @@ function rig(gltf, targetH, name) {
     if (/foot/.test(primary) || y < 0.06) reg = REG.SHOES;
     else if (/shin|thigh/.test(primary) || (y < 0.53 && !isArm)) reg = REG.PANTS;
     else if (/hand/.test(primary)) reg = REG.SKIN;
-    else if (/foreArm/.test(primary)) {
-      const sd = segDist(p, J['foreArm' + side], J['hand' + side]);
-      reg = sd.t > 0.35 ? REG.SKIN : REG.SHIRT;
-    } else if (primary === 'head' || primary === 'neck' || (y > 0.85 && !isArm) || (y > 0.83 && Math.abs(p.x) < 0.05 * H && p.z > 0)) {
+    else if (/foreArm|upperArm/.test(primary)) reg = REG.FOREARM;
+    else if (primary === 'head' || primary === 'neck' || (y > 0.85 && !isArm) || (y > 0.83 && Math.abs(p.x) < 0.05 * H && p.z > 0)) {
       reg = REG.SKIN;
       if (y > 0.955 || (y > 0.905 && p.z < faceZ - 0.085 * H)) reg = REG.HAIR;
     }
+    // around the waist the shirt/pants split is decided per pixel
+    if ((reg === REG.SHIRT || reg === REG.PANTS) && !isArm && y > 0.4 && y < 0.68) reg = REG.TORSO;
     region[i] = reg;
   }
   // one clothing region per triangle (majority vote) so colours never blend across a face
@@ -275,23 +277,67 @@ function rig(gltf, targetH, name) {
   };
   const ze = front(0.925, 0.955, 0.05), zm = front(0.895, 0.915, 0.03);
   const face = {
-    eyeL: new THREE.Vector3(0.03 * H, 0.938 * H, ze),
-    eyeR: new THREE.Vector3(-0.03 * H, 0.938 * H, ze),
+    eyeL: new THREE.Vector3(0.0215 * H, 0.938 * H, ze),
+    eyeR: new THREE.Vector3(-0.0215 * H, 0.938 * H, ze),
     mouth: new THREE.Vector3(0, 0.903 * H, zm),
   };
-  return { geo, joints: J, height: H, restArm, hang, face, name };
+  // shirt hem: the man's at the top of the hips, the woman's a little
+  // higher over her wider hips
+  const waist = (name === 'woman' ? 0.556 : 0.535) * H;
+  return { geo, joints: J, height: H, restArm, hang, face, waist, name };
 }
 
 // ---------------- material with palette ----------------
 // Character material: per-region palette colours on one shared mesh. Survivors
 // get eyes; zombies (z = { seed, decay, blood, tear, build }) get mottled
 // grey skin, dark sockets with a faint glow, blood, torn and filthy clothes.
+// Noise comes from a small tiling texture made once on the CPU, so it looks
+// the same on every GPU (shader hash functions fall apart at the lower
+// precision many phones use). Channels: r, g fbm; b, a single octave.
+// One noise cell per unit of the lookup coordinate.
+let NOISE_TEX = null;
+function noiseTexture() {
+  if (NOISE_TEX) return NOISE_TEX;
+  const N = 128, C = 8, data = new Uint8Array(N * N * 4);
+  const lattice = (seed, cells) => {
+    let s = seed >>> 0;
+    const v = new Float32Array(cells * cells);
+    for (let i = 0; i < v.length; i++) { s = (s * 1664525 + 1013904223) >>> 0; v[i] = s / 4294967296; }
+    return (x, y) => {
+      const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi;
+      const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+      const at = (i, j) => v[((j % cells + cells) % cells) * cells + ((i % cells + cells) % cells)];
+      const a = at(xi, yi), b = at(xi + 1, yi), c = at(xi, yi + 1), d = at(xi + 1, yi + 1);
+      return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
+    };
+  };
+  const fbm = (seed) => {
+    const o = [lattice(seed, C), lattice(seed + 7, C * 2), lattice(seed + 13, C * 4)];
+    return (x, y) => 0.55 * o[0](x, y) + 0.3 * o[1](x * 2, y * 2) + 0.15 * o[2](x * 4, y * 4);
+  };
+  const R = fbm(11), G = fbm(29), B = lattice(47, C), A = lattice(83, C);
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const x = (i / N) * C, y = (j / N) * C, k = (j * N + i) * 4;
+    data[k] = R(x, y) * 255; data[k + 1] = G(x, y) * 255; data[k + 2] = B(x, y) * 255; data[k + 3] = A(x, y) * 255;
+  }
+  const t = new THREE.DataTexture(data, N, N, THREE.RGBAFormat);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps = true; t.needsUpdate = true;
+  NOISE_TEX = t;
+  return t;
+}
+// lookups blend a front (xy) and a side (zy) projection by the surface normal
 const NOISE_GLSL = `
-float zh3(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
-float zn(vec3 x){ vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(mix(zh3(i), zh3(i + vec3(1,0,0)), f.x), mix(zh3(i + vec3(0,1,0)), zh3(i + vec3(1,1,0)), f.x), f.y),
-             mix(mix(zh3(i + vec3(0,0,1)), zh3(i + vec3(1,0,1)), f.x), mix(zh3(i + vec3(0,1,1)), zh3(i + vec3(1,1,1)), f.x), f.y), f.z); }
-float zf(vec3 p){ return 0.55 * zn(p) + 0.3 * zn(p * 2.07) + 0.15 * zn(p * 4.3); }
+uniform sampler2D uNoise;
+varying vec3 vObjN;
+vec4 nz4(vec3 q){
+  float w = smoothstep(0.45, 0.75, abs(normalize(vObjN).x));
+  return mix(texture2D(uNoise, q.xy * 0.125), texture2D(uNoise, q.zy * 0.125 + 0.5), w);
+}
+float zf(vec3 q){ return nz4(q).r; }
+float zn(vec3 q){ return nz4(q).b; }
+float ch(vec3 p){ return texture2D(uNoise, (p.xy + p.z * 3.7) * 0.0078125 + 0.003).a; }
 `;
 function makeMaterial(palette, model, z = null) {
   const m = new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0, flatShading: false });
@@ -307,9 +353,15 @@ function makeMaterial(palette, model, z = null) {
     sh.uniforms.uMouth = { value: face.mouth };
     sh.uniforms.uZ = { value: z ? new THREE.Vector4(z.seed, z.decay, z.blood, z.tear) : new THREE.Vector4() };
     sh.uniforms.uBuild = { value: z ? z.build : 1 };
+    sh.uniforms.uNoise = { value: noiseTexture() };
+    sh.uniforms.uWaist = { value: model.waist };
+    const J = model.joints;
+    sh.uniforms.uElbowL = { value: J.foreArmL }; sh.uniforms.uWristL = { value: J.handL };
+    sh.uniforms.uElbowR = { value: J.foreArmR }; sh.uniforms.uWristR = { value: J.handR };
     m.userData.shader = sh;
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float region;\nflat varying float vRegion;\nvarying vec3 vLocal;\nuniform float uBuild;\nuniform float uH;')
+      .replace('#include <common>', '#include <common>\nattribute float region;\nflat varying float vRegion;\nvarying vec3 vLocal;\nvarying vec3 vObjN;\nuniform float uBuild;\nuniform float uH;')
+      .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nvObjN = objectNormal;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         vRegion = region;
         vLocal = position;
@@ -321,9 +373,17 @@ function makeMaterial(palette, model, z = null) {
           transformed.z *= mix(1.0, uBuild + max(0.0, uBuild - 1.0) * step(0.0, position.z) * 0.8, k);
         }` : ''}`);
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform vec3 uPal[6];\nuniform float uGore;\nuniform float uH;\nuniform vec3 uEyeL;\nuniform vec3 uEyeR;\nuniform vec3 uMouth;\nuniform vec4 uZ;\nflat varying float vRegion;\nvarying vec3 vLocal;\nfloat ch(vec3 p){ return fract(sin(dot(p, vec3(12.9898,78.233,45.164))) * 43758.5453); }' + NOISE_GLSL)
+      .replace('#include <common>', '#include <common>\nuniform vec3 uPal[6];\nuniform float uGore;\nuniform float uH;\nuniform float uWaist;\nuniform vec3 uEyeL;\nuniform vec3 uEyeR;\nuniform vec3 uMouth;\nuniform vec3 uElbowL;\nuniform vec3 uWristL;\nuniform vec3 uElbowR;\nuniform vec3 uWristR;\nuniform vec4 uZ;\nflat varying float vRegion;\nvarying vec3 vLocal;' + NOISE_GLSL)
       .replace('#include <color_fragment>', `
         int ri = int(vRegion + 0.5);
+        // shirt hem: a straight line round the hips
+        if (ri == 6) ri = vLocal.y < uWaist ? 2 : 1;
+        // sleeve: ends a third of the way down the forearm
+        if (ri == 7) {
+          vec3 e = vLocal.x > 0.0 ? uElbowL : uElbowR, w = vLocal.x > 0.0 ? uWristL : uWristR;
+          vec3 ew = w - e;
+          ri = dot(vLocal - e, ew) / dot(ew, ew) > 0.3 ? 0 : 1;
+        }
         vec3 pc = uPal[0];
         if (ri == 1) pc = uPal[1]; else if (ri == 2) pc = uPal[2]; else if (ri == 3) pc = uPal[3]; else if (ri == 4) pc = uPal[4]; else if (ri == 5) pc = uPal[5];
         // subtle cloth/skin variation
@@ -334,7 +394,7 @@ function makeMaterial(palette, model, z = null) {
         float frontOk = step(uEyeL.z - 0.07 * uH, vLocal.z);
         float de = mix(1.0, min(distance(vLocal.xy, uEyeL.xy), distance(vLocal.xy, uEyeR.xy)) / uH, frontOk);
         ${z ? `
-        vec3 P = vLocal / uH + uZ.x;
+        vec3 P = vLocal / uH + uZ.x * 0.125;
         vec3 skin = uPal[0] * (0.7 + 0.3 * zf(P * 15.0));
         if (ri == 0) {
           col = skin;
@@ -348,13 +408,13 @@ function makeMaterial(palette, model, z = null) {
           // filthy, faded, torn: holes show grey skin with dark frayed edges
           col *= 0.72 + 0.32 * zf(P * 5.0 + 7.0);
           float tn = zf(P * vec3(9.0, 6.5, 9.0) + 3.1);
-          float th = 1.0 - uZ.w * 0.42;
+          float th = 1.0 - uZ.w * 0.36;
           if (tn > th) col = skin * 0.7;
           else if (tn > th - 0.035) col *= 0.38;
           // blood: splotches soaked in from the collar, a few running drips
-          float bl = zf(P * vec3(16.0, 7.0, 16.0) + 11.0);
+          float bl = zf(P * vec3(12.0, 9.5, 12.0) + 11.0);
           float hi = smoothstep(0.55, 0.84, vLocal.y / uH);
-          float drip = step(0.93, zn(vec3(P.x * 60.0, 0.0, P.z * 60.0) + 5.0)) * hi * step(0.3, uZ.z);
+          float drip = step(0.975, zn(vec3(P.x * 60.0, 0.0, P.z * 60.0) + 5.0)) * smoothstep(0.66, 0.78, vLocal.y / uH) * step(0.45, uZ.z);
           if (bl * (0.5 + 0.65 * hi) > 1.0 - uZ.z * 0.36 || drip > 0.5) col = mix(col, vec3(0.2, 0.025, 0.02), 0.82);
         } else if (ri == 4) {
           if (zf(P * 13.0) > 0.66 - uZ.y * 0.1) col = skin * 0.8; // hair coming out in patches
@@ -364,10 +424,10 @@ function makeMaterial(palette, model, z = null) {
         float mw = 0.017 * uH * (0.7 + 0.5 * zn(vec3(vLocal.y * 90.0, 1.0, uZ.x)));
         if (frontOk > 0.5 && abs(mo.x) < mw && mo.y < 0.004 * uH && mo.y > -0.035 * uH * (0.4 + uZ.z) * (0.6 + 0.8 * zn(vec3(vLocal.x * 120.0, 2.0, uZ.x)))) col = mix(col, vec3(0.18, 0.02, 0.02), 0.85);
         // eyes: sunken dark sockets, a dull yellow shine
-        if (de < 0.02) { col = mix(vec3(0.04, 0.02, 0.02), col, smoothstep(0.013, 0.02, de)); eyeGlow = 1.0 - smoothstep(0.002, 0.007, de); }
+        if (de < 0.016) { col = mix(vec3(0.04, 0.02, 0.02), col, smoothstep(0.01, 0.016, de)); eyeGlow = 1.0 - smoothstep(0.002, 0.0065, de); }
         ` : `
         // eyes
-        if (de < 0.0085) col = mix(col * 0.2, col, smoothstep(0.0045, 0.0085, de));
+        if (de < 0.0078) col = mix(col * 0.2, col, smoothstep(0.0042, 0.0078, de));
         `}
         diffuseColor.rgb *= col;
         if (uGore > 0.0) {
@@ -377,7 +437,7 @@ function makeMaterial(palette, model, z = null) {
       `)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance += vec3(0.8, 0.68, 0.3) * eyeGlow * 0.32;');
   };
-  m.customProgramCacheKey = () => (z ? 'holdfast-zombie-v2' : 'holdfast-char-v2');
+  m.customProgramCacheKey = () => (z ? 'holdfast-zombie-v3' : 'holdfast-char-v3');
   return m;
 }
 
