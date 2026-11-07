@@ -146,6 +146,13 @@ export class HUD {
           <tr><td>G</td><td>Plant claim flag</td></tr><tr><td>B</td><td>Build mode</td></tr><tr><td>H</td><td>Eat / use meds</td></tr>
           <tr><td>M</td><td>Map</td></tr><tr><td>Esc</td><td>Menu</td></tr>
         </table>
+        <h3>On a phone</h3>
+        <p>Left side of the screen moves, right side looks. The round buttons hit, use, jump, aim, crouch and run; Build, Pack and Map sit on the right.</p>
+        <h3>Credits</h3>
+        <p class="note">Character models, both CC BY 4.0, rigged and animated in-game:
+          “<a href="https://sketchfab.com/3d-models/proportional-low-poly-man-free-download-0bfd0e2b49a348a4b64b20cc8196e3b3" target="_blank" rel="noopener">Proportional Low Poly Man</a>” by Robin Butler;
+          “<a href="https://sketchfab.com/3d-models/female-9a0c634d1a2249d18afbbaecf6305706" target="_blank" rel="noopener">FEMALE</a>” by staxegolo.
+          Licence: <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">creativecommons.org/licenses/by/4.0</a>.</p>
       </div>`;
   }
   showSettings() {
