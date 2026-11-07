@@ -86,9 +86,11 @@ export class Game {
     await this.world.generate({ texSize: this.quality.texSize, quality: this.quality });
     this.water = new Water(this.scene, this.world.terrain);
     this.onProgress('Waking survivors', 0.94);
+    // a host page may point at other copies of the models (e.g. .gltf JSON)
+    const urls = window.HOLDFAST_MODELS || {};
     await loadCharacterModels({
-      man: { url: new URL('../assets/models/man.glb', import.meta.url).href, height: 1.78 },
-      woman: { url: new URL('../assets/models/woman.glb', import.meta.url).href, height: 1.68 },
+      man: { url: urls.man || new URL('../assets/models/man.glb', import.meta.url).href, height: 1.78 },
+      woman: { url: urls.woman || new URL('../assets/models/woman.glb', import.meta.url).href, height: 1.68 },
     });
     this.input = new Input(this.renderer.domElement);
     this.input.wantLock = !this.quality.mobile;
