@@ -122,7 +122,18 @@ export class Game {
     const qs = new URLSearchParams(location.search);
     const loaded = !qs.get('fresh') && loadGame(this);
     this.onProgress('Ready', 1);
-    if (loaded) {
+    if (loaded && !this.profile && !qs.get('still')) {
+      // a save from before survivors existed: make one, keep everything else
+      this.setupOpen = true;
+      this.hud.setVisible(false);
+      new SurvivorSetup(this, (p) => {
+        this.setupOpen = false;
+        this.hud.setVisible(true);
+        this.applyProfile(p, false);
+        this.save();
+        setTimeout(() => this.hud.toast(`Welcome back, ${p.name.split(' ')[0]}. Your claims are where you left them.`, 4), 600);
+      }, { keepPlace: true });
+    } else if (loaded) {
       setTimeout(() => this.hud.toast(`Welcome back${this.profile ? ', ' + this.profile.name.split(' ')[0] : ''}. Your claims are where you left them.`, 4), 800);
     } else if (qs.get('still') && !qs.get('setup')) {
       // automated checks skip the creation screens

@@ -87,9 +87,12 @@ export function profilePalette(p) { return [p.skin, p.shirt, p.pants, '#2a2420',
 
 // ---------------- screens ----------------
 export class SurvivorSetup {
-  constructor(game, onDone) {
+  // opts.keepPlace: an older save with no survivor yet: make one, keep the
+  // save's position and progress (no start point step)
+  constructor(game, onDone, opts = {}) {
     this.game = game;
     this.onDone = onDone;
+    this.keepPlace = !!opts.keepPlace;
     this.profile = randomProfile();
     const el = this.el = document.createElement('div');
     el.className = 'overlay setup';
@@ -133,7 +136,7 @@ export class SurvivorSetup {
         </div>
         <div class="setup-actions">
           <span class="note" id="su-why">${pts < 0 ? 'Drop a strength or take a weakness to balance your points.' : ''}</span>
-          <button class="primary" id="su-next" ${pts < 0 ? 'disabled' : ''}>Choose where to start</button>
+          <button class="primary" id="su-next" ${pts < 0 ? 'disabled' : ''}>${this.keepPlace ? 'Back to your game' : 'Choose where to start'}</button>
         </div>
       </div>`;
     const $ = (id) => this.el.querySelector('#' + id);
@@ -153,7 +156,7 @@ export class SurvivorSetup {
       this.el.querySelector('.setup-traits').scrollTop = keep;
     });
     $('su-rand').addEventListener('click', () => { const r = randomProfile(); Object.assign(p, { ...r, traits: p.traits }); this.renderCreate(); });
-    $('su-next').addEventListener('click', () => { if (pointsLeft(p.traits) >= 0) this.renderSpawn(); });
+    $('su-next').addEventListener('click', () => { if (pointsLeft(p.traits) < 0) return; if (this.keepPlace) this.finish(); else this.renderSpawn(); });
     if (!this.prevCanvas) {
       this.prevCanvas = document.createElement('canvas');
       this.prevCanvas.width = 260; this.prevCanvas.height = 320;
