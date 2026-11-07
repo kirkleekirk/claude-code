@@ -2,14 +2,96 @@
 // roads with tyre tracks) and the town street grid with sidewalks & curbs.
 import * as THREE from 'three';
 import { GeoBuilder, rgb, mulc } from '../geom.js';
-import { resample, catmullRom, clamp } from '../util.js';
+import { resample, catmullRom, clamp, smoothstep } from '../util.js';
 import { townPlane, TOWN_KNOTS } from './terrain.js';
 
 // Turn a control polyline into a smooth, profiled centreline.
-export function roadCentreline(terrain, road) {
+// `prior` are roads already profiled: where this road joins or crosses one
+// of them it is pinned to that road's surface, and the part lying on the
+// other road is marked so its ribbon is left out (the other road shows).
+export function roadCentreline(terrain, road, prior = []) {
   const smooth = catmullRom(road.pts, 6);
   const fine = resample(smooth, 2);
-  return terrain.profile(fine, road.type === 'paved' ? 30 : 20, road.type === 'paved' ? 0.07 : 0.1);
+  const pins = new Map();
+  // roads that start or end on the town grid meet it exactly at street level
+  if (road.townStart) pins.set(0, townPlane(fine[0][0]));
+  if (road.townEnd) pins.set(fine.length - 1, townPlane(fine[fine.length - 1][0]));
+  // drives end on the ground in front of a door
+  if (road.endGround) pins.set(fine.length - 1, terrain.height(fine[fine.length - 1][0], fine[fine.length - 1][1]) + 0.06);
+  const inside = new Array(fine.length).fill(null);
+  for (const R of prior) {
+    const half = R.width / 2 + (R.type === 'paved' ? 1.1 : 0);
+    for (let i = 0; i < fine.length; i++) {
+      const [x, z] = fine[i];
+      const q = nearestOn(R.samples, x, z);
+      if (q.d > half + (road.endGround ? 0.3 : 1.5)) continue;
+      const o = Math.min(q.d, R.width / 2);
+      const surf = q.y - 0.07 * (o / (R.width / 2)) ** 2;
+      pins.set(i, surf - 0.03);
+      if (q.d < half - 0.3) inside[i] = R.name;
+    }
+  }
+  // farm drives may be steeper than county roads
+  const maxGrade = road.type === 'paved' ? 0.09 : road.endGround ? 0.18 : 0.11;
+  const pts = terrain.profile(fine, road.endGround ? 10 : road.type === 'paved' ? 30 : 20, maxGrade, pins);
+  pts.forEach((p, i) => {
+    p.on = inside[i];
+    // town ends: the cross-section follows the town's slope (fades over 12 m)
+    let tw = 0;
+    if (road.townStart) tw = Math.max(tw, 1 - smoothstep(0, 12, p.s));
+    if (road.townEnd) tw = Math.max(tw, 1 - smoothstep(0, 12, pts[pts.length - 1].s - p.s));
+    p.tw = tw;
+    // near a road it joins, the surface warps onto that road's surface
+    let bestD = Infinity;
+    for (const R of prior) {
+      const q = nearestOn(R.samples, p.x, p.z);
+      const reach = R.width / 2 + (R.type === 'paved' ? 1.1 : 0) + 6;
+      if (q.d < reach && q.d < bestD) { bestD = q.d; p.join = R; }
+    }
+  });
+  return pts;
+}
+
+// Top surface (without the 4 cm ribbon lift) of road R at a point near it.
+function surfaceOf(R, x, z) {
+  const q = nearestOn(R.samples, x, z);
+  const half = R.width / 2;
+  const a = Math.min(q.d, half);
+  return { d: q.d, y: q.y - 0.07 * (a / half) * (a / half) };
+}
+
+// Surface adjustments on top of a road's centreline + crown height y at
+// (x, z), given the centreline point p (or a blend of a and b by t).
+// Used by both the ribbon mesh and the terrain stamp so they always agree.
+export function adjustSurface(a, b, t, x, z, y) {
+  const tw = (a.tw || 0) + ((b.tw || 0) - (a.tw || 0)) * t;
+  if (tw) {
+    const cx = a.x + (b.x - a.x) * t;
+    y += (townPlane(x) - townPlane(cx)) * tw;
+  }
+  const R = a.join || b.join;
+  if (R) {
+    const s = surfaceOf(R, x, z);
+    const edge = R.width / 2 + (R.type === 'paved' ? 1.1 : 0);
+    const w = 1 - smoothstep(edge, edge + 5, s.d);
+    if (w > 0) y += (s.y - 0.03 - y) * w;
+  }
+  return y;
+}
+
+// Nearest point on a sampled centreline: distance and height there.
+export function nearestOn(samples, x, z) {
+  let best = Infinity, by = 0;
+  for (let k = 0; k < samples.length - 1; k++) {
+    const a = samples[k], b = samples[k + 1];
+    const dx = b.x - a.x, dz = b.z - a.z;
+    const l2 = dx * dx + dz * dz;
+    let t = l2 > 0 ? ((x - a.x) * dx + (z - a.z) * dz) / l2 : 0;
+    t = clamp(t, 0, 1);
+    const d = Math.hypot(x - a.x - dx * t, z - a.z - dz * t);
+    if (d < best) { best = d; by = a.y + (b.y - a.y) * t; }
+  }
+  return { d: best, y: by };
 }
 
 export function buildRoadRibbon(builder, samples, road) {
@@ -27,14 +109,15 @@ export function buildRoadRibbon(builder, samples, road) {
     let dx = b.x - a.x, dz = b.z - a.z;
     const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
     const nx = -dz, nz = dx; // left normal
-    rows.push(xs.map((o) => [p.x + nx * o, p.y + crown(Math.min(Math.abs(o), half) * Math.sign(o)) + (Math.abs(o) > half ? -0.05 : 0) + 0.04, p.z + nz * o]));
     p.nx = nx; p.nz = nz; p.dx = dx; p.dz = dz;
+    rows.push(xs.map((o) => [p.x + nx * o, ribbonY(road, samples, i, o), p.z + nz * o]));
   }
   // distance along for UVs
   let s = 0;
   const S = [0];
   for (let i = 1; i < n; i++) { s += Math.hypot(samples[i].x - samples[i - 1].x, samples[i].z - samples[i - 1].z); S.push(s); }
   for (let i = 0; i < n - 1; i++) {
+    if (samples[i].on && samples[i + 1].on) continue; // lies on the other road
     for (let k = 0; k < xs.length - 1; k++) {
       const a = rows[i][k], b = rows[i][k + 1], c = rows[i + 1][k + 1], d = rows[i + 1][k];
       let key, col;
@@ -56,8 +139,9 @@ export function buildRoadRibbon(builder, samples, road) {
     const line = (off, w, color, dash = 0) => {
       for (let i = 0; i < n - 1; i++) {
         if (dash && Math.floor(S[i] / dash) % 2) continue;
+        if (samples[i].on || samples[i + 1].on) continue;
         const p = samples[i], q = samples[i + 1];
-        const y0 = p.y + crown(off) + 0.055, y1 = q.y + crown(off) + 0.055;
+        const y0 = ribbonY(road, samples, i, off) + 0.015, y1 = ribbonY(road, samples, i + 1, off) + 0.015;
         const A = [p.x + p.nx * (off - w), y0, p.z + p.nz * (off - w)], B = [p.x + p.nx * (off + w), y0, p.z + p.nz * (off + w)];
         const C = [q.x + q.nx * (off + w), y1, q.z + q.nz * (off + w)], D = [q.x + q.nx * (off - w), y1, q.z + q.nz * (off - w)];
         builder.quad('plain:paint', A, D, C, B, color, null, [0, 1, 0]);
@@ -67,6 +151,14 @@ export function buildRoadRibbon(builder, samples, road) {
     line(-0.1, 0.05, yel); line(0.1, 0.05, yel);
     line(-half + 0.15, 0.06, wht); line(half - 0.15, 0.06, wht);
   }
+}
+
+// Height of the ribbon's top surface at sample i, offset o across the road.
+export function ribbonY(road, samples, i, o) {
+  const p = samples[i], half = road.width / 2;
+  const a = Math.min(Math.abs(o), half);
+  const x = p.x + (p.nx || 0) * o, z = p.z + (p.nz || 0) * o;
+  return adjustSurface(p, p, 0, x, z, p.y - 0.07 * (a / half) * (a / half)) + (Math.abs(o) > half ? -0.05 : 0) + 0.04;
 }
 
 // ---------------- town streets ----------------

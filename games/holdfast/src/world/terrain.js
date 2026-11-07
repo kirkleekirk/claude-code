@@ -48,7 +48,7 @@ export function baseHeight(x, z) {
   hills = lerp(hills, 15 + 4 * n2(x / 70, z / 70), east * (1 - bluff));
   hills += bluff * (8 + 6 * n3(x / 50, z / 50));
   // town terrace mask
-  const tx = smoothstep(32, 78, x) * (1 - smoothstep(T.town.x1 + 8, T.town.x1 + 20, x) * 0);
+  const tx = smoothstep(14, 74, x);
   const tz = 1 - smoothstep(T.town.z1 - 6, T.town.z1 + 40, Math.abs(z));
   const tm = tx * tz;
   let h = lerp(hills, townPlane(x) + 0.25 * n3(x / 40, z / 40), tm);
@@ -78,13 +78,43 @@ export class Terrain {
       const z = T.z0 + j * T.res;
       for (let i = 0; i < T.nx; i++) this.h[j * T.nx + i] = baseHeight(T.x0 + i * T.res, z);
     }
+    this.relax(0.62, 160);
     this.base = this.h.slice();
+    this.roadMask = new Uint8Array(T.nx * T.nz);
+    this.padMask = new Uint8Array(T.nx * T.nz);
     this.splat = null;
     this.chunks = [];
     this.group = new THREE.Group();
     this.group.name = 'terrain';
   }
   idx(i, j) { return j * T.nx + i; }
+  // Limit slopes (rise per metre) by moving material from steep tops to
+  // their feet, so bluffs read as steep banks instead of stretched walls.
+  // `fixed` (optional) marks grid points that must not move (road beds,
+  // streets, building pads); their free neighbours take all the change.
+  relax(maxSlope, iters, fixed = null) {
+    const h = this.h, nx = T.nx, nz = T.nz, m = maxSlope * T.res;
+    const pair = (a, b) => {
+      const d = h[a] - h[b];
+      if (Math.abs(d) <= m) return 0;
+      const fa = fixed && fixed[a], fb = fixed && fixed[b];
+      if (fa && fb) return 0;
+      const e = (Math.abs(d) - m) * Math.sign(d);
+      if (fa) h[b] += e;
+      else if (fb) h[a] -= e;
+      else { h[a] -= e * 0.5; h[b] += e * 0.5; }
+      return 1;
+    };
+    for (let it = 0; it < iters; it++) {
+      let moved = 0;
+      for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+        const a = j * nx + i;
+        if (i + 1 < nx) moved += pair(a, a + 1);
+        if (j + 1 < nz) moved += pair(a, a + nx);
+      }
+      if (!moved) break;
+    }
+  }
   hAt(i, j) {
     i = clamp(i, 0, T.nx - 1); j = clamp(j, 0, T.nz - 1);
     return this.h[j * T.nx + i];
@@ -135,13 +165,13 @@ export class Terrain {
     });
   }
   // Road corridor stamp. samples: [{x,z,y,dx,dz}] centreline with heights; half = half width.
-  stampRoad(samples, half, shoulder = 4, ditch = 0.0, crown = 0.06) {
+  stampRoad(samples, half, shoulder = 4, ditch = 0.0, crown = 0.06, adjust = null) {
     let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
     for (const s of samples) { x0 = Math.min(x0, s.x); z0 = Math.min(z0, s.z); x1 = Math.max(x1, s.x); z1 = Math.max(z1, s.z); }
-    const reach = half + shoulder;
+    const maxReach = half + 1.2 + 30;
     // for each grid point: nearest segment
-    this.forRect(x0 - reach, z0 - reach, x1 + reach, z1 + reach, (i, j, x, z) => {
-      let best = Infinity, by = 0;
+    this.forRect(x0 - maxReach, z0 - maxReach, x1 + maxReach, z1 + maxReach, (i, j, x, z) => {
+      let best = Infinity, by = 0, bk = 0, bt = 0;
       for (let k = 0; k < samples.length - 1; k++) {
         const a = samples[k], b = samples[k + 1];
         const dx = b.x - a.x, dz = b.z - a.z;
@@ -150,24 +180,27 @@ export class Terrain {
         t = clamp(t, 0, 1);
         const cx = a.x + dx * t, cz = a.z + dz * t;
         const d = Math.hypot(x - cx, z - cz);
-        if (d < best) { best = d; by = a.y + (b.y - a.y) * t; }
+        if (d < best) { best = d; by = a.y + (b.y - a.y) * t; bk = k; bt = t; }
       }
-      if (best > reach) return;
+      const adj = (y) => (adjust ? adjust(samples[bk], samples[bk + 1], bt, x, z, y) : y);
       const k = this.idx(i, j);
       const cur = this.h[k];
-      let target;
-      if (best <= half + 0.6) {
-        target = by - crown * (best / half) * (best / half) - 0.05;
-        this.h[k] = target;
+      // banks get wider where the road cuts or fills a lot (about 1:2)
+      const bank = Math.min(30, Math.max(shoulder, Math.abs(cur - by) * 2.2));
+      const flat = half + 1.2;
+      if (best > flat + bank) return;
+      if (best <= flat) {
+        this.h[k] = adj(by - crown * Math.min(1, (best / half) * (best / half))) - 0.07;
+        this.roadMask[k] = 1;
       } else {
-        const t = smoothstep(half + 0.6, reach, best);
-        const dip = ditch * Math.sin(Math.PI * clamp((best - half - 0.6) / (reach - half - 0.6), 0, 1));
-        this.h[k] = lerp(by - 0.1 - dip, cur, t) - dip * (1 - t) * 0;
+        if (this.roadMask[k] || this.padMask[k]) return; // never bury another road's bed or cut a building pad
+        const t = smoothstep(0, bank, best - flat);
+        this.h[k] = lerp(adj(by - crown) - 0.1, cur, t);
       }
     });
   }
   // Sample a smoothed height profile along a polyline (for roads).
-  profile(poly, window = 24, maxGrade = 0.08) {
+  profile(poly, window = 24, maxGrade = 0.08, pins = null) {
     const pts = poly.map(([x, z]) => ({ x, z, y: this.height(x, z) }));
     // cumulative distance
     let acc = 0;
@@ -183,16 +216,36 @@ export class Terrain {
       return sum / w;
     });
     pts.forEach((p, i) => { p.y = sm[i]; });
-    // grade clamp (forward & backward passes)
-    for (let pass = 0; pass < 2; pass++) {
+    // pinned heights (road junctions, town street ends): pins is a Map
+    // index -> y. Nearby samples are eased toward the pins' offsets.
+    const fixed = pins instanceof Map ? pins : new Map();
+    if (fixed.size) {
+      const list = [...fixed].map(([i, y]) => [pts[i].s, y - pts[i].y]);
+      const R = 70;
+      for (const p of pts) {
+        let sw = 0, so = 0;
+        for (const [ps, off] of list) {
+          const w = 1 - smoothstep(0, R, Math.abs(p.s - ps));
+          sw += w; so += w * off;
+        }
+        if (sw > 0) p.y += so / Math.max(1, sw);
+      }
+    }
+    const applyPins = () => { for (const [i, y] of fixed) pts[i].y = y; };
+    applyPins();
+    // grade clamp (forward & backward passes), anchored at pins
+    for (let pass = 0; pass < 16; pass++) {
       for (let i = 1; i < pts.length; i++) {
+        if (fixed.has(i)) continue;
         const d = pts[i].s - pts[i - 1].s;
         pts[i].y = clamp(pts[i].y, pts[i - 1].y - maxGrade * d, pts[i - 1].y + maxGrade * d);
       }
       for (let i = pts.length - 2; i >= 0; i--) {
+        if (fixed.has(i)) continue;
         const d = pts[i + 1].s - pts[i].s;
         pts[i].y = clamp(pts[i].y, pts[i + 1].y - maxGrade * d, pts[i + 1].y + maxGrade * d);
       }
+      applyPins();
     }
     return pts;
   }

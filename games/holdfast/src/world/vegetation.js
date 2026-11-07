@@ -174,6 +174,25 @@ const KINDS = [
   { kind: 'maple', seed: 71, leaf: '#c4782a' }, { kind: 'oak', seed: 83, leaf: '#a8862e' }, { kind: 'maple', seed: 97, leaf: '#a8442a' },
 ];
 
+// Horizontal reach of an archetype's foliage at wall height (1.6-7 m above
+// its base), so trees can be kept from growing into buildings.
+const canopyCache = new Map();
+export function canopyRadius(kindIdx) {
+  if (canopyCache.has(kindIdx)) return canopyCache.get(kindIdx);
+  const k = KINDS[kindIdx];
+  const g = makeTree(k.kind, k.seed, k.leaf);
+  const p = g.near.attributes.position;
+  let r = 0.5;
+  for (let i = 0; i < p.count; i++) {
+    const y = p.getY(i);
+    if (y < 1.6 || y > 7) continue;
+    r = Math.max(r, Math.hypot(p.getX(i), p.getZ(i)));
+  }
+  g.near.dispose(); g.far.dispose();
+  canopyCache.set(kindIdx, r);
+  return r;
+}
+
 export class Trees {
   constructor(scene, quality) {
     this.scene = scene;
@@ -185,7 +204,7 @@ export class Trees {
   add(x, y, z, kindIdx, scale, rng) {
     const col = new THREE.Color(1, 1, 1);
     col.setRGB(0.82 + rng() * 0.3, 0.82 + rng() * 0.3, 0.8 + rng() * 0.25);
-    this.items[kindIdx].push({ x, y, z, r: rng() * Math.PI * 2, s: scale, col });
+    this.items[kindIdx].push({ x, y, z, r: rng() * Math.PI * 2, s: scale, col, canopy: canopyRadius(kindIdx) });
   }
   get total() { return this.items.reduce((a, l) => a + l.length, 0); }
   build() {

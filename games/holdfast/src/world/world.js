@@ -2,17 +2,17 @@
 import * as THREE from 'three';
 import { Terrain, T, terrainMaterial, townPlane } from './terrain.js';
 import { STREETS, ROADS, FARMS, FIELDS, WOODS, TOWN_LOTS, FEATURES } from './layout.js';
-import { roadCentreline, buildRoadRibbon, buildTownStreets, buildTownMarkings } from './roads.js';
+import { roadCentreline, buildRoadRibbon, buildTownStreets, buildTownMarkings, adjustSurface } from './roads.js';
 import { GeoBuilder, rgb } from '../geom.js';
 import { buildingMaterial } from '../atlas.js';
 import { PLANS, townBlock } from '../building/prefabs.js';
 import { PropBuilder } from './props.js';
 import { DoorPool, setDoorPool } from '../building/doors.js';
 import { rotateStructure, validateReachability } from '../building/planner.js';
-import { CELL, STORY, HALF_T, shapeGrid as shapeGridOf } from '../building/defs.js';
+import { CELL, STORY, HALF_T, CELL_DOOR, wallGridE, shapeGrid as shapeGridOf } from '../building/defs.js';
 const HALF_T_STEP = 0.1;
-import { smoothstep, clamp, mulberry32, makeNoise2D } from '../util.js';
-import { Trees, TREE, buildCrops, buildClumps, GrassField } from './vegetation.js';
+import { smoothstep, clamp, mulberry32, makeNoise2D, catmullRom } from '../util.js';
+import { Trees, TREE, buildCrops, buildClumps, GrassField, canopyRadius } from './vegetation.js';
 import { riverFar } from './terrain.js';
 
 const noise = makeNoise2D(2024);
@@ -28,6 +28,7 @@ export class World {
     this.group.name = 'world';
     scene.add(this.group);
     this.occupied = []; // rects reserved by buildings/roads [x0,z0,x1,z1,kind]
+    this.farmHouses = new Map();
   }
 
   async generate(opts) {
@@ -40,10 +41,10 @@ export class World {
 
     P('Shaping the land', 0.05); await tick();
     // ---- town terrace: lawns level with the town plane ----
-    tr.forRect(T.town.x0 - 2, T.town.z0, T.floodwallX, T.town.z1, (i, j, x, z) => {
+    tr.forRect(T.town.x0 - 24, T.town.z0, T.floodwallX, T.town.z1, (i, j, x, z) => {
       const k = tr.idx(i, j);
       const inner = 1 - smoothstep(T.town.z1 - 8, T.town.z1 + 2, Math.abs(z));
-      const ix = smoothstep(T.town.x0 - 2, T.town.x0 + 6, x);
+      const ix = smoothstep(T.town.x0 - 22, T.town.x0 + 4, x);
       tr.h[k] = tr.h[k] + (townPlane(x) + 0.02 - tr.h[k]) * inner * ix;
     });
     // riverwalk behind the floodwall, then riprap down to the water
@@ -69,18 +70,52 @@ export class World {
 
     // ---- rural roads: profile & stamp ----
     P('Laying roads', 0.35); await tick();
-    for (const road of ROADS) {
-      const s = roadCentreline(tr, road);
-      road.samples = s;
+    // farm drives are short gravel lanes from the county road to just in
+    // front of the house's front door; the country church gets one too
+    const drives = [];
+    for (const f of FARMS) {
+      const S = this.farmHouses.get(f);
+      const end = S && f.drive && frontApproach(S, f.drive[0]);
+      if (end) drives.push({ name: f.name + ' drive', type: 'gravel', width: 3.4, pts: [...f.drive, end], endGround: true });
+    }
+    if (this.countryChurch) {
+      const C = this.countryChurch, b = C.bounds();
+      const hwy = ROADS.find((r) => r.name === 'Highway 34');
+      const end = frontApproach(C, [(b.wx0 + b.wx1) / 2, b.wz0 - 20]);
+      if (end && hwy) {
+        const start = nearestOnPoly(catmullRom(hwy.pts, 6), end[0], end[1]);
+        drives.push({ name: 'Bethel Church lane', type: 'gravel', width: 3.0, pts: [start, end], endGround: true });
+      }
+    }
+    this.roads = [...ROADS, ...drives];
+    // profile in priority order: each road is pinned to the ones before it
+    for (const road of this.roads) {
+      road.samples = roadCentreline(tr, road, this.roadSamples);
       this.roadSamples.push(road);
     }
-    // stamp in two passes so crossings agree (paved last wins)
-    for (const road of [...ROADS].sort((a, b) => (a.type === 'paved') - (b.type === 'paved'))) {
-      tr.stampRoad(road.samples, road.width / 2 + (road.type === 'paved' ? 1.1 : 0), road.type === 'paved' ? 6 : 4.5, 0);
+    // stamp lowest priority first, so the main roads' surfaces win at junctions
+    for (const road of [...this.roads].reverse()) {
+      tr.stampRoad(road.samples, road.width / 2 + (road.type === 'paved' ? 1.1 : 0), road.type === 'paved' ? 6 : 4.5, 0, 0.06, adjustSurface);
     }
-    // town streets: terrain just under the asphalt
+    // town streets: terrain just under the asphalt; sidewalks sit on a
+    // level bed so neither the lawn nor a hole shows at their edges
+    const walkBed = (x0, z0, x1, z1) => tr.forRect(x0 - 1, z0 - 1, x1 + 1, z1 + 1, (i, j, x) => {
+      const k = tr.idx(i, j);
+      tr.h[k] = clamp(tr.h[k], townPlane(x) - 0.2, townPlane(x) + 0.05);
+    });
+    for (const s of STREETS.ns) { walkBed(s.x0 - s.walk, s.z0, s.x0, s.z1); walkBed(s.x1, s.z0, s.x1 + s.walk, s.z1); }
+    for (const s of STREETS.ew) { walkBed(s.x0, s.z0 - s.walk, s.x1, s.z0); walkBed(s.x0, s.z1, s.x1, s.z1 + s.walk); }
     for (const s of [...STREETS.ns, ...STREETS.ew, ...(STREETS.lots || [])]) {
       tr.forRect(s.x0 - 0.5, s.z0 - 0.5, s.x1 + 0.5, s.z1 + 0.5, (i, j, x) => { tr.h[tr.idx(i, j)] = townPlane(x) - 0.08; });
+    }
+    // ease any cliffs the stamps left, holding road beds, streets, the
+    // town terrace and building pads where they are
+    {
+      const fixed = tr.roadMask.slice();
+      const hold = (x0, z0, x1, z1) => tr.forRect(x0, z0, x1, z1, (i, j) => { fixed[tr.idx(i, j)] = 1; });
+      hold(T.town.x0 - 2, T.town.z0 - 1.5, T.floodwallX + 40, T.town.z1 + 1.5);
+      for (const S of this.structures) { const b = S.bounds(); hold(b.wx0 - 2.5, b.wz0 - 2.5, b.wx1 + 2.5, b.wz1 + 2.5); }
+      tr.relax(0.62, 80, fixed);
     }
 
     // ---- build meshes ----
@@ -91,7 +126,7 @@ export class World {
 
     P('Paving streets', 0.55); await tick();
     const rb = new GeoBuilder();
-    for (const road of ROADS) buildRoadRibbon(rb, road.samples, road);
+    for (const road of this.roads) buildRoadRibbon(rb, road.samples, road);
     const town = new GeoBuilder();
     this.walk = [];
     buildTownStreets(town, STREETS, { x0: 30, z0: -136, x1: 192, z1: 136 }, { walk: this.walk });
@@ -140,6 +175,26 @@ export class World {
     for (const o of this.occupied) if (x > o[0] - m && x < o[2] + m && z > o[1] - m && z < o[3] + m) return true;
     return false;
   }
+  // A random spot in a rect with nothing solid within r (for parked vehicles).
+  clearSpot(x0, z0, x1, z1, r, rng) {
+    for (let tries = 0; tries < 40; tries++) {
+      const x = x0 + rng() * (x1 - x0), z = z0 + rng() * (z1 - z0);
+      if (this.roadDist && this.roadDist(x, z) < r) continue;
+      if (this.nearBuilding(x, z, r)) continue;
+      const hit = this.physics.query(x - r, z - r, x + r, z + r, []).some((b) => b.kind !== 'walk' && b.kind !== 'floor');
+      if (!hit) return [x, z];
+    }
+    return null;
+  }
+  // within r metres of a building's walls?
+  nearBuilding(x, z, r) {
+    for (const o of this.occupied) {
+      if (o[4] !== 'building') continue;
+      const dx = Math.max(o[0] + 1 - x, 0, x - (o[2] - 1)), dz = Math.max(o[1] + 1 - z, 0, z - (o[3] - 1));
+      if (dx * dx + dz * dz < r * r) return true;
+    }
+    return false;
+  }
   inTownGrid(x, z) {
     return x > T.town.x0 - 2 && x < T.floodwallX + 1 && Math.abs(z) < T.town.z1 + 1;
   }
@@ -175,7 +230,10 @@ export class World {
       if (!this.clearFor(x, z)) return false;
       if (this.inField(x, z, 1)) return false;
       const k = kinds[Math.floor(rng() * kinds.length)];
-      trees.add(x, H(x, z), z, k, sMin + rng() * (sMax - sMin), rng);
+      const sc = sMin + rng() * (sMax - sMin);
+      // keep the foliage out of walls and roofs
+      if (this.nearBuilding(x, z, canopyRadius(k) * sc * 0.85)) return false;
+      trees.add(x, H(x, z), z, k, sc, rng);
       this.physics.add({ min: [x - 0.35, H(x, z), z - 0.35], max: [x + 0.35, H(x, z) + 4, z + 0.35], kind: 'tree', noGround: true }, 'trees');
       return true;
     };
@@ -335,6 +393,8 @@ export class World {
       this.terrain.clampBelow(x0, z0, x0 + CELL, z0 + CELL, y - 0.12);
     }
     this.occupied.push([b.wx0 - 1, b.wz0 - 1, b.wx1 + 1, b.wz1 + 1, 'building']);
+    // road banks must not cut into the pad around a building
+    this.terrain.forRect(b.wx0 - 1.5, b.wz0 - 1.5, b.wx1 + 1.5, b.wz1 + 1.5, (i, j) => { this.terrain.padMask[this.terrain.idx(i, j)] = 1; });
     this.structures.push(S);
     return S;
   }
@@ -390,6 +450,7 @@ export class World {
       const S = fn({ name: farm.name + ' house', ext: h.ext, roof: h.roof, seed: farm.name.length });
       const g = avgHeight(this.terrain, h.at[0], h.at[1], h.at[0] + 10, h.at[1] + 10);
       this.placeLot(S, h.rot, h.at[0], h.at[1], g + 0.6, 6, 0.55);
+      this.farmHouses.set(farm, S);
       if (farm.barn) {
         const B = PLANS[farm.barn.plan]({ name: farm.name + ' barn', style: farm.barn.style });
         const gb = avgHeight(this.terrain, farm.barn.at[0], farm.barn.at[1], farm.barn.at[0] + 12, farm.barn.at[1] + 16);
@@ -481,6 +542,22 @@ export class World {
         P.lamp(st.x1 + 0.7, z, townPlane(st.x1 + 0.7) + 0.15, 'single');
       }
     }
+    // barricades where a town street dead-ends (no road carries on)
+    const roadEnds = this.roads.flatMap((r) => [r.samples[0], r.samples[r.samples.length - 1]]);
+    const carriesOn = (x, z) => roadEnds.some((p) => Math.hypot(p.x - x, p.z - z) < 6);
+    for (const st of STREETS.ns) {
+      const cx = (st.x0 + st.x1) / 2;
+      for (const z of [st.z0, st.z1]) {
+        if (carriesOn(cx, z)) continue;
+        const zz = z + (z === st.z0 ? 0.8 : -0.8);
+        P.barricade(cx, zz, townPlane(cx), true, st.x1 - st.x0 - 0.6);
+      }
+    }
+    for (const st of STREETS.ew) {
+      const cz = (st.z0 + st.z1) / 2;
+      if (carriesOn(st.x0, cz)) continue;
+      P.barricade(st.x0 + 0.8, cz, townPlane(st.x0 + 0.8), false, st.z1 - st.z0 - 0.6);
+    }
     // benches & hydrants downtown
     for (let x = 96; x < 168; x += 18) {
       if (STREETS.ns.some((n) => x > n.x0 - 6 && x < n.x1 + 6)) continue;
@@ -490,10 +567,14 @@ export class World {
     }
     // parked cars: diagonal on Main St, a few elsewhere, wrecks on the highway
     const carCols = ['#7a2a24', '#2f4a6a', '#d8d4c8', '#3a5a3a', '#8a7a5a', '#4a4a4a', '#a8a090', '#2a2a2a'];
+    const lastStall = { n: -99, s: -99 };
     for (let x = 96; x < 168; x += 3) {
       if (STREETS.ns.some((n) => x > n.x0 - 6 && x < n.x1 + 6)) continue;
       if (rng() < 0.62) continue;
       const north = rng() < 0.5;
+      // angled cars in neighbouring stalls would touch: leave a gap
+      if (x - lastStall[north ? 'n' : 's'] < 6) continue;
+      lastStall[north ? 'n' : 's'] = x;
       const zz = north ? -4.6 : 4.6;
       P.car(x + 1.5, zz, (north ? Math.PI : 0) + (north ? -0.9 : 0.9), carCols[Math.floor(rng() * carCols.length)], rng() < 0.3 ? 'pickup' : 'sedan', townPlane(x + 1.5));
     }
@@ -509,8 +590,15 @@ export class World {
       P.fence([[x0, z0], [x1, z0], [x1, z1], [x0, z1], [x0, z0]], 'board', [[(x0 + x1) / 2, z1, 5], [x1, (z0 + z1) / 2, 5], [farm.house.at[0] + 4, z1, 6]]);
       for (const [bx, bz, r] of farm.bins) P.grainBin(bx, bz, r);
       if (farm.silo) P.silo(farm.silo[0], farm.silo[1]);
-      if (farm.drive) { const [mx, mz] = farm.drive[0]; P.mailbox(mx + 2, mz + 2.5, farm.name); }
-      P.car(x0 + 14 + rng() * 10, z1 - 8, rng() * 3, carCols[Math.floor(rng() * carCols.length)], 'pickup');
+      if (farm.drive) {
+        // mailbox beside the drive, just off the road it leaves from
+        const dr = this.roads.find((r) => r.name === farm.name + ' drive');
+        const [ax, az] = dr ? dr.pts[0] : farm.drive[0], [bx, bz] = dr ? dr.pts[1] : [ax + 1, az];
+        const L = Math.hypot(bx - ax, bz - az) || 1, dx = (bx - ax) / L, dz = (bz - az) / L;
+        P.mailbox(ax + dx * 5 - dz * 2.6, az + dz * 5 + dx * 2.6, farm.name);
+      }
+      const spot = this.clearSpot(x0 + 8, z0 + 8, x1 - 8, z1 - 8, 3.4, rng);
+      if (spot) P.car(spot[0], spot[1], rng() * 3, carCols[Math.floor(rng() * carCols.length)], 'pickup');
     }
     // field fences (barbed wire) around pastures & hay
     for (const f of FIELDS) {
@@ -569,6 +657,44 @@ export class World {
     this.lampPositions = P.lampPositions;
     this.carLoot = P.loot;
   }
+}
+
+// A point 3.2 m in front of the exterior ground-floor door of S nearest to
+// `from` (where a drive or path should end). Works from the wall layout, so
+// it can run before the structure is meshed.
+function frontApproach(S, from) {
+  let best = null, bd = Infinity;
+  const hasFloor = (x, z) => S.floors.has(`${Math.floor((x - S.ox) / CELL)},${Math.floor((z - S.oz) / CELL)},0`);
+  for (const [key, w] of S.walls) {
+    const [x, z, l, a] = key.split(',').map(Number);
+    if (l !== 0) continue;
+    const g = wallGridE(w, a);
+    const cols = [];
+    for (let k = 0; k < g[0].length; k++) if (g[0][k] === CELL_DOOR) cols.push(k);
+    if (!cols.length) continue;
+    const e = ((cols[0] + cols[cols.length - 1] + 1) / 2) / g[0].length * CELL;
+    const cx = S.ox + (a === 0 ? x * CELL + e : x * CELL), cz = S.oz + (a === 0 ? z * CELL : z * CELL + e);
+    const n = a === 0 ? [0, 1] : [1, 0];
+    for (const sg of [1, -1]) {
+      if (hasFloor(cx + n[0] * sg * 1.2, cz + n[1] * sg * 1.2)) continue;
+      if (!hasFloor(cx - n[0] * sg * 1.2, cz - n[1] * sg * 1.2)) continue; // must lead inside
+      const p = [cx + n[0] * sg * 3.2, cz + n[1] * sg * 3.2];
+      const dd = Math.hypot(p[0] - from[0], p[1] - from[1]);
+      if (dd < bd) { bd = dd; best = p; }
+    }
+  }
+  return best;
+}
+function nearestOnPoly(poly, x, z) {
+  let best = null, bd = Infinity;
+  for (let i = 0; i < poly.length - 1; i++) {
+    const [ax, az] = poly[i], [bx, bz] = poly[i + 1];
+    const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz || 1;
+    const t = clamp(((x - ax) * dx + (z - az) * dz) / l2, 0, 1);
+    const px = ax + dx * t, pz = az + dz * t, d = Math.hypot(x - px, z - pz);
+    if (d < bd) { bd = d; best = [px, pz]; }
+  }
+  return best;
 }
 
 function avgHeight(tr, x0, z0, x1, z1) {

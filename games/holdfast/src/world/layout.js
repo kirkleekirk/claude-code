@@ -26,8 +26,8 @@ export const STREETS = {
 // Roads outside town: centreline polylines (x, z); type: 'paved' | 'gravel'
 export const ROADS = [
   {
-    name: 'Highway 34', type: 'paved', width: 7.4,
-    pts: [[-330, 26], [-270, 30], [-215, 20], [-165, 30], [-120, 38], [-70, 26], [-20, 12], [20, 4], [52, 0], [70, 0]],
+    name: 'Highway 34', type: 'paved', width: 7.4, townEnd: true,
+    pts: [[-330, 26], [-270, 30], [-215, 20], [-165, 30], [-120, 38], [-70, 26], [-20, 12], [20, 4], [48, 0], [66, 0]],
   },
   {
     name: 'County Road 210', type: 'gravel', width: 5.2,
@@ -35,28 +35,29 @@ export const ROADS = [
   },
   {
     name: 'Price Lane', type: 'gravel', width: 4.6,
-    pts: [[-32, 12], [-36, -30], [-48, -70], [-58, -104], [-60, -128]],
+    pts: [[-32, 12], [-36, -30], [-48, -70], [-57, -100], [-58, -112]],
   },
   {
     name: 'Dekker Road', type: 'gravel', width: 4.6,
     pts: [[-150, 128], [-190, 130], [-226, 126], [-270, 132], [-330, 128]],
   },
   {
-    name: 'Bluff Road', type: 'paved', width: 6.6,
+    name: 'Bluff Road', type: 'paved', width: 6.6, townStart: true,
     pts: [[128, -134], [126, -160], [112, -192], [80, -214], [30, -226], [-30, -222], [-90, -206], [-149, -200]],
   },
   {
-    name: 'River Road', type: 'gravel', width: 5,
+    name: 'River Road', type: 'gravel', width: 5, townStart: true,
     pts: [[84, 134], [82, 160], [70, 190], [40, 222], [0, 240], [-60, 246], [-149, 240]],
   },
 ];
 
 // Farmsteads. `at` is the house lot origin (cell aligned); buildings are
-// placed relative to it. rot = quarter turns of the front (0 = front faces +Z).
+// placed relative to it. `drive` starts on a road (plus optional waypoints)
+// and is extended to the house's front door. rot = quarter turns of the front (0 = front faces +Z).
 export const FARMS = [
   {
-    name: 'Hollis Farm', at: [-196, -108], drive: [[-150, -112], [-176, -112], [-186, -104]],
-    house: { plan: 'foursquare', rot: 1, ext: 'white_siding', roof: 'black_shingle', at: [-196, -112] },
+    name: 'Hollis Farm', at: [-196, -108], drive: [[-150, -110], [-166, -109]],
+    house: { plan: 'foursquare', rot: 3, ext: 'white_siding', roof: 'black_shingle', at: [-196, -112] },
     barn: { plan: 'barn', rot: 0, at: [-232, -150], style: 'barn_red' },
     shed: { plan: 'machine_shed', rot: 0, at: [-200, -150] },
     bins: [[-214, -126, 4.2], [-222, -126, 4.2], [-218, -118, 3.4]],
@@ -65,23 +66,23 @@ export const FARMS = [
   },
   {
     name: 'Dekker Farm', at: [-238, 92],
-    house: { plan: 'farmhouse_l', rot: 2, ext: 'yellow_siding', roof: 'green_shingle', at: [-238, 98] },
+    house: { plan: 'farmhouse_l', rot: 0, ext: 'yellow_siding', roof: 'green_shingle', at: [-238, 98] },
     barn: { plan: 'barn', rot: 2, at: [-272, 80], style: 'barn_white' },
     shed: { plan: 'machine_shed', rot: 1, at: [-212, 80] },
     bins: [[-250, 72, 4], [-258, 72, 4]],
     silo: null,
     yard: [-286, 64, -200, 124],
-    drive: [[-238, 127], [-238, 118]],
+    drive: [[-232, 128]],
   },
   {
     name: 'Price Farm', at: [-80, -134],
-    house: { plan: 'cottage', rot: 1, ext: 'gray_siding', roof: 'brown_shingle', at: [-78, -136] },
+    house: { plan: 'cottage', rot: 3, ext: 'gray_siding', roof: 'brown_shingle', at: [-78, -136] },
     barn: { plan: 'barn_small', rot: 1, at: [-102, -150], style: 'barn_red' },
     shed: null,
     bins: [[-90, -114, 3.6]],
     silo: [-108, -124],
     yard: [-114, -160, -62, -104],
-    drive: [[-60, -128], [-66, -128]],
+    drive: [[-58, -112], [-54, -127]],
   },
 ];
 
@@ -91,7 +92,7 @@ export const FIELDS = [
   { crop: 'corn', x0: -136, z0: -186, x1: -72, z1: -164, rows: 'x' },
   { crop: 'corn', x0: -300, z0: -84, x1: -168, z1: 8, rows: 'z' },
   { crop: 'beans', x0: -136, z0: -96, x1: -64, z1: -44, rows: 'x' },
-  { crop: 'corn', x0: -136, z0: 56, x1: -40, z1: 116, rows: 'z' },
+  { crop: 'corn', x0: -136, z0: 86, x1: -40, z1: 116, rows: 'z' },
   { crop: 'hay', x0: -300, z0: 144, x1: -170, z1: 236, rows: 'x' },
   { crop: 'corn', x0: -132, z0: 140, x1: -20, z1: 222, rows: 'x' },
   { crop: 'pasture', x0: -136, z0: -40, x1: -64, z1: 6 },
@@ -160,5 +161,5 @@ export const FEATURES = {
   waterTower: [106, 118],
   floodwall: { x: 190, z0: -134, z1: 134, gate: [-6, 6] },
   spawn: [14, 2],
-  churchCountry: { at: [-138, 46], rot: 2 },
+  churchCountry: { at: [-124, 58], rot: 2 },
 };

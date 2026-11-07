@@ -26,6 +26,13 @@ const params = new URLSearchParams(location.search);
     game.camera.lookAt(v[3], v[4], v[5]);
   }
   document.getElementById('loading').classList.add('done');
+  if (params.get('validate')) {
+    // generation checks (dev): logs a report and keeps it on window.__validation
+    const { validateWorld } = await import('./world/validate.js');
+    const rep = validateWorld(game.world);
+    window.__validation = rep;
+    console.log('world validation', JSON.stringify(rep.byCat), JSON.stringify(rep.stats));
+  }
   if (params.get('still')) {
     // render a single frame on demand (screenshots)
     window.__shot = (p, t, opts = {}) => {

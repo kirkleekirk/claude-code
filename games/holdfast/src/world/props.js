@@ -17,6 +17,7 @@ export class PropBuilder {
     this.signQueue = [];
     this.lampPositions = [];
     this.loot = [];
+    this.carCount = 0;
   }
   b(x, z) {
     const k = Math.floor(x / TILE) + ',' + Math.floor(z / TILE);
@@ -128,6 +129,7 @@ export class PropBuilder {
       const x = b.x + nx * off * side, z = b.z + nz * off * side;
       if (this.world.inOccupied && this.world.inOccupied(x, z, 1)) continue;
       if (this.world.onStreet && this.world.onStreet(x, z, 0)) continue;
+      if (this.world.roadDist && this.world.roadDist(x, z) < 2.5) continue; // another road crosses here
       poles.push({ x, z, y: H(x, z), dx: b.dx || 1, dz: b.dz || 0 });
     }
     const top = 8.2;
@@ -293,11 +295,16 @@ export class PropBuilder {
       g.geometry('plain:matte', geo, m, rgb('#1e1e1e'));
       geo.dispose();
     }
-    // collision (axis-aligned approximation)
-    const pts = [P(-W, 0, -L), P(W, 0, -L), P(W, 0, L), P(-W, 0, L)];
-    const xs = pts.map((p) => p[0]), zs = pts.map((p) => p[2]);
-    const shrink = Math.abs(Math.sin(2 * yaw)) * 0.5;
-    this.world.physics.add({ min: [Math.min(...xs) + shrink, yy, Math.min(...zs) + shrink], max: [Math.max(...xs) - shrink, yy + (truck ? 1.65 : 1.5), Math.max(...zs) - shrink], kind: 'car' }, 'props');
+    // collision: a chain of boxes along the body so angled cars stay tight
+    const carId = ++this.carCount;
+    const n = Math.max(1, Math.ceil((2 * L) / 0.9));
+    for (let i = 0; i < n; i++) {
+      const z0 = -L + (2 * L * i) / n, z1 = -L + (2 * L * (i + 1)) / n;
+      const pts = [P(-W, 0, z0), P(W, 0, z0), P(W, 0, z1), P(-W, 0, z1)];
+      const xs = pts.map((p) => p[0]), zs = pts.map((p) => p[2]);
+      const shrink = Math.abs(Math.sin(2 * yaw)) * 0.12;
+      this.world.physics.add({ min: [Math.min(...xs) + shrink, yy, Math.min(...zs) + shrink], max: [Math.max(...xs) - shrink, yy + (truck ? 1.65 : 1.5), Math.max(...zs) - shrink], kind: 'car', carId }, 'props');
+    }
     this.loot.push({ type: 'loot', table: truck ? 'truck' : 'car', pos: P(0, 0.9, -L), label: 'Search trunk', searched: false });
   }
 
@@ -333,6 +340,32 @@ export class PropBuilder {
   hydrant(x, z, y) {
     this.cyl('plain:paint', x, y, z, 0.13, 0.11, 0.7, '#c4332a', 10);
     this.sphere('plain:paint', x, y + 0.7, z, 0.12, '#c4332a', 0.8);
+  }
+
+  // Road-closed barricade across a dead-end street: white/orange striped
+  // boards on posts. (x, z) centre, alongX: boards run along X, w width.
+  barricade(x, z, y, alongX, w) {
+    const n = Math.max(1, Math.round(w / 2.6));
+    const seg = w / n;
+    for (let i = 0; i < n; i++) {
+      const c0 = -w / 2 + i * seg + 0.25, c1 = c0 + seg - 0.5;
+      const P = (u, v) => (alongX ? [x + u, z + v] : [x + v, z + u]);
+      for (const u of [c0 + 0.1, c1 - 0.1]) {
+        const [px, pz] = P(u, 0);
+        this.box('plain:paint', px - 0.05, y, pz - 0.05, px + 0.05, y + 1.25, pz + 0.05, '#e8e4da');
+      }
+      // three boards of alternating stripes
+      for (const hy of [0.45, 0.75, 1.05]) {
+        const stripes = Math.max(2, Math.round((c1 - c0) / 0.3));
+        for (let k = 0; k < stripes; k++) {
+          const u0 = c0 + ((c1 - c0) * k) / stripes, u1 = c0 + ((c1 - c0) * (k + 1)) / stripes;
+          const [ax, az] = P(u0, -0.07), [bx, bz] = P(u1, -0.03);
+          this.box('plain:paint', Math.min(ax, bx), y + hy, Math.min(az, bz), Math.max(ax, bx), y + hy + 0.18, Math.max(az, bz), k % 2 ? '#e8e4da' : '#d8642a');
+        }
+      }
+      const [qx0, qz0] = P(c0, -0.1), [qx1, qz1] = P(c1, 0.1);
+      this.solid(Math.min(qx0, qx1), y, Math.min(qz0, qz1), Math.max(qx0, qx1), y + 1.25, Math.max(qz0, qz1), 'barricade');
+    }
   }
 
   // ---------------- signs (textured) ----------------

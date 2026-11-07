@@ -229,8 +229,10 @@ export class Zombies {
       if (this.rng() > this.density(x, z) / 2.2) continue;
       if (g.claims && g.claims.at(x, z, 8)) continue;
       // not inside solid geometry
+      // outdoors on the ground (never on a roof or inside a building)
+      if (g.world.nearBuilding(x, z, 1)) continue;
       const boxes = g.physics.query(x - 0.4, z - 0.4, x + 0.4, z + 0.4, []);
-      const gy = g.physics.groundAt(x, z, 1e9);
+      const gy = g.physics.groundAt(x, z, g.world.terrain.height(x, z) + 0.5);
       if (boxes.some((b) => b.min[1] < gy + 1.7 && b.max[1] > gy + 0.3)) continue;
       // don't pop in right in front of the camera
       const cam = g.camera.position, f = new THREE.Vector3(); g.camera.getWorldDirection(f);
