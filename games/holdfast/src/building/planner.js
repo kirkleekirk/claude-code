@@ -7,7 +7,7 @@
 //   a-z  a room (cells with the same letter form one room)
 //   A-Z  the same room as the lowercase letter but without floor (stairwell void)
 import { Structure } from './structure.js';
-import { DIRS, CELL, STORY, SHAPE_ROWS, shapeGrid, CELL_SOLID } from './defs.js';
+import { DIRS, CELL, STORY, SHAPE_ROWS, shapeGrid, CELL_SOLID, insideStyle } from './defs.js';
 import { mulberry32, hashStr } from '../util.js';
 import { furnishRoom } from './furnish.js';
 
@@ -85,7 +85,7 @@ export function buildFromPlan(spec) {
   const stairTop = new Set(); // edges at the top of stairs (keep open)
   const stairCells = new Set();
   for (const st of spec.stairs || []) {
-    S.setStair(st.x, st.z, st.level, st.dir, st.color);
+    S.setStair(st.x, st.z, st.level, st.dir, st.color, st.side);
     const D = DIRS[st.dir];
     stairCells.add(`${st.x},${st.z},${st.level}`);
     stairCells.add(`${st.x + D[0]},${st.z + D[1]},${st.level}`);
@@ -114,7 +114,7 @@ export function buildFromPlan(spec) {
           // same room: railing between floor and void (except at the stair top)
           if (v1 !== v2 && !stairTop.has(ek)) {
             const rd = roomDef(r1);
-            S.setWall(x, z, l, a, 'railing', rd.wall || spec.int || 'interior', false);
+            S.setWall(x, z, l, a, 'railing', insideStyle(rd.wall || spec.int || 'interior'), false);
           }
           continue;
         }

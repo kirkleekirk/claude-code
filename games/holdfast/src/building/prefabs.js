@@ -131,7 +131,7 @@ export const PLANS = {
       rooms: { a: { kind: 'barn', floor: 'concrete', wall: st }, f: { kind: 'loft', floor: 'barn', wall: st } },
       exits: [{ x: 2, z: 7, side: 's', shape: 'barn_door' }, { x: 3, z: 7, side: 's', shape: 'barn_door' },
         { x: 2, z: 0, side: 'n', shape: 'barn_door' }, { x: 3, z: 0, side: 'n', shape: 'barn_door' }],
-      stairs: [{ x: 0, z: 6, level: 0, dir: 3, color: '#b8a080' }],
+      stairs: [{ x: 0, z: 6, level: 0, dir: 3, color: '#b8a080', side: '#a08a6c' }],
       windowAt: (x, z, l, a) => {
         if (l === 0 && a === 1) return z % 2 ? 'high_window' : 'solid';
         if (l === 1 && a === 0 && z === 8 && (x === 2 || x === 3)) return x === 2 ? 'loft_door' : 'solid';

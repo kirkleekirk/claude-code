@@ -82,6 +82,7 @@ export class PropBuilder {
         const x = ax + (bx - ax) * t, z = az + (bz - az) * t;
         const inGap = gaps.some(([gx, gz, r]) => Math.hypot(x - gx, z - gz) < r);
         if (this.world.roadDist && this.world.roadDist(x, z) < 1.5) { prev = null; continue; }
+        if (this.world.fenceBlocked && this.world.fenceBlocked(x, z)) { prev = null; continue; }
         if (inGap) { prev = null; continue; }
         const y = H(x, z);
         const ph = kind === 'wire' ? 1.25 : kind === 'board' ? 1.3 : 1.0;

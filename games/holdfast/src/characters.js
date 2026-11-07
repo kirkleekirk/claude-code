@@ -345,7 +345,9 @@ function makeMaterial(palette, model, z = null) {
   m.userData.palette = cols;
   const face = model.face, H = model.height;
   m.onBeforeCompile = (sh) => {
-    sh.uniforms.uPal = { value: cols };
+    // one vec3 uniform per colour: some phone drivers read vec3 uniform
+    // arrays wrong (only the first component of each colour survives)
+    cols.forEach((c, i) => { sh.uniforms['uC' + i] = { value: c }; });
     sh.uniforms.uGore = { value: m.userData.gore || 0 };
     sh.uniforms.uH = { value: H };
     sh.uniforms.uEyeL = { value: face.eyeL };
@@ -360,7 +362,7 @@ function makeMaterial(palette, model, z = null) {
     sh.uniforms.uElbowR = { value: J.foreArmR }; sh.uniforms.uWristR = { value: J.handR };
     m.userData.shader = sh;
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float region;\nflat varying float vRegion;\nvarying vec3 vLocal;\nvarying vec3 vObjN;\nuniform float uBuild;\nuniform float uH;')
+      .replace('#include <common>', '#include <common>\nattribute float region;\nvarying float vRegion;\nvarying vec3 vLocal;\nvarying vec3 vObjN;\nuniform float uBuild;\nuniform float uH;')
       .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nvObjN = objectNormal;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         vRegion = region;
@@ -373,19 +375,26 @@ function makeMaterial(palette, model, z = null) {
           transformed.z *= mix(1.0, uBuild + max(0.0, uBuild - 1.0) * step(0.0, position.z) * 0.8, k);
         }` : ''}`);
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform vec3 uPal[6];\nuniform float uGore;\nuniform float uH;\nuniform float uWaist;\nuniform vec3 uEyeL;\nuniform vec3 uEyeR;\nuniform vec3 uMouth;\nuniform vec3 uElbowL;\nuniform vec3 uWristL;\nuniform vec3 uElbowR;\nuniform vec3 uWristR;\nuniform vec4 uZ;\nflat varying float vRegion;\nvarying vec3 vLocal;' + NOISE_GLSL)
+      .replace('#include <common>', '#include <common>\nuniform vec3 uC0;\nuniform vec3 uC1;\nuniform vec3 uC2;\nuniform vec3 uC3;\nuniform vec3 uC4;\nuniform vec3 uC5;\nuniform float uGore;\nuniform float uH;\nuniform float uWaist;\nuniform vec3 uEyeL;\nuniform vec3 uEyeR;\nuniform vec3 uMouth;\nuniform vec3 uElbowL;\nuniform vec3 uWristL;\nuniform vec3 uElbowR;\nuniform vec3 uWristR;\nuniform vec4 uZ;\nvarying float vRegion;\nvarying vec3 vLocal;' + NOISE_GLSL)
       .replace('#include <color_fragment>', `
-        int ri = int(vRegion + 0.5);
+        // regions are whole numbers, the same on all three corners of a
+        // triangle (plain float compares: no int conversion, no flat)
+        float rg = floor(vRegion + 0.5);
         // shirt hem: a straight line round the hips
-        if (ri == 6) ri = vLocal.y < uWaist ? 2 : 1;
+        if (rg > 5.5 && rg < 6.5) rg = vLocal.y < uWaist ? 2.0 : 1.0;
         // sleeve: ends a third of the way down the forearm
-        if (ri == 7) {
-          vec3 e = vLocal.x > 0.0 ? uElbowL : uElbowR, w = vLocal.x > 0.0 ? uWristL : uWristR;
-          vec3 ew = w - e;
-          ri = dot(vLocal - e, ew) / dot(ew, ew) > 0.3 ? 0 : 1;
+        if (rg > 6.5) {
+          vec3 e = vLocal.x > 0.0 ? uElbowL : uElbowR;
+          vec3 ew = (vLocal.x > 0.0 ? uWristL : uWristR) - e;
+          rg = dot(vLocal - e, ew) / dot(ew, ew) > 0.3 ? 0.0 : 1.0;
         }
-        vec3 pc = uPal[0];
-        if (ri == 1) pc = uPal[1]; else if (ri == 2) pc = uPal[2]; else if (ri == 3) pc = uPal[3]; else if (ri == 4) pc = uPal[4]; else if (ri == 5) pc = uPal[5];
+        int ri = rg < 0.5 ? 0 : rg < 1.5 ? 1 : rg < 2.5 ? 2 : rg < 3.5 ? 3 : rg < 4.5 ? 4 : 5;
+        vec3 pc = uC0;
+        if (rg > 0.5 && rg < 1.5) pc = uC1;
+        else if (rg > 1.5 && rg < 2.5) pc = uC2;
+        else if (rg > 2.5 && rg < 3.5) pc = uC3;
+        else if (rg > 3.5 && rg < 4.5) pc = uC4;
+        else if (rg > 4.5) pc = uC5;
         // subtle cloth/skin variation
         float v = 0.92 + 0.08 * ch(floor(vLocal * 40.0));
         vec3 col = pc * v;
@@ -395,7 +404,7 @@ function makeMaterial(palette, model, z = null) {
         float de = mix(1.0, min(distance(vLocal.xy, uEyeL.xy), distance(vLocal.xy, uEyeR.xy)) / uH, frontOk);
         ${z ? `
         vec3 P = vLocal / uH + uZ.x * 0.125;
-        vec3 skin = uPal[0] * (0.7 + 0.3 * zf(P * 15.0));
+        vec3 skin = uC0 * (0.7 + 0.3 * zf(P * 15.0));
         if (ri == 0) {
           col = skin;
           // veins and bruising
@@ -437,7 +446,7 @@ function makeMaterial(palette, model, z = null) {
       `)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance += vec3(0.8, 0.68, 0.3) * eyeGlow * 0.32;');
   };
-  m.customProgramCacheKey = () => (z ? 'holdfast-zombie-v3' : 'holdfast-char-v3');
+  m.customProgramCacheKey = () => (z ? 'holdfast-zombie-v4' : 'holdfast-char-v4');
   return m;
 }
 

@@ -5,7 +5,7 @@
 // Open the game with ?validate=1 to log the report.
 import { T, townPlane } from './terrain.js';
 import { STREETS, FIELDS, FARMS, FEATURES } from './layout.js';
-import { CELL } from '../building/defs.js';
+import { CELL, getStyle } from '../building/defs.js';
 import { ribbonY, nearestOn } from './roads.js';
 
 const PLAYER_R = 0.3, STEP = 0.45;
@@ -259,6 +259,28 @@ export function validateWorld(world) {
     if (bottom > g + 0.02) add('steps-floating', `${st.name}: entry steps ${(bottom - g).toFixed(2)} m above the ground`, [x, g, z]);
     const top = st.oy + p.y - n * ((p.h || 0.5) / (n + 1));
     if (g > top + 0.1) add('steps-buried', `${st.name}: entry steps buried ${(g - top).toFixed(2)} m`, [x, g, z]);
+  }
+  // fences must not cross building fronts or stand in doorways
+  for (const b of fences) {
+    const cx = (b.min[0] + b.max[0]) / 2, cz = (b.min[2] + b.max[2]) / 2;
+    if (world.fenceBlocked && world.fenceBlocked(cx, cz)) add('fence-blocks-door', 'fence in front of a doorway or against a building', [cx, b.min[1], cz]);
+  }
+  // ceiling lights need a ceiling
+  for (const st of S) for (const p of st.props) {
+    if (p.type !== 'ceiling_light') continue;
+    const cx = Math.floor(p.x / CELL), cz = Math.floor(p.z / CELL), l = Math.round(p.y / 3);
+    if (!st.floors.has(`${cx},${cz},${l + 1}`)) add('light-floating', `${st.name}: ceiling light with no ceiling above`, [st.ox + p.x, st.oy + p.y + 2.7, st.oz + p.z]);
+  }
+  // walls inside a building show their inside finish on both faces
+  for (const st of S) for (const [key, w] of st.walls) {
+    if (w.shape !== 'railing') continue;
+    // only railings with building on both sides (loft or stairwell edges)
+    const [x, z, l, a] = key.split(',').map(Number);
+    if (l < 1) continue;
+    const c1 = a === 0 ? [x, z - 1] : [x - 1, z];
+    if (!st.floors.has(`${c1[0]},${c1[1]},0`) || !st.floors.has(`${x},${z},0`)) continue;
+    const sty = getStyle(w.style);
+    if (sty.a.mat !== sty.b.mat || sty.a.color !== sty.b.color) add('railing-finish', `${st.name}: railing at ${key} shows an outside finish`, [st.ox, st.oy, st.oz]);
   }
   // fences must leave roads and drives open
   for (const b of fences) {

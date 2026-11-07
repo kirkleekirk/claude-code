@@ -167,6 +167,15 @@ export function shapeGrid(id) {
 }
 
 export function registerShape(id, def) { shapes[id] = def; }
+// A finish with the inside face on both sides (railings and partitions
+// standing inside a building, where the outside finish would look wrong).
+export function insideStyle(id) {
+  const st = styles[id];
+  if (!st || (st.a.mat === st.b.mat && st.a.color === st.b.color)) return id;
+  const nid = id + '~in';
+  if (!styles[nid]) styles[nid] = { name: st.name + ' (inside)', a: { ...st.b }, b: { ...st.b }, trim: st.trim };
+  return nid;
+}
 export function registerStyle(id, def) { styles[id] = def; }
 
 // Edge/vertex/cell keys

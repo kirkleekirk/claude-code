@@ -671,6 +671,8 @@ export function furnishRoom(S, room, rd, rng, stairCells) {
     let best = null, bd = Infinity;
     for (const c of room.cells) {
       if (stairCells && stairCells.has(`${c[0]},${c[1]},${l}`)) continue;
+      // no ceiling over this cell (open to the roof, or a stairwell): it would float
+      if (!S.floors.has(`${c[0]},${c[1]},${l + 1}`)) continue;
       const d = Math.hypot(c[0] - cxm, c[1] - czm);
       if (d < bd) { bd = d; best = c; }
     }

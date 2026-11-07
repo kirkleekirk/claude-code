@@ -505,8 +505,39 @@ export class World {
     }
   }
 
+  // Ground fences and other runs must stay off: building walls (+0.8 m) and
+  // a 4 m apron in front of every ground-floor opening.
+  buildFenceClear() {
+    const rects = [];
+    for (const S of this.structures) {
+      const b = S.bounds();
+      if (!b) continue;
+      rects.push([b.wx0 - 0.8, b.wz0 - 0.8, b.wx1 + 0.8, b.wz1 + 0.8]);
+      const has = (x, z) => S.floors.has(`${x},${z},0`);
+      for (const [key, w] of S.walls) {
+        const [x, z, l, a] = key.split(',').map(Number);
+        if (l !== 0) continue;
+        const g = shapeGridOf(w.shape);
+        if (!g[0].some((c, k) => c !== '#' && c !== 'w' && g[4][k] !== '#' && g[4][k] !== 'w')) continue;
+        const inA = a === 0 ? has(x, z - 1) : has(x - 1, z), inB = has(x, z);
+        if (inA === inB) continue; // interior wall
+        const ex = S.ox + x * CELL, ez = S.oz + z * CELL;
+        if (a === 0) {
+          const out = inB ? -1 : 1;
+          rects.push([ex - 0.6, Math.min(ez, ez + out * 4), ex + CELL + 0.6, Math.max(ez, ez + out * 4)]);
+        } else {
+          const out = inB ? -1 : 1;
+          rects.push([Math.min(ex, ex + out * 4), ez - 0.6, Math.max(ex, ex + out * 4), ez + CELL + 0.6]);
+        }
+      }
+    }
+    this.fenceClear = rects;
+    this.fenceBlocked = (x, z) => rects.some((r) => x > r[0] && x < r[2] && z > r[1] && z < r[3]);
+  }
+
   placeProps() {
     const P = this.props = new PropBuilder(this);
+    this.buildFenceClear();
     const tr = this.terrain;
     const rng = mulberry32(99);
     // signs & awnings on storefronts

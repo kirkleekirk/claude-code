@@ -857,7 +857,7 @@ export function meshStructure(S, builders, ground) {
     const t0 = HALF_T + 0.0, t1 = CELL - HALF_T;
     const h = STORY / STAIR_STEPS, rr = run / STAIR_STEPS;
     const treadC = rgb(s.color || '#ffffff');
-    const sideC = rgb('#efeae0');
+    const sideC = rgb(s.side || '#efeae0');
     const flip = d === 2 || d === 3;
     for (let i = 0; i < STAIR_STEPS; i++) {
       const qa = i * rr, qb = (i + 1) * rr, yt = y0 + (i + 1) * h, ybot = y0 + i * h;

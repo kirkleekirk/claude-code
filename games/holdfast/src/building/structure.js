@@ -42,7 +42,7 @@ export class Structure {
     this.walls.set(`${x},${z},${l},${a}`, { shape, style, flip, ...extra }); this.dirty = true;
   }
   setRoof(x, z, l, dir, pitch = 1, style = 'black_shingle') { this.roofs.set(`${x},${z},${l}`, { dir, pitch, style }); this.dirty = true; }
-  setStair(x, z, l, dir, color) { this.stairs.set(`${x},${z},${l}`, { dir, color }); this.dirty = true; }
+  setStair(x, z, l, dir, color, side) { this.stairs.set(`${x},${z},${l}`, side ? { dir, color, side } : { dir, color }); this.dirty = true; }
   setColumn(x, z, l, color = '#f4f2ec') { this.columns.set(`${x},${z},${l}`, { color }); this.dirty = true; }
   addProp(type, x, y, z, rot = 0, data = {}) {
     const p = { type, x, y, z, rot, ...data };
