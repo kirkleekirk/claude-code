@@ -1,0 +1,24 @@
+:root {
+  --ink: #f3efe4;
+  --ink-dim: #c9c2b0;
+  --panel: rgba(22, 24, 20, 0.82);
+  --panel-solid: #1c1e19;
+  --line: rgba(243, 239, 228, 0.18);
+  --accent: #d9a441;
+  --danger: #c4533a;
+  --ok: #8fb26a;
+  --font-display: 'Oswald', 'Arial Narrow', Impact, sans-serif;
+  --font-body: 'Source Sans 3', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  color-scheme: dark;
+}
+html, body { margin: 0; height: 100%; overflow: hidden; background: #101210; color: var(--ink); font-family: var(--font-body); touch-action: none; -webkit-user-select: none; user-select: none; }
+#app, #app canvas { position: fixed; inset: 0; display: block; }
+#loading { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 120%, #3d4a2f 0%, #161813 60%); z-index: 50; transition: opacity .6s; }
+#loading.done { opacity: 0; pointer-events: none; }
+.load-inner { width: min(420px, 86vw); text-align: center; }
+.load-inner h1 { font-family: var(--font-display); font-weight: 600; letter-spacing: 0.32em; font-size: clamp(34px, 9vw, 56px); margin: 0; color: var(--ink); }
+.load-inner .sub { margin: 4px 0 26px; letter-spacing: 0.25em; text-transform: uppercase; color: var(--ink-dim); font-size: 13px; }
+.bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+#load-fill { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+#load-text { color: var(--ink-dim); font-size: 13px; margin-top: 12px; }
+#ui { position: fixed; inset: 0; pointer-events: none; z-index: 10; }

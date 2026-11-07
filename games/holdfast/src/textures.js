@@ -63,6 +63,37 @@ function heightToNormal(height, w, h, strength) {
   return c;
 }
 
+// Alpha-cutout texture without dark fringes: transparent texels get the
+// average opaque colour so mipmaps don't bleed black into the edges.
+function alphaTexture(canvas) {
+  const w = canvas.width, h = canvas.height;
+  const d = canvas.getContext('2d').getImageData(0, 0, w, h).data;
+  let r = 0, g = 0, b = 0, n = 0;
+  for (let i = 0; i < w * h; i++) if (d[i * 4 + 3] > 200) { r += d[i * 4]; g += d[i * 4 + 1]; b += d[i * 4 + 2]; n++; }
+  if (n) { r /= n; g /= n; b /= n; }
+  const out = new Uint8Array(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    const sy = h - 1 - y; // flip so v=1 is the top of the image
+    for (let x = 0; x < w; x++) {
+      const si = (sy * w + x) * 4, di = (y * w + x) * 4;
+      const a = d[si + 3];
+      const k = a / 255;
+      out[di] = d[si] * k + r * (1 - k);
+      out[di + 1] = d[si + 1] * k + g * (1 - k);
+      out[di + 2] = d[si + 2] * k + b * (1 - k);
+      out[di + 3] = a;
+    }
+  }
+  const t = new THREE.DataTexture(out, w, h);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.generateMipmaps = true;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.magFilter = THREE.LinearFilter;
+  t.anisotropy = 4;
+  t.needsUpdate = true;
+  return t;
+}
+
 function finishTex(canvas, srgb = true) {
   const t = new THREE.CanvasTexture(canvas);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
@@ -558,7 +589,7 @@ export function cornTexture() {
       ctx.fill();
     }
   }
-  const t = finishTex(c, true);
+  const t = alphaTexture(c);
   t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.ClampToEdgeWrapping;
   cache.set('_corn', t);
   return t;
@@ -575,14 +606,14 @@ export function grassTuftTexture(dry = false) {
     const x = W * (0.1 + rng() * 0.8);
     const h = H * (0.35 + rng() * 0.6);
     const bend = (rng() - 0.5) * W * 0.25;
-    const g = 0.7 + rng() * 0.5;
+    const g = 0.85 + rng() * 0.35;
     ctx.strokeStyle = dry
-      ? `rgb(${Math.round(190 * g)},${Math.round(168 * g)},${Math.round(104 * g)})`
-      : `rgb(${Math.round(92 * g)},${Math.round(128 * g)},${Math.round(56 * g)})`;
+      ? `rgb(${Math.round(196 * g)},${Math.round(174 * g)},${Math.round(112 * g)})`
+      : `rgb(${Math.round(104 * g)},${Math.round(140 * g)},${Math.round(62 * g)})`;
     ctx.lineWidth = W * (0.008 + rng() * 0.01);
     ctx.beginPath(); ctx.moveTo(x, H); ctx.quadraticCurveTo(x + bend * 0.3, H - h * 0.6, x + bend, H - h); ctx.stroke();
   }
-  const t = finishTex(c, true);
+  const t = alphaTexture(c);
   t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
   cache.set(key, t);
   return t;
@@ -616,7 +647,7 @@ export function pampasTexture() {
       ctx.fillRect(px, py, W * 0.012, H * 0.02);
     }
   }
-  const t = finishTex(c, true);
+  const t = alphaTexture(c);
   t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
   cache.set('_pampas', t);
   return t;

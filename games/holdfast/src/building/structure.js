@@ -272,7 +272,7 @@ export class Door {
     return true;
   }
   // Collision box (world) of the leaf in its current target state.
-  box() {
+  collider() {
     const s = this.structure, d = this.def;
     const hx = d.hinge[0] + s.ox, hy = d.hinge[1] + s.oy, hz = d.hinge[2] + s.oz;
     const e = d.eAxis, n = d.nAxis;

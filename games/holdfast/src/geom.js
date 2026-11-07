@@ -39,19 +39,24 @@ export class GeoBuilder {
   quad(key, a, b, c, d, color, uvs = null, normal = null) {
     const B = this.bucket(key);
     const S = surf(key);
+    // Newell's method (robust when a corner collapses)
+    const P = [a, b, c, d];
+    const nw = [0, 0, 0];
+    for (let i = 0; i < 4; i++) {
+      const p = P[i], q = P[(i + 1) % 4];
+      nw[0] += (p[1] - q[1]) * (p[2] + q[2]);
+      nw[1] += (p[2] - q[2]) * (p[0] + q[0]);
+      nw[2] += (p[0] - q[0]) * (p[1] + q[1]);
+    }
     let n = normal;
     if (!n) {
-      // Newell's method (robust when a corner collapses)
-      const P = [a, b, c, d];
-      n = [0, 0, 0];
-      for (let i = 0; i < 4; i++) {
-        const p = P[i], q = P[(i + 1) % 4];
-        n[0] += (p[1] - q[1]) * (p[2] + q[2]);
-        n[1] += (p[2] - q[2]) * (p[0] + q[0]);
-        n[2] += (p[0] - q[0]) * (p[1] + q[1]);
-      }
-      const l = Math.hypot(n[0], n[1], n[2]) || 1;
-      n = [n[0] / l, n[1] / l, n[2] / l];
+      const l = Math.hypot(nw[0], nw[1], nw[2]) || 1;
+      n = [nw[0] / l, nw[1] / l, nw[2] / l];
+    } else if (nw[0] * n[0] + nw[1] * n[1] + nw[2] * n[2] < 0) {
+      // caller gave a facing direction: fix the winding to match it
+      const t = b; b = d; d = t;
+      if (Array.isArray(color[0])) color = [color[0], color[3], color[2], color[1]];
+      if (uvs) uvs = [uvs[0], uvs[3], uvs[2], uvs[1]];
     }
     const base = B.pos.length / 3;
     const pts = [a, b, c, d];
