@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Holdfast</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600&family=Source+Sans+3:wght@400;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="app"></div>
+<div id="loading">
+  <div class="load-inner">
+    <h1>HOLDFAST</h1>
+    <p class="sub">Bridger County</p>
+    <div class="bar"><div id="load-fill"></div></div>
+    <p id="load-text">Starting</p>
+  </div>
+</div>
+<div id="ui"></div>
+<script type="module" src="src/boot.js"></script>
+</body>
+</html>

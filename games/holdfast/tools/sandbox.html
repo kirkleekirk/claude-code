@@ -1,0 +1,49 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Holdfast sandbox</title>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#88a}</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+</head><body>
+<script type="module">
+import * as THREE from 'three';
+import { Structure } from '../src/building/structure.js';
+import { DoorPool, setDoorPool } from '../src/building/doors.js';
+globalThis.__FURNISH_DEBUG = new URLSearchParams(location.search).get('dbg') || true; if (new URLSearchParams(location.search).get('conn')) globalThis.__CONN_DEBUG = true;
+import { buildSample } from './samples.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xa9c4dc);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.35;
+const cam = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.05, 500);
+const hemi = new THREE.HemisphereLight(0xcfe2f5, 0x5a5040, 1.1);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff2dc, 2.6);
+sun.position.set(30, 45, 20);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -30, right: 30, top: 30, bottom: -30, near: 1, far: 150 });
+sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
+scene.add(sun);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: 0x6f8f4f, roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; ground.position.y = -0.45; ground.receiveShadow = true; scene.add(ground);
+scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+setDoorPool(new DoorPool(scene, 256));
+const which = new URLSearchParams(location.search).get('s') || 'house';
+const S = buildSample(which);
+S.rebuild(() => -0.45);
+scene.add(S.group);
+window.S = S;
+window.__setCam = (p, t, fov = 55) => { cam.position.set(...p); cam.up.set(0, 1, 0); if (Math.abs(p[0]-t[0]) + Math.abs(p[2]-t[2]) < 0.2) cam.up.set(0, 0, -1); cam.lookAt(...t); cam.fov = fov; cam.updateProjectionMatrix(); renderer.render(scene, cam); };
+window.__cut = (y) => { renderer.clippingPlanes = y == null ? [] : [new THREE.Plane(new THREE.Vector3(0, -1, 0), y)]; };
+window.__level = (l) => { S.setCutaway(l); };
+window.__openDoors = () => { for (const d of S.doors) { d.setOpen(true); for (let i = 0; i < 100; i++) d.update(0.05); } };
+window.__ready = true;
+</script></body></html>
