@@ -100,7 +100,7 @@ export function loadGame(game) {
   if (data.player) {
     game.player.spawn(data.player.x, data.player.z, data.player.y);
     game.player.health = Math.max(20, data.player.health || 100);
-    if (data.player.weapon === 'gun' && game.inventory.weapons.pistol) game.setWeapon('pistol');
+    game.savedWeaponGun = data.player.weapon === 'gun';
   }
   if (game.zombies) game.zombies.kills = data.kills || 0;
   // claims are back: the camp can find its home before its people arrive

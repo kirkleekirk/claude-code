@@ -4,6 +4,8 @@
 import * as THREE from 'three';
 import { Character, makeWeaponMeshes } from '../characters.js';
 import { PERSONALITIES, BACKGROUND_BY_ID } from './people.js';
+import { Pack, GUNS } from '../items.js';
+import { maybeInjure, maxHealthOf, skillMods, conditionMods } from '../condition.js';
 
 const R = 0.28;
 const tmpV = new THREE.Vector3();
@@ -24,7 +26,15 @@ export class NPC {
     this.visualY = this.pos.y;
     this.vel = new THREE.Vector3();
     this.facing = opts.facing || 0;
-    this.maxHealth = 100; this.health = person.health ?? 100;
+    // what they carry and how worn down they are
+    this.leader = !!person.leader;
+    this.pack = new Pack(this.leader ? 30 : 24).load(person.pack);
+    this.gear = person.gear ? { gun: person.gear.gun && GUNS[person.gear.gun.id] ? { ...person.gear.gun } : null } : { gun: null };
+    this.fatigue = person.fatigue || 0;
+    this.injuries = (person.injuries || []).map((i) => ({ ...i }));
+    this.baseHealth = 100;
+    this.maxHealth = maxHealthOf(this); this.health = Math.min(this.maxHealth, person.health ?? 100);
+    this.stamina = 100;
     this.needs = { hunger: 20 + Math.random() * 20, energy: 70 + Math.random() * 20, social: 50, stress: 20 + Math.random() * 20 };
     this.rels = person.rels || {};
     this.knows = person.knows || {};
@@ -33,7 +43,9 @@ export class NPC {
     this.task = null;
     this.path = null; this.pathI = 0;
     this.anim = { act: null, item: null, seatH: 0, lie: false };
-    this.weapon = opts.weapon || (this.skill('shooting') >= 2 ? 'gun' : 'bat');
+    // a gun to start with, if they know how to use one
+    if (!person.gear && (opts.weapon === 'gun' || (opts.weapon == null && this.skill('shooting') >= 2))) this.giveGun(opts.gunId || '1911', true);
+    this.reloadT = 0;
     this.attackT = -1; this.attackCd = 0; this.stagger = 0;
     this.dead = false; this.deadT = 0;
     this.speaking = 0; this.lookAt = null;
@@ -41,6 +53,18 @@ export class NPC {
     this.openedDoors = [];
     this.t = Math.random() * 10;
   }
+  // fighting with a gun while there's something to shoot it with
+  get weapon() {
+    const g = this.gear.gun;
+    return g && (g.mag > 0 || this.reloadT > 0 || this.pack.count('ammo', GUNS[g.id].ammo) > 0) ? 'gun' : 'bat';
+  }
+  get gunDef() { return this.gear.gun ? GUNS[this.gear.gun.id] : null; }
+  giveGun(id, withAmmo = false) {
+    const def = GUNS[id];
+    this.gear.gun = { id, mag: withAmmo ? def.mag : 0 };
+    if (withAmmo) this.pack.add('ammo', def.ammo, def.mag * (this.faction === 'raider' ? 1 + Math.floor(Math.random() * 3) : 1));
+  }
+  mods() { return skillMods(this); }
   get pers() { return PERSONALITIES[this.person.personality]; }
   get tr() { return this.pers.t; }
   get bg() { return BACKGROUND_BY_ID[this.person.background]; }
@@ -93,7 +117,8 @@ export class NPC {
       if (this.pathI === this.path.length - 1) break;
     }
     if (this.pathI === this.path.length - 1 && d < 0.18) { this.path = null; this.dest = null; return [0, 0]; }
-    const sp = (this.run ? 3.6 : 1.35) * (this.health < 35 ? 0.7 : 1);
+    const cm = conditionMods(this);
+    const sp = (this.run && cm.sprint ? 3.6 : this.run ? 2.2 : 1.35) * (this.health < 35 ? 0.7 : 1) * cm.speed;
     const slow = this.pathI === this.path.length - 1 ? Math.min(1, d / 0.8) : 1;
     return [dx / d * sp * Math.max(0.35, slow), dz / d * sp * Math.max(0.35, slow)];
   }
@@ -102,7 +127,10 @@ export class NPC {
   update(dt, near) {
     this.t += dt;
     if (this.dead) return this.updateDead(dt);
+    // the one you're playing: the controller moves and animates them
+    if (this.controlled) { this.items.group.visible = false; this.char.root.visible = true; return true; }
     this.attackCd -= dt;
+    if (this.reloadT > 0) { this.reloadT -= dt; if (this.reloadT <= 0) this.reloadDone(); }
     this.speaking = Math.max(0, this.speaking - dt);
     this.stagger = Math.max(0, this.stagger - dt);
     if (this.mode === 'away') { this.char.root.visible = false; this.items.group.visible = false; return true; }
@@ -199,7 +227,8 @@ export class NPC {
   animateBody(dt, hs) {
     const a = this.anim;
     const fighting = this.attackT >= 0 || this.combatTarget || (this.ready && !a.act);
-    const weapon = fighting && !a.act ? (this.weapon === 'gun' ? 'gun' : 'bat') : null;
+    const gdef = this.weapon === 'gun' ? this.gunDef : null;
+    const weapon = fighting && !a.act ? (gdef ? (gdef.cls === 'long' ? 'rifle' : 'gun') : 'bat') : null;
     let lookYaw = 0;
     if (this.lookAt) {
       let d = Math.atan2(this.lookAt.x - this.pos.x, this.lookAt.z - this.pos.z) - this.facing;
@@ -212,7 +241,7 @@ export class NPC {
     if (this.listening && !act && hs < 0.2) act = 'listen';
     this.char.animate(dt, {
       speed: hs, mode: hs > 0.15 ? 'walk' : 'idle', act, seatH: a.seatH, weapon, crouch: !!(this.crouch && !act),
-      attack: this.attackT >= 0 ? this.attackT : null, aim: !!(this.aiming && weapon === 'gun'), aimPitch: 0,
+      attack: this.attackT >= 0 ? this.attackT : null, aim: !!(this.aiming && gdef && this.reloadT <= 0), aimPitch: 0, recoil: gdef ? Math.min(1.2, gdef.recoil) : 1,
       lookYaw, turn: this.turnRate, stagger: this.stagger > 0 ? Math.min(1, this.stagger / 0.3) : 0,
       search: a.search,
     });
@@ -229,7 +258,7 @@ export class NPC {
     }
     root.updateMatrixWorld(true);
     // held item
-    const item = weapon || (this.attackT >= 0 && a.act === 'fight' ? null : a.item);
+    const item = (weapon && gdef ? this.gear.gun.id : weapon) || (this.attackT >= 0 && a.act === 'fight' ? null : a.item);
     this.items.setItem(item || null);
     this.items.group.visible = !!item;
     if (item) {
@@ -252,7 +281,13 @@ export class NPC {
   // ---------------- combat ----------------
   damage(n, src) {
     if (this.dead || this.invulnerable) return;
+    // the one you're playing takes hits through your controller
+    if (this.controlled) return this.game.player.damage(n, src);
     this.health -= n;
+    if (this.faction === 'camp' && this.health > 0) {
+      const inj = maybeInjure(this, src && src.hurt ? 'zombie' : src && src.gear && src.weapon === 'gun' ? 'shot' : 'melee', n);
+      if (inj && this.soc.playerNear(this.pos, 40)) this.say(`Agh! ${inj.ouch || inj.name + '!'}`, 2);
+    }
     this.stagger = 0.35;
     if (this.anim.lie || this.seated) { this.setAct(null); this.task = null; }
     if (src && src !== this.game.player) this.lastAttacker = src;
@@ -302,13 +337,24 @@ export class NPC {
     return this.deadT < (this.faction === 'raider' ? 120 : 60);
   }
   // swing at or shoot a target ({pos, damage()})
+  // load the gun from what's in the pack
+  reloadDone() {
+    const g = this.gear.gun;
+    if (!g) return;
+    const def = GUNS[g.id];
+    const n = this.pack.take('ammo', def.ammo, def.mag - g.mag);
+    g.mag += n;
+  }
   attack(target) {
-    if (this.attackCd > 0 || this.attackT >= 0) return;
+    if (this.attackCd > 0 || this.attackT >= 0 || this.reloadT > 0) return;
     const d = Math.hypot(target.pos.x - this.pos.x, target.pos.z - this.pos.z);
-    if (this.weapon === 'gun' && d > 2.2) {
-      this.attackCd = 1.1 + Math.random() * 0.9;
-      this.attackT = 0; this.attackDur = 0.3; this.hitDone = false;
-      this.onHit = () => this.soc.shoot(this, target);
+    const g = this.gear.gun, def = g && GUNS[g.id];
+    if (this.weapon === 'gun' && d > 2.2 && d < def.range * 1.4) {
+      if (g.mag <= 0) { this.reloadT = def.reload * 1.2; return; }
+      // bursts from automatics, aimed shots from the rest
+      this.attackCd = def.auto ? def.rate * (1.5 + Math.random()) : def.rate + 0.35 + Math.random() * 0.5;
+      this.attackT = 0; this.attackDur = Math.min(0.3, def.rate * 2); this.hitDone = false;
+      this.onHit = () => { if (g.mag > 0) { g.mag--; this.soc.shoot(this, target); } };
       return;
     }
     if (d > 1.9) return;
@@ -330,7 +376,16 @@ export class NPC {
   }
   toJSON() {
     const p = this.person;
-    return { ...p, rels: this.rels, knows: this.knows, health: Math.round(this.health), needs: this.needs };
+    return { ...p, rels: this.rels, knows: this.knows, health: Math.round(this.health), needs: this.needs,
+      leader: this.leader || undefined, pack: this.pack.toJSON(), gear: this.gear, fatigue: Math.round(this.fatigue), injuries: this.injuries };
+  }
+  // new body (the leader's look changed on the survivor screen)
+  setLook(model, palette) {
+    this.person.model = model; this.person.palette = palette;
+    this.game.scene.remove(this.char.root);
+    this.char = new Character(model, palette);
+    this.game.scene.add(this.char.root);
+    if (this.controlled) this.game.player.char = this.char;
   }
 }
 

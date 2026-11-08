@@ -44,7 +44,8 @@ export class ThirdPersonCamera {
     this.pos.copy(base).addScaledVector(back, this.curDist);
     this.camera.position.copy(this.pos);
     this.camera.lookAt(base.clone().addScaledVector(dir, 10));
-    this.camera.fov += ((62 - this.aim * 14) - this.camera.fov) * Math.min(1, dt * 8);
+    const zoom = 1 + this.aim * ((this.zoom || 1) - 1);
+    this.camera.fov += ((62 - this.aim * 14) / zoom - this.camera.fov) * Math.min(1, dt * 8);
     this.camera.updateProjectionMatrix();
   }
 }

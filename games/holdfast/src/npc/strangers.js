@@ -7,7 +7,7 @@ import { Structure } from '../building/structure.js';
 import { stationsFor } from './stations.js';
 import { makePerson } from './people.js';
 import { T } from '../world/terrain.js';
-import { compass, cap, inField } from './raiders.js';
+import { compass, cap, inField, dropsOf } from './raiders.js';
 
 const OWN = [
   'I’ve got people waiting for me at the grain elevator.', 'My family’s dug in across the river. I’m just out for supplies.', 'I travel alone. Always have.',
@@ -193,7 +193,7 @@ export class Strangers {
     m.say(['What the hell?!', 'Are you crazy?!', 'You son of a—', 'Stay back!'][Math.floor(Math.random() * 4)]);
   }
   onDeath(m) {
-    this.soc.lootables.push({ pos: [m.pos.x, m.pos.y + 0.4, m.pos.z], table: 'raider_body', label: `Search ${m.first}`, searched: false, until: this.clock + 24 });
+    this.soc.lootables.push({ pos: [m.pos.x, m.pos.y + 0.4, m.pos.z], table: 'raider_body', label: `Search ${m.first}`, searched: false, until: this.clock + 24, extra: dropsOf(m) });
   }
 
   // ---------------- what they can tell you ----------------

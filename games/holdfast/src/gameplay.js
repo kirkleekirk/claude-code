@@ -1,75 +1,9 @@
 // Inventory, loot tables, interaction (doors, searching), and combat.
 import * as THREE from 'three';
 import { isTouch } from './platform.js';
-
-export const START_RES = { wood: 30, metal: 12, stone: 12, food: 3, meds: 2, ammo: 0, fuel: 0 };
-
-export class Inventory {
-  constructor() {
-    this.res = { ...START_RES };
-    this.claimKits = 1;
-    this.weapons = { bat: true, pistol: false };
-    this.items = {}; // things for plans: sedatives, whiskey, seed stock
-  }
-  can(cost) { for (const k in cost) if ((this.res[k] || 0) < cost[k]) return false; return true; }
-  pay(cost) { if (!this.can(cost)) return false; for (const k in cost) this.res[k] -= cost[k]; return true; }
-  add(res) { for (const k in res) this.res[k] = (this.res[k] || 0) + res[k]; }
-  toJSON() { return { res: this.res, claimKits: this.claimKits, weapons: this.weapons, items: this.items }; }
-  load(j) { Object.assign(this.res, j.res || {}); this.claimKits = j.claimKits ?? this.claimKits; Object.assign(this.weapons, j.weapons || {}); Object.assign(this.items, j.items || {}); }
-}
-
-// table -> list of [resource, min, max, chance]
-const TABLES = {
-  kitchen: [['food', 1, 4, 0.75], ['meds', 1, 1, 0.08], ['fuel', 1, 1, 0.06]],
-  fridge: [['food', 1, 3, 0.6]],
-  bedroom: [['meds', 1, 1, 0.25], ['ammo', 2, 6, 0.14], ['wood', 1, 2, 0.2], ['pistol', 1, 1, 0.04], ['kit', 1, 1, 0.03]],
-  meds: [['meds', 1, 2, 0.6], ['food', 1, 1, 0.1]],
-  office: [['ammo', 2, 5, 0.12], ['meds', 1, 1, 0.2], ['metal', 1, 2, 0.25], ['kit', 1, 1, 0.04]],
-  store: [['food', 2, 5, 0.65], ['meds', 1, 2, 0.15], ['wood', 1, 2, 0.15]],
-  hardware: [['metal', 2, 5, 0.7], ['wood', 2, 4, 0.5], ['stone', 1, 3, 0.35], ['fuel', 1, 1, 0.15]],
-  register: [['ammo', 3, 8, 0.25], ['pistol', 1, 1, 0.08]],
-  bar: [['food', 1, 3, 0.5], ['fuel', 1, 2, 0.3]],
-  laundry: [['meds', 1, 1, 0.12], ['wood', 1, 1, 0.2]],
-  garage: [['metal', 2, 4, 0.6], ['wood', 1, 3, 0.5], ['fuel', 1, 2, 0.35]],
-  workshop: [['metal', 2, 5, 0.7], ['wood', 1, 3, 0.4], ['stone', 1, 2, 0.2]],
-  crate: [['wood', 2, 5, 0.6], ['metal', 1, 3, 0.4], ['food', 1, 2, 0.25], ['stone', 1, 2, 0.2]],
-  fuel: [['fuel', 2, 4, 0.8]],
-  car: [['fuel', 1, 2, 0.6], ['metal', 1, 2, 0.4], ['ammo', 2, 4, 0.08], ['food', 1, 1, 0.2]],
-  truck: [['fuel', 1, 3, 0.6], ['metal', 2, 3, 0.5], ['wood', 1, 3, 0.3], ['ammo', 3, 6, 0.1]],
-  // caches survivors know about, and what raiders keep
-  food_cache: [['food', 6, 10, 1], ['meds', 1, 1, 0.3], ['fuel', 1, 2, 0.2]],
-  seed_cache: [['food', 3, 5, 1], ['seeds', 1, 1, 1]],
-  med_cache: [['meds', 4, 6, 1], ['food', 1, 2, 0.5]],
-  fuel_cache: [['fuel', 4, 8, 1], ['metal', 2, 4, 0.7]],
-  build_cache: [['wood', 10, 16, 1], ['metal', 5, 8, 1], ['stone', 4, 6, 0.8]],
-  gun_cache: [['ammo', 12, 20, 1], ['pistol', 1, 1, 1], ['food', 2, 3, 0.6]],
-  mixed_cache: [['food', 3, 5, 1], ['meds', 2, 3, 1], ['ammo', 6, 10, 0.8], ['fuel', 1, 2, 0.6]],
-  liquor_cache: [['food', 1, 2, 0.6], ['fuel', 1, 1, 0.3]],
-  raider_stash: [['food', 6, 12, 1], ['meds', 2, 4, 0.9], ['ammo', 10, 25, 1], ['metal', 4, 8, 0.8], ['fuel', 2, 5, 0.8], ['wood', 4, 8, 0.6], ['kit', 1, 1, 0.3]],
-  raider_body: [['ammo', 2, 6, 0.55], ['food', 1, 1, 0.3], ['meds', 1, 1, 0.2]],
-  supply_run: [['food', 3, 6, 1], ['ammo', 4, 10, 0.8], ['meds', 1, 2, 0.5], ['fuel', 1, 2, 0.5]],
-};
-const ITEMS = { seeds: 'seed stock', sedatives: 'sedatives', liquor: 'whiskey' };
-const NAMES = { wood: 'Wood', metal: 'Metal', stone: 'Stone', food: 'Food', meds: 'Meds', ammo: 'Ammo', fuel: 'Fuel' };
-
-export function rollLoot(table, inv, luck = 1) {
-  const t = TABLES[table] || TABLES.crate;
-  const got = [];
-  for (const [k, a, b, p] of t) {
-    if (Math.random() > p * luck) continue;
-    const n = a + Math.floor(Math.random() * (b - a + 1));
-    if (k === 'pistol') {
-      if (!inv.weapons.pistol) { inv.weapons.pistol = true; got.push(isTouch ? 'a pistol (tap Weapon to switch)' : 'a pistol (Q to switch)'); inv.res.ammo += 6; }
-      else { inv.res.ammo += 6; got.push('6 Ammo'); }
-      continue;
-    }
-    if (k === 'kit') { inv.claimKits += 1; got.push('a claim kit'); continue; }
-    if (ITEMS[k]) { inv.items[k] = (inv.items[k] || 0) + n; got.push(ITEMS[k]); continue; }
-    inv.res[k] += n;
-    got.push(`${n} ${NAMES[k]}`);
-  }
-  return got;
-}
+import { GUNS, rollLoot, itemName, START_RES, Storage } from './items.js';
+import { conditionMods } from './condition.js';
+export { START_RES, Storage as Inventory, rollLoot };
 
 // ---------------- interaction ----------------
 export class Interaction {
@@ -132,13 +66,21 @@ export class Interaction {
     return out;
   }
   // a container searched to the bottom (third person or command view)
+  // a container searched: what fits goes in your pack, what doesn't stays
+  // there for next time
   finishSearch(ref) {
     const g = this.game;
-    ref.searched = true;
-    if (ref.prop) ref.prop.searched = true;
-    const got = rollLoot(ref.table, g.inventory, g.mods ? g.mods.loot : 1);
-    if (g.society) got.push(...g.society.searchBonus(ref));
-    g.hud.toast(got.length ? 'Found ' + got.join(', ') : 'Nothing useful here', 2.5);
+    const first = !ref.left;
+    const entries = ref.left || [...rollLoot(ref.table, g.mods ? g.mods.loot : 1), ...(ref.extra || [])];
+    ref.extra = null;
+    const { got, left } = g.giveLoot(g.player.body, entries);
+    ref.left = left.length ? left : null;
+    ref.searched = !left.length;
+    if (ref.prop) ref.prop.searched = ref.searched;
+    if (first && g.society) got.push(...g.society.searchBonus(ref));
+    const msg = got.length ? 'Found ' + got.join(', ') : left.length ? '' : 'Nothing useful here';
+    if (msg) g.hud.loot(msg);
+    if (left.length) g.hud.toast(`Pack full. Left behind: ${left.map((e) => itemName(e.kind, e.id, e.n)).join(', ')}`, 3.5);
     g.markDirty && g.markDirty();
   }
   update(dt) {
@@ -201,6 +143,7 @@ export class Combat {
   melee(player) {
     const g = this.game;
     const fx = Math.sin(player.facing), fz = Math.cos(player.facing);
+    const cm = player.body ? conditionMods(player.body) : { melee: 1 };
     let hit = 0;
     const people = g.society ? g.society.hittable() : [];
     for (const z of [...g.zombies.list, ...people]) {
@@ -210,7 +153,7 @@ export class Combat {
       if (d > player.weapon.reach + 0.3 || Math.abs(z.pos.y - player.pos.y) > 1.4) continue;
       const dot = (dx * fx + dz * fz) / (d || 1);
       if (dot < 0.25) continue;
-      const dmg = player.weapon.damage * (0.85 + Math.random() * 0.3);
+      const dmg = player.weapon.damage * (0.85 + Math.random() * 0.3) * cm.melee;
       if (z.hurt) z.hurt(dmg, dx / (d || 1), dz / (d || 1), 'melee');
       else {
         // a sleeping or unaware person takes a sneak attack hard
@@ -224,58 +167,79 @@ export class Combat {
     if (hit) g.audio && g.audio.thud();
     else g.audio && g.audio.swoosh();
   }
-  // aim: { origin, dir } to shoot from the gun itself (command view), else
-  // along the camera
+  // a shot from the gun in hand. aim: { origin, dir } fires from the gun
+  // itself (top view), otherwise along the camera
   shoot(player, aim = null) {
-    const g = this.game, inv = g.inventory;
-    if (inv.res.ammo <= 0) { g.hud.toast('Out of ammo', 1.5); return; }
-    inv.res.ammo--;
+    const g = this.game, gun = player.gun;
+    if (!gun) return;
+    const def = GUNS[gun.id];
+    if (gun.mag <= 0) { player.startReload(); return; }
+    gun.mag--;
     const cam = g.camera;
-    const dir = new THREE.Vector3();
-    if (aim) dir.copy(aim.dir); else cam.getWorldDirection(dir);
-    const spread = (player.aiming ? (aim ? 0.03 : 0.008) : 0.04) * (g.mods ? g.mods.spread : 1);
-    dir.x += (Math.random() - 0.5) * spread; dir.y += (Math.random() - 0.5) * spread; dir.z += (Math.random() - 0.5) * spread;
-    dir.normalize();
+    const base = new THREE.Vector3();
+    if (aim) base.copy(aim.dir); else cam.getWorldDirection(base);
+    const cm = player.body ? conditionMods(player.body) : { spread: 1 };
+    const moving = Math.min(1, player.speed / 4);
+    const spread = def.spread * (player.aiming ? (def.scope ? 0.04 : def.quick ? 0.15 : 0.25) : 1) * (g.mods ? g.mods.spread : 1) * cm.spread * (1 + moving * 0.7) * (def.pellets > 1 ? 1 : 1);
     const o = aim ? aim.origin.clone() : cam.position.clone();
-    // world hit distance
-    const wr = g.physics.raycast(o.x, o.y, o.z, dir.x, dir.y, dir.z, 120, { skipGlass: false });
-    let best = wr.dist, target = null, head = false;
-    // the shot leaves the gun, not the camera: nothing behind the player counts
     const tMin = aim ? 0.1 : Math.max(0, o.distanceTo(player.pos) - 0.8);
-    const people = g.society ? g.society.hittable() : [];
-    for (const z of [...g.zombies.list, ...people]) {
-      if (z.dead) continue;
-      // ray vs vertical capsule (approximate as cylinder r=0.33)
-      const cx = z.pos.x - o.x, cz = z.pos.z - o.z;
-      const a = dir.x * dir.x + dir.z * dir.z;
-      const b = -2 * (cx * dir.x + cz * dir.z);
-      const c = cx * cx + cz * cz - 0.33 * 0.33;
-      const disc = b * b - 4 * a * c;
-      if (disc < 0) continue;
-      const t = (-b - Math.sqrt(disc)) / (2 * a);
-      if (t < tMin || t > best) continue;
-      const y = o.y + dir.y * t - z.pos.y;
-      if (y < 0 || y > 1.8) continue;
-      best = t; target = z; head = y > 1.48;
-    }
-    const end = o.clone().addScaledVector(dir, best);
     const hand = player.muzzleWorld ? player.muzzleWorld(new THREE.Vector3()) : player.char.handWorld(new THREE.Vector3());
-    const geo = new THREE.BufferGeometry().setFromPoints([hand, end]);
-    const line = new THREE.Line(geo, this.tracerMat);
-    g.scene.add(line);
-    this.tracers.push({ line, t: 0.06 });
+    const people = g.society ? g.society.hittable() : [];
+    const targets = [...g.zombies.list, ...people];
+    const dealt = new Map();
+    let anyHead = false;
+    for (let i = 0; i < def.pellets; i++) {
+      const dir = base.clone();
+      const a = Math.random() * Math.PI * 2, r = spread * Math.sqrt(Math.random());
+      const up = Math.abs(dir.y) > 0.95 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+      const sx = new THREE.Vector3().crossVectors(dir, up).normalize(), sy = new THREE.Vector3().crossVectors(sx, dir).normalize();
+      dir.addScaledVector(sx, Math.cos(a) * r).addScaledVector(sy, Math.sin(a) * r).normalize();
+      const reach = Math.min(def.range * 2.2, 250);
+      const wr = g.physics.raycast(o.x, o.y, o.z, dir.x, dir.y, dir.z, reach, { skipGlass: false });
+      let best = wr.dist, target = null, head = false;
+      for (const z of targets) {
+        if (z.dead) continue;
+        // ray vs vertical capsule (approximate as cylinder r=0.33)
+        const cx = z.pos.x - o.x, cz = z.pos.z - o.z;
+        const A = dir.x * dir.x + dir.z * dir.z;
+        const B = -2 * (cx * dir.x + cz * dir.z);
+        const C = cx * cx + cz * cz - 0.33 * 0.33;
+        const disc = B * B - 4 * A * C;
+        if (disc < 0) continue;
+        const t = (-B - Math.sqrt(disc)) / (2 * A);
+        if (t < tMin || t > best) continue;
+        const y = o.y + dir.y * t - z.pos.y;
+        if (y < 0 || y > 1.8) continue;
+        best = t; target = z; head = y > 1.48;
+      }
+      if (i < 4) {
+        const end = o.clone().addScaledVector(dir, best);
+        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([hand, end]), this.tracerMat);
+        g.scene.add(line);
+        this.tracers.push({ line, t: 0.06 });
+      }
+      if (target) {
+        const fall = Math.max(0.25, 1 - Math.max(0, best - def.range) / def.range);
+        const dmg = def.dmg * fall * (g.mods ? g.mods.gun : 1) * (head ? (def.pellets > 1 ? 1.5 : 2.6) : 1);
+        dealt.set(target, (dealt.get(target) || 0) + dmg);
+        if (head && def.pellets === 1) anyHead = true;
+      }
+    }
+    for (const [t, dmg] of dealt) {
+      const dx = t.pos.x - player.pos.x, dz = t.pos.z - player.pos.z, dd = Math.hypot(dx, dz) || 1;
+      if (t.hurt) t.hurt(dmg, dx / dd, dz / dd, def.knock ? 'melee' : anyHead ? 'head' : 'shot');
+      else { t.damage(dmg, player); g.society.onPlayerHit(t); }
+    }
+    if (anyHead && dealt.size) g.hud.toast('Headshot', 0.8);
     this.muzzle.position.copy(hand);
     this.muzzle.intensity = 6;
-    if (target) {
-      const dmg = (head ? 140 : 45) * (g.mods ? g.mods.gun : 1);
-      if (target.hurt) target.hurt(dmg, dir.x, dir.z, head ? 'head' : 'shot');
-      else { target.damage(dmg, player); g.society.onPlayerHit(target); }
-      if (head) g.hud.toast('Headshot', 0.8);
-    }
-    // gunshots are loud
-    g.zombies.alertNoise(player.pos, 70);
-    if (g.society) g.society.raiders.hear(player.pos, 90, null);
-    g.audio && g.audio.gunshot();
+    // the kick (third person only)
+    if (!aim && g.tpc) g.tpc.pitch = Math.min(0.95, g.tpc.pitch + def.recoil * 0.012);
+    if (gun.mag === 0) setTimeout(() => player.gun === gun && player.startReload(), 250);
+    // gunshots are loud; some louder than others
+    g.zombies.alertNoise(player.pos, def.noise);
+    if (g.society) g.society.raiders.hear(player.pos, def.noise * 1.2, null);
+    g.audio && g.audio.gunshot(Math.min(1.3, def.noise / 70));
   }
   update(dt) {
     for (const tr of this.tracers) {

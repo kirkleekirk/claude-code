@@ -6,6 +6,7 @@ import { ROLES, PERSONALITIES, BACKGROUND_BY_ID, compatibility } from './people.
 import { ISSUES, NOTICE } from './lines.js';
 import { weighted, first } from './dialogue.js';
 import { CELL, STORY } from '../building/defs.js';
+import { tickCondition, addFatigue, exhausted } from '../condition.js';
 
 const ROLE_WORK = {
   cook: ["Supper's coming. Don't hover.", "Needs salt. Everything needs salt.", "Whoever finished the coffee owes me.", "Smells almost like real food."],
@@ -235,6 +236,7 @@ export class Camp {
     if (m.mode === 'talk') { m.locked = true; return; }
     m.locked = false;
     if (m.rescue) return this.soc.rescueBrain(m, dt);
+    if (m.mode === 'mission') return this.soc.jobs.brain(m, dt, near);
     if (!this.claim) { m.mode = 'follow'; return; }
     // danger in camp
     const threat = this.soc.threatNear(m, 14);
@@ -277,8 +279,21 @@ export class Camp {
       if (sl) return this.assign(m, { kind: 'watch', slot: sl, opt: sl.opts[0], dur: 1, phase: null });
       return this.assign(m, { kind: 'watch', route: this.perimeter(), act: 'guard', item: 'rifle', dur: 1, phase: null });
     }
+    // sent home to get patched up: meds from storage on each wound, then bed
+    if (m.healOrder) {
+      m.healOrder = false;
+      let used = 0;
+      for (const i of m.injuries) if (!i.treated && this.game.storage.take('res', 'meds', 1)) { i.treated = true; i.t *= 0.6; used++; }
+      if (used) { m.health = Math.min(m.maxHealth, m.health + 20 * used); this.log(`${m.person.name} got patched up (${used} meds).`, 'hurt'); }
+      else if (m.injuries.some((i) => !i.treated)) m.say('We\u2019re out of meds. I\u2019ll just lie down.');
+      m.restOrder = true;
+    }
+    if (m.restOrder && m.bed && (!m.bed.user || m.bed.user === m)) {
+      m.restOrder = false;
+      return this.assign(m, { kind: 'sleep', slot: m.bed, opt: m.bed.opts[0], dur: 3, phase: null, label: 'Resting' });
+    }
     // dead on their feet: a nap, whatever the hour
-    if (ph !== 'sleep' && n.energy < 16 && m.bed && !m.bed.user) {
+    if (ph !== 'sleep' && (n.energy < 16 || m.fatigue > 70 || (m.injuries.length && m.health < m.maxHealth * 0.6)) && m.bed && !m.bed.user) {
       m.say(m.tr.humor > 0.6 ? 'If I don\u2019t lie down I\u2019ll fall down.' : 'I need to lie down. Just for a bit.');
       return this.assign(m, { kind: 'sleep', slot: m.bed, opt: m.bed.opts[0], dur: 1.6, phase: null, label: 'Napping' });
     }
@@ -289,7 +304,7 @@ export class Camp {
       return this.assign(m, { kind: 'sleep', x: c.x + 2, y: c.y, z: c.z + 2, act: 'sleep', lie: true, dur: 1.5, phase: 'sleep' });
     }
     // trips out for hunters and scavengers
-    if (ph === 'work' && (m.role === 'hunter' || m.role === 'scavenger') && h < 14 && (m.lastTrip || -99) < this.game.day && Math.random() < 0.5) {
+    if (ph === 'work' && (m.role === 'hunter' || m.role === 'scavenger') && h < 14 && (m.lastTrip || -99) < this.game.day && (m.fatigue || 0) < 40 && !m.injuries.some((i) => !i.treated) && Math.random() < 0.5) {
       return this.startTrip(m);
     }
     const cookTime = (h > m.pers.wake && h < m.pers.wake + 1.2) || (h > 11.2 && h < 12.2) || (h > 17.2 && h < 18.4);
@@ -312,10 +327,10 @@ export class Camp {
             if (tg === 'solo') s += (1 - t.social) * 1.6;
             if (tg === 'evening') s += ph === 'evening' ? 2 : 0;
             if (tg === 'morning') s += ph === 'morning' ? 2.4 : 0;
-            if (tg === 'rest') s += n.energy < 35 ? 2.5 : 0.3;
+            if (tg === 'rest') s += n.energy < 35 || m.fatigue > 40 ? 2.5 + m.fatigue / 40 : 0.3;
             if (tg === 'faith') s += t.faith * (ph === 'morning' || ph === 'evening' ? 3 : 0.6);
             if (tg === 'guard') s += m.role === 'guard' ? (ph === 'work' ? 4 : 1) : 0;
-            if (tg === 'patient') s += m.health < 50 ? 6 : -10;
+            if (tg === 'patient') s += m.health < 50 || m.injuries.length ? 6 : -10;
             if (tg === 'music') s += m.person.background === 'musician' ? 4 : 0;
             if (tg === 'grief') s += m.grief > 0 ? 6 : (m.tr.faith > 0.6 && ph === 'morning' ? 0.5 : -0.2);
           }
@@ -561,10 +576,10 @@ export class Camp {
     const c = this.center();
     if (!c) { m.mode = 'follow'; return; }
     const d = Math.hypot(m.pos.x - c.x, m.pos.z - c.z);
-    if (d < 12) { m.mode = 'camp'; m.task = null; return; }
+    if (d < 12) { m.mode = 'camp'; m.task = null; this.game.unload(m, true); return; }
     const pl = this.game.player.pos, dp = Math.hypot(m.pos.x - pl.x, m.pos.z - pl.z);
     // out of sight and far from you: they just get there
-    if (dp > 70 || (!near && dp > 30)) { m.pos.set(c.x + 3, c.y, c.z + 3); m.pos.y = this.game.physics.groundAt(m.pos.x, m.pos.z, c.y + 0.6); m.visualY = m.pos.y; m.mode = 'camp'; m.task = null; m.stop(); return; }
+    if (dp > 70 || (!near && dp > 30)) { m.pos.set(c.x + 3, c.y, c.z + 3); m.pos.y = this.game.physics.groundAt(m.pos.x, m.pos.z, c.y + 0.6); m.visualY = m.pos.y; m.mode = 'camp'; m.task = null; m.stop(); this.game.unload(m, true); return; }
     if (!m.path) m.goTo(c.x + 2, c.y, c.z + 2);
   }
   startTrip(m) {
@@ -619,6 +634,7 @@ export class Camp {
     if (!this.members.length) return;
     if (this.dirty && this.claim && !this.game.buildMode.active) this.refresh();
     const hrs = dt / this.game.sky.dayLength * 24;
+    const medicHere = this.members.some((o) => !o.dead && o.role === 'medic' && o.mode === 'camp');
     for (const m of this.members) {
       if (m.dead) continue;
       const n = m.needs, s = m.sleeping;
@@ -627,7 +643,20 @@ export class Camp {
       n.social = Math.max(0, n.social - hrs * (m.mode === 'camp' && !s ? 3 : 1));
       if (n.hunger > 80) n.stress = Math.min(100, n.stress + hrs * 3);
       if (m.grief > 0) m.grief = Math.max(0, m.grief - hrs);
-      if (m.mode !== 'camp' && m.mode !== 'away') m.health = Math.min(m.maxHealth, m.health + hrs * 1.5);
+      if (m.mode !== 'camp' && m.mode !== 'away' && !m.controlled) m.health = Math.min(m.maxHealth, m.health + hrs * 1.5);
+      // rest, wounds and the wear of being out there
+      const atCamp = !!this.claim && m.mode !== 'away' && this.inside(m.pos.x, m.pos.z, 2);
+      const sleeping = !!(m.sleeping || (m.task && m.task.kind === 'sleep' && m.task.stage === 'do'));
+      tickCondition(m, hrs, { atCamp, sleeping, resting: !!m.seated, medic: medicHere,
+        onHealed: (d) => this.log(`${m.person.name}'s ${d.name.toLowerCase()} has healed.`, 'hurt') });
+      if (atCamp && !sleeping) m.health = Math.min(m.maxHealth, m.health + hrs * (medicHere ? 2.5 : 1));
+      if (!m.controlled && !atCamp && ['follow', 'wait', 'mission', 'travel', 'inside'].includes(m.mode)) {
+        if (addFatigue(m, dt * (m.run ? 0.26 : 0.075) + (m.attackT === 0 ? 0.45 : 0))) {
+          m.say(m.tr.temper > 0.6 ? 'I\u2019m done. I can\u2019t do any more today.' : 'I\u2019m spent. I need to get back and sleep.');
+          if (this.claim && m.mode !== 'mission') { m.mode = 'travel'; m.task = null; }
+          this.log(`${m.person.name} was exhausted and headed home.`, 'hurt');
+        }
+      }
     }
     // has the player been gone a while?
     if (this.claim) {
@@ -648,22 +677,7 @@ export class Camp {
       if (m.task && m.task.trip && m.task.stage === 'do' && m.mode === 'camp') {
         m.mode = 'away'; m.awayUntil = this.clock + (m.role === 'hunter' ? 4 : 5.5); m.task = null; m.stop();
       }
-      if (m.mode === 'away' && this.clock > (m.awayUntil || 0)) {
-        m.mode = 'camp';
-        const c = this.center();
-        const a = Math.random() * Math.PI * 2;
-        m.pos.set(c.x + Math.cos(a) * 16, 0, c.z + Math.sin(a) * 16);
-        m.pos.y = this.game.physics.groundAt(m.pos.x, m.pos.z, this.game.world.terrain.height(m.pos.x, m.pos.z) + 0.6);
-        m.visualY = m.pos.y;
-        const inv = this.game.inventory, skill = m.skill(m.role === 'hunter' ? 'shooting' : 'scavenging');
-        let got = [];
-        if (Math.random() < 0.08 - skill * 0.015) { m.health = Math.max(15, m.health - 35); got = ['nothing but a bad gash']; this.log(`${m.person.name} came back hurt from a ${m.role === 'hunter' ? 'hunt' : 'supply run'}.`, 'hurt', { who: [m.person.name] }); m.say("Ran into trouble out there. I'm all right. Mostly."); }
-        else if (m.role === 'hunter') { const n = Math.random() < 0.25 ? 0 : 1 + Math.floor(Math.random() * (2 + skill)); if (n) inv.add({ food: n }); got = n ? [`${n} food`] : []; }
-        else { const pool = ['wood', 'metal', 'stone', 'meds', 'ammo', 'fuel', 'food']; const n = 2 + Math.floor(Math.random() * (2 + skill)); const add = {}; for (let i = 0; i < n; i++) { const k = pool[Math.floor(Math.random() * pool.length)]; add[k] = (add[k] || 0) + 1; } inv.add(add); got = Object.entries(add).map(([k, v]) => `${v} ${k}`); }
-        if (got.length && got[0] !== 'nothing but a bad gash') { this.log(`${m.person.name} came back with ${got.join(', ')}.`, 'trip', { who: [m.person.name] }); m.say(m.role === 'hunter' ? `Brought back ${got.join(', ')}.` : `Got ${got.join(', ')}. Not bad.`); }
-        else if (!got.length) { this.log(`${m.person.name} came back empty-handed.`, 'trip'); m.say(m.tr.humor > 0.6 ? 'The deer won today.' : 'Nothing out there today.'); }
-        this.game.markDirty && this.game.markDirty();
-      }
+      if (m.mode === 'away' && this.clock > (m.awayUntil || 0)) this.soc.jobs.comeBack(m);
     }
   }
   // the social director: who talks, who argues, what happens
@@ -874,7 +888,9 @@ export class Camp {
   }
   activity(m) {
     if (m.dead) return 'Dead';
+    if (m.controlled) return 'You\u2019re playing as them';
     if (m.mode === 'away') return m.role === 'hunter' ? 'Out hunting' : 'Out on a supply run';
+    if (m.mode === 'mission') return m.mission ? m.mission.status : 'On a job';
     if (m.mode === 'follow') return 'With you';
     if (m.mode === 'wait') return 'Waiting where you left them';
     if (m.mode === 'travel') return 'Heading back to camp';

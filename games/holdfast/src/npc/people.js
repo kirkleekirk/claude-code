@@ -381,6 +381,19 @@ function pickLast(rng, taken, list = LAST) {
   const pool = free.length ? free : list;
   return pool[Math.floor(rng() * pool.length)];
 }
+// The leader: you. Their "background" is whatever you made them; their
+// skills follow the traits you picked on the survivor screen.
+export function registerLeader(profile) {
+  const t = new Set(profile.traits || []);
+  const lv = (k, base = 1) => Math.min(3, base + (t.has(k) ? 1 : 0));
+  BACKGROUND_BY_ID.leader = {
+    id: 'leader', job: 'The one holding this group together', role: 'guard',
+    skills: { cooking: 0, medicine: lv('medic', 0), mechanics: lv('handy', 0), combat: lv('slugger'), shooting: lv('marksman'), scavenging: lv('scavenger'), farming: 0, building: lv('handy'), leadership: 2, stealth: lv('quiet', 0) },
+    kin: ['family'], item: 'the claim flag', place: null, known: 'kept everyone alive on the road', story: [],
+    flavor: ['We keep moving. That\u2019s the whole trick.', 'Check your gear before dark.', 'Everybody eats tonight. That\u2019s the job.', 'One more day. Then another one.'],
+    ideas: [],
+  };
+}
 // A new person: rng() -> 0..1. used: set of background ids already in the
 // group this person will join (their background must be new to it).
 export function makePerson(rng, used = new Set(), opts = {}) {

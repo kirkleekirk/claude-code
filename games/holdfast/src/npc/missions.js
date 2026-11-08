@@ -4,7 +4,7 @@
 // the inside, a scouting run, an ambush on the highway).
 import { Structure } from '../building/structure.js';
 import { CELL, STORY } from '../building/defs.js';
-import { compass, cap, poss } from './raiders.js';
+import { compass, cap, poss, dropsOf } from './raiders.js';
 
 export const BUILD_TYPES = { grill: 'grill', garden: 'garden_bed', medcot: 'medcot', workbench: 'workbench', lookout: 'lookout', shelf: 'metal_shelf', table: 'table', chopping: 'chopping_block', campfire: 'log_bench' };
 const BUILD_NAMES = { grill: 'a grill', garden: 'a garden bed', medcot: 'a medical cot', workbench: 'a workbench', lookout: 'a lookout post', shelf: 'a storage shelf', table: 'a table', chopping: 'a chopping block', campfire: 'a log bench by the fire' };
@@ -282,7 +282,7 @@ export class Missions {
     if (m.convoy) {
       if (m.convoy.every((x) => x.dead || x.gone)) {
         const dead = m.convoy.filter((x) => x.dead).length;
-        for (const x of m.convoy) if (x.dead) this.soc.lootables.push({ pos: [x.pos.x, x.pos.y + 0.4, x.pos.z], table: 'supply_run', label: `${x.first}’s pack`, searched: false, until: this.clock + 24 });
+        for (const x of m.convoy) if (x.dead) this.soc.lootables.push({ pos: [x.pos.x, x.pos.y + 0.4, x.pos.z], table: 'supply_run', label: `${x.first}’s pack`, searched: false, until: this.clock + 24, extra: dropsOf(x) });
         m.convoy = null;
         if (dead) this.complete(m, `You hit ${poss(c.name)} supply run on the highway.`);
         else { m.step = `They got away. Try again at dawn`; }
@@ -299,7 +299,7 @@ export class Missions {
     pool.forEach((r, i) => {
       if (c.live) { const live = c.npcs.find((x) => x.rec === r); if (live) { this.soc.drop(live); c.npcs = c.npcs.filter((x) => x !== live); } }
       const sx = a.x - Math.cos(dir) * (40 + i * 2.5), sz = a.z - Math.sin(dir) * (40 + i * 2.5);
-      const x = this.soc.spawn(r.person, { x: sx, z: sz, faction: 'raider', mode: 'raider', weapon: r.weapon });
+      const x = this.soc.spawn(r.person, { x: sx, z: sz, faction: 'raider', mode: 'raider', weapon: r.weapon, gunId: r.gun || 'ak' });
       x.rec = r; x.health = r.health;
       let seen = false;
       Object.defineProperty(x, 'isHostile', { get: () => seen });

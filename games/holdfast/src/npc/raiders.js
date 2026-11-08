@@ -97,7 +97,9 @@ export class Raiders {
     p.palette[1] = DARK_SHIRTS[Math.floor(rng() * DARK_SHIRTS.length)];
     p.palette[2] = DARK_PANTS[Math.floor(rng() * DARK_PANTS.length)];
     const bg = BACKGROUND_BY_ID[p.background];
-    const r = { person: p, health: 100, dead: false, weapon: bg.skills.shooting >= 1 || rng() < 0.45 ? 'gun' : 'bat' };
+    const armed = bg.skills.shooting >= 1 || rng() < 0.45;
+    const gun = armed ? ['ak', 'ak', 'pump', '1911', '1911', 'uzi', 'm4', 'pump'][Math.floor(rng() * 8)] : null;
+    const r = { person: p, health: 100, dead: false, weapon: armed ? 'gun' : 'bat', gun };
     c.roster.push(r);
     // the boss: most commanding
     const alive = c.roster.filter((x) => !x.dead);
@@ -178,7 +180,7 @@ export class Raiders {
     if (r.dead) return;
     const a = Math.random() * Math.PI * 2, d = arriving ? 16 : 3 + Math.random() * 6;
     const x = c.x + Math.cos(a) * d, z = c.z + Math.sin(a) * d;
-    const m = this.soc.spawn(r.person, { x, z, faction: 'raider', mode: 'raider', weapon: r.weapon });
+    const m = this.soc.spawn(r.person, { x, z, faction: 'raider', mode: 'raider', weapon: r.weapon, gunId: r.gun || 'ak' });
     m.health = r.health; m.maxHealth = 100;
     m.rcamp = c; m.rec = r;
     m.boss = r.person.id === c.boss;
@@ -250,7 +252,7 @@ export class Raiders {
     if (dPl > 70 || pl.dead) { c.sus = Math.max(0, c.sus - dt * 0.2); return; }
     const dark = g.sky.darkness;
     let best = 0, who = null;
-    const followers = this.soc.npcs.filter((o) => o.faction === 'camp' && o.mode === 'follow' && !o.dead);
+    const followers = this.soc.npcs.filter((o) => o.faction === 'camp' && ['follow', 'mission', 'wait'].includes(o.mode) && !o.dead && !o.controlled && Math.hypot(o.pos.x - c.x, o.pos.z - c.z) < 60);
     for (const m of c.npcs) {
       if (m.dead || m.sleeping || m.downed) continue;
       for (const t of [pl, ...followers]) {
@@ -319,7 +321,7 @@ export class Raiders {
       // someone may see it happen
       if (c.npcs.some((o) => o !== m && !o.dead && !o.sleeping && Math.hypot(o.pos.x - m.pos.x, o.pos.z - m.pos.z) < 14)) this.goHostile(c);
     }
-    this.soc.lootables.push({ pos: [m.pos.x, m.pos.y + 0.4, m.pos.z], table: 'raider_body', label: `Search ${m.first}`, searched: false, until: this.clock + 24 });
+    this.soc.lootables.push({ pos: [m.pos.x, m.pos.y + 0.4, m.pos.z], table: 'raider_body', label: `Search ${m.first}`, searched: false, until: this.clock + 24, extra: dropsOf(m) });
   }
   onSearched(item) {
     if (item.table !== 'raider_stash') return;
@@ -406,9 +408,9 @@ export class Raiders {
   target(m) {
     const pl = this.game.player;
     let best = null, bd = 40;
-    if (!pl.dead) { const d = dist(m.pos, pl.pos); if (d < bd) { best = pl; bd = d; } }
+    if (!pl.dead && !pl.released) { const d = dist(m.pos, pl.pos); if (d < bd) { best = pl; bd = d; } }
     for (const o of this.soc.npcs) {
-      if (o.dead || o.downed || o.faction === 'raider' || o.mode === 'away') continue;
+      if (o.dead || o.downed || o.faction === 'raider' || o.mode === 'away' || o.controlled) continue;
       if (o.faction === 'stranger' && !o.angry) continue;
       const d = dist(m.pos, o.pos);
       if (d < bd) { best = o; bd = d; }
@@ -550,7 +552,7 @@ export class Raiders {
     const P = { camp: c, npcs: [], until: this.clock + 3 };
     party.forEach((r, i) => {
       const x = ctr.x + Math.cos(a + (i - n / 2) * 0.12) * 42, z = ctr.z + Math.sin(a + (i - n / 2) * 0.12) * 42;
-      const m = this.soc.spawn(r.person, { x, z, faction: 'raider', mode: 'raider', weapon: r.weapon });
+      const m = this.soc.spawn(r.person, { x, z, faction: 'raider', mode: 'raider', weapon: r.weapon, gunId: r.gun || 'ak' });
       m.health = r.health; m.rec = r; m.rcamp = null; m.party = P; m.raiding = true;
       Object.defineProperty(m, 'isHostile', { get: () => true });
       m.brain = (dt) => this.partyBrain(m, dt);
@@ -629,7 +631,7 @@ export class Raiders {
   toJSON() {
     for (const c of this.camps) if (c.live) for (const m of c.npcs) m.rec.health = m.dead ? 0 : m.health;
     return this.camps.map((c) => ({
-      id: c.id, name: c.name, x: c.x, y: c.y, z: c.z, Sid: c.Sid, roster: c.roster.map((r) => ({ person: { ...r.person, rels: undefined }, health: Math.round(r.health), dead: r.dead, weapon: r.weapon })),
+      id: c.id, name: c.name, x: c.x, y: c.y, z: c.z, Sid: c.Sid, roster: c.roster.map((r) => ({ person: { ...r.person, rels: undefined }, health: Math.round(r.health), dead: r.dead, weapon: r.weapon, gun: r.gun })),
       known: c.known, scouted: c.scouted, mods: c.mods, stashLooted: c.stashLooted, grownDay: c.grownDay, losses: c.losses, grudge: c.grudge, boss: c.boss, tents: c.tents, gone: c.gone, raidAt: c.raidAt,
     }));
   }
@@ -649,6 +651,14 @@ export class Raiders {
 }
 
 function dist(a, b) { return Math.hypot(a.x - b.x, a.z - b.z); }
+// what someone had on them: their gun (loaded as it was) and their ammo
+export function dropsOf(m) {
+  const out = [];
+  const g = m.gear && m.gear.gun;
+  if (g) out.push({ kind: 'gun', id: g.id, n: 1, mag: g.mag });
+  for (const [id, n] of Object.entries(m.pack ? m.pack.ammo : {})) if (n > 0) out.push({ kind: 'ammo', id, n });
+  return out;
+}
 function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
 function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 // the Saints' stash, the Red Hand's stash

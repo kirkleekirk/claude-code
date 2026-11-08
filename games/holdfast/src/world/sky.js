@@ -218,8 +218,10 @@ export class Sky {
     this.sun.intensity += fl * 3;
     this.hemi.color.copy(amb);
     this.hemi.groundColor.copy(gnd);
-    this.hemi.intensity = hemiI + fl * 1.5;
-    this.ambient.intensity = lerp(0.05, 0.16, dayLight);
+    // the top view keeps a little night sight so you can still follow a fight
+    const ov = (this.overview || 0) * (1 - dayLight);
+    this.hemi.intensity = hemiI + fl * 1.5 + ov * 0.45;
+    this.ambient.intensity = lerp(0.05, 0.16, dayLight) + ov * 0.3;
     this.colors.horizon.copy(hor); this.colors.zenith.copy(zen); this.colors.sun.copy(sunC);
     this.fog.color.copy(hor).lerp(zen, 0.15);
     this.fog.far = this.viewDistance * w.fogFar * lerp(0.75, 1, dayLight);

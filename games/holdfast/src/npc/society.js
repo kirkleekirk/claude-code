@@ -3,14 +3,17 @@
 // use (paths, sight, shooting, who's a threat), followers, and the fires.
 import * as THREE from 'three';
 import { NPC } from './npc.js';
+import { maxHealthOf } from '../condition.js';
 import { Camp } from './camp.js';
 import { Speech } from './dialogue.js';
-import { makePerson } from './people.js';
+import { makePerson, registerLeader } from './people.js';
+import { profilePalette } from '../survivor.js';
 import { Raiders } from './raiders.js';
 import { Strangers } from './strangers.js';
 import { Missions } from './missions.js';
+import { Jobs } from './jobs.js';
 import { NpcUI } from './ui.js';
-import { rollLoot } from '../gameplay.js';
+import { rollLoot, GUNS } from '../items.js';
 
 const v3 = new THREE.Vector3();
 
@@ -27,6 +30,7 @@ export class Society {
     this.raiders = new Raiders(this);
     this.strangers = new Strangers(this);
     this.missions = new Missions(this);
+    this.jobs = new Jobs(this);
     this.ui = new NpcUI(this);
     this.fires = new Fires(this);
     // edits to the camp's structure rebuild its stations and paths
@@ -51,7 +55,7 @@ export class Society {
   near(npc, r) {
     const out = [];
     for (const o of this.npcs) {
-      if (o === npc || o.dead || o.mode === 'away') continue;
+      if (o === npc || o.dead || o.mode === 'away' || o.controlled) continue;
       const dx = o.pos.x - npc.pos.x, dz = o.pos.z - npc.pos.z;
       if (dx * dx + dz * dz < r * r) out.push(o);
     }
@@ -133,30 +137,53 @@ export class Society {
     }
     if (d < 1.8) m.attack(t);
   }
+  // one shot from an NPC's gun: every pellet rolls to hit; shotguns
+  // catch whatever is crowded around the target too
   shoot(m, t) {
     if (t.dead) return;
-    const g = this.game;
+    const g = this.game, def = m.gunDef || GUNS['1911'];
     const dx = t.pos.x - m.pos.x, dz = t.pos.z - m.pos.z, d = Math.hypot(dx, dz) || 1;
     const sk = m.skill('shooting');
     const moving = t.vel ? Math.hypot(t.vel.x, t.vel.z) : 0;
-    const p = Math.max(0.12, Math.min(0.9, 0.48 + sk * 0.13 - d / 55 - moving * 0.04 - g.sky.darkness * 0.12));
-    const hit = Math.random() < p;
+    const fall = Math.max(0, d - def.range) / def.range;
+    const base = def.pellets > 1 ? Math.max(0.15, 0.95 - d / (def.range * 1.3)) : 0.5 + sk * 0.12 - d / (def.range * 1.6) - def.spread * 2;
+    const p = Math.max(0.1, Math.min(0.92, base - moving * 0.04 - g.sky.darkness * 0.12 - fall * 0.3));
     m.items.group.updateMatrixWorld(true);
     const from = this.items_muzzle(m);
-    const to = new THREE.Vector3(t.pos.x, t.pos.y + 1.25, t.pos.z);
-    if (!hit) to.add(new THREE.Vector3((Math.random() - 0.5) * 1.6, (Math.random() - 0.3) * 1.2, (Math.random() - 0.5) * 1.6));
-    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([from, to]), this.tracerMat);
-    g.scene.add(line);
-    this.tracers.push({ line, t: 0.06 });
-    const pd = Math.hypot(g.player.pos.x - m.pos.x, g.player.pos.z - m.pos.z);
-    if (pd < 140) g.audio && g.audio.gunshot(Math.max(0.15, 1 - pd / 140));
-    if (hit) {
-      const dmg = (30 + sk * 8 + Math.random() * 12) * (Math.random() < 0.12 ? 2.4 : 1);
-      if (t.hurt) t.hurt(dmg, dx / d, dz / d, 'shot');
-      else t.damage(t === g.player ? dmg * 0.45 : dmg, m);
+    let hits = 0;
+    for (let i = 0; i < def.pellets; i++) if (Math.random() < p) hits++;
+    const lines = Math.min(3, def.pellets);
+    for (let i = 0; i < lines; i++) {
+      const to = new THREE.Vector3(t.pos.x, t.pos.y + 1.2, t.pos.z);
+      if (!hits || i > 0) to.add(new THREE.Vector3((Math.random() - 0.5) * (1 + def.pellets * 0.15), (Math.random() - 0.3) * 1.0, (Math.random() - 0.5) * (1 + def.pellets * 0.15)));
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([from, to]), this.tracerMat);
+      g.scene.add(line);
+      this.tracers.push({ line, t: 0.06 });
     }
-    g.zombies.alertNoise(m.pos, 45);
-    this.raiders.hear(m.pos, 70, m);
+    const pd = Math.hypot(g.player.pos.x - m.pos.x, g.player.pos.z - m.pos.z);
+    if (pd < 160) g.audio && g.audio.gunshot(Math.max(0.15, 1 - pd / 160) * Math.min(1.2, def.noise / 75));
+    const hurtIt = (x, dmg) => {
+      const ex = x.pos.x - m.pos.x, ez = x.pos.z - m.pos.z, ed = Math.hypot(ex, ez) || 1;
+      if (x.hurt) x.hurt(dmg, ex / ed, ez / ed, def.knock ? 'melee' : 'shot');
+      // people take cover and keep moving: gunfire between people is less sure than at the dead
+      else x.damage(x === g.player ? dmg * 0.45 : Math.min(60, dmg * 0.7), m);
+    };
+    if (hits) {
+      const head = def.pellets === 1 && Math.random() < 0.1 + sk * 0.04;
+      hurtIt(t, def.dmg * hits * (head ? 2.4 : 1) * (1 - Math.min(0.6, fall * 0.5)) * (m.faction === 'raider' ? 0.8 : 1));
+    }
+    // a shotgun blast hits the crowd around the target too
+    if (def.pellets > 1 && t.hurt) {
+      for (const z of g.zombies.list) {
+        if (z === t || z.dead) continue;
+        const zx = z.pos.x - m.pos.x, zz = z.pos.z - m.pos.z, zd = Math.hypot(zx, zz);
+        if (zd > def.range || (zx * dx + zz * dz) / (zd * d) < 0.93) continue;
+        const k = Math.floor(def.pellets * (0.25 + Math.random() * 0.3));
+        if (k) hurtIt(z, def.dmg * k);
+      }
+    }
+    g.zombies.alertNoise(m.pos, def.noise * 0.6);
+    this.raiders.hear(m.pos, def.noise, m);
   }
   items_muzzle(m) {
     if (m.items.group.visible && m.items.muzzle) return m.items.muzzle.clone().applyMatrix4(m.items.group.matrixWorld);
@@ -166,7 +193,7 @@ export class Society {
   humansNear(pos, r) {
     const out = [];
     for (const o of this.npcs) {
-      if (o.dead || o.mode === 'away' || !o.char.root.visible) continue;
+      if (o.dead || o.mode === 'away' || o.controlled || !o.char.root.visible) continue;
       const d = Math.hypot(o.pos.x - pos.x, o.pos.z - pos.z);
       if (d < r) out.push([d, o]);
     }
@@ -191,7 +218,7 @@ export class Society {
     const out = [];
     const f = this.npcs.find((o) => o.mode === 'follow' && !o.dead && o.skill('scavenging') >= 2 && Math.hypot(o.pos.x - p.x, o.pos.z - p.z) < 14);
     if (f && Math.random() < 0.35 + f.skill('scavenging') * 0.08) {
-      const got = rollLoot(item.table, g.inventory, 0.7);
+      const { got } = g.giveLoot(f, rollLoot(item.table, 0.7));
       if (got.length) { out.push(`${f.first} turned up ${got.join(', ')}`); if (Math.random() < 0.5) f.say(this.speech.line(f, 't_loot')); }
     }
     this.missions.onSearched(item);
@@ -366,6 +393,33 @@ export class Society {
     return n;
   }
 
+  // the leader's body (made from the survivor screen), created once
+  ensureLeader(p) {
+    registerLeader(p);
+    const model = p.model === 'woman' ? 'woman' : 'man', palette = profilePalette(p);
+    let L = this.camp.members.find((m) => m.leader && !m.dead);
+    if (L) {
+      L.person.name = p.name;
+      if (L.person.model !== model || L.person.palette.join() !== palette.join()) L.setLook(model, palette);
+      return L;
+    }
+    const at = this.game.player.pos;
+    const person = { id: 'LEADER', name: p.name, model, age: 33, palette, personality: 'rock', background: 'leader', role: 'guard', kin: '', kinRel: '', story: 0, seed: 7, leader: true };
+    L = this.spawn(person, { x: at.x, y: at.y, z: at.z, faction: 'camp', mode: 'controlled', weapon: 'bat' });
+    this.camp.add(L);
+    L.mode = 'controlled';
+    return L;
+  }
+  // after loading: back into whoever you were playing
+  restoreControl(id) {
+    const g = this.game;
+    const b = (id && this.camp.members.find((m) => m.person.id === id && !m.dead)) || this.camp.members.find((m) => m.leader && !m.dead);
+    if (b) { g.player.body && (g.player.body.controlled = false); g.player.body = null; g.switchTo(b, true); }
+    // only one of them is yours
+    const home = this.camp.claim;
+    for (const m of this.camp.members) if (m !== b && (m.controlled || m.mode === 'controlled')) { m.controlled = false; m.mode = home && this.camp.inside(m.pos.x, m.pos.z, 2) ? 'camp' : home ? 'travel' : 'follow'; }
+  }
+
   // ---------------- new game ----------------
   // two people you found on the first morning
   startingCompanions(near) {
@@ -421,9 +475,12 @@ export class Society {
     this.raiders.update(dt);
     this.strangers.update(dt);
     this.missions.update(dt);
+    this.jobs.update(dt);
     const far = g.quality.level === 'low' ? 85 : 120;
+    // the world is alive around you, and wherever you're looking from above
+    const cf = g.command && g.command.active ? g.command.focusPoint : null;
     for (const n of [...this.npcs]) {
-      const d = Math.hypot(n.pos.x - p.pos.x, n.pos.z - p.pos.z);
+      const d = Math.min(Math.hypot(n.pos.x - p.pos.x, n.pos.z - p.pos.z), cf ? Math.hypot(n.pos.x - cf.x, n.pos.z - cf.z) : Infinity);
       const keep = n.update(dt, d < far);
       if (!keep || n.gone) this.drop(n);
     }
@@ -438,7 +495,8 @@ export class Society {
   toJSON() {
     return {
       v: 1,
-      members: this.camp.members.filter((m) => !m.dead).map((m) => ({ ...m.toJSON(), role: m.role, mode: m.mode === 'away' || m.mode === 'talk' || m.mode === 'leaving' ? 'camp' : m.mode, x: m.pos.x, y: m.pos.y, z: m.pos.z, smoker: m.smoker })),
+      members: this.camp.members.filter((m) => !m.dead).map((m) => ({ ...m.toJSON(), role: m.role, mode: ['away', 'talk', 'leaving', 'controlled', 'mission'].includes(m.mode) ? (this.camp.claim ? 'camp' : 'follow') : m.mode, x: m.pos.x, y: m.pos.y, z: m.pos.z, smoker: m.smoker })),
+      controlled: this.game.player.body ? this.game.player.body.person.id : null,
       camp: this.camp.toJSON(),
       raiders: this.raiders.toJSON(),
       missions: this.missions.toJSON(),
@@ -448,6 +506,17 @@ export class Society {
     if (!j || j.v !== 1) return false;
     for (const d of j.members || []) {
       const { x, y, z, mode, role, needs, smoker, ...person } = d;
+      // the leader's body already exists (made from the profile): fill it in
+      const L = person.leader && this.camp.members.find((m) => m.leader);
+      if (L) {
+        L.pos.set(x, y, z); L.visualY = y;
+        L.rels = person.rels || {}; L.knows = person.knows || {};
+        L.pack.load(person.pack); L.gear = person.gear ? { gun: person.gear.gun ? { ...person.gear.gun } : null } : L.gear;
+        L.fatigue = person.fatigue || 0; L.injuries = person.injuries || []; L.maxHealth = maxHealthOf(L); L.health = Math.min(L.maxHealth, person.health ?? 100);
+        if (needs) Object.assign(L.needs, needs);
+        L.mode = mode || 'camp';
+        continue;
+      }
       const n = this.spawn(person, { x, y, z, faction: 'camp', mode: mode || 'camp' });
       n.role = role || person.role;
       if (needs) Object.assign(n.needs, needs);
@@ -455,6 +524,7 @@ export class Society {
       this.camp.add(n);
       n.mode = mode || 'camp';
     }
+    this.savedControl = j.controlled || null;
     this.camp.load(j.camp || {});
     this.raiders.load(j.raiders || []);
     this.missions.load(j.missions || {});

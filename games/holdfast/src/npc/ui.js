@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { ROLES, PERSONALITIES, BACKGROUND_BY_ID } from './people.js';
 import { ACT_NAMES } from './camp.js';
+import { treat, injuryList, fatigueWord } from '../condition.js';
 import { isTouch } from '../platform.js';
 
 const v = new THREE.Vector3();
@@ -24,7 +25,7 @@ export class NpcUI {
     const ui = document.getElementById('ui');
     this.layer = document.createElement('div');
     this.layer.className = 'npc-layer';
-    ui.appendChild(this.layer);
+    ui.prepend(this.layer); // under the HUD, over the world
     this.bubbles = new Map();
     // talk panel
     const t = this.talkEl = document.createElement('div');
@@ -183,6 +184,7 @@ export class NpcUI {
       o.push(['Come with me.', () => { this.askFollow(n); this.menu(); }]);
     }
     if (camp.claim) o.push(['About your job…', () => this.jobMenu(n)]);
+    if (Math.hypot(n.pos.x - pl.pos.x, n.pos.z - pl.pos.z) < 30) o.push([`Let me take it from here (play as ${n.first})`, () => { const ok = this.game.switchTo(n); if (ok) this.closeTalk(); else this.menu(); }]);
     o.push(['Goodbye.', () => { this.say(n, sp.line(n, 'bye')); setTimeout(() => this.talking === n && this.closeTalk(), 250); }]);
     this.options(o);
   }
@@ -205,7 +207,7 @@ export class NpcUI {
   story(n) {
     const sp = this.soc.speech;
     const told = n.person.story || 0;
-    if (told >= 4) return this.say(n, sp.line(n, 'no_more_story'));
+    if (told >= 4 || !n.bg.story.length) return this.say(n, sp.line(n, 'no_more_story'));
     if (told >= n.storyLimit('player')) return this.say(n, sp.line(n, 'story_locked'));
     this.say(n, sp.chapter(n, told));
     n.person.story = told + 1;
@@ -255,9 +257,9 @@ export class NpcUI {
     ]);
   }
   patch(n) {
-    const inv = this.game.inventory, pl = this.game.player;
-    if (n.skill('medicine') < 3 && inv.res.meds <= 0) return this.say(n, 'I need meds to work with. We’re out.');
-    if (n.skill('medicine') < 3) inv.res.meds--;
+    const pl = this.game.player;
+    if (n.skill('medicine') < 3 && !this.game.takeSupply('res', 'meds', 1)) return this.say(n, 'I need meds to work with. We’re out.');
+    if (pl.body) treat(pl.body);
     const h = 30 + n.skill('medicine') * 10;
     pl.heal(h);
     this.say(n, ['Hold still. There.', 'This’ll sting. ...Done.', 'Keep that clean, I mean it.'][Math.floor(Math.random() * 3)]);
@@ -268,6 +270,7 @@ export class NpcUI {
     const sp = this.soc.speech;
     const followers = this.soc.camp.members.filter((m) => m.mode === 'follow' && !m.dead).length;
     if (followers >= 3) return this.say(n, 'You’ve already got a crowd with you. Somebody has to mind the camp.');
+    if (n.fatigue > 85) return this.say(n, n.tr.temper > 0.6 ? 'Look at me. I can barely stand. No.' : 'I\u2019m too tired. Let me sleep first.');
     const no = n.health < 35 || n.needs.energy < 15 || n.rel('player') < -0.25 || (n.tr.bravery < 0.25 && n.mood < 0.35);
     if (no) return this.say(n, sp.line(n, 'follow_no'));
     if (n.task && n.task.slot) n.task.slot.user = null;
@@ -322,8 +325,9 @@ export class NpcUI {
         this.say(n, `Honestly? I could use ${name}. ${n.tr.honesty > 0.6 ? 'I won’t lie, it’s been rough.' : ''}`);
         this.options([
           [`Here. (${amt} ${res})`, () => {
-            if ((inv.res[res] || 0) < amt) { this.say(n, 'You don’t have it either, huh. It’s fine.'); return this.menu(); }
-            inv.res[res] -= amt; n.gotWant = true; n.adjust('player', 0.3);
+            const kind = res === 'ammo' ? 'ammo' : 'res', id = res === 'ammo' ? '9mm' : res;
+            if (this.game.haveSupply(kind, id) < amt) { this.say(n, 'You don’t have it either, huh. It’s fine.'); return this.menu(); }
+            this.game.takeSupply(kind, id, amt); n.gotWant = true; n.adjust('player', 0.3);
             this.say(n, n.tr.warmth > 0.5 ? 'You’re a good person. I won’t forget this.' : 'Huh. Thanks. Didn’t expect that.');
             this.menu();
           }],

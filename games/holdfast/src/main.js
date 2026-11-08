@@ -25,6 +25,9 @@ import { SurvivorSetup, SPAWNS, traitMods, profilePalette } from './survivor.js'
 import { START_RES } from './gameplay.js';
 import { Society } from './npc/society.js';
 import { CommandView } from './command.js';
+import { GUNS, itemName } from './items.js';
+import { treat, maxHealthOf, INJURIES, exhausted } from './condition.js';
+import { PackScreen } from './packui.js';
 
 import { isTouch } from './platform.js';
 export { isTouch };
@@ -117,6 +120,8 @@ export class Game {
     this.audio = new Audio();
     this.society = new Society(this);
     this.command = new CommandView(this);
+    this.storage = this.inventory; // the camp's storage
+    this.packScreen = new PackScreen(this);
     this.sky.onThunder = () => setTimeout(() => this.audio.thunder(), 600 + Math.random() * 1500);
     // flashlight
     this.flashlight = new THREE.SpotLight(0xfff4dc, 0, 28, 0.42, 0.45, 1.4);
@@ -124,7 +129,20 @@ export class Game {
     this.player.flashlightOn = false;
     this.setWeapon('bat');
     const qs = new URLSearchParams(location.search);
+    this.loading = true;
     const loaded = !qs.get('fresh') && loadGame(this);
+    this.loading = false;
+    if (loaded && this.profile) {
+      const L = this.society.ensureLeader(this.profile);
+      this.society.restoreControl(this.society.savedControl);
+      // an older save: its pistol and ammo go to the leader
+      if (this.storage.legacyPistol) {
+        delete this.storage.legacyPistol;
+        if (!L.gear.gun) L.gear.gun = { id: '1911', mag: 8 }; else this.storage.put('gun', '1911', 1, { mag: 8 });
+        L.pack.add('ammo', '9mm', this.storage.take('ammo', '9mm', 48));
+      }
+      if (this.savedWeaponGun && this.player.body && this.player.body.gear.gun) this.setWeapon('gun');
+    }
     // a save from before there were other people: two of them find you
     if (loaded && !this.society.loaded && !qs.get('still')) this.society.startingCompanions(this.player.pos);
     this.onProgress('Ready', 1);
@@ -175,27 +193,105 @@ export class Game {
   // (for a new game) starting kit and spawn point.
   applyProfile(p, fresh) {
     this.profile = p;
-    this.mods = traitMods(p.traits || []);
+    // the leader is a survivor like everyone else; you start out as them
+    const lead = this.society.ensureLeader(p);
+    lead.baseHealth = traitMods(p.traits || []).maxHealth;
+    lead.maxHealth = maxHealthOf(lead);
+    if (!this.player.body || this.player.body === lead) this.switchTo(lead, true);
     const pl = this.player;
-    const old = pl.char;
-    const ch = new Character(p.model === 'woman' ? 'woman' : 'man', profilePalette(p));
-    this.scene.remove(old.root);
-    this.scene.add(ch.root);
-    pl.char = ch;
-    pl.maxHealth = this.mods.maxHealth;
-    pl.maxStamina = this.mods.maxStamina;
-    pl.health = Math.min(pl.health, pl.maxHealth);
-    pl.stamina = Math.min(pl.stamina, pl.maxStamina);
-    this.setWeapon(pl.weapon && pl.weapon.kind === 'gun' ? 'pistol' : 'bat');
     if (fresh) {
       Object.assign(this.inventory.res, START_RES);
       if (p.traits.includes('prepper')) this.inventory.add({ food: 4, meds: 2, wood: 15, metal: 6, stone: 6 });
+      lead.pack.add('res', 'food', 2); lead.pack.add('res', 'meds', 1);
+      if (p.traits.includes('prepper')) { lead.pack.add('res', 'food', 2); lead.pack.add('res', 'meds', 1); }
       const sp = SPAWNS.find((s) => s.id === p.spawn) || SPAWNS[0];
       pl.spawn(sp.at[0], sp.at[1]);
-      pl.health = pl.maxHealth; pl.stamina = pl.maxStamina;
+      lead.health = lead.maxHealth; pl.stamina = pl.maxStamina;
       this.tpc.yaw = -Math.PI / 2;
     }
     pl.syncModel(0.016);
+  }
+  // take control of a survivor (the one you were drives themselves again)
+  switchTo(b, quiet = false) {
+    const pl = this.player, old = pl.body;
+    if (!b || b.dead || b.downed || old === b) return false;
+    if (b.mode === 'away') { this.hud.toast(`${b.first} is out on a run.`, 2); return false; }
+    if (exhausted(b) && !quiet) { this.hud.toast(`${b.first} is exhausted and needs rest at camp.`, 2.5); return false; }
+    if (this.society.ui.talking) this.society.ui.closeTalk();
+    pl.attach(b);
+    b.mode = 'controlled';
+    if (old && !old.dead) {
+      // back to their own life: at camp, or tagging along with whoever you are now
+      const home = this.claims.list[0];
+      old.mode = home && home.x0 <= old.pos.x && old.pos.x <= home.x1 && home.z0 <= old.pos.z && old.pos.z <= home.z1 ? 'camp' : 'follow';
+      if (exhausted(old) || old.health < old.maxHealth * 0.35) old.mode = home ? 'travel' : 'follow';
+      old.task = null;
+    }
+    this.mods = b.leader ? traitMods(this.profile ? this.profile.traits || [] : []) : b.mods();
+    pl.maxStamina = this.mods.maxStamina;
+    this.setWeapon(b.gear.gun ? 'gun' : 'bat');
+    this.wasInCamp = null;
+    if (!quiet) this.hud.toast(`You're ${b.person.name} now.`, 2.5);
+    this.hud.bodyChanged && this.hud.bodyChanged();
+    return true;
+  }
+  // the one you're playing went down: someone close takes over to help
+  onBodyDown(b, src) {
+    const alive = this.society.camp.members.filter((m) => m !== b && !m.dead && !m.downed && m.mode !== 'away');
+    alive.sort((x, y) => Math.hypot(x.pos.x - b.pos.x, x.pos.z - b.pos.z) - Math.hypot(y.pos.x - b.pos.x, y.pos.z - b.pos.z));
+    const near = alive.find((m) => Math.hypot(m.pos.x - b.pos.x, m.pos.z - b.pos.z) < 40);
+    const next = near || alive.find((m) => m.leader) || alive[0];
+    if (next) this.switchTo(next, true);
+    b.health = 1;
+    b.goDown(src);
+    this.hud.toast(near ? `${b.first} is down! You're ${next.first} now. Get to them (hold ${isTouch ? 'Use' : 'E'}).` : `${b.first} is down, out there alone. Send someone, fast.`, 5);
+  }
+  onExhausted(b) {
+    this.hud.toast(`${b.first} is exhausted. ${b.leader ? 'Get back to camp and rest.' : 'Switch to someone rested (top view) or head home.'}`, 5);
+  }
+  // put found things in a survivor's pack: { got: [names], left: [entries] }
+  giveLoot(b, entries) {
+    const got = [], left = [], taken = [];
+    for (const e of entries) {
+      if (!e || !e.n) continue;
+      // claim kits and things for plans go to the group
+      if (e.kind === 'item') { this.storage.put('item', e.id, e.n); got.push(itemName(e.kind, e.id, e.n)); taken.push({ kind: e.kind, id: e.id, n: e.n }); continue; }
+      if (e.kind === 'gun' && !b.gear.gun) {
+        b.gear.gun = { id: e.id, mag: e.mag || 0 };
+        got.push(itemName(e.kind, e.id) + ' (in hand)');
+        taken.push({ kind: 'gun', id: e.id, n: 1 });
+        if (b.controlled) this.setWeapon('gun');
+        continue;
+      }
+      const n = b.pack.add(e.kind, e.id, e.n, { mag: e.mag });
+      if (n > 0) { got.push(itemName(e.kind, e.id, n)); taken.push({ kind: e.kind, id: e.id, n }); }
+      if (n < e.n) left.push({ ...e, n: e.n - n });
+    }
+    return { got, left, taken };
+  }
+  // back at camp: the pack goes into storage, minus what you'd want on you
+  unload(b, quiet = false) {
+    const st = this.storage, pk = b.pack, moved = [];
+    const keep = { food: 2, meds: 2 };
+    for (const [k, n] of Object.entries(pk.res)) { const t = Math.max(0, n - (keep[k] || 0)); if (t) { pk.take('res', k, t); st.put('res', k, t); moved.push(itemName('res', k, t)); } }
+    const gd = b.gear.gun ? GUNS[b.gear.gun.id] : null;
+    for (const [k, n] of Object.entries(pk.ammo)) { const t = Math.max(0, n - (gd && gd.ammo === k ? gd.mag * 3 : 0)); if (t) { pk.take('ammo', k, t); st.put('ammo', k, t); moved.push(itemName('ammo', k, t)); } }
+    while (pk.guns.length) { const g = pk.guns.pop(); st.put('gun', g.id, 1, { mag: g.mag }); moved.push(itemName('gun', g.id)); }
+    for (const [k, n] of Object.entries(pk.items)) if (n > 0) { pk.take('item', k, n); st.put('item', k, n); moved.push(itemName('item', k, n)); }
+    if (moved.length && !quiet) this.hud.loot(`Stored at camp: ${moved.join(', ')}`);
+    if (moved.length) this.markDirty();
+    return moved;
+  }
+  // take what's needed from your pack, or camp storage when you're there
+  takeSupply(kind, id, n) {
+    const b = this.player.body;
+    let got = b ? b.pack.take(kind, id, n) : 0;
+    if (got < n && this.claims.at(this.player.pos.x, this.player.pos.z)) got += this.storage.take(kind, id, n - got);
+    return got;
+  }
+  haveSupply(kind, id) {
+    const b = this.player.body;
+    return (b ? b.pack.count(kind, id) : 0) + (this.claims.at(this.player.pos.x, this.player.pos.z) ? this.storage.count(kind, id) : 0);
   }
   // build mode for the claim you're in, or your nearest one
   openBuild() {
@@ -207,13 +303,37 @@ export class Game {
     if (this.command.active) this.command.closeMenu();
     this.buildMode.enter(c);
   }
+  // 'bat' or 'gun' (whichever gun this survivor has)
   setWeapon(k) {
-    if (k === 'pistol' && !this.inventory.weapons.pistol) return;
-    const w = { ...WEAPONS[k] };
-    if (w.kind === 'bat') { w.damage *= this.mods.melee; w.speed *= this.mods.swing; }
+    const b = this.player.body;
+    if (k === 'pistol') k = 'gun';
+    if (k === 'gun') {
+      const g = b && b.gear.gun;
+      if (!g) return;
+      const def = GUNS[g.id];
+      this.player.weapon = { kind: 'gun', id: g.id, name: def.name, speed: def.rate, damage: def.dmg, reach: 0 };
+      this.player.reloadT = 0;
+      return;
+    }
+    const w = { ...WEAPONS.bat };
+    w.damage *= this.mods.melee; w.speed *= this.mods.swing;
     this.player.weapon = w;
   }
   markDirty() { this.dirtyT = 4; }
+  // meds for wounds (bleeding first), food for a bit of strength
+  patchUp() {
+    const p = this.player, b = p.body, hud = this.hud;
+    if (!b) return;
+    const hm = Math.round(45 * this.mods.heal), hf = Math.round(15 * this.mods.heal);
+    const wounds = b.injuries.some((i) => !i.treated);
+    if ((wounds || p.health < p.maxHealth * 0.6) && this.takeSupply('res', 'meds', 1)) {
+      const t = treat(b);
+      p.heal(hm);
+      hud.toast(`Patched up (+${hm} health)${t ? ' · ' + t.name + ' treated' : ''}`, 2.5);
+    } else if (p.health < p.maxHealth && this.takeSupply('res', 'food', 1)) { p.heal(hf); p.stamina = p.maxStamina; hud.toast(`Ate something (+${hf} health)`, 2); }
+    else if (p.health >= p.maxHealth && !wounds) hud.toast("You're not hurt.", 1.5);
+    else hud.toast('No food or meds on you.', 1.5);
+  }
   save() { return saveGame(this); }
   newGame() { clearSave(); location.reload(); }
   respawn() {
@@ -222,15 +342,22 @@ export class Game {
     const at = c ? [c.flag[0] + 1.5, c.flag[2] + 1.5, c.flag[1]] : FEATURES.spawn;
     p.spawn(at[0], at[1], at[2]);
     p.char.root.rotation.x = 0;
-    this.inventory.res.food = Math.floor(this.inventory.res.food / 2);
-    this.inventory.res.ammo = Math.floor(this.inventory.res.ammo / 2);
+    // half of what you carried is gone, and it left a mark
+    const b = p.body;
+    if (b) {
+      for (const bag of [b.pack.res, b.pack.ammo]) for (const k in bag) bag[k] = Math.floor(bag[k] / 2);
+      if (!b.injuries.some((i) => i.id === 'concussion')) b.injuries.push({ id: 'concussion', t: INJURIES.concussion.heal });
+      b.maxHealth = maxHealthOf(b);
+      b.health = b.maxHealth * 0.6;
+      b.fatigue = Math.max(b.fatigue || 0, 70);
+    }
     // the ones that got you have wandered off
     this.zombies.list = this.zombies.list.filter((z) => { const near = z.pos.distanceTo(p.pos) < 35; if (near) z.dispose(); return !near; });
     this.hud.hideDeath();
     this.hud.toast('You came to, aching. Some supplies are gone.', 3);
   }
   onPlayerDeath() {
-    setTimeout(() => this.hud.showDeath('The dead got you this time. Half your food and ammo went with you.'), 1500);
+    setTimeout(() => this.hud.showDeath('The dead got you this time. Half of what you carried went with you.'), 1500);
   }
   onKill() { this.zombies.kills++; }
 
@@ -243,12 +370,14 @@ export class Game {
       else if (this.command.active && (!this.command.$('cmd-menu').hidden || this.command.planting)) { this.command.closeMenu(); this.command.setPlantMode(false); inp.pressedSet.delete('Escape'); }
       else if (this.society.ui.talking) { this.society.ui.closeTalk(); inp.pressedSet.delete('Escape'); }
       else if (!this.society.ui.campEl.hidden) { this.society.ui.toggleCamp(false); inp.pressedSet.delete('Escape'); }
+      else if (!this.packScreen.el.hidden) { this.packScreen.toggle(false); inp.pressedSet.delete('Escape'); }
       else if (!this.map.el.hidden) { this.map.toggle(false); inp.pressedSet.delete('Escape'); }
       else if (!this.buildMode.active) hud.togglePause();
     }
     if (hud.paused || this.player.dead) return;
     if (inp.pressed('KeyM') && !this.buildMode.active && !this.society.ui.talking && this.society.ui.campEl.hidden) this.map.toggle();
-    if (inp.pressed('KeyJ') && !this.buildMode.active && !this.society.ui.talking && this.map.el.hidden) this.society.ui.toggleCamp();
+    if (inp.pressed('KeyJ') && !this.buildMode.active && !this.society.ui.talking && this.map.el.hidden && this.packScreen.el.hidden) this.society.ui.toggleCamp();
+    if ((inp.pressed('KeyI') || inp.pressed('Tab')) && !this.buildMode.active && !this.society.ui.talking && this.map.el.hidden && this.society.ui.campEl.hidden) this.packScreen.toggle();
     if (this.modalOpen) return;
     if (inp.pressed('KeyB') && !this.buildMode.active) { this.openBuild(); inp.pressedSet.delete('KeyB'); }
     if (this.buildMode.active) return;
@@ -259,25 +388,13 @@ export class Game {
       this.claims.plant(this.player.pos.x + f.x * 2, this.player.pos.z + f.z * 2, false, this.player.pos.y);
     }
     if (inp.pressed('KeyQ')) {
+      const b = this.player.body;
       if (this.player.weapon.kind === 'gun') this.setWeapon('bat');
-      else if (this.inventory.weapons.pistol) this.setWeapon('pistol');
-      else hud.toast('You only have the bat. Pistols turn up in houses and stores.', 2.5);
+      else if (b && b.gear.gun) this.setWeapon('gun');
+      else hud.toast('No gun in hand. Guns turn up in houses, cars and raider camps; equip one from your pack.', 3);
     }
     if (inp.pressed('KeyF')) { this.player.flashlightOn = !this.player.flashlightOn; }
-    if (inp.pressed('KeyH')) {
-      const p = this.player, inv = this.inventory;
-      if (p.health >= p.maxHealth) hud.toast("You're not hurt.", 1.5);
-      const hm = Math.round(45 * this.mods.heal), hf = Math.round(15 * this.mods.heal);
-      if (inv.res.meds > 0 && p.health < p.maxHealth * 0.6) { inv.res.meds--; p.heal(hm); hud.toast(`Patched up (+${hm} health)`, 2); }
-      else if (inv.res.food > 0) { inv.res.food--; p.heal(hf); p.stamina = p.maxStamina; hud.toast(`Ate something (+${hf} health)`, 2); }
-      else if (inv.res.meds > 0) { inv.res.meds--; p.heal(hm); hud.toast(`Patched up (+${hm} health)`, 2); }
-      else hud.toast('No food or meds.', 1.5);
-    }
-    if (inp.pressed('KeyI')) {
-      const r = this.inventory.res;
-      const it = Object.entries(this.inventory.items).filter(([, n]) => n > 0).map(([k, n]) => `${n} ${{ seeds: 'seed stock', sedatives: 'sedatives', liquor: 'whiskey' }[k] || k}`);
-      hud.toast(`Pack: ${r.wood} wood, ${r.metal} metal, ${r.stone} stone, ${r.food} food, ${r.meds} meds, ${r.ammo} ammo, ${r.fuel} fuel · ${this.inventory.claimKits} claim kit(s)${it.length ? ' · ' + it.join(', ') : ''}`, 4);
-    }
+    if (inp.pressed('KeyH')) this.patchUp();
   }
 
   update(dt) {
@@ -336,8 +453,7 @@ export class Game {
         if (inp.locked || inp.touch.active || (inp.mouse.buttons & 4) || dragging) this.tpc.look(ld.x, ld.y, inp.touch.active);
         this.player.update(dt, inp, this.tpc);
         // guns fire on the attack input
-        if (this.player.weapon.kind === 'gun' && this.player.attackT >= 0 && !this.player._shotFired) { this.combat.shoot(this.player); this.player._shotFired = true; }
-        if (this.player.attackT < 0) this.player._shotFired = false;
+        if (this.player.shotPending) { this.player.shotPending = false; if (this.player.weapon.kind === 'gun') this.combat.shoot(this.player); }
         this.tpc.update(dt, this.player.char.root.position, this.player.aiming, this.player.crouch);
         // in a tight corner the camera ends up inside the player: hide the model
         const close = this.tpc.curDist < 0.6;
@@ -346,8 +462,20 @@ export class Game {
         this.interaction.update(dt);
         this.zombies.update(dt);
       }
-      this.focus = this.player.pos;
+      this.focus = this.command.active ? this.command.focusPoint : this.player.pos;
+      this.sky.overview = this.command.active ? 1 : 0;
       this.command.sync();
+      // walking into camp: the pack goes into storage
+      const body = this.player.body;
+      if (body && !this.player.dead && !this.player.released) {
+        const inCamp = !!this.claims.at(this.player.pos.x, this.player.pos.z);
+        if (inCamp && this.wasInCamp === false) this.unload(body);
+        this.wasInCamp = inCamp;
+      }
+      // a scope pulls the view in
+      const gd = this.player.gunDef;
+      this.tpc.zoom = gd ? (gd.scope || (gd.cls === 'long' ? 1.25 : 1)) : 1;
+      document.getElementById('ui').classList.toggle('scoped', !!(gd && gd.scope && this.player.aiming && !this.command.active && this.tpc.aim > 0.6));
       this.society.update(dt);
       this.combat.update(dt);
       this.claims.update(dt);

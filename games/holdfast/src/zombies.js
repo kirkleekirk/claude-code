@@ -95,7 +95,7 @@ class Zombie {
     if (this.senseT <= 0) {
       this.senseT = full ? 0.25 : 1;
       const dark = g.sky.darkness;
-      const cands = g.society ? [player, ...g.society.humansNear(this.pos, 26)] : [player];
+      const cands = g.society ? [...(player.released ? [] : [player]), ...g.society.humansNear(this.pos, 26)] : [player];
       let seen = null, sd = Infinity;
       for (const t of cands) {
         if (t.dead) continue;
@@ -284,8 +284,10 @@ export class Zombies {
     if (this.game.world.inOccupied(x, z, 25)) return 1.4;
     return 0.6;
   }
+  // around you, or (in the top view) wherever you're watching
   trySpawn() {
-    const g = this.game, p = g.player.pos;
+    const g = this.game, cf = g.command && g.command.active ? g.command.focusPoint : null;
+    const p = cf && Math.random() < 0.6 ? cf : g.player.pos;
     for (let k = 0; k < 12; k++) {
       const a = this.rng() * Math.PI * 2, r = 45 + this.rng() * 85;
       const x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
@@ -324,7 +326,8 @@ export class Zombies {
     if (this.spawnT <= 0 && alive < this.target && !g.peaceful) { this.spawnT = 1.5; this.trySpawn(); }
     const keep = [];
     for (const z of this.list) {
-      const d = z.pos.distanceTo(p.pos);
+      const cf = g.command && g.command.active ? g.command.focusPoint : null;
+      const d = Math.min(z.pos.distanceTo(p.pos), cf ? Math.hypot(z.pos.x - cf.x, z.pos.z - cf.z) : Infinity);
       if (d > 175 && !z.dead) { z.dispose(); continue; }
       const full = d < 60;
       const alive2 = z.update(dt, p, full);

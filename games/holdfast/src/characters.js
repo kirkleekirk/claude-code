@@ -750,7 +750,7 @@ export class Character {
     this.Q = newPose();
     this.ph = Math.random();
     this.clock = Math.random() * 100;
-    this.b = { move: 0, run: 0, sprint: 0, crouch: 0, aim: 0, air: 0, search: 0, dead: 0, bat: 0, gun: 0, look: 0, stagger: 0 };
+    this.b = { move: 0, run: 0, sprint: 0, crouch: 0, aim: 0, air: 0, search: 0, dead: 0, bat: 0, gun: 0, rifle: 0, look: 0, stagger: 0 };
     this.landK = 0;
     this.wasAir = false;
     this.lookYaw = 0;
@@ -831,6 +831,7 @@ export class Character {
     go('dead', dead ? 1 : 0, 3.2);
     go('bat', st.weapon === 'bat' && !zombie ? 1 : 0, 10);
     go('gun', st.weapon === 'gun' && !zombie ? 1 : 0, 10);
+    go('rifle', st.weapon === 'rifle' && !zombie ? 1 : 0, 10);
     go('stagger', st.stagger || 0, 14);
     this.clock += dt;
     const t = this.clock;
@@ -1003,7 +1004,30 @@ export class Character {
       }
       mixKeys(P, Q, b.gun, [...WEAPON, 'hP', 'cY', 'hY', 'cP']);
     }
-    if (!zombie && b.bat < 0.5 && b.gun < 0.5 && st.attack != null && st.attack >= 0) {
+    if (b.rifle > 0.001) {
+      const Q = this.Q; Object.assign(Q, P);
+      // low ready: across the body, muzzle forward and down to the left,
+      // the support hand out on the handguard
+      Object.assign(Q, { ik: 1, gx: -0.12, gy: -0.15, gz: 0.24 + nR * 0.015 * mv, wcx: 0.3, wcy: -0.4, wcz: 0.87, wm: 0, two: 1, twoD: -0.3, twoX: 0.0, twoY: 0.03 });
+      // aiming: stock in the shoulder, cheek down to the sights
+      const pitch = st.aimPitch || 0;
+      const chestP = P.cP + P.sP;
+      const cpitch = pitch - chestP;
+      const reach = 0.25;
+      const ax = -0.1, ay = 0.16 + Math.sin(cpitch) * reach, az = Math.cos(cpitch) * reach;
+      Q.gx = lerp(Q.gx, ax, b.aim); Q.gy = lerp(Q.gy, ay, b.aim); Q.gz = lerp(Q.gz, az, b.aim);
+      Q.wrx = 0; Q.wry = Math.sin(pitch); Q.wrz = Math.cos(pitch); Q.wm = b.aim;
+      Q.twoD = lerp(-0.3, -0.33, b.aim); Q.twoY = lerp(0.03, 0.045, b.aim);
+      Q.hP = lerp(Q.hP, -pitch * 0.7 - chestP * 0.5 + 0.1, b.aim); Q.hR = lerp(Q.hR, 0.14, b.aim);
+      Q.cY = lerp(Q.cY, 0.22, b.aim); Q.hY = lerp(Q.hY, -0.2, b.aim);
+      // the kick into the shoulder
+      if (st.attack != null && st.attack >= 0) {
+        const k = Math.max(0, 1 - st.attack * 3.5) * (st.recoil ?? 1);
+        Q.gz -= 0.05 * k; Q.gy += 0.02 * k; Q.wry += 0.14 * k; Q.cP -= 0.05 * k; Q.cY -= 0.04 * k;
+      }
+      mixKeys(P, Q, b.rifle, [...WEAPON, 'hP', 'hR', 'cY', 'hY', 'cP']);
+    }
+    if (!zombie && b.bat < 0.5 && b.gun < 0.5 && b.rifle < 0.5 && st.attack != null && st.attack >= 0) {
       // bare-handed shove
       const a = st.attack, k = a < 0.35 ? sstep(0, 0.35, a) : 1 - sstep(0.45, 1, a);
       P.aRF = lerp(P.aRF, 1.45, k); P.aRE = lerp(P.aRE, 0.15, k); P.aLF = lerp(P.aLF, 1.35, k); P.aLE = lerp(P.aLE, 0.2, k); P.cP += 0.15 * k;
@@ -1284,12 +1308,40 @@ export function makeWeaponMeshes() {
   add('crate', mk(new THREE.BoxGeometry(0.48, 0.3, 0.34), M(0xc8a878, 0.8), 0, -0.03, -0.17));
   add('rifle', mk(new THREE.BoxGeometry(0.04, 0.07, 0.34), M(0x5a3c24, 0.6), 0, -0.02, -0.12),
     mk(new THREE.BoxGeometry(0.035, 0.05, 0.32), darkM, 0, 0.015, 0.2), rod(0.42, 0.011, darkM, 0.55));
+  // ---- guns (origin at the pistol grip, barrel along +Z) ----
+  const blk = M(0x1c1d1f, 0.45, 0.55), gry = M(0x3a3c3f, 0.5, 0.5), stl = M(0x5d6064, 0.35, 0.75);
+  const wd = M(0x7a4a28, 0.6), wdl = M(0x9a6438, 0.55), olive = M(0x4d4f3a, 0.7), tan = M(0x8a7a5a, 0.75);
+  const box = (w, h, d, mat, x, y, z, rx = 0) => mk(new THREE.BoxGeometry(w, h, d), mat, x, y, z, rx);
+  const tube = (r, len, mat, x, y, z, seg = 8) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, seg), mat); m.rotation.x = Math.PI / 2; m.position.set(x, y, z); return m; };
+  const muzzles = { bat: new THREE.Vector3(0, 0, 0.6), gun: new THREE.Vector3(0, 0.045, 0.16) };
+  const addGun = (name, mz, ...parts) => { add(name, ...parts); muzzles[name] = new THREE.Vector3(...mz); };
+  addGun('1911', [0, 0.045, 0.16], box(0.03, 0.04, 0.2, stl, 0, 0.045, 0.06), box(0.028, 0.1, 0.045, wd, 0, -0.005, -0.005, -0.25), box(0.026, 0.012, 0.05, blk, 0, 0.016, 0.07));
+  addGun('uzi', [0, 0.05, 0.24], box(0.046, 0.065, 0.24, blk, 0, 0.05, 0.08), box(0.032, 0.17, 0.042, blk, 0, -0.04, 0.0, -0.08), tube(0.009, 0.06, gry, 0, 0.05, 0.22), box(0.01, 0.02, 0.14, gry, 0, 0.09, 0.07), box(0.02, 0.012, 0.16, stl, 0, 0.06, -0.12));
+  const shot = (drum) => [
+    box(0.048, 0.07, 0.2, drum ? blk : stl, 0, 0.05, 0.06), tube(0.013, drum ? 0.42 : 0.56, gry, 0, 0.07, drum ? 0.36 : 0.43),
+    ...(drum ? [tube(0.085, 0.07, blk, 0, -0.005, 0.13, 14), box(0.018, 0.03, 0.3, stl, 0, 0.035, -0.17), box(0.02, 0.09, 0.03, stl, 0, 0.0, -0.31)]
+      : [tube(0.011, 0.42, gry, 0, 0.045, 0.35), box(0.05, 0.05, 0.16, wdl, 0, 0.042, 0.33), box(0.045, 0.1, 0.34, wd, 0, 0.01, -0.21, 0.12)]),
+    box(0.03, 0.09, 0.04, drum ? blk : wd, 0, -0.01, -0.01, -0.3),
+  ];
+  addGun('pump', [0, 0.07, 0.72], ...shot(false));
+  addGun('sweeper', [0, 0.07, 0.58], ...shot(true));
+  addGun('m4', [0, 0.06, 0.62], box(0.044, 0.07, 0.3, blk, 0, 0.06, 0.06), box(0.052, 0.055, 0.22, gry, 0, 0.06, 0.32), tube(0.008, 0.2, blk, 0, 0.06, 0.52),
+    box(0.02, 0.035, 0.16, blk, 0, 0.11, 0.05), box(0.032, 0.15, 0.06, gry, 0, -0.03, 0.13, 0.15), box(0.04, 0.075, 0.22, blk, 0, 0.035, -0.2), box(0.03, 0.09, 0.04, blk, 0, -0.01, -0.01, -0.3));
+  addGun('ak', [0, 0.055, 0.62], box(0.046, 0.07, 0.3, stl, 0, 0.055, 0.06), box(0.05, 0.055, 0.2, wdl, 0, 0.05, 0.3), tube(0.008, 0.22, gry, 0, 0.065, 0.51),
+    box(0.03, 0.12, 0.055, olive, 0, -0.025, 0.14, 0.25), box(0.03, 0.1, 0.05, olive, 0, -0.11, 0.17, 0.55), box(0.042, 0.1, 0.3, wd, 0, 0.015, -0.2, 0.08), box(0.03, 0.09, 0.04, wd, 0, -0.01, -0.01, -0.3));
+  addGun('scout', [0, 0.055, 0.66], box(0.038, 0.07, 0.62, blk, 0, 0.025, 0.04), box(0.04, 0.1, 0.24, blk, 0, 0.005, -0.27, 0.06), tube(0.009, 0.36, gry, 0, 0.055, 0.48),
+    tube(0.016, 0.15, blk, 0, 0.095, 0.2), box(0.012, 0.03, 0.012, blk, 0, 0.075, 0.2), tube(0.006, 0.05, stl, 0.03, 0.06, 0.02));
+  addGun('long', [0, 0.06, 0.92], box(0.05, 0.075, 0.5, tan, 0, 0.03, 0.12), box(0.05, 0.12, 0.34, tan, 0, 0.005, -0.3, 0.05), tube(0.012, 0.56, gry, 0, 0.06, 0.6),
+    tube(0.018, 0.06, blk, 0, 0.06, 0.9), tube(0.022, 0.4, blk, 0, 0.125, 0.12), tube(0.028, 0.08, blk, 0, 0.125, 0.3), tube(0.026, 0.07, blk, 0, 0.125, -0.06),
+    box(0.012, 0.035, 0.012, blk, 0, 0.09, 0.12), tube(0.007, 0.05, stl, 0.032, 0.06, 0.02));
   for (const g of Object.values(items)) g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  const setItem = (name) => {
+  const out = { group, bat, gun, items, muzzle: new THREE.Vector3(0, 0.045, 0.16) };
+  out.setItem = (name) => {
     bat.visible = name === 'bat'; gun.visible = name === 'gun';
     for (const [k, g] of Object.entries(items)) g.visible = k === name;
+    out.muzzle.copy(muzzles[name] || muzzles.gun);
   };
-  // muzzle point in the group's space
-  return { group, bat, gun, items, setItem, muzzle: new THREE.Vector3(0, 0.045, 0.16) };
+  // muzzle point in the group's space (follows the item shown)
+  return out;
 }
 export { REG, BONES };

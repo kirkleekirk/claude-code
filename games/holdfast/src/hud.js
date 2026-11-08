@@ -1,22 +1,24 @@
 // HUD and on-screen controls (DOM). Keeps gameplay state display, prompts,
 // toasts, the pause/help menu and the phone touch controls.
 import { isTouch } from './platform.js';
-
-const RES_ORDER = [['wood', 'Wood'], ['metal', 'Metal'], ['stone', 'Stone'], ['food', 'Food'], ['meds', 'Meds'], ['ammo', 'Ammo'], ['fuel', 'Fuel']];
+import { GUNS, AMMO } from './items.js';
+import { INJURIES, fatigueWord } from './condition.js';
 
 export class HUD {
   constructor(game) {
     this.game = game;
     const ui = this.root = document.getElementById('ui');
     ui.innerHTML = `
-      <div class="hud-top-left"><div id="hud-clock">9:00</div><div id="hud-weather">Clear</div><div id="hud-claim"></div></div>
-      <div class="hud-res" id="hud-res"></div>
+      <div class="hud-top-left"><div class="hud-time"><span id="hud-clock">9:00</span><span id="hud-weather">Clear</span></div><div id="hud-claim"></div></div>
       <div class="hud-toasts" id="hud-toasts"></div>
+      <div class="hud-loot" id="hud-loot"></div>
+      <div class="scope-mask" id="scope-mask"></div>
       <div class="crosshair" id="crosshair"></div>
       <div class="prompt" id="prompt" hidden><span class="key" id="prompt-key">E</span><span id="prompt-text"></span><div class="prompt-bar" id="prompt-bar"></div></div>
       <div class="hud-bars">
-        <div class="bar-row"><span class="bar-label">Health</span><div class="hbar"><div id="hp-fill" class="fill hp"></div></div></div>
-        <div class="bar-row"><span class="bar-label">Stamina</span><div class="hbar"><div id="st-fill" class="fill st"></div></div></div>
+        <div class="who"><b id="hud-name"></b><span id="hud-cond"></span></div>
+        <div class="bar-row"><div class="hbar hp-bar"><div id="hp-fill" class="fill hp"></div><div id="hp-lost" class="lost"></div></div></div>
+        <div class="bar-row"><div class="hbar thin"><div id="st-fill" class="fill st"></div></div></div>
         <div class="weapon" id="hud-weapon"></div>
       </div>
       <div class="vignette" id="vignette"></div>
@@ -46,22 +48,26 @@ export class HUD {
           <button data-act="sprint" class="tb toggle">Run</button>
           <button data-act="crouch" class="tb toggle">Crouch</button>
           <button data-act="aim" class="tb toggle">Aim</button>
+          <button data-act="reload" class="tb" id="tb-reload" hidden>Reload</button>
         </div>
         <div class="tbtns-top">
           <button data-act="view" class="tb small">Top view</button>
-          <button data-act="claim" class="tb small">Claim</button>
-          <button data-act="build" class="tb small">Build</button>
-          <button data-act="camp" class="tb small">Camp</button>
-          <button data-act="map" class="tb small">Map</button>
-          <button data-act="inv" class="tb small">Pack</button>
-          <button data-act="eat" class="tb small">Eat</button>
-          <button data-act="light" class="tb small">Light</button>
           <button data-act="weapon" class="tb small" id="tb-weapon">Swap</button>
+          <button data-act="eat" class="tb small">Heal</button>
+          <button data-act="light" class="tb small">Light</button>
+          <button data-act="more" class="tb small" id="tb-more" aria-label="More">More</button>
+          <div class="tb-more" id="tb-more-menu" hidden>
+            <button data-act="inv" class="tb small">Pack</button>
+            <button data-act="camp" class="tb small">Camp</button>
+            <button data-act="map" class="tb small">Map</button>
+            <button data-act="claim" class="tb small">Claim</button>
+            <button data-act="build" class="tb small">Build</button>
+          </div>
         </div>
       </div>`;
     this.$ = (id) => document.getElementById(id);
     this.toastsEl = this.$('hud-toasts');
-    this.resEl = this.$('hud-res');
+    this.lootEl = this.$('hud-loot');
     this.lastRes = '';
     this.$('menu-btn').addEventListener('click', () => this.togglePause());
     this.$('btn-resume').addEventListener('click', () => this.togglePause(false));
@@ -78,28 +84,40 @@ export class HUD {
   update(dt) {
     const g = this.game, p = g.player;
     if (!p) return;
-    this.$('hp-fill').style.width = (100 * p.health / p.maxHealth).toFixed(1) + '%';
-    this.$('st-fill').style.width = (100 * p.stamina / p.maxStamina).toFixed(1) + '%';
+    const b = p.body;
+    // health as a share of a full body: injuries take a piece off the end
+    const full = b ? b.baseHealth || 100 : p.maxHealth;
+    this.$('hp-fill').style.width = (100 * Math.max(0, p.health) / full).toFixed(1) + '%';
+    this.$('hp-lost').style.width = (100 * Math.max(0, full - p.maxHealth) / full).toFixed(1) + '%';
+    this.$('st-fill').style.width = (100 * p.stamina / Math.max(1, p.maxStamina)).toFixed(1) + '%';
+    if (b) {
+      const cond = [];
+      if ((b.fatigue || 0) > 30) cond.push(`<i class="cond-chip ${b.fatigue >= 100 ? 'bad' : b.fatigue > 60 ? 'warn' : ''}">${fatigueWord(b.fatigue)}</i>`);
+      for (const i of b.injuries) if (INJURIES[i.id]) cond.push(`<i class="cond-chip bad">${INJURIES[i.id].name}</i>`);
+      const key = b.person.name + cond.join('');
+      if (key !== this.condKey) { this.condKey = key; this.$('hud-name').textContent = b.person.name; this.$('hud-cond').innerHTML = cond.join(''); }
+    }
     const h = Math.floor(g.sky.time), m = Math.floor((g.sky.time - h) * 60);
     const ampm = h < 12 ? 'AM' : 'PM';
     this.$('hud-clock').textContent = `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${ampm}`;
     const wn = { clear: 'Clear', cloudy: 'Cloudy', overcast: 'Overcast', storm: 'Storm warning' }[g.sky.weather];
     this.$('hud-weather').textContent = wn;
     this.$('hud-weather').classList.toggle('warn', g.sky.weather === 'storm');
-    const inv = g.inventory;
-    if (inv) {
-      const key = RES_ORDER.map(([k]) => inv.res[k]).join(',') + '|' + inv.claimKits;
-      if (key !== this.lastRes) {
-        this.lastRes = key;
-        this.resEl.innerHTML = RES_ORDER.map(([k, n]) => `<div class="res"><span class="res-n">${inv.res[k]}</span><span class="res-l">${n}</span></div>`).join('') +
-          `<div class="res kit"><span class="res-n">${inv.claimKits}</span><span class="res-l">Claim kits</span></div>`;
-      }
-      this.$('hud-weapon').textContent = p.weapon.name + (p.weapon.kind === 'gun' ? ` · ${inv.res.ammo} rounds` : '');
+    // the gun in hand: what's loaded, what's spare, reloading
+    const gun = p.gun, gd = gun && GUNS[gun.id];
+    const wkey = gd ? `${gun.id}|${gun.mag}|${b.pack.count('ammo', gd.ammo)}|${p.reloadT > 0 ? 1 : 0}` : p.weapon.name;
+    if (wkey !== this.wKey) {
+      this.wKey = wkey;
+      this.$('hud-weapon').innerHTML = gd
+        ? `<span class="wname">${gd.name}</span><span class="wmag ${gun.mag === 0 ? 'empty' : ''}">${p.reloadT > 0 ? 'Reloading' : gun.mag}</span><span class="wres">/ ${b.pack.count('ammo', gd.ammo)} ${AMMO[gd.ammo].short || AMMO[gd.ammo].name}</span>`
+        : `<span class="wname">${p.weapon.name}</span>`;
+      const rl = this.$('tb-reload');
+      if (rl) rl.hidden = !gd;
     }
     const claim = g.claims && g.claims.at(p.pos.x, p.pos.z);
     this.$('hud-claim').textContent = claim ? (isTouch ? 'Inside your claim · tap Build' : 'Inside your claim · B to build') : '';
     const wb = this.$('tb-weapon');
-    if (wb) { const t = p.weapon.kind === 'gun' ? 'Bat' : g.inventory && g.inventory.weapons.pistol ? 'Pistol' : 'Swap'; if (wb.textContent !== t) wb.textContent = t; }
+    if (wb) { const t = p.weapon.kind === 'gun' ? 'Bat' : b && b.gear.gun ? GUNS[b.gear.gun.id].name.split(' ')[0] : 'Swap'; if (wb.textContent !== t) wb.textContent = t; }
     for (const b of this.root.querySelectorAll('.tbtns-top [data-act=light]')) b.classList.toggle('on', !!p.flashlightOn);
     this.$('vignette').style.opacity = Math.max(p.hurtFlash * 2.2, p.health < 30 ? 0.35 + 0.15 * Math.sin(performance.now() / 300) : 0).toFixed(2);
     this.$('crosshair').classList.toggle('aim', p.aiming);
@@ -112,6 +130,16 @@ export class HUD {
     this.$('prompt-text').textContent = text;
     const bar = this.$('prompt-bar');
     bar.style.width = progress == null ? '0' : (progress * 100).toFixed(0) + '%';
+  }
+  // what you just picked up, briefly, bottom left
+  loot(text, secs = 3.5) {
+    const d = document.createElement('div');
+    d.className = 'loot-line';
+    d.textContent = text;
+    this.lootEl.appendChild(d);
+    while (this.lootEl.children.length > 4) this.lootEl.firstChild.remove();
+    setTimeout(() => d.classList.add('out'), secs * 1000);
+    setTimeout(() => d.remove(), secs * 1000 + 600);
   }
   toast(text, secs = 3) {
     const d = document.createElement('div');
@@ -153,10 +181,10 @@ export class HUD {
         <table class="keys">
           <tr><td>W A S D</td><td>Move</td></tr><tr><td>Mouse</td><td>Look (click the game to capture the mouse)</td></tr>
           <tr><td>Shift</td><td>Run</td></tr><tr><td>Space</td><td>Jump / vault fences</td></tr><tr><td>C</td><td>Crouch (quieter)</td></tr>
-          <tr><td>Left click</td><td>Attack / shoot</td></tr><tr><td>Right click</td><td>Aim</td></tr><tr><td>Q</td><td>Switch weapon</td></tr>
+          <tr><td>Left click</td><td>Attack / shoot (hold for automatics)</td></tr><tr><td>Right click</td><td>Aim (scoped rifles zoom)</td></tr><tr><td>R</td><td>Reload</td></tr><tr><td>Q</td><td>Bat / gun</td></tr><tr><td>I or Tab</td><td>Pack and camp storage</td></tr>
           <tr><td>E</td><td>Open doors, search, pick up (hold to search)</td></tr><tr><td>F</td><td>Flashlight</td></tr>
-          <tr><td>G</td><td>Plant claim flag</td></tr><tr><td>B</td><td>Build mode</td></tr><tr><td>H</td><td>Eat / use meds</td></tr>
-          <tr><td>M</td><td>Map</td></tr><tr><td>J</td><td>Camp: people, journal, plans</td></tr><tr><td>V</td><td>Top view: command your group from above</td></tr><tr><td>1-9</td><td>Pick a line when talking</td></tr><tr><td>Esc</td><td>Menu</td></tr>
+          <tr><td>G</td><td>Plant claim flag</td></tr><tr><td>B</td><td>Build mode</td></tr><tr><td>H</td><td>Patch up (meds treat wounds)</td></tr>
+          <tr><td>M</td><td>Map</td></tr><tr><td>J</td><td>Camp: people, journal, plans</td></tr><tr><td>V</td><td>Top view: manage your group, take control of anyone</td></tr><tr><td>1-9</td><td>Pick a line when talking</td></tr><tr><td>Esc</td><td>Menu</td></tr>
         </table>
         <h3>On a phone</h3>
         <p><b>Top view</b> is made for phones: you see your group from above. Tap the ground to walk there (double-tap to run), tap the dead or raiders to fight, tap the search and door icons to use them, and tap a person to talk or give orders. Drag to look around, pinch to zoom, twist two fingers to turn. Pick who you're ordering on the bar at the bottom; everything else (claim flag, building, camp, map, pack, eating, weapon, flashlight, sneaking) is on the buttons at the right. <b>3rd person</b> switches back.</p>
@@ -235,6 +263,7 @@ export class HUD {
         if (tc.identifier === lookId) { lookId = null; inp.touch.active = false; }
       }
     };
+    cv.addEventListener('touchstart', (e) => { const m = this.$('tb-more-menu'); if (m && !m.hidden) { m.hidden = true; this.$('tb-more').classList.remove('on'); } }, { passive: true });
     cv.addEventListener('touchstart', onStart, { passive: false });
     cv.addEventListener('touchmove', onMove, { passive: false });
     cv.addEventListener('touchend', onEnd);
@@ -242,17 +271,21 @@ export class HUD {
     for (const b of t.querySelectorAll('button[data-act]')) {
       const act = b.dataset.act;
       const toggle = b.classList.contains('toggle');
+      const inMore = !!b.closest('.tb-more');
       b.addEventListener('touchstart', (e) => {
         e.preventDefault(); e.stopPropagation();
+        const more = this.$('tb-more-menu');
+        if (act === 'more') { more.hidden = !more.hidden; this.$('tb-more').classList.toggle('on', !more.hidden); return; }
+        if (inMore) { more.hidden = true; this.$('tb-more').classList.remove('on'); }
         if (toggle) { const on = !inp.actionsDown.has(act); inp.actionsDown[on ? 'add' : 'delete'](act); b.classList.toggle('on', on); if (act === 'crouch') inp.pressedSet.add('KeyC'); return; }
         inp.actionsDown.add(act + '-hold');
-        const map = { attack: 'TouchAttack', interact: 'KeyE', jump: 'Space', build: 'KeyB', inv: 'KeyI', map: 'KeyM', camp: 'KeyJ', claim: 'KeyG', eat: 'KeyH', light: 'KeyF', weapon: 'KeyQ', view: 'KeyV' };
+        const map = { attack: 'TouchAttack', interact: 'KeyE', jump: 'Space', build: 'KeyB', inv: 'KeyI', map: 'KeyM', camp: 'KeyJ', claim: 'KeyG', eat: 'KeyH', light: 'KeyF', weapon: 'KeyQ', view: 'KeyV', reload: 'KeyR' };
         if (map[act]) { inp.pressedSet.add(map[act]); inp.keys.add(map[act]); }
       }, { passive: false });
       b.addEventListener('touchend', (e) => {
         e.preventDefault();
         inp.actionsDown.delete(act + '-hold');
-        const map = { attack: 'TouchAttack', interact: 'KeyE', jump: 'Space', build: 'KeyB', inv: 'KeyI', map: 'KeyM', camp: 'KeyJ', claim: 'KeyG', eat: 'KeyH', light: 'KeyF', weapon: 'KeyQ', view: 'KeyV' };
+        const map = { attack: 'TouchAttack', interact: 'KeyE', jump: 'Space', build: 'KeyB', inv: 'KeyI', map: 'KeyM', camp: 'KeyJ', claim: 'KeyG', eat: 'KeyH', light: 'KeyF', weapon: 'KeyQ', view: 'KeyV', reload: 'KeyR' };
         if (map[act]) inp.keys.delete(map[act]);
       });
     }
