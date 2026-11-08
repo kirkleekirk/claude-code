@@ -1,0 +1,515 @@
+// Everyone who isn't you or dead: your camp, the strangers on the roads and
+// the raider crews. Owns the NPC list and the shared services their brains
+// use (paths, sight, shooting, who's a threat), followers, and the fires.
+import * as THREE from 'three';
+import { NPC } from './npc.js';
+import { Camp } from './camp.js';
+import { Speech } from './dialogue.js';
+import { makePerson } from './people.js';
+import { Raiders } from './raiders.js';
+import { Strangers } from './strangers.js';
+import { Missions } from './missions.js';
+import { NpcUI } from './ui.js';
+import { rollLoot } from '../gameplay.js';
+
+const v3 = new THREE.Vector3();
+
+export class Society {
+  constructor(game) {
+    this.game = game;
+    this.speech = new Speech();
+    this.npcs = [];
+    this.trail = [];
+    this.lootables = [];
+    this.tracers = [];
+    this.tracerMat = new THREE.LineBasicMaterial({ color: 0xffe0a0, transparent: true, opacity: 0.7 });
+    this.camp = new Camp(this);
+    this.raiders = new Raiders(this);
+    this.strangers = new Strangers(this);
+    this.missions = new Missions(this);
+    this.ui = new NpcUI(this);
+    this.fires = new Fires(this);
+    // edits to the camp's structure rebuild its stations and paths
+    const w = game.world, attach = w.attach.bind(w);
+    w.attach = (S) => { attach(S); if (this.camp.claim && this.camp.claim.structure === S) this.camp.dirty = true; };
+  }
+  get clock() { return (this.game.day - 1) * 24 + this.game.sky.time; }
+  playerName() { return this.game.profile ? this.game.profile.name : 'friend'; }
+  spawn(person, opts) { const n = new NPC(this, person, opts); this.npcs.push(n); return n; }
+  drop(n) {
+    n.dispose();
+    this.ui.forget(n);
+    this.npcs = this.npcs.filter((o) => o !== n);
+  }
+
+  // ---------------- services for brains ----------------
+  navFor(ax, az, bx, bz) {
+    const nav = this.camp.nav;
+    if (nav && nav.contains(ax, az) && nav.contains(bx, bz)) return nav;
+    return null;
+  }
+  near(npc, r) {
+    const out = [];
+    for (const o of this.npcs) {
+      if (o === npc || o.dead || o.mode === 'away') continue;
+      const dx = o.pos.x - npc.pos.x, dz = o.pos.z - npc.pos.z;
+      if (dx * dx + dz * dz < r * r) out.push(o);
+    }
+    return out;
+  }
+  bubble(npc, text, dur) {
+    this.ui.bubble(npc, text, dur);
+    // what you hear goes in the Overheard log
+    if (npc.faction !== 'stranger' && this.playerNear(npc.pos, 30) && !this.ui.talking) {
+      const o = this.camp.overheard;
+      o.push({ day: this.game.day, time: this.game.sky.time, who: npc.faction === 'raider' ? `${npc.first} (${npc.rcamp ? npc.rcamp.name : 'raider'})` : npc.person.name, text });
+      if (o.length > 60) o.shift();
+    }
+  }
+  playerNear(pos, r) { const p = this.game.player.pos; return Math.hypot(p.x - pos.x, p.z - pos.z) < r; }
+  notice(text, npc) { this.game.hud.toast(text, 4.5); }
+  // nothing solid between two points at chest height
+  clear(a, b, h = 1.2) {
+    const ox = a.x, oy = a.y + h, oz = a.z;
+    const dx = b.x - ox, dy = b.y + h - oy, dz = b.z - oz, len = Math.hypot(dx, dy, dz);
+    if (len < 0.3) return true;
+    const hit = this.game.physics.raycast(ox, oy, oz, dx / len, dy / len, dz / len, len, { skipGlass: true, noTerrain: false,
+      filter: (bx) => bx.kind !== 'door' && bx.kind !== 'walk' && bx.kind !== 'tree' });
+    return hit.dist >= len - 0.3;
+  }
+  onScreen(pos, maxD = 60) {
+    const cam = this.game.camera;
+    v3.set(pos.x, pos.y + 1, pos.z);
+    if (v3.distanceTo(cam.position) > maxD) return false;
+    v3.project(cam);
+    return v3.z < 1 && Math.abs(v3.x) < 1.1 && Math.abs(v3.y) < 1.1;
+  }
+  // zombies and hostile people near an NPC that it should deal with
+  threatNear(m, r, pos = m.pos) {
+    let best = null, bd = r;
+    for (const z of this.game.zombies.list) {
+      if (z.dead) continue;
+      const d = Math.hypot(z.pos.x - pos.x, z.pos.z - pos.z);
+      if (d < bd && Math.abs(z.pos.y - pos.y) < 2.5 && (z.state === 'chase' || d < 7)) { best = z; bd = d; }
+    }
+    for (const o of this.npcs) {
+      if (o.dead || o === m || o.downed || !this.enemies(m, o)) continue;
+      const d = Math.hypot(o.pos.x - pos.x, o.pos.z - pos.z);
+      if (d < bd * 1.6 && Math.abs(o.pos.y - pos.y) < 3) { best = o; bd = d / 1.6; }
+    }
+    return best;
+  }
+  enemies(a, b) {
+    const fa = a.faction, fb = b.faction;
+    if (fa === fb) return false;
+    if (fa === 'raider') return b.faction === 'camp' ? a.isHostile : b.angry && a.isHostile;
+    if (fb === 'raider') return b.isHostile;
+    if (fa === 'stranger') return a.angry && fb === 'camp';
+    if (fb === 'stranger') return b.angry;
+    return false;
+  }
+  // close in and hit, or keep distance and shoot
+  fight(m, t, dt) {
+    m.combatTarget = t;
+    m.locked = false;
+    if (m.anim.act) m.setAct(null);
+    const d = Math.hypot(t.pos.x - m.pos.x, t.pos.z - m.pos.z);
+    m.faceTarget = t.pos;
+    m.seeT = (m.seeT || 0) - dt;
+    if (m.seeT <= 0) { m.seeT = 0.35; m.sees = this.clear(m.pos, t.pos); }
+    if (m.weapon === 'gun' && d > 3.2 && d < 30 && m.sees) {
+      m.aiming = true;
+      if (m.path) m.stop();
+      // zombies closing in: back off a step while firing
+      if (d < 6 && t.hurt) { const bx = m.pos.x - (t.pos.x - m.pos.x) / d * 2, bz = m.pos.z - (t.pos.z - m.pos.z) / d * 2; m.goTo(bx, m.pos.y, bz, true); }
+      m.attack(t);
+      return;
+    }
+    m.aiming = false;
+    m.repathT = (m.repathT || 0) - dt;
+    if (m.repathT <= 0) {
+      m.repathT = 0.35;
+      if (d > 1.25) m.goTo(t.pos.x, t.pos.y, t.pos.z, true); else m.stop();
+    }
+    if (d < 1.8) m.attack(t);
+  }
+  shoot(m, t) {
+    if (t.dead) return;
+    const g = this.game;
+    const dx = t.pos.x - m.pos.x, dz = t.pos.z - m.pos.z, d = Math.hypot(dx, dz) || 1;
+    const sk = m.skill('shooting');
+    const moving = t.vel ? Math.hypot(t.vel.x, t.vel.z) : 0;
+    const p = Math.max(0.12, Math.min(0.9, 0.48 + sk * 0.13 - d / 55 - moving * 0.04 - g.sky.darkness * 0.12));
+    const hit = Math.random() < p;
+    m.items.group.updateMatrixWorld(true);
+    const from = this.items_muzzle(m);
+    const to = new THREE.Vector3(t.pos.x, t.pos.y + 1.25, t.pos.z);
+    if (!hit) to.add(new THREE.Vector3((Math.random() - 0.5) * 1.6, (Math.random() - 0.3) * 1.2, (Math.random() - 0.5) * 1.6));
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([from, to]), this.tracerMat);
+    g.scene.add(line);
+    this.tracers.push({ line, t: 0.06 });
+    const pd = Math.hypot(g.player.pos.x - m.pos.x, g.player.pos.z - m.pos.z);
+    if (pd < 140) g.audio && g.audio.gunshot(Math.max(0.15, 1 - pd / 140));
+    if (hit) {
+      const dmg = (30 + sk * 8 + Math.random() * 12) * (Math.random() < 0.12 ? 2.4 : 1);
+      if (t.hurt) t.hurt(dmg, dx / d, dz / d, 'shot');
+      else t.damage(t === g.player ? dmg * 0.45 : dmg, m);
+    }
+    g.zombies.alertNoise(m.pos, 45);
+    this.raiders.hear(m.pos, 70, m);
+  }
+  items_muzzle(m) {
+    if (m.items.group.visible && m.items.muzzle) return m.items.muzzle.clone().applyMatrix4(m.items.group.matrixWorld);
+    return new THREE.Vector3(m.pos.x + Math.sin(m.facing) * 0.4, m.pos.y + 1.35, m.pos.z + Math.cos(m.facing) * 0.4);
+  }
+  // living people (not in a building far away) the dead can smell
+  humansNear(pos, r) {
+    const out = [];
+    for (const o of this.npcs) {
+      if (o.dead || o.mode === 'away' || !o.char.root.visible) continue;
+      const d = Math.hypot(o.pos.x - pos.x, o.pos.z - pos.z);
+      if (d < r) out.push([d, o]);
+    }
+    out.sort((a, b) => a[0] - b[0]);
+    return out.slice(0, 3).map((e) => e[1]);
+  }
+  // player weapons can hit these
+  hittable() { return this.npcs.filter((o) => !o.dead && o.faction !== 'camp' && o.mode !== 'away'); }
+  onDeath(npc, src) {
+    if (npc.faction === 'camp') this.camp.onDeath(npc, src);
+    else if (npc.faction === 'raider') this.raiders.onDeath(npc, src);
+    else this.strangers.onDeath(npc, src);
+    for (const o of this.npcs) if (o.combatTarget === npc) o.combatTarget = null;
+  }
+  onPlayerHit(npc) {
+    if (npc.faction === 'raider') this.raiders.provoked(npc);
+    else if (npc.faction === 'stranger') this.strangers.provoked(npc);
+  }
+  // a follower who searches beside you finds more
+  searchBonus(item) {
+    const g = this.game, p = g.player.pos;
+    const out = [];
+    const f = this.npcs.find((o) => o.mode === 'follow' && !o.dead && o.skill('scavenging') >= 2 && Math.hypot(o.pos.x - p.x, o.pos.z - p.z) < 14);
+    if (f && Math.random() < 0.35 + f.skill('scavenging') * 0.08) {
+      const got = rollLoot(item.table, g.inventory, 0.7);
+      if (got.length) { out.push(`${f.first} turned up ${got.join(', ')}`); if (Math.random() < 0.5) f.say(this.speech.line(f, 't_loot')); }
+    }
+    this.missions.onSearched(item);
+    this.raiders.onSearched(item);
+    return out;
+  }
+
+  // ---------------- followers ----------------
+  followBrain(m, dt, near) {
+    m.locked = false;
+    if (m.rescue) return this.rescueBrain(m, dt);
+    if (m.task) { if (m.task.slot && m.task.slot.user === m) m.task.slot.user = null; m.task = null; }
+    m.sleeping = false;
+    const pl = this.game.player, pp = pl.pos;
+    if (m.healing) return this.healBrain(m, dt);
+    if (m.anim.act && !m.convo) m.setAct(null);
+    const threat = this.threatNear(m, 15) || this.threatNear(m, 11, pp);
+    const coward = m.tr.bravery < 0.3 && m.health < 45;
+    if (threat && !coward) {
+      if (!m.combatTarget && Math.random() < 0.3) m.say(this.speech.line(m, threat.hurt ? 't_zombie' : 't_raiders'));
+      this.fight(m, threat, dt);
+      return;
+    }
+    if (m.combatTarget && !threat && Math.random() < 0.25) m.say(this.speech.line(m, 't_kill'));
+    m.combatTarget = null; m.aiming = false; m.faceTarget = null;
+    m.crouch = pl.crouch;
+    const d = Math.hypot(pp.x - m.pos.x, pp.z - m.pos.z), dy = Math.abs(pp.y - m.pos.y);
+    // left far behind: catch up out of sight
+    if ((d > 55 || (dy > 5 && d > 18)) && !this.onScreen(m.pos)) { this.placeNearPlayer(m); return; }
+    // a medic patches you up when you're hurting
+    if (m.skill('medicine') >= 2 && pl.health < pl.maxHealth * 0.5 && !pl.dead && this.clock > (m.healCd || 0) && !threat) {
+      m.healing = { t: 0 }; m.say(m.tr.warmth > 0.6 ? "You're bleeding. Hold still, let me look." : 'Stop moving. You’re hurt.');
+      return;
+    }
+    const idx = this.npcs.filter((o) => o.mode === 'follow').indexOf(m);
+    const keep = 2.2 + idx * 0.9;
+    m.followT = (m.followT || 0) - dt;
+    if (m.followT <= 0) {
+      m.followT = 0.5;
+      if (d > keep + 0.8 || dy > 1.2) {
+        const path = this.trailPath(m, keep);
+        m.dest = path[path.length - 1];
+        m.path = path; m.pathI = 0; m.run = d > 7 || pl.speed > 4;
+      } else if (d < keep) m.stop();
+    }
+    if (!m.path) { m.lookAt = d < 8 ? pp : null; if (d < 3 && Math.hypot(pl.vel.x, pl.vel.z) < 0.2) m.faceTarget = pp; }
+    m.chatT = (m.chatT ?? 30 + Math.random() * 40) - dt;
+    if (m.chatT <= 0) {
+      m.chatT = 50 + Math.random() * 70;
+      const c = this.camp.center();
+      const far = c && Math.hypot(c.x - pp.x, c.z - pp.z) > 200;
+      const t = far && Math.random() < 0.5 ? this.speech.line(m, 't_far') : Math.random() < 0.5 ? this.speech.flavor(m) : this.speech.line(m, 'o_small');
+      if (t && !this.ui.talking) m.say(t);
+    }
+  }
+  healBrain(m, dt) {
+    const pl = this.game.player, pp = pl.pos;
+    const d = Math.hypot(pp.x - m.pos.x, pp.z - m.pos.z);
+    if (this.threatNear(m, 10)) { m.healing = null; m.setAct(null); return; }
+    if (d > 1.3) { if (!m.path || (m.healRepath = (m.healRepath || 0) - dt) <= 0) { m.healRepath = 0.4; m.goTo(pp.x, pp.y, pp.z, d > 5); } return; }
+    m.stop(); m.faceTarget = pp; m.setAct('inspect');
+    m.healing.t += dt;
+    if (m.healing.t > 2.4) {
+      const n = 22 + m.skill('medicine') * 8;
+      pl.heal(n);
+      m.healing = null; m.setAct(null);
+      m.healCd = this.clock + 2;
+      m.say(['There. Try not to do that again.', 'Patched. You owe me.', "That'll hold. Keep it clean.", 'Done. Go easy for a bit.'][Math.floor(Math.random() * 4)]);
+      this.game.hud.toast(`${m.first} patched you up (+${n} health)`, 2.5);
+      m.adjust('player', 0.02);
+    }
+  }
+  // the way you came: through the doors and halls you walked, ending a
+  // few steps short of you
+  trailPath(m, keep) {
+    const pp = this.game.player.pos, tr = this.trail;
+    const d = Math.hypot(pp.x - m.pos.x, pp.z - m.pos.z);
+    const stopAt = (p) => Math.hypot(p.x - pp.x, p.z - pp.z) < keep && Math.abs(p.y - pp.y) < 1;
+    if (d < 10 && Math.abs(pp.y - m.pos.y) < 0.8 && this.clear(m.pos, pp, 0.9)) {
+      const k = (d - keep) / d;
+      return [{ x: m.pos.x + (pp.x - m.pos.x) * k, y: pp.y, z: m.pos.z + (pp.z - m.pos.z) * k }];
+    }
+    let bi = -1, bd = 1e9;
+    for (let i = 0; i < tr.length; i++) {
+      const t = tr[i], dd = Math.hypot(t.x - m.pos.x, t.z - m.pos.z) + Math.abs(t.y - m.pos.y) * 2;
+      if (dd < bd) { bd = dd; bi = i; }
+    }
+    if (bi < 0 || bd > 8) return [{ x: pp.x, y: pp.y, z: pp.z }];
+    const out = [];
+    for (let i = bi + 1; i < tr.length; i++) { if (stopAt(tr[i])) break; out.push(tr[i]); }
+    if (!out.length) out.push(tr[Math.min(tr.length - 1, bi + 1)]);
+    return out;
+  }
+  placeNearPlayer(m) {
+    const pp = this.game.player.pos, tr = this.trail;
+    let at = null;
+    for (let i = tr.length - 4; i >= Math.max(0, tr.length - 14); i--) { if (!this.onScreen(tr[i])) { at = tr[i]; break; } }
+    if (!at) at = { x: pp.x - Math.sin(this.game.tpc.yaw) * 3, y: pp.y, z: pp.z - Math.cos(this.game.tpc.yaw) * 3 };
+    m.pos.set(at.x, this.game.physics.groundAt(at.x, at.z, at.y + 0.6), at.z);
+    m.visualY = m.pos.y; m.stop(); m.vel.set(0, 0, 0);
+  }
+  waitBrain(m, dt, near) {
+    m.locked = false;
+    if (m.rescue) return this.rescueBrain(m, dt);
+    const threat = this.threatNear(m, 12);
+    if (threat) return this.fight(m, threat, dt);
+    m.combatTarget = null; m.aiming = false; m.faceTarget = null;
+    if (m.waitAt && !m.path && Math.hypot(m.waitAt.x - m.pos.x, m.waitAt.z - m.pos.z) > 1.5) m.goTo(m.waitAt.x, m.waitAt.y, m.waitAt.z);
+    if (!m.path && !m.anim.act) m.setAct(['idle_crossed', 'lean', 'idle_hips', 'smoke'][m.person.seed % (m.smoker ? 4 : 3)], m.smoker && m.person.seed % 4 === 3 ? 'cigarette' : null);
+    m.lookAt = this.playerNear(m.pos, 10) ? this.game.player.pos : null;
+  }
+  // someone went down: the nearest friend (a medic if there is one) runs over
+  onDowned(m, src) {
+    if (m.faction !== 'camp') return;
+    this.camp.log(`${m.person.name} went down${src && src.hurt ? ' under the dead' : src && src.faction === 'raider' ? ' in a firefight' : ''}.`, 'hurt');
+    this.notice(this.playerNear(m.pos, 60) ? `${m.first} is down! Get to them (hold ${this.game.quality.mobile ? 'Use' : 'E'}).` : `${m.first} is down at camp.`);
+    const helpers = this.camp.members.filter((o) => o !== m && !o.dead && !o.downed && !o.rescue && ['camp', 'follow', 'wait'].includes(o.mode) && Math.hypot(o.pos.x - m.pos.x, o.pos.z - m.pos.z) < 45);
+    helpers.sort((a, b) => (b.skill('medicine') - a.skill('medicine')) * 8 + Math.hypot(a.pos.x - m.pos.x, a.pos.z - m.pos.z) - Math.hypot(b.pos.x - m.pos.x, b.pos.z - m.pos.z));
+    const h = helpers.find((o) => o.tr.bravery > 0.3 || o.rel(m.person.id) > 0.3) || helpers[0];
+    if (h) { h.rescue = m; h.say(`${m.first}! Hang on, I'm coming!`); }
+  }
+  rescueBrain(m, dt) {
+    const v = m.rescue;
+    if (!v || v.dead || !v.downed) { m.rescue = null; m.rescueT = 0; if (m.anim.act === 'kneel_work') m.setAct(null); return; }
+    if (m.task && m.task.slot && m.task.slot.user === m) m.task.slot.user = null;
+    m.task = null; m.sleeping = false;
+    const threat = this.threatNear(m, 5);
+    if (threat) return this.fight(m, threat, dt);
+    m.combatTarget = null; m.aiming = false;
+    const d = Math.hypot(v.pos.x - m.pos.x, v.pos.z - m.pos.z);
+    if (d > 1.15) {
+      m.rescueRepath = (m.rescueRepath || 0) - dt;
+      if (!m.path || m.rescueRepath <= 0) { m.rescueRepath = 0.6; m.goTo(v.pos.x + 0.7, v.pos.y, v.pos.z, true); }
+      if (m.anim.act) m.setAct(null);
+      return;
+    }
+    m.stop(); m.faceTarget = v.pos; m.setAct('kneel_work');
+    m.rescueT = (m.rescueT || 0) + dt;
+    if (m.rescueT > 3.2) {
+      m.rescueT = 0; m.rescue = null; m.setAct(null);
+      v.revive(m);
+      m.say(m.skill('medicine') >= 2 ? 'Pressure on it. You\u2019ll live.' : 'Up. Come on, up. I\u2019ve got you.');
+      this.camp.log(`${m.person.name} got ${v.person.name} back on their feet.`, 'hurt');
+    }
+  }
+  leave(m) {
+    this.camp.remove(m);
+    m.mode = 'leaving';
+    const c = this.camp.center() || m.pos;
+    const a = Math.random() * Math.PI * 2;
+    const tx = c.x + Math.cos(a) * 140, tz = c.z + Math.sin(a) * 140;
+    m.brain = (dt) => {
+      m.locked = false; m.setAct(null);
+      if (!m.path) m.goTo(tx, this.game.world.terrain.height(tx, tz), tz);
+      if (!this.playerNear(m.pos, 90) || Math.hypot(m.pos.x - tx, m.pos.z - tz) < 3) m.gone = true;
+    };
+  }
+
+  // a new camp member near the camp (debugging and tests)
+  addMember(opts = {}) {
+    const p = makePerson(Math.random, this.camp.usedBackgrounds(), { lastNames: this.camp.usedLastNames(), firstNames: this.camp.usedFirstNames(), ...opts });
+    const c = this.camp.center() || this.game.player.pos;
+    const n = this.spawn(p, { x: c.x + 3, z: c.z + 3, y: c.y, faction: 'camp', mode: this.camp.claim ? 'camp' : 'follow' });
+    n.rels.player = 0.15;
+    this.camp.add(n, true);
+    n.mode = this.camp.claim ? 'camp' : 'follow';
+    return n;
+  }
+
+  // ---------------- new game ----------------
+  // two people you found on the first morning
+  startingCompanions(near) {
+    const used = new Set();
+    const rng = Math.random;
+    const roles = [['cook', 'medic', 'farmer'], ['guard', 'builder', 'mechanic', 'scavenger', 'hunter']];
+    const out = [];
+    for (let i = 0; i < 2; i++) {
+      const p = makePerson(rng, used, { roles: roles[i], lastNames: new Set(out.map((o) => o.person.name.split(' ').slice(-1)[0])), firstNames: new Set(out.map((o) => o.first)) });
+      used.add(p.background);
+      const a = -Math.PI / 2 + (i ? 0.9 : -0.9);
+      const x = near.x + Math.cos(a) * 3, z = near.z + Math.sin(a) * 3;
+      const n = this.spawn(p, { x, z, y: near.y, faction: 'camp', mode: 'follow' });
+      n.rels.player = 0.2 + Math.random() * 0.15;
+      this.camp.add(n);
+      n.mode = 'follow';
+      out.push(n);
+    }
+    // they've known each other a few days
+    out[0].adjust(out[1].person.id, 0.15); out[1].adjust(out[0].person.id, 0.15);
+    out[0].knows[out[1].person.id] = 1; out[1].knows[out[0].person.id] = 1;
+    this.camp.log(`${out[0].person.name} and ${out[1].person.name} threw in with you on the road.`, 'join');
+    setTimeout(() => out[0].say(this.speech.line(out[0], 'joined', { player: this.playerName() })), 2500);
+    return out;
+  }
+
+  // ---------------- per frame ----------------
+  update(dt) {
+    const g = this.game, p = g.player;
+    // the player's trail, for followers to retrace through doors and halls
+    const last = this.trail[this.trail.length - 1];
+    if (last && Math.hypot(p.pos.x - last.x, p.pos.z - last.z) > 25) this.trail.length = 0;
+    if (!p.dead && p.onGround && (!last || Math.hypot(p.pos.x - last.x, p.pos.z - last.z) > 0.6 || Math.abs(p.pos.y - last.y) > 0.35)) {
+      this.trail.push({ x: p.pos.x, y: p.pos.y, z: p.pos.z });
+      if (this.trail.length > 140) this.trail.shift();
+    }
+    // the first claim is home
+    const claim = g.claims.list[0] || null;
+    if (claim !== this.camp.claim) {
+      const had = !!this.camp.claim;
+      this.camp.setClaim(claim);
+      if (claim) for (const m of this.camp.members) {
+        if (m.mode === 'follow' && !had) { m.mode = 'camp'; m.task = null; }
+      }
+      if (claim && !had && this.camp.members.length) {
+        const m = this.camp.members.find((x) => !x.dead);
+        m && m.say(m.tr.optimism > 0.5 ? "This'll do. I'll start setting up." : 'Fine. Here it is, then.');
+        this.camp.log(`You planted a flag. The camp has a home.`, 'camp');
+      }
+      if (!claim) for (const m of this.camp.members) if (m.mode === 'camp' || m.mode === 'travel') { m.mode = 'follow'; m.task = null; m.setAct(null); }
+    }
+    this.camp.update(dt);
+    this.raiders.update(dt);
+    this.strangers.update(dt);
+    this.missions.update(dt);
+    const far = g.quality.level === 'low' ? 85 : 120;
+    for (const n of [...this.npcs]) {
+      const d = Math.hypot(n.pos.x - p.pos.x, n.pos.z - p.pos.z);
+      const keep = n.update(dt, d < far);
+      if (!keep || n.gone) this.drop(n);
+    }
+    if (this.lootables.length > 30) this.lootables = this.lootables.filter((l) => !l.searched && this.clock < (l.until ?? Infinity));
+    for (const t of this.tracers) { t.t -= dt; if (t.t <= 0) { g.scene.remove(t.line); t.line.geometry.dispose(); } }
+    this.tracers = this.tracers.filter((t) => t.t > 0);
+    this.fires.update(dt);
+    this.ui.update(dt);
+  }
+
+  // ---------------- saving ----------------
+  toJSON() {
+    return {
+      v: 1,
+      members: this.camp.members.filter((m) => !m.dead).map((m) => ({ ...m.toJSON(), role: m.role, mode: m.mode === 'away' || m.mode === 'talk' || m.mode === 'leaving' ? 'camp' : m.mode, x: m.pos.x, y: m.pos.y, z: m.pos.z, smoker: m.smoker })),
+      camp: this.camp.toJSON(),
+      raiders: this.raiders.toJSON(),
+      missions: this.missions.toJSON(),
+    };
+  }
+  load(j) {
+    if (!j || j.v !== 1) return false;
+    for (const d of j.members || []) {
+      const { x, y, z, mode, role, needs, smoker, ...person } = d;
+      const n = this.spawn(person, { x, y, z, faction: 'camp', mode: mode || 'camp' });
+      n.role = role || person.role;
+      if (needs) Object.assign(n.needs, needs);
+      n.smoker = smoker;
+      this.camp.add(n);
+      n.mode = mode || 'camp';
+    }
+    this.camp.load(j.camp || {});
+    this.raiders.load(j.raiders || []);
+    this.missions.load(j.missions || {});
+    return true;
+  }
+}
+
+// Flames and firelight for campfires near you (two pooled lights, so the
+// shaders never recompile when a fire comes into view).
+class Fires {
+  constructor(soc) {
+    this.soc = soc;
+    const g = soc.game;
+    this.lights = [0, 1].map(() => { const l = new THREE.PointLight(0xff9a40, 0, 14, 1.6); g.scene.add(l); return l; });
+    this.flameMat = new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
+    this.coreMat = new THREE.MeshBasicMaterial({ color: 0xfff0a0, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+    this.flames = new Map();
+    this.cone = new THREE.ConeGeometry(0.22, 0.7, 7, 1, true);
+    this.cone.translate(0, 0.35, 0);
+    this.t = 0;
+  }
+  list() {
+    const out = [];
+    for (const S of this.soc.game.world.structures) {
+      if (!S.props.length) continue;
+      for (const p of S.props) if (p.type === 'campfire') out.push({ key: p, x: S.ox + p.x, y: S.oy + p.y, z: S.oz + p.z, S });
+    }
+    return out;
+  }
+  update(dt) {
+    this.t += dt;
+    this.scanT = (this.scanT || 0) - dt;
+    if (this.scanT <= 0) { this.scanT = 2; this.cached = this.list(); }
+    const g = this.soc.game, p = g.player.pos;
+    const fires = (this.cached || []).map((f) => [Math.hypot(f.x - p.x, f.z - p.z), f]).filter((e) => e[0] < 90).sort((a, b) => a[0] - b[0]);
+    const live = new Set();
+    for (const [, f] of fires.slice(0, 6)) {
+      live.add(f.key);
+      let m = this.flames.get(f.key);
+      if (!m) {
+        m = new THREE.Group();
+        const a = new THREE.Mesh(this.cone, this.flameMat), b = new THREE.Mesh(this.cone, this.coreMat);
+        b.scale.set(0.55, 0.6, 0.55);
+        m.add(a, b);
+        g.scene.add(m);
+        this.flames.set(f.key, m);
+      }
+      m.position.set(f.x, f.y + 0.08, f.z);
+      const k = 0.85 + Math.sin(this.t * 13 + f.x) * 0.1 + Math.sin(this.t * 7.3 + f.z) * 0.08;
+      m.scale.set(1, k, 1);
+      m.rotation.y = this.t * 0.7;
+    }
+    for (const [k, m] of this.flames) if (!live.has(k)) { g.scene.remove(m); this.flames.delete(k); }
+    const dark = g.sky.darkness;
+    this.lights.forEach((l, i) => {
+      const e = fires[i];
+      if (!e || e[0] > 70) { l.intensity = 0; return; }
+      const f = e[1];
+      l.position.set(f.x, f.y + 0.8, f.z);
+      l.intensity = (2 + dark * 14) * (0.85 + Math.sin(this.t * 17 + i) * 0.08 + Math.sin(this.t * 5.1 + i * 2) * 0.07);
+    });
+  }
+}

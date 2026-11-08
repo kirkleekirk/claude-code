@@ -20,11 +20,12 @@ const floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 20), new THREE.MeshStan
 floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
 const grid = new THREE.GridHelper(60, 120, 0x3a4030, 0x55604a); grid.position.y = 0.002; scene.add(grid);
 await loadCharacterModels({ man: { url: '../assets/models/man.glb', height: 1.78 }, woman: { url: '../assets/models/woman.glb', height: 1.68 } });
-let actors = [];
+let actors = [], extras = [];
 const rng = mulberry32(3);
 window.__strip = (o) => {
   for (const a of actors) { scene.remove(a.c.root); if (a.w) scene.remove(a.w.group); }
-  actors = [];
+  for (const e of extras) scene.remove(e);
+  actors = []; extras = [];
   const n = o.n || 8, sp = o.spacing || 1.0;
   for (let i = 0; i < n; i++) {
     const zr = mulberry32((o.seed || 7) * 31 + i * 7);
@@ -47,13 +48,21 @@ window.__strip = (o) => {
     c.root.rotation.y = o.facing != null ? o.facing : (faceBy[o.view || 'side'] || 0);
     if (o.fall) { const k = o.fall[i]; c.root.rotation.x = -Math.sin(k * Math.PI / 2) * Math.PI / 2 * 0.98; c.root.position.y = 0.12 * k; }
     scene.add(c.root);
+    if (o.acts) { st.act = o.acts[i % o.acts.length]; for (let k = 0; k < 120; k++) c.animate(1 / 60, { ...st, attack: null }); if (o.times) c.clock = o.times[i]; c.animate(0, st); }
+    if (c.lying > 0.5) { c.root.rotation.x = -Math.PI / 2; c.root.position.y = (st.seatH || 0) + 0.12; }
+    if (st.seatH > 0.05 && !(c.lying > 0.5)) {
+      const seat = new THREE.Mesh(new THREE.BoxGeometry(0.46, st.seatH, 0.46), new THREE.MeshStandardMaterial({ color: 0x8a6a4a }));
+      seat.position.set(c.root.position.x, st.seatH / 2, 0); seat.rotation.y = c.root.rotation.y;
+      seat.translateZ(-0.05); scene.add(seat); extras.push(seat);
+    }
     let w = null;
-    if (st.weapon) {
+    const item = o.items ? o.items[i % o.items.length] : st.weapon;
+    if (item) {
       w = makeWeaponMeshes(); scene.add(w.group);
       c.root.updateMatrixWorld(true);
       w.group.position.copy(c.grip.pos).applyMatrix4(c.root.matrixWorld);
       w.group.quaternion.copy(c.root.quaternion).multiply(c.grip.quat);
-      w.bat.visible = st.weapon === 'bat'; w.gun.visible = st.weapon === 'gun';
+      w.setItem(item);
     }
     actors.push({ c, w });
   }

@@ -19,7 +19,7 @@ export class Input {
       if (e.repeat) return;
       const tag = e.target && e.target.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return; // typing a name
-      if (this.uiCapture && !['Escape', 'Tab', 'KeyB', 'KeyM', 'KeyI'].includes(e.code)) return;
+      if (this.uiCapture && !['Escape', 'Tab', 'KeyB', 'KeyM', 'KeyI', 'KeyJ'].includes(e.code)) return;
       this.keys.add(e.code);
       this.pressedSet.add(e.code);
       if (['Tab', 'Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault();

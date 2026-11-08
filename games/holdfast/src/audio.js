@@ -54,7 +54,7 @@ export class Audio {
   }
   swoosh() { this.noise(0.18, 900, 0.8, 0.25); }
   thud() { this.noise(0.12, 220, 1.2, 0.8, 'lowpass'); this.tone(90, 0.12, 0.4, 'sine', -40); }
-  gunshot() { this.noise(0.35, 1400, 0.4, 1.0, 'lowpass'); this.tone(120, 0.2, 0.6, 'square', -80); }
+  gunshot(v = 1) { this.noise(0.35, 1400 * (0.5 + v * 0.5), 0.4, 1.0 * v, 'lowpass'); this.tone(120, 0.2, 0.6 * v, 'square', -80); }
   bang() { this.noise(0.15, 160, 1.5, 0.6, 'lowpass'); }
   build() { this.noise(0.06, 2400, 3, 0.35); setTimeout(() => this.noise(0.06, 2000, 3, 0.3), 110); }
   salvage() { this.noise(0.25, 600, 1, 0.35); }

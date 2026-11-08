@@ -51,6 +51,7 @@ export class HUD {
           <button data-act="build" class="tb small">Build</button>
           <button data-act="inv" class="tb small">Pack</button>
           <button data-act="map" class="tb small">Map</button>
+          <button data-act="camp" class="tb small">Camp</button>
         </div>
       </div>`;
     this.$ = (id) => document.getElementById(id);
@@ -137,6 +138,9 @@ export class HUD {
         <p>Plant a <b>claim flag</b> anywhere (press <b>G</b>). It marks out a build area around the flag. Inside it you can build on a 2&nbsp;m grid, take over an existing house, or tear it apart and rebuild it your way.</p>
         <h3>Build</h3>
         <p>Inside your claim press <b>B</b>. Pick a piece, click to place, right-click or <b>X</b> to remove. Walls are made from shapes you can design yourself in the <b>Wall designer</b>. Pieces cost wood, metal and stone.</p>
+        <h3>People</h3>
+        <p>You're not alone out here. Walk up to someone and press <b>E</b> to talk. Your people have their own personalities and pasts, and they'll tell you more as they come to trust you. At camp they keep their own hours: cooking, working, eating together, arguing, telling stories by the fire. Give them jobs that suit them, take one or two along on runs, and listen when they have a plan. <b>J</b> opens the camp: who's who, the journal, what you've overheard, and your plans.</p>
+        <p>Strangers camp out on the roads. Some will join you if you earn it; some only know things. Raider crews set up after a while and grow. Rob them carefully: your people have ideas about how.</p>
         <h3>Controls</h3>
         <table class="keys">
           <tr><td>W A S D</td><td>Move</td></tr><tr><td>Mouse</td><td>Look (click the game to capture the mouse)</td></tr>
@@ -144,7 +148,7 @@ export class HUD {
           <tr><td>Left click</td><td>Attack / shoot</td></tr><tr><td>Right click</td><td>Aim</td></tr><tr><td>Q</td><td>Switch weapon</td></tr>
           <tr><td>E</td><td>Open doors, search, pick up (hold to search)</td></tr><tr><td>F</td><td>Flashlight</td></tr>
           <tr><td>G</td><td>Plant claim flag</td></tr><tr><td>B</td><td>Build mode</td></tr><tr><td>H</td><td>Eat / use meds</td></tr>
-          <tr><td>M</td><td>Map</td></tr><tr><td>Esc</td><td>Menu</td></tr>
+          <tr><td>M</td><td>Map</td></tr><tr><td>J</td><td>Camp: people, journal, plans</td></tr><tr><td>1-9</td><td>Pick a line when talking</td></tr><tr><td>Esc</td><td>Menu</td></tr>
         </table>
         <h3>On a phone</h3>
         <p>Left side of the screen moves, right side looks. The round buttons hit, use, jump, aim, crouch and run; Build, Pack and Map sit on the right.</p>
@@ -230,13 +234,13 @@ export class HUD {
         e.preventDefault(); e.stopPropagation();
         if (toggle) { const on = !inp.actionsDown.has(act); inp.actionsDown[on ? 'add' : 'delete'](act); b.classList.toggle('on', on); if (act === 'crouch') inp.pressedSet.add('KeyC'); return; }
         inp.actionsDown.add(act + '-hold');
-        const map = { attack: 'TouchAttack', interact: 'KeyE', jump: 'Space', build: 'KeyB', inv: 'KeyI', map: 'KeyM' };
+        const map = { attack: 'TouchAttack', interact: 'KeyE', jump: 'Space', build: 'KeyB', inv: 'KeyI', map: 'KeyM', camp: 'KeyJ' };
         if (map[act]) { inp.pressedSet.add(map[act]); inp.keys.add(map[act]); }
       }, { passive: false });
       b.addEventListener('touchend', (e) => {
         e.preventDefault();
         inp.actionsDown.delete(act + '-hold');
-        const map = { attack: 'TouchAttack', interact: 'KeyE', jump: 'Space', build: 'KeyB', inv: 'KeyI', map: 'KeyM' };
+        const map = { attack: 'TouchAttack', interact: 'KeyE', jump: 'Space', build: 'KeyB', inv: 'KeyI', map: 'KeyM', camp: 'KeyJ' };
         if (map[act]) inp.keys.delete(map[act]);
       });
     }

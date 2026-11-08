@@ -10,7 +10,7 @@ export class MapView {
     const el = this.el = document.createElement('div');
     el.className = 'overlay map';
     el.hidden = true;
-    el.innerHTML = `<div class="map-wrap"><canvas id="map-cv"></canvas><div class="map-legend"><b>Bridger County</b><span>You</span><span class="lg-claim">Your claims</span><button id="map-close">${isTouch ? 'Close' : 'Close (M)'}</button></div></div>`;
+    el.innerHTML = `<div class="map-wrap"><canvas id="map-cv"></canvas><div class="map-legend"><b>Bridger County</b><span>You</span><span class="lg-claim">Your claims</span><span class="lg-people">Your people</span><span class="lg-raider">Raiders</span><span class="lg-plan">Plans</span><button id="map-close">${isTouch ? 'Close' : 'Close (M)'}</button></div></div>`;
     document.getElementById('ui').appendChild(el);
     el.querySelector('#map-close').addEventListener('click', () => this.toggle(false));
     this.base = null;
@@ -80,6 +80,7 @@ export class MapView {
       ctx.strokeStyle = c.color; ctx.lineWidth = 2;
       ctx.strokeRect(X(c.x0), Z(c.z0), (c.x1 - c.x0) / sx, (c.z1 - c.z0) / sz);
     }
+    if (this.game.society) this.game.society.ui.drawMap(ctx, X, Z);
     const p = this.game.player;
     ctx.save();
     ctx.translate(X(p.pos.x), Z(p.pos.z));

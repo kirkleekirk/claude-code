@@ -515,7 +515,7 @@ const POSE_KEYS = ['pY', 'pR', 'pP', 'sY', 'sP', 'sR', 'cY', 'cP', 'cR', 'hY', '
   'lHF', 'lHA', 'lK', 'lA', 'rHF', 'rHA', 'rK', 'rA',
   'aLF', 'aLA', 'aLY', 'aLR', 'aLE', 'aLW', 'aRF', 'aRA', 'aRY', 'aRR', 'aRE', 'aRW',
   'lift', 'wcx', 'wcy', 'wcz', 'wrx', 'wry', 'wrz', 'wm',
-  'ik', 'gx', 'gy', 'gz', 'two', 'twoD', 'twoX', 'twoY', 'px', 'sLY', 'sRY'];
+  'ik', 'gx', 'gy', 'gz', 'two', 'twoD', 'twoX', 'twoY', 'px', 'sLY', 'sRY', 'sitW', 'sitH'];
 const newPose = () => { const o = {}; for (const k of POSE_KEYS) o[k] = 0; return o; };
 function setArm(P, side, f, a, y, r, e, w = 0) { const k = 'a' + side; P[k + 'F'] = f; P[k + 'A'] = a; P[k + 'Y'] = y; P[k + 'R'] = r; P[k + 'E'] = e; P[k + 'W'] = w; }
 function mixArm(P, side, Q, t) { for (const s of ['F', 'A', 'Y', 'R', 'E', 'W']) { const k = 'a' + side + s; P[k] = lerp(P[k], Q[k], t); } }
@@ -568,6 +568,137 @@ function playKeys(P, frames, t, weight = 1) {
     P[key] = lerp(P[key], lerp(a, b, k), weight);
   }
 }
+
+// ---------------- everyday actions ----------------
+// Each act writes a target pose into Q (a copy of the current pose); the
+// character blends acts in and out. t: clock, c: the character, st: state
+// (st.seatH seat height, st.attack 0..1 for punches). Returns { lying }.
+const wave = (t, f, ph = 0) => Math.sin(t * f + ph);
+function sitLegs(P, c, seatH, hip = 1.5, knee = 1.5) {
+  const sc = c.model.height / 1.78;
+  P.lHF = P.rHF = hip; P.lK = P.rK = knee; P.lA = P.rA = 0.05; P.lHA = P.rHA = 0.1;
+  P.px = 0; P.pR = 0; P.pY = 0; P.lift = 0; P.sR = 0; P.cR = 0;
+  P.sitW = 1; P.sitH = seatH + 0.085 * sc;
+}
+function grip(P, gx, gy, gz, wx, wy, wz, two = 0, twoD = 0.12, twoX = 0, twoY = 0) {
+  Object.assign(P, { ik: 1, gx, gy, gz, wcx: wx, wcy: wy, wcz: wz, wm: 0, two, twoD, twoX, twoY });
+}
+function armsCrossed(P) { setArm(P, 'L', 0.62, 0.12, 0.95, 0.5, 2.05, 0); setArm(P, 'R', 0.55, 0.12, 0.95, 0.4, 2.1, 0); }
+function armsRest(P) { setArm(P, 'L', 0.06, 0.13, 0, 0.15, 0.18, 0); setArm(P, 'R', 0.06, 0.13, 0, 0.15, 0.18, 0); }
+const ACTS = {
+  idle_crossed(P, t, c) { armsCrossed(P); P.hY += wave(t, 0.4, c.zv.seed) * 0.25; },
+  idle_hips(P, t, c) { setArm(P, 'L', 0.15, 0.55, 0, 1.6, 1.75, 0.3); setArm(P, 'R', 0.15, 0.55, 0, 1.6, 1.75, 0.3); P.hY += wave(t, 0.35, c.zv.seed) * 0.3; },
+  idle_pockets(P, t, c) { setArm(P, 'L', -0.05, 0.1, 0.12, 0.3, 0.45, 0); setArm(P, 'R', -0.05, 0.1, 0.12, 0.3, 0.45, 0); P.hP += 0.06; P.hY += wave(t, 0.3, c.zv.seed) * 0.2; },
+  wring(P, t) { grip(P, -0.04 + wave(t, 3) * 0.02, -0.3, 0.27, 0.9, 0, 0.3, 1, 0.07, 0, 0); P.hP += 0.2; P.hY += wave(t, 1.1) * 0.15; },
+  pace(P) { setArm(P, 'L', -0.45, 0.12, -0.25, 0.4, 1.45, 0); setArm(P, 'R', -0.45, 0.12, -0.25, 0.4, 1.45, 0); P.hP += 0.18; },
+  lean(P, t, c) { armsCrossed(P); P.sP -= 0.08; P.lHF = 0.35; P.lK = 0.7; P.lA = 0.3; P.lHA = -0.05; P.hY += wave(t, 0.3, c.zv.seed) * 0.2; },
+  talk(P, t, c) {
+    const a = c.zv.seed;
+    setArm(P, 'R', 0.45 + wave(t, 2.1, a) * 0.25, 0.22, 0.25, 0.1, 1.25 + wave(t, 3.2, a) * 0.3, 0.3);
+    setArm(P, 'L', 0.3 + wave(t, 1.7, a + 1) * 0.15, 0.2, 0.2, 0.1, 1.0 + wave(t, 2.6, a) * 0.2, 0.3);
+    P.hP += wave(t, 2.4, a) * 0.06; P.hR += wave(t, 1.3, a) * 0.06; P.cY += wave(t, 0.9, a) * 0.06;
+  },
+  listen(P, t, c) { armsCrossed(P); P.hR += 0.12; P.hP += Math.max(0, wave(t, 1.6, c.zv.seed)) * 0.12; },
+  argue(P, t, c) {
+    const jab = Math.max(0, wave(t, 4.5, c.zv.seed));
+    setArm(P, 'R', 1.25 + jab * 0.18, 0.1, 0.3, 0, 0.25 + (1 - jab) * 0.35, 0);
+    setArm(P, 'L', 0.15, 0.55, 0, 1.6, 1.75, 0.3);
+    P.cP += 0.12; P.hP -= 0.1; P.cY -= 0.12;
+  },
+  shrug(P, t) { const k = Math.max(0, wave(t, 2)); setArm(P, 'L', 0.25, 0.5, 0, 1.2, 1.4, 0.4); setArm(P, 'R', 0.25, 0.5, 0, 1.2, 1.4, 0.4); P.hR += 0.15 * k; },
+  warm_hands(P, t) { setArm(P, 'L', 1.0, 0.08, 0.3, 0.2, 0.75 + wave(t, 3) * 0.1, -0.4); setArm(P, 'R', 1.0, 0.08, 0.3, 0.2, 0.75 - wave(t, 3) * 0.1, -0.4); P.cP += 0.12; P.hP += 0.2; },
+  cook(P, t) {
+    grip(P, -0.06 + Math.cos(t * 3.2) * 0.05, -0.27, 0.4 + Math.sin(t * 3.2) * 0.04, 0.05, -0.75, 0.66);
+    setArm(P, 'L', 0.75, 0.12, 0.35, 0.1, 1.25, 0); P.cP += 0.15; P.hP += 0.3;
+  },
+  chop(P, t, c) {
+    const u = ((t * 0.62 + c.zv.seed) % 1 + 1) % 1;
+    const up = u < 0.5 ? Math.sin((u / 0.5) * Math.PI / 2) : u < 0.6 ? 1 - (u - 0.5) / 0.1 : 0;
+    const k = up;
+    grip(P, -0.04, lerp(-0.42, 0.42, k), lerp(0.6, 0.06, k), 0, lerp(-0.55, 0.62, k), lerp(0.84, -0.78, k), 1, 0.3, 0, 0);
+    P.cP += lerp(0.5, -0.12, k); P.sP += lerp(0.15, 0, k); P.hP += lerp(0.2, -0.2, k);
+    const knee = lerp(0.35, 0.05, k); P.lK += knee; P.rK += knee; P.lHF += knee * 0.5; P.rHF += knee * 0.5;
+  },
+  hammer(P, t) {
+    const h = Math.abs(Math.sin(t * 4.2));
+    grip(P, -0.12, -0.2 + h * 0.16, 0.48, 0, -0.2 + h * 0.6, 0.98 - h * 0.3);
+    setArm(P, 'L', 0.9, 0.05, 0.45, 0.2, 0.65, 0); P.cP += 0.2; P.hP += 0.35;
+  },
+  inspect(P, t) {
+    const k = (Math.sin(t * 0.8) + 1) / 2;
+    grip(P, -0.15 + k * 0.1, lerp(-0.3, 0.15, k), 0.5, 0, 0.2, 1);
+    setArm(P, 'L', 0.2, 0.15, 0.1, 0, 0.6, 0); P.hP += lerp(0.25, -0.05, k);
+  },
+  sweep(P, t) {
+    const s = Math.sin(t * 2.4);
+    grip(P, -0.05 + s * 0.18, -0.3, 0.33, 0.25 * s, -0.86, 0.45, 1, 0.42, 0, 0);
+    P.cP += 0.2; P.cY += s * 0.15;
+  },
+  carry(P) { grip(P, -0.17, -0.1, 0.34, -1, 0, 0, 1, 0.34, 0, 0); P.sP -= 0.05; },
+  guard(P, t, c) {
+    grip(P, -0.12, -0.18, 0.33, 0.18, -0.32, 0.93, 1, 0.33, 0, 0);
+    P.hY += Math.sin(t * 0.32 + c.zv.seed) * 0.65; P.cY += Math.sin(t * 0.32 + c.zv.seed) * 0.15;
+  },
+  smoke(P, t, c) {
+    const u = ((t / 7 + c.zv.seed) % 1 + 1) % 1, up = u < 0.18 ? Math.sin((u / 0.18) * Math.PI) : 0;
+    grip(P, lerp(-0.2, -0.05, up), lerp(-0.32, 0.24, up), lerp(0.14, 0.13, up), 0, 0.2, 1);
+    setArm(P, 'L', 0.55, 0.12, 0.95, 0.4, 2.0, 0); P.hP -= up * 0.15;
+  },
+  drink(P, t, c) {
+    const u = ((t / 6 + c.zv.seed) % 1 + 1) % 1, up = u < 0.25 ? Math.sin((u / 0.25) * Math.PI) : 0;
+    grip(P, lerp(-0.16, -0.05, up), lerp(-0.2, 0.24, up), lerp(0.28, 0.15, up), 0, 1, 0.05);
+    setArm(P, 'L', 0.06, 0.15, 0, 0.15, 0.25, 0); P.hP -= up * 0.35;
+  },
+  pray(P) { grip(P, -0.01, -0.02, 0.24, 0, 0.98, 0.15, 1, 0, 0.02, 0); P.hP += 0.5; P.cP += 0.08; },
+  stretch(P, t) { const k = Math.max(0, Math.sin(t * 0.7)); setArm(P, 'L', lerp(0.1, 2.9, k), 0.25, 0, 0, lerp(0.2, 0.25, k), 0); setArm(P, 'R', lerp(0.1, 2.9, k), 0.25, 0, 0, lerp(0.2, 0.25, k), 0); P.sP -= 0.12 * k; P.hP -= 0.3 * k; },
+  wave(P, t) { setArm(P, 'R', 2.55, 0.45, 0, -0.4, 0.55 + Math.sin(t * 9) * 0.35, 0); },
+  cheer(P, t) { const b = Math.abs(Math.sin(t * 6)); setArm(P, 'L', 2.8, 0.35, 0, 0, 0.3 + b * 0.3, 0); setArm(P, 'R', 2.8, 0.35, 0, 0, 0.3 + b * 0.3, 0); P.hP -= 0.2; },
+  cry(P, t) { grip(P, -0.03, 0.2, 0.15, 0, 1, 0, 1, 0, 0.07, 0); P.hP += 0.45; P.cP += 0.2; P.cR += Math.sin(t * 13) * 0.03; },
+  fight(P, t, c, st) {
+    const a = st.attack != null && st.attack >= 0 ? Math.sin(Math.min(1, st.attack) * Math.PI) : 0;
+    grip(P, -0.1, 0.18, 0.24 + a * 0.32, 0, 0.3, 1);
+    setArm(P, 'L', 1.25, 0.2, 0.45, 0.3, 2.1 - a * 0.2, 0);
+    P.lK += 0.25; P.rK += 0.25; P.lHF += 0.15; P.rHF += 0.15; P.cY += 0.25 - a * 0.4; P.cP += 0.12; P.hP += 0.1;
+    P.hY += Math.sin(t * 2.5) * 0.08;
+  },
+  kneel_work(P, t) {
+    Object.assign(P, { lHF: 1.45, lHA: 0.12, lK: 1.55, lA: 0.35, rHF: -0.05, rHA: 0.08, rK: 1.65, rA: -0.55, pY: 0.1, sP: 0.28, cP: 0.32, hP: 0.3, lift: 0, px: 0, pR: 0 });
+    grip(P, -0.08 + Math.sin(t * 2.2) * 0.08, -0.55, 0.42 + Math.cos(t * 1.7) * 0.06, 0, -0.6, 0.8);
+    setArm(P, 'L', 1.1 + Math.sin(t * 2.6) * 0.15, 0.08, 0.3, 0.3, 0.5, 0.2);
+  },
+  tend_fire(P, t) {
+    Object.assign(P, { lHF: 1.45, lHA: 0.12, lK: 1.55, lA: 0.35, rHF: -0.05, rHA: 0.08, rK: 1.65, rA: -0.55, pY: 0.1, sP: 0.2, cP: 0.25, hP: 0.3, lift: 0, px: 0, pR: 0 });
+    grip(P, -0.1, -0.4 + Math.sin(t * 1.5) * 0.05, 0.42 + Math.sin(t * 1.5) * 0.08, 0, -0.55, 0.84);
+    setArm(P, 'L', 0.6, 0.12, 0.3, 0.2, 1.1, 0);
+  },
+  sit_chair(P, t, c, st) { sitLegs(P, c, st.seatH ?? 0.47); setArm(P, 'L', 0.55, 0.12, 0.15, 0.2, 1.0, 0); setArm(P, 'R', 0.55, 0.12, 0.15, 0.2, 1.0, 0); P.sP = -0.04; P.cP = 0; P.hY += wave(t, 0.25, c.zv.seed) * 0.3; },
+  sit_eat(P, t, c, st) {
+    sitLegs(P, c, st.seatH ?? 0.47);
+    const u = ((t / 4 + c.zv.seed) % 1 + 1) % 1, up = u < 0.3 ? Math.sin((u / 0.3) * Math.PI) : 0;
+    grip(P, -0.06, lerp(-0.18, 0.2, up), lerp(0.36, 0.16, up), 0, 0.3, 1);
+    setArm(P, 'L', 0.85, 0.1, 0.45, 0.2, 1.45, 0); P.cP = 0.15; P.hP = 0.25 - up * 0.2;
+  },
+  sit_read(P, t, c, st) { sitLegs(P, c, st.seatH ?? 0.47); grip(P, -0.06, -0.1, 0.3, 0, 0.55, 0.84, 1, 0, 0.13, 0); P.cP = 0.1; P.hP = 0.45; P.hY = 0; },
+  sit_write(P, t, c, st) { sitLegs(P, c, st.seatH ?? 0.47); grip(P, -0.08 + Math.sin(t * 5) * 0.03, -0.17, 0.42, 0, -0.5, 0.86); setArm(P, 'L', 0.85, 0.15, 0.35, 0.3, 1.1, 0); P.cP = 0.25; P.hP = 0.4; },
+  sit_cards(P, t, c, st) { sitLegs(P, c, st.seatH ?? 0.47); const k = Math.max(0, Math.sin(t * 0.9 + c.zv.seed)); grip(P, -0.08, -0.12 + k * 0.05, 0.36 + k * 0.08, 0, 0.6, 0.8, 1, 0, 0.14, 0); P.cP = 0.15; P.hP = 0.3; },
+  sit_drink(P, t, c, st) { sitLegs(P, c, st.seatH ?? 0.47); ACTS.drink(P, t, c); P.cP = 0.05; },
+  sit_ground(P, t, c, st) {
+    sitLegs(P, c, (st.seatH ?? 0) + 0.05, 2.0, 2.3); P.lA = P.rA = 0.3;
+    setArm(P, 'L', 0.95, 0.25, 0.25, 0.3, 0.75, 0); setArm(P, 'R', 0.95, 0.25, 0.25, 0.3, 0.75, 0);
+    P.sP = 0.15; P.cP = 0.12; P.hP = -0.1; P.hY += wave(t, 0.2, c.zv.seed) * 0.3;
+  },
+  sit_log(P, t, c, st) { sitLegs(P, c, st.seatH ?? 0.42, 1.55, 1.75); P.lA = P.rA = 0.25; setArm(P, 'L', 0.75, 0.15, 0.2, 0.2, 0.9, 0); setArm(P, 'R', 0.75, 0.15, 0.2, 0.2, 0.9, 0); P.sP = 0.2; P.cP = 0.18; P.hP = -0.2; },
+  sit_whittle(P, t, c, st) {
+    sitLegs(P, c, st.seatH ?? 0.42, 1.55, 1.75); P.lA = P.rA = 0.25;
+    grip(P, -0.03 + Math.sin(t * 3.5) * 0.02, -0.3, 0.32, 0.3, 0.5, 0.8, 1, -0.02, 0.07, 0.02);
+    P.sP = 0.2; P.cP = 0.22; P.hP = 0.35;
+  },
+  sleep(P, t) {
+    Object.assign(P, { lHF: 0.1, rHF: 0.25, lK: 0.25, rK: 0.5, lA: -0.4, rA: -0.4, lHA: 0.1, rHA: 0.12, px: 0, pR: 0, pY: 0, lift: 0, sP: 0, cP: Math.sin(t * 1.1) * 0.02, hY: 0.6, hP: -0.05, hR: 0.1, sR: 0, cR: 0, cY: 0 });
+    setArm(P, 'L', 0.2, 0.35, 0, 0.2, 0.5, 0); setArm(P, 'R', 0.9, 0.1, 0.6, 0.3, 1.6, 0);
+    return { lying: true };
+  },
+};
 
 // small quaternion pool (no per-frame allocation)
 const QPOOL = Array.from({ length: 96 }, () => new THREE.Quaternion());
@@ -878,6 +1009,22 @@ export class Character {
       P.aRF = lerp(P.aRF, 1.45, k); P.aRE = lerp(P.aRE, 0.15, k); P.aLF = lerp(P.aLF, 1.35, k); P.aLE = lerp(P.aLE, 0.2, k); P.cP += 0.15 * k;
     }
 
+    // ---------------- everyday actions (camp life) ----------------
+    const acts = this.acts || (this.acts = {});
+    const want = st.act && ACTS[st.act] ? st.act : null;
+    if (want && !(want in acts)) acts[want] = 0;
+    let lying = 0;
+    for (const k in acts) {
+      acts[k] += ((k === want ? 1 : 0) - acts[k]) * (1 - Math.exp(-(k === want ? 5 : 7) * dt));
+      if (k !== want && acts[k] < 0.003) { delete acts[k]; continue; }
+      const Q = this.Q; Object.assign(Q, P);
+      const r = ACTS[k](Q, t, this, st);
+      const w = acts[k];
+      for (const key of POSE_KEYS) P[key] = lerp(P[key], Q[key], w);
+      if (r && r.lying) lying = Math.max(lying, w);
+    }
+    this.lying = lying;
+
     // ---------------- searching (kneel and rummage) ----------------
     if (b.search > 0.001) {
       const Q = this.Q; Object.assign(Q, P);
@@ -937,7 +1084,7 @@ export class Character {
     // lean comes from the hips as well as the back
     const tl = P.sP + P.cP;
     P.pP += tl * 0.45; P.sP *= 0.55; P.cP *= 0.55;
-    this.buildPose(P, b.dead < 0.5 && b.air < 0.9);
+    this.buildPose(P, b.dead < 0.5 && b.air < 0.9 && this.lying < 0.5);
   }
 
   // Turn the angle set into bone rotations, keep the lowest foot on the
@@ -971,6 +1118,7 @@ export class Character {
         lowest = Math.min(lowest, hy + fk.heel[1], hy + fk.toe[1], hy + fk.knee[1] - 0.05);
       }
       off = -lowest;
+      if (P.sitW > 0.001) off = lerp(off, P.sitH - J.hips.y, Math.min(1, P.sitW));
     }
     const hipsPos = V[7].set(J.hips.x + P.px, J.hips.y + off + P.lift, J.hips.z);
     this.bones.hips.position.copy(hipsPos);
@@ -1114,7 +1262,34 @@ export function makeWeaponMeshes() {
   for (const g of [bat, gun]) g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   const group = new THREE.Group();
   group.add(bat, gun);
+  // everyday items (origin at the grip, +Z along the item)
+  const M = (c, r = 0.7, m = 0) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m });
+  const mk = (geo, mat, x = 0, y = 0, z = 0, rx = 0) => { const o = new THREE.Mesh(geo, mat); o.position.set(x, y, z); o.rotation.x = rx; return o; };
+  const items = {};
+  const add = (name, ...parts) => { const g = new THREE.Group(); g.add(...parts); g.visible = false; group.add(g); items[name] = g; };
+  const woodM = M(0x8a6440), steel = M(0x9aa0a6, 0.4, 0.7), darkM = M(0x2a2826, 0.5, 0.4);
+  const rod = (len, r, mat, z) => mk(new THREE.CylinderGeometry(r, r, len, 7), mat, 0, 0, z, Math.PI / 2);
+  add('axe', rod(0.78, 0.017, woodM, 0.22), mk(new THREE.BoxGeometry(0.02, 0.17, 0.09), steel, 0, 0.06, 0.58));
+  add('hammer', rod(0.34, 0.014, woodM, 0.1), mk(new THREE.BoxGeometry(0.03, 0.11, 0.035), darkM, 0, 0.02, 0.27));
+  add('spatula', rod(0.3, 0.008, darkM, 0.08), mk(new THREE.BoxGeometry(0.07, 0.006, 0.09), steel, 0, 0, 0.27));
+  add('spoon', rod(0.16, 0.005, steel, 0.05), mk(new THREE.SphereGeometry(0.018, 8, 5), steel, 0, 0, 0.14));
+  add('knife', rod(0.09, 0.009, woodM, 0.0), mk(new THREE.BoxGeometry(0.004, 0.016, 0.08), steel, 0, 0, 0.08));
+  add('stick', rod(0.85, 0.012, woodM, 0.3));
+  add('broom', rod(1.35, 0.013, woodM, 0.3), mk(new THREE.BoxGeometry(0.26, 0.04, 0.16), M(0xb89a58, 0.95), 0, 0, 0.98));
+  add('book', mk(new THREE.BoxGeometry(0.17, 0.035, 0.23), M(0x6a2a24, 0.8), 0.07, 0, 0.06));
+  add('mug', mk(new THREE.CylinderGeometry(0.04, 0.036, 0.1, 10), M(0xd8d2c4, 0.6), 0, 0, 0.05, -Math.PI / 2));
+  add('bottle', mk(new THREE.CylinderGeometry(0.034, 0.036, 0.17, 9), M(0x5a3a1a, 0.15, 0.1), 0, 0, 0.06, -Math.PI / 2), mk(new THREE.CylinderGeometry(0.012, 0.02, 0.07, 7), M(0x5a3a1a, 0.15, 0.1), 0, 0, 0.17, -Math.PI / 2));
+  add('cigarette', mk(new THREE.CylinderGeometry(0.004, 0.004, 0.07, 5), M(0xf4f0e8), 0.0, 0, 0.04, Math.PI / 2));
+  add('cards', mk(new THREE.BoxGeometry(0.07, 0.008, 0.1), M(0xf0ece2, 0.6), 0.05, 0, 0.03));
+  add('crate', mk(new THREE.BoxGeometry(0.48, 0.3, 0.34), M(0xc8a878, 0.8), 0, -0.03, -0.17));
+  add('rifle', mk(new THREE.BoxGeometry(0.04, 0.07, 0.34), M(0x5a3c24, 0.6), 0, -0.02, -0.12),
+    mk(new THREE.BoxGeometry(0.035, 0.05, 0.32), darkM, 0, 0.015, 0.2), rod(0.42, 0.011, darkM, 0.55));
+  for (const g of Object.values(items)) g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  const setItem = (name) => {
+    bat.visible = name === 'bat'; gun.visible = name === 'gun';
+    for (const [k, g] of Object.entries(items)) g.visible = k === name;
+  };
   // muzzle point in the group's space
-  return { group, bat, gun, muzzle: new THREE.Vector3(0, 0.045, 0.16) };
+  return { group, bat, gun, items, setItem, muzzle: new THREE.Vector3(0, 0.045, 0.16) };
 }
 export { REG, BONES };

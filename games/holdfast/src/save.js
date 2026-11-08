@@ -28,6 +28,7 @@ export function saveGame(game) {
     carLoot: (w.carLoot || []).map((c, i) => (c.searched ? i : -1)).filter((i) => i >= 0),
     customShapes: game.customShapes, customStyles: game.customStyles,
     kills: game.zombies ? game.zombies.kills : 0,
+    society: game.society ? game.society.toJSON() : null,
   };
   try {
     localStorage.setItem(KEY, JSON.stringify(data));
@@ -102,5 +103,10 @@ export function loadGame(game) {
     if (data.player.weapon === 'gun' && game.inventory.weapons.pistol) game.setWeapon('pistol');
   }
   if (game.zombies) game.zombies.kills = data.kills || 0;
+  // claims are back: the camp can find its home before its people arrive
+  if (game.society && data.society) {
+    game.society.camp.setClaim(game.claims.list[0] || null);
+    game.society.loaded = game.society.load(data.society);
+  }
   return true;
 }

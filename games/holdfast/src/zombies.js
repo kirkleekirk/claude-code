@@ -87,32 +87,39 @@ class Zombie {
       if (this.downT <= 0) { this.char.root.rotation.x = 0; this.state = 'chase'; this.memory = 6; }
       return true;
     }
-    const pp = player.pos;
-    const dx = pp.x - this.pos.x, dz = pp.z - this.pos.z;
-    const dist = Math.hypot(dx, dz);
+    // who it's after: you, or whichever living person is closest in view
+    if (this.prey && (this.prey.dead || (this.prey !== player && !this.prey.char.root.visible))) this.prey = null;
+    let prey = this.prey || player;
     // perception (throttled)
     this.senseT = (this.senseT || 0) - dt;
-    if (this.senseT <= 0 && !player.dead) {
+    if (this.senseT <= 0) {
       this.senseT = full ? 0.25 : 1;
       const dark = g.sky.darkness;
-      const sight = (player.crouch ? 14 : 24) * (1 - dark * 0.45) * (player.flashlightOn && dark > 0.5 ? 1.5 : 1) * (dark > 0.5 && g.mods ? g.mods.nightSight : 1);
-      let sees = false;
-      if (dist < sight && Math.abs(pp.y - this.pos.y) < 4) {
+      const cands = g.society ? [player, ...g.society.humansNear(this.pos, 26)] : [player];
+      let seen = null, sd = Infinity;
+      for (const t of cands) {
+        if (t.dead) continue;
+        const tp = t.pos, isP = t === player;
+        const tx = tp.x - this.pos.x, tz = tp.z - this.pos.z, td = Math.hypot(tx, tz);
+        const sight = ((isP ? player.crouch : t.crouch) ? 14 : 24) * (1 - dark * 0.45) * (isP && player.flashlightOn && dark > 0.5 ? 1.5 : 1) * (isP && dark > 0.5 && g.mods ? g.mods.nightSight : 1);
+        if (td > sight || td > sd || Math.abs(tp.y - this.pos.y) > 4) continue;
         const fx = Math.sin(this.facing), fz = Math.cos(this.facing);
-        const dot = (dx * fx + dz * fz) / (dist || 1);
-        if (dot > -0.2 || dist < 3) {
-          const ox = this.pos.x, oy = this.pos.y + 1.6, oz = this.pos.z;
-          const ty = pp.y + 1.4;
-          const len = Math.hypot(dx, ty - oy, dz);
-          const hit = ph.raycast(ox, oy, oz, dx / len, (ty - oy) / len, dz / len, len, { skipGlass: true, noTerrain: false, filter: (b) => b.kind !== 'tree' && b.kind !== 'fence' && b.kind !== 'prop' });
-          sees = hit.dist >= len - 0.5;
-        }
+        if ((tx * fx + tz * fz) / (td || 1) < -0.2 && td > 3) continue;
+        const ox = this.pos.x, oy = this.pos.y + 1.6, oz = this.pos.z;
+        const ty = tp.y + 1.4;
+        const len = Math.hypot(tx, ty - oy, tz);
+        const hit = ph.raycast(ox, oy, oz, tx / len, (ty - oy) / len, tz / len, len, { skipGlass: true, noTerrain: false, filter: (b) => b.kind !== 'tree' && b.kind !== 'fence' && b.kind !== 'prop' });
+        if (hit.dist >= len - 0.5) { seen = t; sd = td; }
       }
-      if (sees) { this.state = 'chase'; this.memory = 6; this.target = pp.clone(); }
-      else if (this.state === 'chase') { this.memory -= this.senseT > 0 ? 0.25 : 1; if (this.memory <= 0) { this.state = 'investigate'; } }
-      if (dist < player.noise && this.state === 'wander') { this.state = 'investigate'; this.target = pp.clone(); }
+      if (seen) { this.state = 'chase'; this.memory = 6; this.prey = seen; prey = seen; this.target = seen.pos.clone(); }
+      else if (this.state === 'chase') { this.memory -= this.senseT > 0 ? 0.25 : 1; if (this.memory <= 0) { this.state = 'investigate'; this.prey = null; } }
+      const pd = Math.hypot(player.pos.x - this.pos.x, player.pos.z - this.pos.z);
+      if (!player.dead && pd < player.noise && this.state === 'wander') { this.state = 'investigate'; this.target = player.pos.clone(); }
     }
-    if (this.state === 'chase' && !player.dead) this.target = pp.clone();
+    const pp = prey.pos;
+    const dx = pp.x - this.pos.x, dz = pp.z - this.pos.z;
+    const dist = Math.hypot(dx, dz);
+    if (this.state === 'chase' && !prey.dead) this.target = pp.clone();
     // choose desired direction
     let tx = 0, tz = 0, speed = 0;
     if (this.stagger > 0) { this.stagger -= dt; }
@@ -131,7 +138,7 @@ class Zombie {
       if (this.state === 'investigate' && !this.waypoint && el < 1.5) { this.state = 'wander'; this.home.copy(this.pos); }
       tx = ex / (el || 1); tz = ez / (el || 1);
       speed = this.state === 'chase' ? this.chaseSpeed : 0.9;
-      if (this.state === 'chase' && dist < 1.25 && Math.abs(pp.y - this.pos.y) < 1.2) { speed = 0; this.tryAttack(player); }
+      if (this.state === 'chase' && dist < 1.25 && Math.abs(pp.y - this.pos.y) < 1.2) { speed = 0; this.tryAttack(prey); }
     } else {
       this.waypoint = null;
       this.wanderT -= dt;
@@ -182,7 +189,7 @@ class Zombie {
       this.attackT += dt / 0.9;
       if (!this.hitDone && this.attackT > 0.45) {
         this.hitDone = true;
-        if (dist < 1.6 && Math.abs(pp.y - this.pos.y) < 1.3) player.damage(9 + Math.random() * 6, this);
+        if (dist < 1.6 && Math.abs(pp.y - this.pos.y) < 1.3 && !prey.dead) prey.damage(9 + Math.random() * 6, this);
       }
       if (this.attackT >= 1) this.attackT = -1;
     }

@@ -54,6 +54,18 @@ function makeCtx(builder, p, out) {
       builder.geometry(key, g, m, Array.isArray(color) ? color : rgb(color), 1);
       g.dispose();
     },
+    // triangles in prop-local metres, drawn from both sides (tarps, sheets)
+    tris(key, pts, color) {
+      const n = pts.length / 9, arr = new Float32Array(n * 18);
+      let o = 0;
+      const put = (i) => { const [wx, wz] = tx(pts[i], pts[i + 2]); arr[o++] = wx; arr[o++] = p.y + pts[i + 1]; arr[o++] = wz; };
+      for (let t = 0; t < n; t++) { const b = t * 9; put(b); put(b + 3); put(b + 6); put(b); put(b + 6); put(b + 3); }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+      g.computeVertexNormals();
+      builder.geometry(key, g, new THREE.Matrix4(), Array.isArray(color) ? color : rgb(color), 1);
+      g.dispose();
+    },
     loot(table, x, y, z, label) {
       const w = ctx.world(x, y, z);
       out.interact.push({ type: 'loot', table, pos: w, label: label || 'Search', prop: p, searched: !!p.searched });
@@ -315,7 +327,7 @@ export const PROPS = {
     const s = p.s || 0.8;
     c.box('planks', -s / 2, 0, -s / 2, s / 2, s, s / 2, '#c8a878', null, true);
     for (const y of [0.05, s - 0.1]) c.box('planks', -s / 2 - 0.01, y, -s / 2 - 0.01, s / 2 + 0.01, y + 0.05, s / 2 + 0.01, '#a8885a');
-    if (p.loot !== false) c.loot(p.loot || 'crate', 0, s * 0.6, 0, 'Search crate');
+    if (p.loot !== false) c.loot(p.loot || 'crate', 0, s * 0.6, 0, p.label || 'Search crate');
   },
   hay_bale(c, p) {
     c.box('hay', -0.45, 0, -0.23, 0.45, 0.4, 0.23, '#ffffff', null, true);
@@ -423,6 +435,116 @@ export const PROPS = {
     c.box('plain:plastic', -0.7, 0.75, 0.1, 0.7, 0.77, 0.28, '#f4f2ea');
   },
   // Steps descending away from a floor edge (front = +z). p.h = total drop, p.w = width.
+  // ---------------- camp life ----------------
+  campfire(c, p) {
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2;
+      c.box('stone', Math.cos(a) * 0.55 - 0.12, 0, Math.sin(a) * 0.55 - 0.1, Math.cos(a) * 0.55 + 0.12, 0.17, Math.sin(a) * 0.55 + 0.1, '#8a847a');
+    }
+    c.box('plain:matte', -0.4, 0, -0.4, 0.4, 0.03, 0.4, '#2a2420');
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI + 0.3;
+      c.cyl('woodFurn', Math.cos(a) * 0.12, 0.12, Math.sin(a) * 0.12, 0.05, 0.62, '#4a3a2a', 7, i % 2 ? 'x' : 'z');
+    }
+    c.solid(-0.5, 0, -0.5, 0.5, 0.3, 0.5);
+  },
+  log_bench(c, p) {
+    c.cyl('woodFurn', 0, 0.2, 0, 0.2, 1.6, '#7a5a3c', 10, 'x');
+    for (const x of [-0.82, 0.82]) c.cyl('woodFurn', x, 0.2, 0, 0.19, 0.04, '#c8a878', 10, 'x');
+    c.solid(-0.8, 0, -0.2, 0.8, 0.4, 0.2);
+  },
+  grill(c, p) {
+    c.cyl('plain:metal', 0, 0.62, 0, 0.32, 0.36, '#2a2a2a', 14);
+    c.cyl('plain:metal', 0, 0.84, 0, 0.33, 0.04, '#3a3a3a', 14);
+    for (let i = -3; i <= 3; i++) c.box('plain:metal', -0.28, 0.86, i * 0.08 - 0.008, 0.28, 0.87, i * 0.08 + 0.008, '#8a8a8a');
+    for (const [x, z] of [[-0.22, -0.18], [0.22, -0.18], [0, 0.26]]) c.box('plain:metal', x - 0.02, 0, z - 0.02, x + 0.02, 0.48, z + 0.02, '#2a2a2a');
+    c.box('plain:matte', -0.12, 0.88, -0.05, -0.02, 0.9, 0.05, '#7a3a22');
+    c.box('plain:matte', 0.05, 0.88, -0.1, 0.16, 0.9, 0.02, '#7a3a22');
+    c.solid(-0.34, 0, -0.34, 0.34, 0.9, 0.34);
+  },
+  chopping_block(c, p) {
+    c.cyl('woodFurn', 0, 0.25, 0, 0.3, 0.5, '#8a6a4a', 12);
+    c.cyl('woodFurn', 0, 0.505, 0, 0.29, 0.01, '#c8a878', 12);
+    for (let i = 0; i < 6; i++) c.cyl('woodFurn', 0.75 + (i % 3) * 0.24, 0.12 + Math.floor(i / 3) * 0.22, -0.2, 0.11, 0.55, '#9a7a52', 8, 'z');
+    c.solid(-0.3, 0, -0.3, 0.3, 0.5, 0.3);
+    c.solid(0.6, 0, -0.5, 1.4, 0.45, 0.1);
+  },
+  garden_bed(c, p) {
+    c.box('planks', -0.9, 0, -0.55, 0.9, 0.32, 0.55, '#a8885a', null, true);
+    c.box('plain:matte', -0.84, 0.3, -0.49, 0.84, 0.33, 0.49, '#3a2a1e');
+    for (let i = 0; i < 8; i++) {
+      const x = -0.68 + (i % 4) * 0.45, z = i < 4 ? -0.22 : 0.22;
+      c.sphere('fabric', x, 0.43, z, 0.13, '#4a7a32', 0.8);
+      c.sphere('fabric', x + 0.04, 0.52, z + 0.02, 0.08, '#5a8a3a', 0.9);
+    }
+  },
+  bedroll(c, p) {
+    c.box('fabric', -0.38, 0, -0.95, 0.38, 0.07, 0.95, p.color || '#5a6a4a');
+    c.box('fabric', -0.36, 0.07, -0.25, 0.36, 0.11, 0.93, '#7a8a6a');
+    c.box('fabric', -0.25, 0.07, -0.93, 0.25, 0.17, -0.65, '#e8e4da');
+  },
+  lookout(c, p) {
+    const bag = '#a89a78';
+    for (const [x0, z0, x1, z1] of [[-0.95, -0.95, 0.95, -0.6], [-0.95, -0.6, -0.6, 0.6], [0.6, -0.6, 0.95, 0.6]]) {
+      for (let k = 0; k < 4; k++) c.box('fabric', x0, k * 0.22, z0, x1, k * 0.22 + 0.21, z1, k % 2 ? bag : '#9a8c6a', null, true);
+    }
+    c.box('woodFurn', -0.04, 0, -0.85, 0.04, 2.4, -0.77, '#6a4a32');
+    c.box('fabric', 0.04, 1.95, -0.83, 0.62, 2.35, -0.8, '#c4533a');
+  },
+  medcot(c, p) {
+    c.box('fabric', -0.38, 0.38, -0.95, 0.38, 0.45, 0.95, '#5a6a50');
+    for (const x of [-0.36, 0.33]) for (const z of [-0.9, 0.86]) c.box('plain:metal', x, 0, z, x + 0.03, 0.38, z + 0.03, '#7a7a7a');
+    c.box('fabric', -0.3, 0.45, -0.92, 0.3, 0.53, -0.66, '#ece8de');
+    c.box('plain:paint', 0.5, 0, -0.3, 0.9, 0.35, 0.2, '#e8e4dc', null, true);
+    c.box('plain:paint', 0.62, 0.36, -0.12, 0.78, 0.37, 0.0, '#c4332a');
+    c.box('plain:paint', 0.66, 0.36, -0.16, 0.74, 0.37, 0.04, '#c4332a');
+    c.solid(-0.38, 0, -0.95, 0.38, 0.45, 0.95);
+  },
+  // A-frame canvas tent, open at the front (+Z), a bedroll inside
+  tent(c, p) {
+    const w = 2.0, h = 1.45, d = 2.5, z0 = -d / 2, z1 = d / 2, col = p.color || '#6a6a4a';
+    const quad = (a, b, cc, dd) => [...a, ...b, ...cc, ...a, ...cc, ...dd];
+    c.tris('fabric', [
+      ...quad([-w / 2, 0, z0], [0, h, z0], [0, h, z1], [-w / 2, 0, z1]),
+      ...quad([w / 2, 0, z0], [w / 2, 0, z1], [0, h, z1], [0, h, z0]),
+      -w / 2, 0, z0, w / 2, 0, z0, 0, h, z0,
+    ], col);
+    // front flaps tied back
+    c.tris('fabric', [-w / 2, 0, z1, 0, h, z1, -w / 2 - 0.25, 0.1, z1 + 0.35, w / 2, 0, z1, w / 2 + 0.25, 0.1, z1 + 0.35, 0, h, z1], mulc(rgb(col), 0.82));
+    c.box('woodFurn', -0.03, 0, z1 + 0.02, 0.03, h + 0.1, z1 + 0.08, '#5a4a3a');
+    c.box('woodFurn', -0.03, 0, z0 - 0.08, 0.03, h + 0.1, z0 - 0.02, '#5a4a3a');
+    c.box('fabric', -0.36, 0, -1.05, 0.36, 0.07, 0.85, p.roll || '#4a4a3e');
+    c.box('fabric', -0.25, 0.07, -1.03, 0.25, 0.16, -0.78, '#d8d4c8');
+    // the walls are thin: block the sides and back, not the doorway
+    c.solid(-w / 2, 0, z0, -w / 2 + 0.25, 1.0, z1);
+    c.solid(w / 2 - 0.25, 0, z0, w / 2, 1.0, z1);
+    c.solid(-w / 2, 0, z0 - 0.05, w / 2, h, z0 + 0.1);
+  },
+  // scrap-metal barricade: corrugated sheets on posts, sandbags at the foot
+  barricade(c, p) {
+    const w = p.w || 2.4, cols = ['#6a6258', '#7a5a44', '#5a6068', '#8a7a62'];
+    for (let i = 0; i < 3; i++) {
+      const x0 = -w / 2 + i * (w / 3) - 0.04, x1 = x0 + w / 3 + 0.08, t = (i % 2) * 0.12;
+      c.box('plain:metal', x0, 0.15 + t * 0.4, -0.05, x1, 1.45 + t, 0.02, cols[(i + (p.seed || 0)) % 4]);
+    }
+    for (const x of [-w / 2 + 0.1, 0, w / 2 - 0.1]) c.box('woodFurn', x - 0.05, 0, 0.02, x + 0.05, 1.55, 0.12, '#5a4632');
+    for (let i = 0; i < 4; i++) c.box('fabric', -w / 2 + i * (w / 4) + 0.02, 0, -0.32, -w / 2 + (i + 1) * (w / 4) - 0.02, 0.24, -0.06, i % 2 ? '#a89a78' : '#9a8c6a');
+    c.solid(-w / 2, 0, -0.32, w / 2, 1.5, 0.12);
+  },
+  // a grave: mound of earth and a cross with a name on it
+  grave(c, p) {
+    c.box('plain:matte', -0.42, 0, -0.95, 0.42, 0.16, 0.95, '#4a3a2a');
+    c.box('plain:matte', -0.32, 0.16, -0.85, 0.32, 0.24, 0.85, '#55432f');
+    c.box('woodFurn', -0.04, 0, -1.12, 0.04, 1.05, -1.04, '#8a6a4a');
+    c.box('woodFurn', -0.3, 0.72, -1.13, 0.3, 0.8, -1.03, '#8a6a4a');
+    for (let i = 0; i < 4; i++) c.sphere('fabric', -0.2 + i * 0.13, 0.27, 0.3 + (i % 2) * 0.12, 0.05, ['#d8c040', '#c84a3a', '#e8e4da', '#8a6ac0'][i]);
+  },
+  water_barrel(c, p) {
+    c.cyl('plain:plastic', 0, 0.45, 0, 0.3, 0.9, '#2f5a8a', 14);
+    c.cyl('plain:metal', 0, 0.4, 0.3, 0.02, 0.06, '#c0c0c0', 6, 'z');
+    c.cyl('plain:plastic', 0, 0.92, 0, 0.2, 0.04, '#d8d4c8', 12);
+    c.solid(-0.3, 0, -0.3, 0.3, 0.92, 0.3);
+  },
   steps(c, p) {
     const h = p.h || 0.5, w = p.w || 1.6;
     const n = Math.max(1, Math.round(h / 0.19) - 1);
@@ -471,4 +593,15 @@ export const FURNITURE_CATALOG = [
   { type: 'toolchest', name: 'Tool chest', cost: { metal: 3 } },
   { type: 'drum', name: 'Fuel drum', cost: { metal: 2 } },
   { type: 'hay_bale', name: 'Hay bale', cost: { wood: 1 } },
+  { type: 'campfire', name: 'Campfire', cost: { wood: 2, stone: 2 } },
+  { type: 'log_bench', name: 'Log bench', cost: { wood: 2 } },
+  { type: 'grill', name: 'Grill', cost: { metal: 3 } },
+  { type: 'chopping_block', name: 'Chopping block', cost: { wood: 2 } },
+  { type: 'garden_bed', name: 'Garden bed', cost: { wood: 3 } },
+  { type: 'bedroll', name: 'Bedroll', cost: { wood: 1 } },
+  { type: 'lookout', name: 'Lookout post', cost: { wood: 2, stone: 3 } },
+  { type: 'medcot', name: 'Medical cot', cost: { wood: 2, metal: 2 } },
+  { type: 'water_barrel', name: 'Water barrel', cost: { metal: 2 } },
+  { type: 'tent', name: 'Tent', cost: { wood: 2 } },
+  { type: 'barricade', name: 'Scrap barricade', cost: { metal: 3, wood: 1 } },
 ];

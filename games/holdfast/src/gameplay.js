@@ -8,12 +8,13 @@ export class Inventory {
     this.res = { ...START_RES };
     this.claimKits = 1;
     this.weapons = { bat: true, pistol: false };
+    this.items = {}; // things for plans: sedatives, whiskey, seed stock
   }
   can(cost) { for (const k in cost) if ((this.res[k] || 0) < cost[k]) return false; return true; }
   pay(cost) { if (!this.can(cost)) return false; for (const k in cost) this.res[k] -= cost[k]; return true; }
   add(res) { for (const k in res) this.res[k] = (this.res[k] || 0) + res[k]; }
-  toJSON() { return { res: this.res, claimKits: this.claimKits, weapons: this.weapons }; }
-  load(j) { Object.assign(this.res, j.res || {}); this.claimKits = j.claimKits ?? this.claimKits; Object.assign(this.weapons, j.weapons || {}); }
+  toJSON() { return { res: this.res, claimKits: this.claimKits, weapons: this.weapons, items: this.items }; }
+  load(j) { Object.assign(this.res, j.res || {}); this.claimKits = j.claimKits ?? this.claimKits; Object.assign(this.weapons, j.weapons || {}); Object.assign(this.items, j.items || {}); }
 }
 
 // table -> list of [resource, min, max, chance]
@@ -34,7 +35,20 @@ const TABLES = {
   fuel: [['fuel', 2, 4, 0.8]],
   car: [['fuel', 1, 2, 0.6], ['metal', 1, 2, 0.4], ['ammo', 2, 4, 0.08], ['food', 1, 1, 0.2]],
   truck: [['fuel', 1, 3, 0.6], ['metal', 2, 3, 0.5], ['wood', 1, 3, 0.3], ['ammo', 3, 6, 0.1]],
+  // caches survivors know about, and what raiders keep
+  food_cache: [['food', 6, 10, 1], ['meds', 1, 1, 0.3], ['fuel', 1, 2, 0.2]],
+  seed_cache: [['food', 3, 5, 1], ['seeds', 1, 1, 1]],
+  med_cache: [['meds', 4, 6, 1], ['food', 1, 2, 0.5]],
+  fuel_cache: [['fuel', 4, 8, 1], ['metal', 2, 4, 0.7]],
+  build_cache: [['wood', 10, 16, 1], ['metal', 5, 8, 1], ['stone', 4, 6, 0.8]],
+  gun_cache: [['ammo', 12, 20, 1], ['pistol', 1, 1, 1], ['food', 2, 3, 0.6]],
+  mixed_cache: [['food', 3, 5, 1], ['meds', 2, 3, 1], ['ammo', 6, 10, 0.8], ['fuel', 1, 2, 0.6]],
+  liquor_cache: [['food', 1, 2, 0.6], ['fuel', 1, 1, 0.3]],
+  raider_stash: [['food', 6, 12, 1], ['meds', 2, 4, 0.9], ['ammo', 10, 25, 1], ['metal', 4, 8, 0.8], ['fuel', 2, 5, 0.8], ['wood', 4, 8, 0.6], ['kit', 1, 1, 0.3]],
+  raider_body: [['ammo', 2, 6, 0.55], ['food', 1, 1, 0.3], ['meds', 1, 1, 0.2]],
+  supply_run: [['food', 3, 6, 1], ['ammo', 4, 10, 0.8], ['meds', 1, 2, 0.5], ['fuel', 1, 2, 0.5]],
 };
+const ITEMS = { seeds: 'seed stock', sedatives: 'sedatives', liquor: 'whiskey' };
 const NAMES = { wood: 'Wood', metal: 'Metal', stone: 'Stone', food: 'Food', meds: 'Meds', ammo: 'Ammo', fuel: 'Fuel' };
 
 export function rollLoot(table, inv, luck = 1) {
@@ -49,6 +63,7 @@ export function rollLoot(table, inv, luck = 1) {
       continue;
     }
     if (k === 'kit') { inv.claimKits += 1; got.push('a claim kit'); continue; }
+    if (ITEMS[k]) { inv.items[k] = (inv.items[k] || 0) + n; got.push(ITEMS[k]); continue; }
     inv.res[k] += n;
     got.push(`${n} ${NAMES[k]}`);
   }
@@ -94,6 +109,21 @@ export class Interaction {
       for (const it of S.interact) pushLoot(it);
     }
     for (const it of g.world.carLoot || []) pushLoot(it);
+    const soc = g.society;
+    if (soc) {
+      for (const it of soc.lootables) pushLoot(it);
+      const f = g.tpc.forward;
+      for (const n of soc.npcs) {
+        if (n.dead || n.mode === 'away' || n.faction === 'raider' || n.angry) continue;
+        if (Math.abs(n.pos.y - p.y) > 1.4) continue;
+        const dist = Math.hypot(n.pos.x - p.x, n.pos.z - p.z);
+        if (dist > 2.6) continue;
+        // people beside you only count when you look their way
+        if (!n.downed && ((n.pos.x - p.x) * f.x + (n.pos.z - p.z) * f.z) / (dist || 1) < 0.55) continue;
+        const pos = [n.pos.x, n.pos.y + (n.downed ? 0.4 : 1.3), n.pos.z];
+        out.push({ kind: n.downed ? 'revive' : 'npc', ref: n, pos, dist: dist - 0.4 });
+      }
+    }
     if (g.claims) for (const c of g.claims.list) {
       const dist = Math.hypot(c.flag[0] - p.x, c.flag[2] - p.z);
       if (dist < 2) out.push({ kind: 'flag', ref: c, pos: c.flag, dist });
@@ -133,9 +163,20 @@ export class Interaction {
         best.ref.searched = true;
         if (best.ref.prop) best.ref.prop.searched = true;
         const got = rollLoot(best.ref.table, g.inventory, g.mods ? g.mods.loot : 1);
+        if (g.society) got.push(...g.society.searchBonus(best.ref));
         g.hud.toast(got.length ? 'Found ' + got.join(', ') : 'Nothing useful here', 2.5);
         g.markDirty && g.markDirty();
       }
+    } else if (best.kind === 'npc') {
+      const n = best.ref;
+      g.hud.setPrompt(`Talk to ${n.first}`);
+      if (inp.pressed('KeyE')) { g.society.ui.openTalk(n); inp.pressedSet.delete('KeyE'); }
+    } else if (best.kind === 'revive') {
+      const n = best.ref;
+      const holding = inp.down('KeyE');
+      if (holding) this.hold += dt; else this.hold = Math.max(0, this.hold - dt * 2);
+      g.hud.setPrompt(`Help ${n.first} up`, 'Hold E', this.hold > 0 ? this.hold / 1.6 : null);
+      if (this.hold >= 1.6) { this.hold = 0; n.revive(g.player); }
     } else if (best.kind === 'flag') {
       g.hud.setPrompt('Hold E to pack up this claim', 'Hold E', this.hold > 0 ? this.hold / 2 : null);
       if (inp.down('KeyE')) this.hold += dt; else this.hold = 0;
@@ -158,14 +199,22 @@ export class Combat {
     const g = this.game;
     const fx = Math.sin(player.facing), fz = Math.cos(player.facing);
     let hit = 0;
-    for (const z of g.zombies.list) {
+    const people = g.society ? g.society.hittable() : [];
+    for (const z of [...g.zombies.list, ...people]) {
       if (z.dead) continue;
       const dx = z.pos.x - player.pos.x, dz = z.pos.z - player.pos.z;
       const d = Math.hypot(dx, dz);
       if (d > player.weapon.reach + 0.3 || Math.abs(z.pos.y - player.pos.y) > 1.4) continue;
       const dot = (dx * fx + dz * fz) / (d || 1);
       if (dot < 0.25) continue;
-      z.hurt(player.weapon.damage * (0.85 + Math.random() * 0.3), dx / (d || 1), dz / (d || 1), 'melee');
+      const dmg = player.weapon.damage * (0.85 + Math.random() * 0.3);
+      if (z.hurt) z.hurt(dmg, dx / (d || 1), dz / (d || 1), 'melee');
+      else {
+        // a sleeping or unaware person takes a sneak attack hard
+        const unaware = z.sleeping || (z.rcamp && z.rcamp.state === 'calm' && !z.combatTarget);
+        z.damage(dmg * (unaware && player.crouch ? 3.2 : unaware ? 1.6 : 1), player);
+        g.society.onPlayerHit(z);
+      }
       hit++;
       if (hit >= 2) break;
     }
@@ -188,7 +237,8 @@ export class Combat {
     let best = wr.dist, target = null, head = false;
     // the shot leaves the gun, not the camera: nothing behind the player counts
     const tMin = Math.max(0, o.distanceTo(player.pos) - 0.8);
-    for (const z of g.zombies.list) {
+    const people = g.society ? g.society.hittable() : [];
+    for (const z of [...g.zombies.list, ...people]) {
       if (z.dead) continue;
       // ray vs vertical capsule (approximate as cylinder r=0.33)
       const cx = z.pos.x - o.x, cz = z.pos.z - o.z;
@@ -212,11 +262,14 @@ export class Combat {
     this.muzzle.position.copy(hand);
     this.muzzle.intensity = 6;
     if (target) {
-      target.hurt((head ? 140 : 45) * (g.mods ? g.mods.gun : 1), dir.x, dir.z, head ? 'head' : 'shot');
+      const dmg = (head ? 140 : 45) * (g.mods ? g.mods.gun : 1);
+      if (target.hurt) target.hurt(dmg, dir.x, dir.z, head ? 'head' : 'shot');
+      else { target.damage(dmg, player); g.society.onPlayerHit(target); }
       if (head) g.hud.toast('Headshot', 0.8);
     }
     // gunshots are loud
     g.zombies.alertNoise(player.pos, 70);
+    if (g.society) g.society.raiders.hear(player.pos, 90, null);
     g.audio && g.audio.gunshot();
   }
   update(dt) {

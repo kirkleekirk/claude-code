@@ -23,6 +23,7 @@ import { Audio } from './audio.js';
 import { saveGame, loadGame, clearSave, hasSave } from './save.js';
 import { SurvivorSetup, SPAWNS, traitMods, profilePalette } from './survivor.js';
 import { START_RES } from './gameplay.js';
+import { Society } from './npc/society.js';
 
 import { isTouch } from './platform.js';
 export { isTouch };
@@ -113,6 +114,7 @@ export class Game {
     this.buildMode = new BuildMode(this);
     this.map = new MapView(this);
     this.audio = new Audio();
+    this.society = new Society(this);
     this.sky.onThunder = () => setTimeout(() => this.audio.thunder(), 600 + Math.random() * 1500);
     // flashlight
     this.flashlight = new THREE.SpotLight(0xfff4dc, 0, 28, 0.42, 0.45, 1.4);
@@ -121,6 +123,8 @@ export class Game {
     this.setWeapon('bat');
     const qs = new URLSearchParams(location.search);
     const loaded = !qs.get('fresh') && loadGame(this);
+    // a save from before there were other people: two of them find you
+    if (loaded && !this.society.loaded && !qs.get('still')) this.society.startingCompanions(this.player.pos);
     this.onProgress('Ready', 1);
     if (loaded && !this.profile && !qs.get('still')) {
       // a save from before survivors existed: make one, keep everything else
@@ -138,6 +142,7 @@ export class Game {
     } else if (qs.get('still') && !qs.get('setup')) {
       // automated checks skip the creation screens
       this.applyProfile({ name: 'Test Survivor', model: 'man', skin: PALETTES.survivorM[0], shirt: PALETTES.survivorM[1], pants: PALETTES.survivorM[2], hair: PALETTES.survivorM[4], traits: [], spawn: 'highway' }, true);
+      if (qs.get('npcs') !== '0') this.society.startingCompanions(this.player.pos);
     } else {
       // a new game: make a survivor, then pick where to start
       this.setupOpen = true;
@@ -146,8 +151,10 @@ export class Game {
         this.setupOpen = false;
         this.hud.setVisible(true);
         this.applyProfile(p, true);
+        this.society.startingCompanions(this.player.pos);
         this.save();
-        setTimeout(() => this.hud.toast(`${p.name.split(' ')[0]}, find a place worth holding, then ${isTouch ? 'tap Build after planting your claim flag' : 'press G to plant your claim flag'}.`, 7), 600);
+        setTimeout(() => this.hud.toast(`${p.name.split(' ')[0]}, two survivors are with you. Find a place worth holding, then ${isTouch ? 'plant your claim flag' : 'press G to plant your claim flag'}.`, 7), 600);
+        setTimeout(() => this.hud.toast(isTouch ? 'Walk up to someone and tap Use to talk. Camp shows your people.' : 'Walk up to someone and press E to talk. J shows your camp.', 6), 8000);
         setTimeout(() => this.hud.toast(isTouch ? 'Left side: move · Right side: look · Buttons: hit, use, jump' : 'WASD move · Mouse look · Click to swing · E to use · Esc for help', 6), 3800);
       });
     }
@@ -211,11 +218,14 @@ export class Game {
     if (inp.pressed('Escape')) {
       // one Esc closes one thing
       if (this.buildMode.designer && !this.buildMode.designer.el.hidden) { this.buildMode.designer.close(); inp.pressedSet.delete('Escape'); }
+      else if (this.society.ui.talking) { this.society.ui.closeTalk(); inp.pressedSet.delete('Escape'); }
+      else if (!this.society.ui.campEl.hidden) { this.society.ui.toggleCamp(false); inp.pressedSet.delete('Escape'); }
       else if (!this.map.el.hidden) { this.map.toggle(false); inp.pressedSet.delete('Escape'); }
       else if (!this.buildMode.active) hud.togglePause();
     }
     if (hud.paused || this.player.dead) return;
-    if (inp.pressed('KeyM') && !this.buildMode.active) this.map.toggle();
+    if (inp.pressed('KeyM') && !this.buildMode.active && !this.society.ui.talking && this.society.ui.campEl.hidden) this.map.toggle();
+    if (inp.pressed('KeyJ') && !this.buildMode.active && !this.society.ui.talking && this.map.el.hidden) this.society.ui.toggleCamp();
     if (this.modalOpen) return;
     if (inp.pressed('KeyB') && !this.buildMode.active) {
       const c = this.claims.at(this.player.pos.x, this.player.pos.z);
@@ -244,7 +254,8 @@ export class Game {
     }
     if (inp.pressed('KeyI')) {
       const r = this.inventory.res;
-      hud.toast(`Pack: ${r.wood} wood, ${r.metal} metal, ${r.stone} stone, ${r.food} food, ${r.meds} meds, ${r.ammo} ammo, ${r.fuel} fuel · ${this.inventory.claimKits} claim kit(s)`, 4);
+      const it = Object.entries(this.inventory.items).filter(([, n]) => n > 0).map(([k, n]) => `${n} ${{ seeds: 'seed stock', sedatives: 'sedatives', liquor: 'whiskey' }[k] || k}`);
+      hud.toast(`Pack: ${r.wood} wood, ${r.metal} metal, ${r.stone} stone, ${r.food} food, ${r.meds} meds, ${r.ammo} ammo, ${r.fuel} fuel · ${this.inventory.claimKits} claim kit(s)${it.length ? ' · ' + it.join(', ') : ''}`, 4);
     }
   }
 
@@ -270,7 +281,31 @@ export class Game {
         this.player.char.animate(dt, { speed: 0, mode: 'idle', weapon: this.player.weapon.kind === 'gun' ? 'gun' : 'bat' });
         this.player.syncModel(dt);
         this.player.char.mesh.visible = true;
+      } else if (this.society.ui.talking) {
+        // a two-shot from the side, a little behind your shoulder
+        const n = this.society.ui.talking, p = this.player.pos;
+        const dx = n.pos.x - p.x, dz = n.pos.z - p.z, L = Math.hypot(dx, dz) || 1;
+        const ux = dx / L, uz = dz / L;
+        const mx = (p.x + n.pos.x) / 2, mz = (p.z + n.pos.z) / 2, my = Math.max(p.y, n.visualY) + (n.seated ? 1.25 : 1.5);
+        const far = 1.9 + L * 0.55;
+        const room = (k) => this.physics.raycast(mx, my, mz, -uz * k, 0, ux * k, far + 0.4, { skipGlass: true, filter: (b) => b.kind !== 'tree' }).dist;
+        if (!this.talkSide) this.talkSide = room(1) >= room(-1) ? 1 : -1;
+        const k = this.talkSide, r = Math.min(far, room(k) - 0.3);
+        const cam = new THREE.Vector3(mx - uz * k * r - ux * 0.9, my + 0.3, mz + ux * k * r - uz * 0.9);
+        if (!this.talkCamInit) { this.talkCamInit = true; this.camera.position.copy(cam); }
+        this.camera.position.lerp(cam, Math.min(1, dt * 4));
+        this.camera.lookAt(mx + ux * 0.35, my - 0.12, mz + uz * 0.35);
+        // leave room for the talk panel: it sits lower right on wide screens, at the bottom on narrow ones
+        if (innerWidth > 720) this.camera.rotateY(isTouch ? -0.34 : -0.2); else this.camera.rotateX(-0.22);
+        let f = Math.atan2(dx, dz) - this.player.facing;
+        while (f > Math.PI) f -= Math.PI * 2;
+        while (f < -Math.PI) f += Math.PI * 2;
+        this.player.facing += f * Math.min(1, dt * 5);
+        this.player.char.animate(dt, { speed: 0, mode: 'idle', weapon: this.player.weapon.kind === 'gun' ? 'gun' : 'bat' });
+        this.player.syncModel(dt);
+        this.tpc.yaw = Math.atan2(-ux, -uz);
       } else if (!this.modalOpen) {
+        this.talkSide = 0; this.talkCamInit = false;
         const ld = inp.lookDelta();
         const dragging = !inp.locked && (inp.mouse.buttons & 1) && inp.dragMoved;
         if (inp.locked || inp.touch.active || (inp.mouse.buttons & 4) || dragging) this.tpc.look(ld.x, ld.y, inp.touch.active);
@@ -287,6 +322,7 @@ export class Game {
         this.zombies.update(dt);
       }
       this.focus = this.player.pos;
+      this.society.update(dt);
       this.combat.update(dt);
       this.claims.update(dt);
       this.hud.update(dt);
