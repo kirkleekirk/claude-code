@@ -87,7 +87,8 @@ table.keys td:first-child { font-family: var(--font-display); color: var(--ink-d
 .stick.active { opacity: 1; }
 .knob { position: absolute; left: 45px; top: 45px; width: 50px; height: 50px; border-radius: 50%; background: rgba(243,239,228,.55); }
 .tbtns { position: absolute; right: max(14px, env(safe-area-inset-right, 0px)); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: repeat(3, 62px); gap: 8px; direction: rtl; }
-.tbtns-top { position: absolute; right: max(14px, env(safe-area-inset-right, 0px)); top: calc(110px + env(safe-area-inset-top, 0px)); display: flex; flex-direction: column; gap: 8px; }
+.tbtns-top { position: absolute; right: max(14px, env(safe-area-inset-right, 0px)); top: calc(110px + env(safe-area-inset-top, 0px)); display: grid; grid-template-columns: 62px 62px; gap: 6px; }
+.tbtns-top .tb.small { width: 62px; height: 38px; font-size: 12px; }
 .tb { width: 62px; height: 62px; border-radius: 50%; background: rgba(28,30,25,.6); border: 1px solid rgba(243,239,228,.3); color: var(--ink); font-family: var(--font-display); font-size: 13px; letter-spacing: 0.04em; padding: 0; touch-action: none; }
 .tb.big { background: rgba(196, 83, 58, .55); }
 .tb.on { background: rgba(217,164,65,.7); color: #1a1a14; }
@@ -319,3 +320,62 @@ table.keys td:first-child { font-family: var(--font-display); color: var(--ink-d
   #hud-obj { max-width: 52vw; font-size: 11px; }
   .people { grid-template-columns: 1fr; }
 }
+
+/* ---------------- top view (command) ---------------- */
+.cmd-mode .touch, .cmd-mode .crosshair { display: none !important; }
+.cmd-ui { position: absolute; inset: 0; pointer-events: none; }
+.cmd-ui > * { pointer-events: auto; }
+#ui .cmd-ui .cmd-marks, #ui .cmd-ui .cmd-status { pointer-events: none; }
+.cmd-marks { position: absolute; inset: 0; overflow: hidden; }
+.cmd-mark { pointer-events: auto; position: absolute; left: 0; top: 0; width: 36px; height: 36px; border-radius: 50%; padding: 7px; background: rgba(28,30,25,.78); border: 2px solid var(--accent); color: var(--accent); touch-action: none; }
+.cmd-mark svg { width: 100%; height: 100%; display: block; }
+.cmd-mark.door { width: 32px; height: 32px; padding: 6px; border-color: rgba(243,239,228,.55); color: var(--ink); }
+.cmd-mark.door.open { opacity: .55; }
+.cmd-bar { position: absolute; left: max(10px, env(safe-area-inset-left, 0px)); bottom: calc(10px + env(safe-area-inset-bottom, 0px)); display: flex; gap: 6px; flex-wrap: wrap; max-width: calc(100vw - 180px); }
+.cmd-card { width: 108px; padding: 6px 8px; display: grid; gap: 3px; text-align: left; background: rgba(28,30,25,.82); touch-action: none; }
+.cmd-card b { font-family: var(--font-display); font-weight: 400; font-size: 14px; letter-spacing: 0.04em; }
+.cmd-card small { font-size: 11px; color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmd-card .hbar { display: block; height: 5px; }
+.cmd-card .fill { display: block; }
+.cmd-card.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.cmd-card.all { width: auto; min-width: 84px; }
+.cmd-acts { position: absolute; right: max(10px, env(safe-area-inset-right, 0px)); top: calc(64px + env(safe-area-inset-top, 0px)); display: grid; grid-template-columns: 74px 74px; gap: 6px; }
+.cmd-acts button { height: 40px; padding: 0 4px; font-size: 13px; background: rgba(28,30,25,.82); touch-action: none; }
+.cmd-acts button.on { background: var(--accent); color: #1a1a14; border-color: var(--accent); }
+.cmd-acts [data-a=third] { border-color: var(--accent); }
+.cmd-status { position: absolute; left: 50%; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); font-size: 13px; color: var(--ink); text-shadow: 0 1px 3px #000; white-space: nowrap; }
+.cmd-menu { position: absolute; width: 180px; background: var(--panel-solid); border: 1px solid var(--line); border-radius: 8px; padding: 6px; display: grid; gap: 4px; z-index: 20; box-shadow: 0 6px 20px rgba(0,0,0,.45); }
+.cmd-menu[hidden] { display: none; }
+.cmd-menu-t { font-size: 12px; color: var(--accent); padding: 2px 4px 4px; }
+.cmd-menu button { height: 40px; text-align: left; }
+.cmd-plant { position: absolute; left: 50%; top: calc(66px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; font-size: 14px; max-width: min(460px, calc(100vw - 190px)); }
+.cmd-plant[hidden] { display: none; }
+.cmd-mode .prompt { bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
+.cmd-mode .prompt .key { display: none; }
+@media (max-height: 520px) {
+  .cmd-acts { top: calc(56px + env(safe-area-inset-top, 0px)); grid-template-columns: 68px 68px; gap: 5px; }
+  .cmd-acts button { height: 36px; font-size: 12px; }
+  .cmd-card { width: 96px; padding: 4px 7px; }
+  .tbtns-top .tb.small { height: 34px; }
+  .tbtns-top { grid-template-columns: 62px 62px 62px; }
+}
+/* phones: the claim hint is what the Build button is for; the plan line sits under the vitals */
+.is-touch #hud-claim { display: none; }
+.is-touch #hud-obj { position: fixed; left: max(16px, env(safe-area-inset-left, 0px)); top: calc(128px + env(safe-area-inset-top, 0px)); max-width: 36vw; }
+@media (max-width: 640px) and (min-height: 521px) { .is-touch #hud-obj { top: calc(180px + env(safe-area-inset-top, 0px)); max-width: 50vw; } }
+/* portrait phones: the actions become a strip along the bottom, the group under it */
+@media (max-width: 640px) and (min-height: 521px) {
+  .cmd-acts { top: auto; left: max(8px, env(safe-area-inset-left, 0px)); right: max(8px, env(safe-area-inset-right, 0px)); bottom: calc(66px + env(safe-area-inset-bottom, 0px)); grid-template-columns: repeat(6, 1fr); gap: 4px; }
+  .cmd-acts button { height: 38px; font-size: 12px; }
+  .cmd-bar { left: max(8px, env(safe-area-inset-left, 0px)); max-width: calc(100vw - 16px); bottom: calc(8px + env(safe-area-inset-bottom, 0px)); flex-wrap: nowrap; overflow-x: auto; gap: 4px; }
+  .cmd-card { width: 86px; flex: 0 0 auto; padding: 4px 6px; }
+  .cmd-card b { font-size: 13px; }
+  .cmd-status { bottom: calc(160px + env(safe-area-inset-bottom, 0px)); }
+  .cmd-plant { max-width: calc(100vw - 20px); top: calc(186px + env(safe-area-inset-top, 0px)); }
+  .cmd-mode .prompt { bottom: calc(186px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (max-width: 640px) {
+  .is-touch .talk { width: calc(100vw - 16px); right: 8px; transform: none; }
+  .is-touch .talk-log { max-height: 30vh; }
+}
+body:not(.is-touch) .cmd-mode .hud-bars { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }

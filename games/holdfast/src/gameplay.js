@@ -1,5 +1,6 @@
 // Inventory, loot tables, interaction (doors, searching), and combat.
 import * as THREE from 'three';
+import { isTouch } from './platform.js';
 
 export const START_RES = { wood: 30, metal: 12, stone: 12, food: 3, meds: 2, ammo: 0, fuel: 0 };
 
@@ -58,7 +59,7 @@ export function rollLoot(table, inv, luck = 1) {
     if (Math.random() > p * luck) continue;
     const n = a + Math.floor(Math.random() * (b - a + 1));
     if (k === 'pistol') {
-      if (!inv.weapons.pistol) { inv.weapons.pistol = true; got.push('a pistol (Q to switch)'); inv.res.ammo += 6; }
+      if (!inv.weapons.pistol) { inv.weapons.pistol = true; got.push(isTouch ? 'a pistol (tap Weapon to switch)' : 'a pistol (Q to switch)'); inv.res.ammo += 6; }
       else { inv.res.ammo += 6; got.push('6 Ammo'); }
       continue;
     }
@@ -130,6 +131,16 @@ export class Interaction {
     }
     return out;
   }
+  // a container searched to the bottom (third person or command view)
+  finishSearch(ref) {
+    const g = this.game;
+    ref.searched = true;
+    if (ref.prop) ref.prop.searched = true;
+    const got = rollLoot(ref.table, g.inventory, g.mods ? g.mods.loot : 1);
+    if (g.society) got.push(...g.society.searchBonus(ref));
+    g.hud.toast(got.length ? 'Found ' + got.join(', ') : 'Nothing useful here', 2.5);
+    g.markDirty && g.markDirty();
+  }
   update(dt) {
     const g = this.game, inp = g.input;
     if (g.player.dead || g.buildMode?.active) { g.hud.setPrompt(null); return; }
@@ -158,15 +169,7 @@ export class Interaction {
       const T = 1.3 * (g.mods ? g.mods.search : 1);
       g.hud.setPrompt(best.ref.label || 'Search', 'Hold E', this.hold > 0 ? this.hold / T : null);
       g.player.noise = Math.max(g.player.noise, holding ? 4 : 0);
-      if (this.hold >= T) {
-        this.hold = 0;
-        best.ref.searched = true;
-        if (best.ref.prop) best.ref.prop.searched = true;
-        const got = rollLoot(best.ref.table, g.inventory, g.mods ? g.mods.loot : 1);
-        if (g.society) got.push(...g.society.searchBonus(best.ref));
-        g.hud.toast(got.length ? 'Found ' + got.join(', ') : 'Nothing useful here', 2.5);
-        g.markDirty && g.markDirty();
-      }
+      if (this.hold >= T) { this.hold = 0; this.finishSearch(best.ref); }
     } else if (best.kind === 'npc') {
       const n = best.ref;
       g.hud.setPrompt(`Talk to ${n.first}`);
@@ -178,7 +181,7 @@ export class Interaction {
       g.hud.setPrompt(`Help ${n.first} up`, 'Hold E', this.hold > 0 ? this.hold / 1.6 : null);
       if (this.hold >= 1.6) { this.hold = 0; n.revive(g.player); }
     } else if (best.kind === 'flag') {
-      g.hud.setPrompt('Hold E to pack up this claim', 'Hold E', this.hold > 0 ? this.hold / 2 : null);
+      g.hud.setPrompt(isTouch ? 'Hold Use to pack up this claim' : 'Hold E to pack up this claim', 'Hold E', this.hold > 0 ? this.hold / 2 : null);
       if (inp.down('KeyE')) this.hold += dt; else this.hold = 0;
       if (this.hold > 2) { this.hold = 0; g.claims.remove(best.ref); }
     }
@@ -221,22 +224,24 @@ export class Combat {
     if (hit) g.audio && g.audio.thud();
     else g.audio && g.audio.swoosh();
   }
-  shoot(player) {
+  // aim: { origin, dir } to shoot from the gun itself (command view), else
+  // along the camera
+  shoot(player, aim = null) {
     const g = this.game, inv = g.inventory;
     if (inv.res.ammo <= 0) { g.hud.toast('Out of ammo', 1.5); return; }
     inv.res.ammo--;
     const cam = g.camera;
     const dir = new THREE.Vector3();
-    cam.getWorldDirection(dir);
-    const spread = (player.aiming ? 0.008 : 0.04) * (g.mods ? g.mods.spread : 1);
+    if (aim) dir.copy(aim.dir); else cam.getWorldDirection(dir);
+    const spread = (player.aiming ? (aim ? 0.03 : 0.008) : 0.04) * (g.mods ? g.mods.spread : 1);
     dir.x += (Math.random() - 0.5) * spread; dir.y += (Math.random() - 0.5) * spread; dir.z += (Math.random() - 0.5) * spread;
     dir.normalize();
-    const o = cam.position.clone();
+    const o = aim ? aim.origin.clone() : cam.position.clone();
     // world hit distance
     const wr = g.physics.raycast(o.x, o.y, o.z, dir.x, dir.y, dir.z, 120, { skipGlass: false });
     let best = wr.dist, target = null, head = false;
     // the shot leaves the gun, not the camera: nothing behind the player counts
-    const tMin = Math.max(0, o.distanceTo(player.pos) - 0.8);
+    const tMin = aim ? 0.1 : Math.max(0, o.distanceTo(player.pos) - 0.8);
     const people = g.society ? g.society.hittable() : [];
     for (const z of [...g.zombies.list, ...people]) {
       if (z.dead) continue;

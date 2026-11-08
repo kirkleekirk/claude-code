@@ -24,6 +24,7 @@ import { saveGame, loadGame, clearSave, hasSave } from './save.js';
 import { SurvivorSetup, SPAWNS, traitMods, profilePalette } from './survivor.js';
 import { START_RES } from './gameplay.js';
 import { Society } from './npc/society.js';
+import { CommandView } from './command.js';
 
 import { isTouch } from './platform.js';
 export { isTouch };
@@ -115,6 +116,7 @@ export class Game {
     this.map = new MapView(this);
     this.audio = new Audio();
     this.society = new Society(this);
+    this.command = new CommandView(this);
     this.sky.onThunder = () => setTimeout(() => this.audio.thunder(), 600 + Math.random() * 1500);
     // flashlight
     this.flashlight = new THREE.SpotLight(0xfff4dc, 0, 28, 0.42, 0.45, 1.4);
@@ -126,6 +128,11 @@ export class Game {
     // a save from before there were other people: two of them find you
     if (loaded && !this.society.loaded && !qs.get('still')) this.society.startingCompanions(this.player.pos);
     this.onProgress('Ready', 1);
+    // phones start in the top view (and keep whichever view you used last)
+    let pref = null;
+    try { pref = localStorage.getItem('holdfast.view'); } catch (e) { /* storage blocked */ }
+    const wantCmd = qs.get('view') ? qs.get('view') === 'command' : !qs.get('still') && (pref ? pref === 'command' : isTouch);
+    this.startView = () => { if (wantCmd) this.command.toggle(true); };
     if (loaded && !this.profile && !qs.get('still')) {
       // a save from before survivors existed: make one, keep everything else
       this.setupOpen = true;
@@ -135,14 +142,17 @@ export class Game {
         this.hud.setVisible(true);
         this.applyProfile(p, false);
         this.save();
+        this.startView();
         setTimeout(() => this.hud.toast(`Welcome back, ${p.name.split(' ')[0]}. Your claims are where you left them.`, 4), 600);
       }, { keepPlace: true });
     } else if (loaded) {
+      this.startView();
       setTimeout(() => this.hud.toast(`Welcome back${this.profile ? ', ' + this.profile.name.split(' ')[0] : ''}. Your claims are where you left them.`, 4), 800);
     } else if (qs.get('still') && !qs.get('setup')) {
       // automated checks skip the creation screens
       this.applyProfile({ name: 'Test Survivor', model: 'man', skin: PALETTES.survivorM[0], shirt: PALETTES.survivorM[1], pants: PALETTES.survivorM[2], hair: PALETTES.survivorM[4], traits: [], spawn: 'highway' }, true);
       if (qs.get('npcs') !== '0') this.society.startingCompanions(this.player.pos);
+      this.startView();
     } else {
       // a new game: make a survivor, then pick where to start
       this.setupOpen = true;
@@ -153,9 +163,11 @@ export class Game {
         this.applyProfile(p, true);
         this.society.startingCompanions(this.player.pos);
         this.save();
-        setTimeout(() => this.hud.toast(`${p.name.split(' ')[0]}, two survivors are with you. Find a place worth holding, then ${isTouch ? 'plant your claim flag' : 'press G to plant your claim flag'}.`, 7), 600);
-        setTimeout(() => this.hud.toast(isTouch ? 'Walk up to someone and tap Use to talk. Camp shows your people.' : 'Walk up to someone and press E to talk. J shows your camp.', 6), 8000);
-        setTimeout(() => this.hud.toast(isTouch ? 'Left side: move · Right side: look · Buttons: hit, use, jump' : 'WASD move · Mouse look · Click to swing · E to use · Esc for help', 6), 3800);
+        this.startView();
+        const cmd = this.command.active;
+        setTimeout(() => this.hud.toast(`${p.name.split(' ')[0]}, two survivors are with you. Find a place worth holding, then ${isTouch ? 'tap Claim to plant your flag' : 'press G to plant your claim flag'}.`, 7), 600);
+        setTimeout(() => this.hud.toast(cmd ? 'Tap a person to talk. Camp shows your people. 3rd person switches the view.' : isTouch ? 'Walk up to someone and tap Use to talk. Top view shows your group from above.' : 'Walk up to someone and press E to talk. J shows your camp. V for the top view.', 6), 8000);
+        setTimeout(() => this.hud.toast(cmd ? 'Tap the ground to move · double-tap to run · drag to look around' : isTouch ? 'Left side: move · Right side: look · Buttons: hit, use, jump' : 'WASD move · Mouse look · Click to swing · E to use · Esc for help', 6), 3800);
       });
     }
   }
@@ -184,6 +196,16 @@ export class Game {
       this.tpc.yaw = -Math.PI / 2;
     }
     pl.syncModel(0.016);
+  }
+  // build mode for the claim you're in, or your nearest one
+  openBuild() {
+    if (this.buildMode.active) return;
+    const p = this.player.pos;
+    let c = this.claims.at(p.x, p.z);
+    if (!c && this.claims.list.length) c = [...this.claims.list].sort((a, b) => Math.hypot(a.flag[0] - p.x, a.flag[2] - p.z) - Math.hypot(b.flag[0] - p.x, b.flag[2] - p.z))[0];
+    if (!c) { this.hud.toast(isTouch ? 'Plant a claim flag first (tap Claim).' : 'Plant a claim flag first (G).', 2.5); return; }
+    if (this.command.active) this.command.closeMenu();
+    this.buildMode.enter(c);
   }
   setWeapon(k) {
     if (k === 'pistol' && !this.inventory.weapons.pistol) return;
@@ -218,6 +240,7 @@ export class Game {
     if (inp.pressed('Escape')) {
       // one Esc closes one thing
       if (this.buildMode.designer && !this.buildMode.designer.el.hidden) { this.buildMode.designer.close(); inp.pressedSet.delete('Escape'); }
+      else if (this.command.active && (!this.command.$('cmd-menu').hidden || this.command.planting)) { this.command.closeMenu(); this.command.setPlantMode(false); inp.pressedSet.delete('Escape'); }
       else if (this.society.ui.talking) { this.society.ui.closeTalk(); inp.pressedSet.delete('Escape'); }
       else if (!this.society.ui.campEl.hidden) { this.society.ui.toggleCamp(false); inp.pressedSet.delete('Escape'); }
       else if (!this.map.el.hidden) { this.map.toggle(false); inp.pressedSet.delete('Escape'); }
@@ -227,13 +250,11 @@ export class Game {
     if (inp.pressed('KeyM') && !this.buildMode.active && !this.society.ui.talking && this.society.ui.campEl.hidden) this.map.toggle();
     if (inp.pressed('KeyJ') && !this.buildMode.active && !this.society.ui.talking && this.map.el.hidden) this.society.ui.toggleCamp();
     if (this.modalOpen) return;
-    if (inp.pressed('KeyB') && !this.buildMode.active) {
-      const c = this.claims.at(this.player.pos.x, this.player.pos.z);
-      if (c) { this.buildMode.enter(c); inp.pressedSet.delete('KeyB'); }
-      else hud.toast(this.claims.list.length ? 'Walk back inside your claim to build.' : 'Plant a claim flag first (G).', 2.5);
-    }
+    if (inp.pressed('KeyB') && !this.buildMode.active) { this.openBuild(); inp.pressedSet.delete('KeyB'); }
     if (this.buildMode.active) return;
-    if (inp.pressed('KeyG')) {
+    if (inp.pressed('KeyV')) this.command.toggle();
+    if (inp.pressed('KeyG') && this.command.active) this.command.setPlantMode(true);
+    else if (inp.pressed('KeyG')) {
       const f = this.tpc.forward;
       this.claims.plant(this.player.pos.x + f.x * 2, this.player.pos.z + f.z * 2, false, this.player.pos.y);
     }
@@ -304,6 +325,10 @@ export class Game {
         this.player.char.animate(dt, { speed: 0, mode: 'idle', weapon: this.player.weapon.kind === 'gun' ? 'gun' : 'bat' });
         this.player.syncModel(dt);
         this.tpc.yaw = Math.atan2(-ux, -uz);
+      } else if (this.command.active && !this.modalOpen) {
+        this.talkSide = 0; this.talkCamInit = false;
+        this.command.update(dt);
+        this.zombies.update(dt);
       } else if (!this.modalOpen) {
         this.talkSide = 0; this.talkCamInit = false;
         const ld = inp.lookDelta();
@@ -322,6 +347,7 @@ export class Game {
         this.zombies.update(dt);
       }
       this.focus = this.player.pos;
+      this.command.sync();
       this.society.update(dt);
       this.combat.update(dt);
       this.claims.update(dt);
@@ -330,12 +356,15 @@ export class Game {
       const fl = this.flashlight;
       fl.intensity = this.player.flashlightOn && !this.buildMode.active ? 40 : 0;
       if (fl.intensity) {
-        const f = new THREE.Vector3(); this.camera.getWorldDirection(f);
+        const f = new THREE.Vector3();
+        // from above, the light goes where you face, not where the camera looks
+        if (this.command.active && !this.society.ui.talking) f.set(Math.sin(this.player.facing), -0.18, Math.cos(this.player.facing)).normalize();
+        else this.camera.getWorldDirection(f);
         fl.position.copy(this.player.pos).add(new THREE.Vector3(0, 1.45, 0)).addScaledVector(f, 0.3);
         fl.target.position.copy(fl.position).addScaledVector(f, 10);
         fl.target.updateMatrixWorld();
       }
-      if (this.sky.darkness > 0.75 && !this.player.flashlightOn && !this._flHint) { this._flHint = true; this.hud.toast('It is getting dark. Press F for your flashlight.', 4); }
+      if (this.sky.darkness > 0.75 && !this.player.flashlightOn && !this._flHint) { this._flHint = true; this.hud.toast(isTouch ? 'It is getting dark. Tap Light for your flashlight.' : 'It is getting dark. Press F for your flashlight.', 4); }
       // autosave
       if (this.dirtyT > 0) { this.dirtyT -= dt; if (this.dirtyT <= 0) this.save(); }
       this.autosaveT -= dt;

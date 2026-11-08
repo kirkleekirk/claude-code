@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { Structure } from './building/structure.js';
 import { CELL } from './building/defs.js';
 import { T } from './world/terrain.js';
+import { isTouch } from './platform.js';
 
 export const CLAIM_HALF = 10; // cells from the flag to the edge (40 m square)
 const COLORS = ['#c4533a', '#d9a441', '#3f7cac', '#6a9a4a', '#8a4a9a'];
@@ -62,7 +63,7 @@ export class Claims {
       g.world.structures.push(S);
       g.world.attach(S);
       c.structure = S;
-      if (!silent) g.hud.toast('Claim planted. Press B to build.', 3);
+      if (!silent) g.hud.toast(isTouch ? 'Claim planted. Tap Build to build.' : 'Claim planted. Press B to build.', 3);
     }
     const fx = r.vx * CELL, fz = r.vz * CELL;
     // on the floor you're standing on (not a counter, never the roof)

@@ -59,6 +59,7 @@ export class NpcUI {
       const el = document.createElement('div');
       el.className = 'bubble';
       el.innerHTML = '<b></b><span></span>';
+      el.style.display = 'none'; // until it's placed over their head
       this.layer.appendChild(el);
       b = { el, t: 0 };
       this.bubbles.set(npc, b);

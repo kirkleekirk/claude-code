@@ -203,6 +203,8 @@ export class Society {
   followBrain(m, dt, near) {
     m.locked = false;
     if (m.rescue) return this.rescueBrain(m, dt);
+    // told to go after something
+    if (m.orderTarget) { if (!m.orderTarget.dead && !(m.orderTarget.downed && m.orderTarget.faction !== 'raider')) return this.fight(m, m.orderTarget, dt); m.orderTarget = null; }
     if (m.task) { if (m.task.slot && m.task.slot.user === m) m.task.slot.user = null; m.task = null; }
     m.sleeping = false;
     const pl = this.game.player, pp = pl.pos;
@@ -296,6 +298,9 @@ export class Society {
   waitBrain(m, dt, near) {
     m.locked = false;
     if (m.rescue) return this.rescueBrain(m, dt);
+    if (m.orderTarget) { if (!m.orderTarget.dead) return this.fight(m, m.orderTarget, dt); m.orderTarget = null; }
+    // walking to where they were sent
+    if (m.path && m.waitAt) { m.combatTarget = null; m.aiming = false; if (m.anim.act) m.setAct(null); const t = this.threatNear(m, 6); if (t) return this.fight(m, t, dt); return; }
     const threat = this.threatNear(m, 12);
     if (threat) return this.fight(m, threat, dt);
     m.combatTarget = null; m.aiming = false; m.faceTarget = null;

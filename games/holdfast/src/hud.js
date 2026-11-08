@@ -48,10 +48,15 @@ export class HUD {
           <button data-act="aim" class="tb toggle">Aim</button>
         </div>
         <div class="tbtns-top">
+          <button data-act="view" class="tb small">Top view</button>
+          <button data-act="claim" class="tb small">Claim</button>
           <button data-act="build" class="tb small">Build</button>
-          <button data-act="inv" class="tb small">Pack</button>
-          <button data-act="map" class="tb small">Map</button>
           <button data-act="camp" class="tb small">Camp</button>
+          <button data-act="map" class="tb small">Map</button>
+          <button data-act="inv" class="tb small">Pack</button>
+          <button data-act="eat" class="tb small">Eat</button>
+          <button data-act="light" class="tb small">Light</button>
+          <button data-act="weapon" class="tb small" id="tb-weapon">Swap</button>
         </div>
       </div>`;
     this.$ = (id) => document.getElementById(id);
@@ -93,6 +98,9 @@ export class HUD {
     }
     const claim = g.claims && g.claims.at(p.pos.x, p.pos.z);
     this.$('hud-claim').textContent = claim ? (isTouch ? 'Inside your claim · tap Build' : 'Inside your claim · B to build') : '';
+    const wb = this.$('tb-weapon');
+    if (wb) { const t = p.weapon.kind === 'gun' ? 'Bat' : g.inventory && g.inventory.weapons.pistol ? 'Pistol' : 'Swap'; if (wb.textContent !== t) wb.textContent = t; }
+    for (const b of this.root.querySelectorAll('.tbtns-top [data-act=light]')) b.classList.toggle('on', !!p.flashlightOn);
     this.$('vignette').style.opacity = Math.max(p.hurtFlash * 2.2, p.health < 30 ? 0.35 + 0.15 * Math.sin(performance.now() / 300) : 0).toFixed(2);
     this.$('crosshair').classList.toggle('aim', p.aiming);
   }
@@ -148,10 +156,11 @@ export class HUD {
           <tr><td>Left click</td><td>Attack / shoot</td></tr><tr><td>Right click</td><td>Aim</td></tr><tr><td>Q</td><td>Switch weapon</td></tr>
           <tr><td>E</td><td>Open doors, search, pick up (hold to search)</td></tr><tr><td>F</td><td>Flashlight</td></tr>
           <tr><td>G</td><td>Plant claim flag</td></tr><tr><td>B</td><td>Build mode</td></tr><tr><td>H</td><td>Eat / use meds</td></tr>
-          <tr><td>M</td><td>Map</td></tr><tr><td>J</td><td>Camp: people, journal, plans</td></tr><tr><td>1-9</td><td>Pick a line when talking</td></tr><tr><td>Esc</td><td>Menu</td></tr>
+          <tr><td>M</td><td>Map</td></tr><tr><td>J</td><td>Camp: people, journal, plans</td></tr><tr><td>V</td><td>Top view: command your group from above</td></tr><tr><td>1-9</td><td>Pick a line when talking</td></tr><tr><td>Esc</td><td>Menu</td></tr>
         </table>
         <h3>On a phone</h3>
-        <p>Left side of the screen moves, right side looks. The round buttons hit, use, jump, aim, crouch and run; Build, Pack and Map sit on the right.</p>
+        <p><b>Top view</b> is made for phones: you see your group from above. Tap the ground to walk there (double-tap to run), tap the dead or raiders to fight, tap the search and door icons to use them, and tap a person to talk or give orders. Drag to look around, pinch to zoom, twist two fingers to turn. Pick who you're ordering on the bar at the bottom; everything else (claim flag, building, camp, map, pack, eating, weapon, flashlight, sneaking) is on the buttons at the right. <b>3rd person</b> switches back.</p>
+        <p>In third person the left side of the screen moves and the right side looks. The round buttons hit, use, jump, aim, crouch and run; Top view, Claim, Build, Camp, Map, Pack, Eat and Light sit on the right, and the button by your health swaps weapons.</p>
         <h3>Credits</h3>
         <p class="note">Character models, both CC BY 4.0, rigged and animated in-game:
           “<a href="https://sketchfab.com/3d-models/proportional-low-poly-man-free-download-0bfd0e2b49a348a4b64b20cc8196e3b3" target="_blank" rel="noopener">Proportional Low Poly Man</a>” by Robin Butler;
@@ -190,7 +199,9 @@ export class HUD {
     let lookId = null, lx = 0, ly = 0;
     const R = 56;
     const cv = this.game.renderer.domElement;
+    const cmd = () => this.game.command && this.game.command.active;
     const onStart = (e) => {
+      if (cmd()) return; // the command view has its own gestures
       for (const tc of e.changedTouches) {
         const x = tc.clientX, y = tc.clientY;
         if (stickId === null && x < innerWidth * 0.42 && y > innerHeight * 0.35) {
@@ -201,6 +212,7 @@ export class HUD {
       e.preventDefault();
     };
     const onMove = (e) => {
+      if (cmd()) { stickId = null; lookId = null; return; }
       for (const tc of e.changedTouches) {
         if (tc.identifier === stickId) {
           let dx = tc.clientX - sx, dy = tc.clientY - sy;
@@ -234,13 +246,13 @@ export class HUD {
         e.preventDefault(); e.stopPropagation();
         if (toggle) { const on = !inp.actionsDown.has(act); inp.actionsDown[on ? 'add' : 'delete'](act); b.classList.toggle('on', on); if (act === 'crouch') inp.pressedSet.add('KeyC'); return; }
         inp.actionsDown.add(act + '-hold');
-        const map = { attack: 'TouchAttack', interact: 'KeyE', jump: 'Space', build: 'KeyB', inv: 'KeyI', map: 'KeyM', camp: 'KeyJ' };
+        const map = { attack: 'TouchAttack', interact: 'KeyE', jump: 'Space', build: 'KeyB', inv: 'KeyI', map: 'KeyM', camp: 'KeyJ', claim: 'KeyG', eat: 'KeyH', light: 'KeyF', weapon: 'KeyQ', view: 'KeyV' };
         if (map[act]) { inp.pressedSet.add(map[act]); inp.keys.add(map[act]); }
       }, { passive: false });
       b.addEventListener('touchend', (e) => {
         e.preventDefault();
         inp.actionsDown.delete(act + '-hold');
-        const map = { attack: 'TouchAttack', interact: 'KeyE', jump: 'Space', build: 'KeyB', inv: 'KeyI', map: 'KeyM', camp: 'KeyJ' };
+        const map = { attack: 'TouchAttack', interact: 'KeyE', jump: 'Space', build: 'KeyB', inv: 'KeyI', map: 'KeyM', camp: 'KeyJ', claim: 'KeyG', eat: 'KeyH', light: 'KeyF', weapon: 'KeyQ', view: 'KeyV' };
         if (map[act]) inp.keys.delete(map[act]);
       });
     }
