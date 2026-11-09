@@ -304,7 +304,7 @@ export class Camp {
       return this.assign(m, { kind: 'sleep', x: c.x + 2, y: c.y, z: c.z + 2, act: 'sleep', lie: true, dur: 1.5, phase: 'sleep' });
     }
     // trips out for hunters and scavengers
-    if (ph === 'work' && (m.role === 'hunter' || m.role === 'scavenger') && h < 14 && (m.lastTrip || -99) < this.game.day && (m.fatigue || 0) < 40 && !m.injuries.some((i) => !i.treated) && Math.random() < 0.5) {
+    if (ph === 'work' && (m.role === 'hunter' || m.role === 'scavenger') && h < 14 && (m.lastTrip || -99) < this.game.day && this.clock - (m.joinedAt ?? -99) > 8 && (m.fatigue || 0) < 40 && !m.injuries.some((i) => !i.treated) && Math.random() < 0.5) {
       return this.startTrip(m);
     }
     const cookTime = (h > m.pers.wake && h < m.pers.wake + 1.2) || (h > 11.2 && h < 12.2) || (h > 17.2 && h < 18.4);
@@ -651,6 +651,7 @@ export class Camp {
         onHealed: (d) => this.log(`${m.person.name}'s ${d.name.toLowerCase()} has healed.`, 'hurt') });
       if (atCamp && !sleeping) m.health = Math.min(m.maxHealth, m.health + hrs * (medicHere ? 2.5 : 1));
       if (!m.controlled && !atCamp && ['follow', 'wait', 'mission', 'travel', 'inside'].includes(m.mode)) {
+        if (m.path) this.soc.trained(m, 'endure', dt * (m.run ? 0.08 : 0.035));
         if (addFatigue(m, dt * (m.run ? 0.26 : 0.075) + (m.attackT === 0 ? 0.45 : 0))) {
           m.say(m.tr.temper > 0.6 ? 'I\u2019m done. I can\u2019t do any more today.' : 'I\u2019m spent. I need to get back and sleep.');
           if (this.claim && m.mode !== 'mission') { m.mode = 'travel'; m.task = null; }

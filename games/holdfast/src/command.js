@@ -11,6 +11,8 @@ import { STORY } from './building/defs.js';
 import { CLAIM_HALF } from './claims.js';
 import { GUNS } from './items.js';
 import { fatigueWord, exhausted, injuryList } from './condition.js';
+import { radarSVG, bestAt } from './stats.js';
+import { compass as compassOf } from './npc/raiders.js';
 import { ROLES } from './npc/people.js';
 import { isTouch } from './platform.js';
 
@@ -191,8 +193,8 @@ export class CommandView {
     if (one) {
       const gun = one.gear.gun ? GUNS[one.gear.gun.id] : null;
       const inj = injuryList(one);
-      h += `<div class="ci-head"><b>${esc(one.person.name)}</b><span>${esc(ROLES[one.role] ? ROLES[one.role].name : '')} · ${fatigueWord(one.fatigue)}${inj.length ? ' · ' + esc(inj.join(', ')) : ''}</span>
-        <span>${gun ? esc(gun.name) + ` ${one.gear.gun.mag}/${gun.mag}` : 'Bat'} · carrying ${one.pack.weight().toFixed(0)}/${one.pack.cap}</span></div>`;
+      h += `<div class="ci-top"><button class="ci-radar" data-o="stats" aria-label="${esc(one.first)}'s stats">${radarSVG(one.stats, { size: 64, labels: false })}</button><div class="ci-head"><b>${esc(one.person.name)}</b><span>${esc(ROLES[one.role] ? ROLES[one.role].name : '')} · best at ${esc(bestAt(one.stats))}</span>
+        <span>${fatigueWord(one.fatigue)}${inj.length ? ' · ' + esc(inj.join(', ')) : ''} · ${gun ? esc(gun.name) + ` ${one.gear.gun.mag}/${gun.mag}` : 'Bat'} · carrying ${one.pack.weight().toFixed(0)}/${one.pack.cap}</span></div></div>`;
     } else h += `<div class="ci-head"><b>${sel.length} people</b><span>${esc(sel.map((m) => m.first).join(', '))}</span></div>`;
     const can = (m) => !m.downed && m.mode !== 'away' && !m.dead;
     const ok = sel.filter(can);
@@ -214,6 +216,7 @@ export class CommandView {
     if (o === 'clear') { this.sel.clear(); this.render(true); return; }
     if (o === 'play') return this.action('play');
     if (o === 'job') return this.jobMenu(sel);
+    if (o === 'stats') return this.soc.ui.showStats(sel.length === 1 ? sel[0] : [...this.sel][0] || null);
     for (const m of sel) {
       if (m.job) soc.jobs.cancel(m);
       m.orderTarget = null; m.restOrder = false; m.healOrder = false;
@@ -236,11 +239,32 @@ export class CommandView {
       if (ms.kind === 'cache' && ms.at) opts.push([`Fetch: ${ms.title}`, () => this.sendJob(team, 'cache', { mission: ms.id, where: ms.title, title: `Fetching ${ms.title.replace(/^[A-Z]/, (c) => c.toLowerCase())}`, focus: ms.at })]);
     }
     for (const c of soc.raiders.active) if (c.known && !c.stashLooted) opts.push([`Raid ${c.name} (${soc.jobs.raidOdds(team, c).word})`, () => this.sendJob(team, 'raid', { camp: c.id, where: c.name, title: `Raiding ${c.name}`, focus: c })]);
+    // strangers you know about: send someone to talk them round
+    const c = soc.camp.center() || this.game.player.pos, best = [...team].sort((a, b) => (b.stats.charm || 0) - (a.stats.charm || 0))[0];
+    for (const t of this.knownStrangers()) {
+      const odds = soc.jobs.pitchOdds(best, t);
+      opts.push([`Recruit ${t.person.name} (${Math.round(Math.hypot(t.pos.x - c.x, t.pos.z - c.z))} m ${compassOf(t.pos.x - c.x, t.pos.z - c.z)}, ${soc.jobs.oddsWord(odds)})`, () => this.sendRecruit(team, t)]);
+    }
+    opts.push(['Look for survivors (a few hours)', () => this.sendJob(team, 'scout', {})]);
     opts.push(['Scavenge a building…', () => { this.pickMode = { kind: 'scavenge', team }; this.showPick('Tap a building to scavenge.'); }]);
     opts.push(['Go somewhere and hold…', () => { this.pickMode = { kind: 'goto', team }; this.showPick('Tap where they should go.'); }]);
     opts.push(['Supply run (a few hours)', () => this.sendJob(team, 'run', {})]);
     const r = this.$('cmd-info').getBoundingClientRect();
     this.openMenu(r.left + r.width / 2, r.top, `Send ${team.length > 1 ? team.length + ' people' : team[0].first}`, opts);
+  }
+  // strangers out there you've met, heard about, or can see from here
+  knownStrangers() {
+    const soc = this.soc, c = soc.camp.center() || this.game.player.pos, out = [];
+    for (const gr of soc.strangers.groups) for (const t of gr.npcs) {
+      if (t.dead || t.faction !== 'stranger' || t.angry) continue;
+      if (t.met || gr.known || Math.hypot(t.pos.x - c.x, t.pos.z - c.z) < 170 || soc.playerNear(t.pos, 120)) out.push(t);
+    }
+    return out;
+  }
+  sendRecruit(team, t) {
+    // the best talker leads
+    team = [...team].sort((a, b) => (b.stats.charm || 0) - (a.stats.charm || 0));
+    this.sendJob(team, 'recruit', { target: t, where: t.person.name, title: `Recruiting ${t.person.name}`, focus: t.pos });
   }
   sendJob(team, kind, opts) {
     const job = this.soc.jobs.send(team, kind, opts);
@@ -406,7 +430,14 @@ export class CommandView {
         this.render(true);
         return;
       }
-      if (u.faction === 'stranger') { this.openMenu(sx, sy, `${u.person.name} · stranger`, [['Play and go talk to them', () => { this.exit(this.game.player.body); this.hint(`Walk over to ${u.first} to talk.`, 3); }]]); return; }
+      if (u.faction === 'stranger') {
+        const team = [...this.sel].filter((m) => m.faction === 'camp' && !m.downed && m.mode !== 'away');
+        const opts = [];
+        if (team.length && !u.angry) opts.push([`Send ${team.length > 1 ? team.length + ' people' : team[0].first} to recruit them (${soc.jobs.oddsWord(soc.jobs.pitchOdds([...team].sort((a, b) => b.stats.charm - a.stats.charm)[0], u))})`, () => this.sendRecruit(team, u)]);
+        opts.push(['Play and go talk to them', () => { this.exit(this.game.player.body); this.hint(`Walk over to ${u.first} to talk.`, 3); }]);
+        this.openMenu(sx, sy, `${u.person.name} · stranger`, opts);
+        return;
+      }
     }
     const p = this.groundAt(sx, sy);
     if (!p) return;

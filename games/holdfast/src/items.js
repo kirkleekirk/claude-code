@@ -157,14 +157,34 @@ const TABLES = {
 };
 export function lootTable(t) { return TABLES[t] || TABLES.crate; }
 
+// How picked-over the county is (chosen on the survivor screen). Applies to
+// what's lying around in houses, shops, cars and on bodies; caches someone
+// told you about and raider stashes are what they are.
+export const SCARCITY = {
+  plenty: { name: 'Plentiful', chance: 1, empty: 0.05, box: 1, desc: 'Most cupboards still have something in them.' },
+  scarce: { name: 'Scarce', chance: 0.62, empty: 0.25, box: 0.75, desc: 'A lot of places have been picked over. Ammo is precious.' },
+  desperate: { name: 'Desperate', chance: 0.42, empty: 0.4, box: 0.6, desc: 'Nearly everything is gone. Every can counts.' },
+};
+let scarce = SCARCITY.scarce;
+export function setScarcity(level) { scarce = SCARCITY[level] || SCARCITY.scarce; }
+const KEPT = new Set(['food_cache', 'seed_cache', 'med_cache', 'fuel_cache', 'build_cache', 'gun_cache', 'mixed_cache', 'liquor_cache', 'raider_stash']);
+// what you start with at camp, by how scarce things are
+export const START_BY = {
+  plenty: { wood: 30, metal: 12, stone: 12, food: 3, meds: 2, fuel: 0 },
+  scarce: { wood: 20, metal: 7, stone: 7, food: 2, meds: 1, fuel: 0 },
+  desperate: { wood: 12, metal: 4, stone: 4, food: 1, meds: 0, fuel: 0 },
+};
+
 // what a search turns up: [{ kind, id, n, mag }]
 export function rollLoot(table, luck = 1) {
-  const out = [];
+  const out = [], world = !KEPT.has(table), sc = world ? scarce : SCARCITY.plenty;
+  // somebody got here first
+  if (world && Math.random() < sc.empty / Math.max(0.6, luck)) return out;
   for (const [kind, id, a, b, p] of lootTable(table)) {
-    if (Math.random() > p * luck) continue;
+    if (Math.random() > p * luck * sc.chance) continue;
     if (kind === 'ammo') {
       const [lo, hi] = a || b ? [a, b] : AMMO[id].box;
-      out.push({ kind, id, n: lo + Math.floor(Math.random() * (hi - lo + 1)) });
+      out.push({ kind, id, n: Math.max(1, Math.round((lo + Math.floor(Math.random() * (hi - lo + 1))) * sc.box)) });
     } else if (kind === 'gun') out.push({ kind, id, n: 1, mag: Math.floor(Math.random() * (GUNS[id].mag + 1) * 0.7) });
     else out.push({ kind, id, n: a + Math.floor(Math.random() * (b - a + 1)) });
   }

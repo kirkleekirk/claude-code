@@ -5,6 +5,7 @@ import { T } from './world/terrain.js';
 import { makeWeaponMeshes } from './characters.js';
 import { GUNS } from './items.js';
 import { conditionMods, maybeInjure, maxHealthOf, addFatigue } from './condition.js';
+import { train } from './stats.js';
 
 const RADIUS = 0.32, HEIGHT = 1.75, STEP = 0.48, GRAV = 22;
 
@@ -64,7 +65,7 @@ export class Player {
     const def = GUNS[g.id];
     if (g.mag >= def.mag) return false;
     if (this.body.pack.count('ammo', def.ammo) <= 0) { if (!this.noAmmoT || this.noAmmoT < performance.now()) { this.noAmmoT = performance.now() + 1500; this.game.hud.toast(`No ${def.ammo} left`, 1.5); } return false; }
-    this.reloadT = def.reload * (this.body.injuries.some((i) => i.id === 'arm') ? 1.4 : 1);
+    this.reloadT = def.reload * (this.body.injuries.some((i) => i.id === 'arm') ? 1.4 : 1) * ((this.game.mods && this.game.mods.reload) || 1);
     this.reloadMax = this.reloadT;
     return true;
   }
@@ -124,6 +125,7 @@ export class Player {
     // out in the world, every step wears on you (the leader least)
     if (b && !(this.game.claims && this.game.claims.at(this.pos.x, this.pos.z))) {
       if (addFatigue(b, dt * (sprinting ? 0.32 : moving ? 0.12 : 0.025))) this.game.onExhausted && this.game.onExhausted(b);
+      if (moving) train(b, 'endure', dt * (sprinting ? 0.12 : 0.05), this.game);
     }
     // desired horizontal velocity
     const f = cam.forward, r = cam.right;

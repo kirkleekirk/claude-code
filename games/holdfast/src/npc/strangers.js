@@ -39,15 +39,17 @@ export class Strangers {
     for (const gr of this.groups) {
       const near = this.soc.playerNear(gr, 75);
       const left = gr.npcs.filter((m) => !m.dead && m.faction === 'stranger');
-      if ((now > gr.until && !near) || (!left.length && !near)) this.remove(gr);
+      const visiting = gr.npcs.some((m) => m.pitchBy && !m.pitchBy.dead && m.pitchBy.job);
+      if (!visiting && ((now > gr.until && !near) || (!left.length && !near))) this.remove(gr);
     }
     this.groups = this.groups.filter((gr) => !gr.removed);
   }
-  spot() {
-    const g = this.game, tr = g.world.terrain, P = T.play, pp = g.player.pos;
+  // somewhere to camp, 70-160 m from a point (you, by default)
+  spot(center = null, r0 = 70, r1 = 160) {
+    const g = this.game, tr = g.world.terrain, P = T.play, pp = center || g.player.pos;
     const claim = g.claims.list[0];
     for (let k = 0; k < 200; k++) {
-      const a = Math.random() * Math.PI * 2, r = 70 + Math.random() * 90;
+      const a = Math.random() * Math.PI * 2, r = r0 + Math.random() * (r1 - r0);
       const x = pp.x + Math.cos(a) * r, z = pp.z + Math.sin(a) * r;
       if (x < P.x0 + 20 || x > P.x1 - 20 || z < P.z0 + 20 || z > P.z1 - 20) continue;
       if (x > T.town.x0 - 8 && x < T.floodwallX && Math.abs(z) < T.town.z1) continue;
@@ -114,6 +116,14 @@ export class Strangers {
   }
   brain(m, dt, near) {
     m.locked = false;
+    // one of your people is talking to them: they stop and listen
+    if (m.pitchBy && m.t < (m.pitchUntil || 0) && !m.angry) {
+      if (m.task && m.task.slot) m.task.slot.user = null;
+      m.task = null; m.sleeping = false; m.stop();
+      if (m.anim.act && m.anim.act !== 'talk') m.setAct(null);
+      m.faceTarget = m.pitchBy.pos; m.lookAt = m.pitchBy.pos; m.listening = m.speaking <= 0;
+      return;
+    }
     const pl = this.game.player, pp = pl.pos;
     const dp = Math.hypot(pp.x - m.pos.x, pp.z - m.pos.z);
     if (m.angry) {
@@ -222,13 +232,28 @@ export class Strangers {
     }
     return { text: pre + RUMORS[Math.floor(Math.random() * RUMORS.length)] };
   }
+  // one of your people talked them round: they come back to camp
+  recruitedBy(m, by) {
+    const camp = this.soc.camp, gr = m.group;
+    if (m.task && m.task.slot) m.task.slot.user = null;
+    m.task = null; m.setAct(null); m.sleeping = false; m.greeted = true; m.pitchBy = null; m.listening = false;
+    if (gr) gr.npcs = gr.npcs.filter((x) => x !== m);
+    m.group = null;
+    camp.add(m, true);
+    m.mode = camp.claim ? 'travel' : 'follow';
+    m.rels[by.person.id] = Math.max(m.rel(by.person.id), 0.3);
+    m.adjust('player', 0.15);
+    return m;
+  }
   // would they come back to camp with you?
   join(m) {
     const sp = this.soc.speech, camp = this.soc.camp;
     if (!m.recruitable) return { ok: false, text: (sp.line(m, 'refuse_join') || 'No.') + ' ' + m.own };
     if (camp.members.filter((x) => !x.dead).length >= 12) return { ok: false, text: 'Sounds like your camp’s full up already. I’d just be another mouth.' };
     if (camp.usedBackgrounds().has(m.person.background)) return { ok: false, text: 'Sounds like you’ve already got somebody who does what I do. I’d be in the way.' };
-    if (m.rel('player') < 0.12) {
+    // how much they need to trust you depends on how good you are with people
+    const b = this.game.player.body, need = 0.12 + (5 - ((b && b.stats && b.stats.charm) || 5)) * 0.02;
+    if (m.rel('player') < need) {
       const hint = m.want && !m.gotWant ? ` I could use ${m.want[2]}, if you’ve got any to spare.` : ' Ask me again after we’ve talked some more.';
       return { ok: false, text: (sp.line(m, 'refuse_join') || 'Not yet.') + hint };
     }

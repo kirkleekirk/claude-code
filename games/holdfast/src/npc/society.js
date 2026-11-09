@@ -6,7 +6,7 @@ import { NPC } from './npc.js';
 import { maxHealthOf } from '../condition.js';
 import { Camp } from './camp.js';
 import { Speech } from './dialogue.js';
-import { makePerson, registerLeader } from './people.js';
+import { makePerson, registerLeader, BACKGROUND_BY_ID } from './people.js';
 import { profilePalette } from '../survivor.js';
 import { Raiders } from './raiders.js';
 import { Strangers } from './strangers.js';
@@ -14,6 +14,7 @@ import { Missions } from './missions.js';
 import { Jobs } from './jobs.js';
 import { WorldNav } from './worldnav.js';
 import { Tactics } from './tactics.js';
+import { bodyMods, train } from '../stats.js';
 import { NpcUI } from './ui.js';
 import { rollLoot, GUNS } from '../items.js';
 
@@ -53,6 +54,8 @@ export class Society {
   }
 
   // ---------------- services for brains ----------------
+  // someone got a little practice at something
+  trained(m, stat, amount) { return train(m, stat, amount, this.game); }
   takePath() { if (this.pathBudget > 0) { this.pathBudget--; return true; } return false; }
   navFor(ax, az, bx, bz) {
     const nav = this.camp.nav;
@@ -170,6 +173,7 @@ export class Society {
       else x.damage(x === g.player ? dmg * 0.45 : Math.min(60, dmg * 0.7), m);
     };
     if (hits) {
+      this.trained(m, 'shoot', 1);
       const head = def.pellets === 1 && Math.random() < 0.1 + sk * 0.04;
       hurtIt(t, def.dmg * hits * (head ? 2.4 : 1) * (1 - Math.min(0.6, fall * 0.5)) * (m.faction === 'raider' ? 0.8 : 1));
     }
@@ -433,11 +437,12 @@ export class Society {
     let L = this.camp.members.find((m) => m.leader && !m.dead);
     if (L) {
       L.person.name = p.name;
+      L.role = L.person.role = BACKGROUND_BY_ID.leader.role || L.role;
       if (L.person.model !== model || L.person.palette.join() !== palette.join()) L.setLook(model, palette);
       return L;
     }
     const at = this.game.player.pos;
-    const person = { id: 'LEADER', name: p.name, model, age: 33, palette, personality: 'rock', background: 'leader', role: 'guard', kin: '', kinRel: '', story: 0, seed: 7, leader: true };
+    const person = { id: 'LEADER', name: p.name, model, age: 33, palette, personality: 'rock', background: 'leader', role: BACKGROUND_BY_ID.leader.role || 'guard', kin: '', kinRel: '', story: 0, seed: 7, leader: true, stats: p.stats ? { ...p.stats } : undefined };
     L = this.spawn(person, { x: at.x, y: at.y, z: at.z, faction: 'camp', mode: 'controlled', weapon: 'bat' });
     this.camp.add(L);
     L.mode = 'controlled';
@@ -455,12 +460,12 @@ export class Society {
 
   // ---------------- new game ----------------
   // two people you found on the first morning
-  startingCompanions(near) {
+  startingCompanions(near, n = 2) {
     const used = new Set();
     const rng = Math.random;
     const roles = [['cook', 'medic', 'farmer'], ['guard', 'builder', 'mechanic', 'scavenger', 'hunter']];
     const out = [];
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < n; i++) {
       const p = makePerson(rng, used, { roles: roles[i], lastNames: new Set(out.map((o) => o.person.name.split(' ').slice(-1)[0])), firstNames: new Set(out.map((o) => o.first)) });
       used.add(p.background);
       const a = -Math.PI / 2 + (i ? 0.9 : -0.9);
@@ -474,7 +479,7 @@ export class Society {
     // they've known each other a few days
     out[0].adjust(out[1].person.id, 0.15); out[1].adjust(out[0].person.id, 0.15);
     out[0].knows[out[1].person.id] = 1; out[1].knows[out[0].person.id] = 1;
-    this.camp.log(`${out[0].person.name} and ${out[1].person.name} threw in with you on the road.`, 'join');
+    this.camp.log(out.length > 1 ? `${out[0].person.name} and ${out[1].person.name} threw in with you on the road.` : `${out[0].person.name} threw in with you on the road.`, 'join');
     setTimeout(() => out[0].say(this.speech.line(out[0], 'joined', { player: this.playerName() })), 2500);
     return out;
   }
@@ -548,6 +553,9 @@ export class Society {
         L.pos.set(x, y, z); L.visualY = y;
         L.rels = person.rels || {}; L.knows = person.knows || {};
         L.pack.load(person.pack); L.gear = person.gear ? { gun: person.gear.gun ? { ...person.gear.gun } : null } : L.gear;
+        if (person.stats) L.stats = { ...person.stats };
+        L.xp = person.xp ? { ...person.xp } : {};
+        L.baseHealth = bodyMods(L, this.game.profile).maxHealth;
         L.fatigue = person.fatigue || 0; L.injuries = person.injuries || []; L.maxHealth = maxHealthOf(L); L.health = Math.min(L.maxHealth, person.health ?? 100);
         if (needs) Object.assign(L.needs, needs);
         L.mode = mode || 'camp';

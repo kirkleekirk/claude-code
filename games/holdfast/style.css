@@ -559,3 +559,98 @@ button.mini.quiet { background: transparent; color: var(--ink-dim); }
   .is-touch .hud-toasts { top: auto; bottom: calc(250px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); width: min(340px, 86vw); }
 }
 @media (max-width: 640px) and (min-height: 521px) { .is-touch .cmd-mode .hud-toasts { top: calc(190px + env(safe-area-inset-top, 0px)); bottom: auto; } }
+/* ---- stats: the pentagon ---- */
+.radar { display: block; overflow: visible; }
+.radar .rd-ring { fill: none; stroke: rgba(243,239,228,.1); stroke-width: 1; }
+.radar .rd-ring.outer { stroke: rgba(243,239,228,.24); fill: rgba(243,239,228,.03); }
+.radar .rd-spoke { stroke: rgba(243,239,228,.1); stroke-width: 1; }
+.radar .rd-fill { fill: rgba(217,164,65,.34); stroke: #e2b257; stroke-width: 1.6; stroke-linejoin: round; }
+.radar .rd-compare { fill: none; stroke: rgba(243,239,228,.55); stroke-width: 1.2; stroke-dasharray: 3 3; }
+.radar .rd-dot { fill: #f3d58c; }
+.radar .rd-lab { font-family: var(--font-display); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; fill: var(--ink-dim); }
+.radar .rd-lab.sm { font-size: 9px; letter-spacing: .06em; }
+.radar .rd-val { font-family: var(--font-display); font-size: 13px; fill: var(--ink); }
+/* camp panel: a little one on every card */
+.people .person { display: flex; gap: 10px; align-items: center; text-align: left; }
+.person .p-radar { flex: none; width: 58px; height: 58px; }
+.person .p-main { flex: 1; min-width: 0; }
+/* the stats tab: everyone side by side */
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 10px; }
+.stat-card { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 8px 9px; border-radius: 12px; background: rgba(243,239,228,.04); border: 1px solid var(--hair); text-align: center; }
+.stat-card:hover { border-color: rgba(217,164,65,.5); }
+.stat-card .sc-head { display: flex; flex-direction: column; gap: 1px; width: 100%; }
+.stat-card .sc-head b { font-family: var(--font-display); font-weight: 400; font-size: 14px; letter-spacing: .04em; }
+.stat-card .sc-head span { font-size: 11px; color: var(--ink-dim); }
+.stat-card .sc-nums { display: flex; gap: 8px; font-size: 12px; color: var(--ink); }
+.stat-card .sc-nums i { font-style: normal; font-size: 9px; color: var(--ink-dim); margin-right: 2px; letter-spacing: .05em; }
+/* one person: the big pentagon and what each stat does */
+.detail-stats { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin: 6px 0 10px; }
+.detail-stats .radar { flex: none; }
+.st-rows { flex: 1; min-width: 220px; display: grid; gap: 7px; }
+.st-row { display: grid; grid-template-columns: 82px 1fr 22px 54px; gap: 2px 8px; align-items: center; font-size: 12.5px; }
+.st-row .st-n { font-family: var(--font-display); letter-spacing: .05em; font-size: 12px; text-transform: uppercase; color: var(--ink-dim); }
+.st-row .st-bar { height: 8px; border-radius: 999px; background: rgba(243,239,228,.08); overflow: hidden; }
+.st-row .st-bar span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #b8862f, #e8bc62); }
+.st-row b { font-family: var(--font-display); font-weight: 400; font-size: 15px; text-align: right; }
+.st-row .st-xp { font-size: 10px; color: var(--ink-dim); }
+.st-row .st-xpbar { display: block; height: 4px; border-radius: 999px; background: rgba(243,239,228,.08); overflow: hidden; }
+.st-row .st-xpbar span { display: block; height: 100%; background: rgba(243,239,228,.55); }
+.st-row small { grid-column: 1 / -1; font-size: 11px; color: var(--ink-dim); margin: -2px 0 2px; }
+/* talk panel: theirs, top right */
+.talk-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.talk-head .th-who { min-width: 0; }
+.talk-radar:empty { display: none; }
+.talk-radar { flex: none; margin: -4px -4px -8px 0; }
+/* top view: theirs beside the name; tap for the full page */
+.cmd-info .ci-top { display: flex; gap: 10px; align-items: center; }
+#ui .cmd-info .ci-radar { flex: none; width: 64px; height: 64px; padding: 0; border: 0; border-radius: 10px; background: rgba(243,239,228,.04); min-width: 0; }
+@media (max-height: 520px) { #ui .cmd-info .ci-radar { width: 48px; height: 48px; } #ui .cmd-info .ci-radar .radar { width: 48px; height: 48px; } .talk-radar .radar { width: 70px; height: 70px; } }
+@media (max-width: 640px) { .st-row { grid-template-columns: 74px 1fr 20px 40px; } .detail-stats { justify-content: center; } .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .stat-card .radar { width: 120px; height: 120px; } }
+.talk .talk-head { display: flex; flex-direction: row; flex-wrap: nowrap; justify-content: space-between; align-items: flex-start; }
+.talk .talk-head .th-who { flex: 1; }
+/* ---- survivor screen v2 ---- */
+.su-steps { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: -2px 0 10px; font-family: var(--font-display); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-dim); }
+.su-steps span { display: inline-flex; align-items: center; gap: 6px; }
+.su-steps i { font-style: normal; display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; border: 1px solid rgba(243,239,228,.25); font-size: 11px; }
+.su-steps .on { color: var(--ink); }
+.su-steps .on i { background: var(--accent); border-color: var(--accent); color: #1a1a14; }
+.su-steps .done i { border-color: var(--accent); color: var(--accent); }
+.bg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 7px; }
+.bg-card { display: flex; flex-direction: column; gap: 3px; text-align: left; padding: 9px 11px; background: #24271f; border-radius: 8px; border: 1px solid transparent; }
+.bg-card.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.bg-card .bn { font-weight: 600; font-size: 14px; }
+.bg-card .bb { display: flex; flex-wrap: wrap; gap: 4px; }
+.bg-card .bb i { font-style: normal; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: rgba(217,164,65,.18); color: #f0d48a; }
+.bg-card .bb i.neg { background: rgba(196,83,58,.22); color: #f2a790; }
+.bg-card .bd { font-size: 12px; color: var(--ink-dim); line-height: 1.35; }
+.bg-card .bk { font-size: 11.5px; color: var(--ink); opacity: .8; }
+.opt-section { margin-bottom: 6px; }
+.opt-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.opt-card { display: flex; flex-direction: column; gap: 3px; text-align: left; padding: 10px 12px; background: #24271f; border-radius: 8px; border: 1px solid transparent; }
+.opt-card.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.opt-card .on-n { font-weight: 600; font-size: 14px; }
+.opt-card .on-n .pts { font-style: normal; font-size: 11px; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: rgba(217,164,65,.18); color: #f0d48a; font-weight: 400; }
+.opt-card .on-d { font-size: 12px; color: var(--ink-dim); line-height: 1.35; }
+.setup-grid.strengths { grid-template-columns: minmax(0, 330px) minmax(0, 1fr); }
+.su-radar { display: grid; place-items: center; }
+.allocs { display: grid; gap: 6px; }
+.alloc { display: grid; grid-template-columns: 1fr 30px 26px 30px; align-items: center; gap: 2px 6px; }
+.alloc .an { font-family: var(--font-display); letter-spacing: .06em; text-transform: uppercase; font-size: 12.5px; }
+.alloc .an i { font-style: normal; color: var(--accent); font-size: 11px; margin-left: 4px; }
+.alloc b { font-family: var(--font-display); font-weight: 400; font-size: 18px; text-align: center; }
+.alloc .chipbtn { padding: 0; height: 28px; font-size: 16px; }
+.alloc .ad { grid-column: 1 / -1; font-size: 11.5px; color: var(--ink-dim); margin-top: -2px; }
+@media (max-width: 760px) {
+  .opt-grid { grid-template-columns: minmax(0, 1fr); }
+  .setup-grid.strengths { grid-template-columns: minmax(0, 1fr); }
+  .su-radar .radar { width: 210px; height: 210px; }
+}
+@media (max-height: 520px) {
+  .setup-grid.strengths { grid-template-columns: minmax(0, 290px) minmax(0, 1fr); }
+  .setup-grid.strengths .setup-look { display: flex; }
+  .su-radar .radar { width: 170px; height: 170px; }
+  .opt-card { padding: 7px 10px; }
+  .su-steps { margin-bottom: 4px; }
+}
+/* the strengths step's left column is always one column (the look step's phone grid doesn't apply) */
+.setup-grid.strengths .setup-look { display: flex; flex-direction: column; align-items: stretch; }

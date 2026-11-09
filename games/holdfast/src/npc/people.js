@@ -2,6 +2,7 @@
 // backgrounds (a life in Bridger County, told in chapters as trust grows).
 // Two survivors may share a personality; within one camp no two share a
 // background, so their stories, skills and talk are their own.
+import { BG_BY_ID } from '../survivor.js';
 
 // Traits 0..1: temper, warmth, humor, bravery, honesty, social, discipline,
 // faith, greed, anxiety, optimism. tone picks the shared line pool.
@@ -386,9 +387,11 @@ function pickLast(rng, taken, list = LAST) {
 export function registerLeader(profile) {
   const t = new Set(profile.traits || []);
   const lv = (k, base = 1) => Math.min(3, base + (t.has(k) ? 1 : 0));
+  const bg = BG_BY_ID[profile.background];
+  const trade = (bg && bg.skills) || {};
   BACKGROUND_BY_ID.leader = {
-    id: 'leader', job: 'The one holding this group together', role: 'guard',
-    skills: { cooking: 0, medicine: lv('medic', 0), mechanics: lv('handy', 0), combat: lv('slugger'), shooting: lv('marksman'), scavenging: lv('scavenger'), farming: 0, building: lv('handy'), leadership: 2, stealth: lv('quiet', 0) },
+    id: 'leader', job: bg ? `${bg.name}, now the one holding this group together` : 'The one holding this group together', role: (bg && bg.role) || 'guard',
+    skills: { cooking: 0, medicine: Math.max(trade.medicine || 0, lv('medic', 0)), mechanics: Math.max(trade.mechanics || 0, lv('handy', 0)), combat: lv('slugger'), shooting: lv('marksman'), scavenging: lv('scavenger'), farming: trade.farming || 0, building: Math.max(trade.building || 0, lv('handy')), leadership: 2, stealth: lv('quiet', 0) },
     kin: ['family'], item: 'the claim flag', place: null, known: 'kept everyone alive on the road', story: [],
     flavor: ['We keep moving. That\u2019s the whole trick.', 'Check your gear before dark.', 'Everybody eats tonight. That\u2019s the job.', 'One more day. Then another one.'],
     ideas: [],

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { isTouch } from './platform.js';
 import { GUNS, rollLoot, itemName, START_RES, Storage } from './items.js';
 import { conditionMods } from './condition.js';
+import { train } from './stats.js';
 export { START_RES, Storage as Inventory, rollLoot };
 
 // ---------------- interaction ----------------
@@ -73,6 +74,7 @@ export class Interaction {
     const first = !ref.left;
     const entries = ref.left || [...rollLoot(ref.table, g.mods ? g.mods.loot : 1), ...(ref.extra || [])];
     ref.extra = null;
+    if (first) train(g.player.body, 'scav', 2, g);
     const { got, left } = g.giveLoot(g.player.body, entries);
     ref.left = left.length ? left : null;
     ref.searched = !left.length;
@@ -162,6 +164,7 @@ export class Combat {
         g.society.onPlayerHit(z);
       }
       hit++;
+      train(player.body, 'fight', z.dead ? 3 : 1, g);
       if (hit >= 2) break;
     }
     if (hit) g.audio && g.audio.thud();
@@ -231,6 +234,7 @@ export class Combat {
       else { t.damage(dmg, player); g.society.onPlayerHit(t); }
     }
     if (anyHead && dealt.size) g.hud.toast('Headshot', 0.8);
+    if (dealt.size) train(player.body, 'shoot', anyHead ? 2 : 1, g);
     this.muzzle.position.copy(hand);
     this.muzzle.intensity = 6;
     // the kick (third person only)

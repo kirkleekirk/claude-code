@@ -6,10 +6,12 @@ import * as THREE from 'three';
 import { ROLES, PERSONALITIES, BACKGROUND_BY_ID } from './people.js';
 import { ACT_NAMES } from './camp.js';
 import { treat, injuryList, fatigueWord } from '../condition.js';
+import { STATS, radarSVG, bestAt, xpNeed, STAT_MAX, train } from '../stats.js';
 import { isTouch } from '../platform.js';
 
 const v = new THREE.Vector3();
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const sumStats = (m) => STATS.reduce((t, st) => t + (m.stats[st.id] || 0), 0);
 const SKILL_NAMES = { cooking: 'Cooking', medicine: 'Medicine', mechanics: 'Mechanics', combat: 'Fighting', shooting: 'Shooting', scavenging: 'Scavenging', farming: 'Farming', building: 'Building', leadership: 'Leadership', stealth: 'Stealth' };
 const ROLE_SKILL = { cook: 'cooking', farmer: 'farming', medic: 'medicine', mechanic: 'mechanics', builder: 'building', guard: 'combat', hunter: 'shooting', scavenger: 'scavenging', quartermaster: 'leadership', counselor: 'leadership' };
 
@@ -30,13 +32,13 @@ export class NpcUI {
     // talk panel
     const t = this.talkEl = document.createElement('div');
     t.className = 'talk'; t.hidden = true;
-    t.innerHTML = `<div class="talk-head"><div><b id="talk-name"></b><span id="talk-sub"></span></div><div id="talk-meta"></div></div><div class="talk-log" id="talk-log"></div><div class="talk-opts" id="talk-opts"></div>`;
+    t.innerHTML = `<div class="talk-head"><div class="th-who"><div><b id="talk-name"></b><span id="talk-sub"></span></div><div id="talk-meta"></div></div><div class="talk-radar" id="talk-radar"></div></div><div class="talk-log" id="talk-log"></div><div class="talk-opts" id="talk-opts"></div>`;
     ui.appendChild(t);
     // camp panel
     const c = this.campEl = document.createElement('div');
     c.className = 'overlay camp-panel'; c.hidden = true;
     c.innerHTML = `<div class="panel wide"><div class="camp-top"><h2 id="camp-title">Camp</h2><button id="camp-close">${isTouch ? 'Close' : 'Close (J)'}</button></div>
-      <div class="tabs"><button data-tab="people" class="on">People</button><button data-tab="journal">Journal</button><button data-tab="heard">Overheard</button><button data-tab="plans">Plans</button></div><div id="camp-body"></div></div>`;
+      <div class="tabs"><button data-tab="people" class="on">People</button><button data-tab="stats">Stats</button><button data-tab="journal">Journal</button><button data-tab="heard">Overheard</button><button data-tab="plans">Plans</button></div><div id="camp-body"></div></div>`;
     ui.appendChild(c);
     c.querySelector('#camp-close').addEventListener('click', () => this.toggleCamp(false));
     for (const b of c.querySelectorAll('[data-tab]')) b.addEventListener('click', () => { this.tab = b.dataset.tab; this.renderCamp(); });
@@ -115,6 +117,8 @@ export class NpcUI {
     const sp = this.soc.speech;
     const hello = npc.faction === 'stranger' && !npc.met ? 'hello0' : r > 0.35 ? 'hello2' : r > -0.1 ? 'hello1' : 'hello0';
     npc.met = true;
+    // talking people round is practice
+    if (g.player.body && npc.charmDay !== g.day) { npc.charmDay = g.day; train(g.player.body, 'charm', npc.faction === 'stranger' ? 1.5 : 0.6, g); }
     if (npc.sleeping) { npc.sleeping = false; if (npc.task && npc.task.slot) npc.task.slot.user = null; npc.task = null; npc.setAct(null); this.say(npc, ['Mm? What is it?', 'I’m up, I’m up.', 'This better be good.'][Math.floor(Math.random() * 3)]); }
     else this.say(npc, sp.line(npc, hello, { you: this.soc.playerName() }));
     // a grudge colours the greeting
@@ -153,6 +157,9 @@ export class NpcUI {
       : `${relWord(n.rel('player'))} · Stranger${n.recruitable === false && n.rumors ? ' · has own people' : ''}`;
     const el = this.talkEl.querySelector('#talk-meta');
     if (el.textContent !== meta) el.textContent = meta;
+    // what they're good for, once you know who they are
+    const rk = known ? JSON.stringify(n.stats) : '';
+    if (rk !== this.radarKey) { this.radarKey = rk; this.talkEl.querySelector('#talk-radar').innerHTML = known ? radarSVG(n.stats, { size: 92, labels: 'short' }) : ''; }
   }
   // option buttons: [label, fn]
   options(list) {
@@ -332,7 +339,7 @@ export class NpcUI {
           [`Here. (${amt} ${res})`, () => {
             const kind = res === 'ammo' ? 'ammo' : 'res', id = res === 'ammo' ? '9mm' : res;
             if (this.game.haveSupply(kind, id) < amt) { this.say(n, 'You don’t have it either, huh. It’s fine.'); return this.menu(); }
-            this.game.takeSupply(kind, id, amt); n.gotWant = true; n.adjust('player', 0.3);
+            this.game.takeSupply(kind, id, amt); n.gotWant = true; n.adjust('player', 0.3); train(this.game.player.body, 'charm', 2, this.game);
             this.say(n, n.tr.warmth > 0.5 ? 'You’re a good person. I won’t forget this.' : 'Huh. Thanks. Didn’t expect that.');
             this.menu();
           }],
@@ -343,7 +350,7 @@ export class NpcUI {
     if (n.recruitable !== undefined) o.push(['We have a camp. Come with us.', () => {
       const r = st.join(n);
       this.say(n, r.text);
-      if (r.ok) { this.game.hud.toast(`${n.person.name} joined your camp`, 4); setTimeout(() => this.talking === n && this.menu(), 50); return; }
+      if (r.ok) { train(this.game.player.body, 'charm', 6, this.game); this.game.hud.toast(`${n.person.name} joined your camp`, 4); setTimeout(() => this.talking === n && this.menu(), 50); return; }
       this.menu();
     }]);
     o.push(['Take care.', () => { this.say(n, sp.line(n, 'bye')); setTimeout(() => this.talking === n && this.closeTalk(), 250); }]);
@@ -360,6 +367,12 @@ export class NpcUI {
     this.detail = null;
     if (open) { this.game.input.exitLock(); this.renderCamp(); }
   }
+  // straight to someone's stats (or everyone's)
+  showStats(m = null) {
+    this.toggleCamp(true);
+    if (m) { this.tab = 'people'; this.detail = m; } else this.tab = 'stats';
+    this.renderCamp();
+  }
   renderCamp() {
     const camp = this.soc.camp, body = this.campEl.querySelector('#camp-body');
     for (const b of this.campEl.querySelectorAll('[data-tab]')) b.classList.toggle('on', b.dataset.tab === this.tab);
@@ -371,9 +384,9 @@ export class NpcUI {
       if (!alive.length) h = '<p class="note">Nobody’s with you yet. Survivors camp out on the roads; talk to them.</p>';
       h += '<div class="people">' + alive.map((m, i) => {
         const p = PERSONALITIES[m.person.personality];
-        return `<button class="person" data-i="${i}"><div class="pn"><b>${esc(m.person.name)}</b><span>${esc(ROLES[m.role].name)} · ${esc(p.name)}</span></div>
+        return `<button class="person" data-i="${i}"><div class="p-radar">${radarSVG(m.stats, { size: 58, labels: false })}</div><div class="p-main"><div class="pn"><b>${esc(m.person.name)}</b><span>${esc(ROLES[m.role].name)} · ${esc(p.name)}</span></div>
           <div class="pa">${esc(camp.activity(m))}</div>
-          <div class="pb"><div class="hbar"><div class="fill hp" style="width:${(100 * m.health / m.maxHealth).toFixed(0)}%"></div></div><span>${moodWord(m.mood)} · ${relWord(m.rel('player'))}</span></div></button>`;
+          <div class="pb"><div class="hbar"><div class="fill hp" style="width:${(100 * m.health / m.maxHealth).toFixed(0)}%"></div></div><span>${moodWord(m.mood)} · ${relWord(m.rel('player'))}</span></div></div></button>`;
       }).join('') + '</div>';
       if (camp.claim) {
         const inv = this.game.inventory;
@@ -382,6 +395,17 @@ export class NpcUI {
       }
       body.innerHTML = h;
       for (const b of body.querySelectorAll('.person')) b.addEventListener('click', () => { this.detail = alive[+b.dataset.i]; this.renderCamp(); });
+      return;
+    }
+    if (this.tab === 'stats') {
+      if (!alive.length) { body.innerHTML = '<p class="note">Nobody’s with you yet.</p>'; return; }
+      const sorted = [...alive].sort((a, b) => sumStats(b) - sumStats(a));
+      h = '<div class="stat-grid">' + sorted.map((m) => `<button class="stat-card" data-id="${m.person.id}">
+        <div class="sc-head"><b>${esc(m.person.name)}${m.leader ? ' <i class="lead">★</i>' : ''}</b><span>${esc(ROLES[m.role].name)} · best at ${esc(bestAt(m.stats))}</span></div>
+        ${radarSVG(m.stats, { size: 150, labels: 'short' })}
+        <div class="sc-nums">${STATS.map((st) => `<span><i>${st.short}</i>${m.stats[st.id]}</span>`).join('')}</div></button>`).join('') + '</div>';
+      body.innerHTML = h;
+      for (const b of body.querySelectorAll('.stat-card')) b.addEventListener('click', () => { this.detail = alive.find((m) => m.person.id === b.dataset.id); this.tab = 'people'; this.renderCamp(); });
       return;
     }
     if (this.tab === 'journal') {
@@ -408,7 +432,13 @@ export class NpcUI {
     const friend = others.sort((a, b) => m.rel(b.person.id) - m.rel(a.person.id))[0];
     const rival = [...others].sort((a, b) => m.rel(a.person.id) - m.rel(b.person.id))[0];
     const told = m.person.story || 0;
+    const bars = STATS.map((st) => {
+      const v = m.stats[st.id], xp = (m.xp && m.xp[st.id]) || 0, need = xpNeed(v);
+      return `<div class="st-row" title="${esc(st.desc)}"><span class="st-n">${st.name}</span><span class="st-bar"><span style="width:${(v / STAT_MAX * 100).toFixed(0)}%"></span></span><b>${v}</b>
+        <span class="st-xp">${v >= STAT_MAX ? 'max' : `<span class="st-xpbar"><span style="width:${Math.min(100, xp / need * 100).toFixed(0)}%"></span></span>`}</span><small>${esc(st.desc)}</small></div>`;
+    }).join('');
     body.innerHTML = `<button class="back">← Everyone</button>
+      <div class="detail-stats">${radarSVG(m.stats, { size: 236 })}<div class="st-rows">${bars}</div></div>
       <div class="detail"><h3>${esc(m.person.name)} <small>${m.person.age}</small></h3>
       <p><b>${esc(p.name)}.</b> ${esc(p.desc)}</p>
       <p><b>${esc(bg.job)}.</b> ${told ? esc('They ' + bg.known + '.') : 'You don’t know much about them yet.'}</p>

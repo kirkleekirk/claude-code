@@ -56,7 +56,14 @@ export function conditionMods(b) {
   return m;
 }
 // how fast being out wears someone down (per real second of activity)
-export function fatigueRate(b) { return b.leader ? 0.3 : 1; }
+// (the leader has the wind for it; Endurance makes anyone last longer)
+export function fatigueRate(b) {
+  const e = b.stats ? Math.max(0.45, 1 - ((b.stats.endure ?? 5) - 5) * 0.1) : 1;
+  // an inspiring leader keeps everyone going a little longer
+  return (b.leader ? 0.3 : hasTrait(b, 'inspiring') ? 0.85 : 1) * e;
+}
+// one of your leader's traits (from the survivor screen)
+function hasTrait(b, id) { const p = b.game && b.game.profile; return !!(p && p.traits && p.traits.includes(id)); }
 export function addFatigue(b, n) {
   const before = b.fatigue || 0;
   b.fatigue = Math.min(100, before + n * fatigueRate(b));
@@ -68,7 +75,8 @@ export function exhausted(b) { return (b.fatigue || 0) >= 100; }
 // an hour (or part) passes: rest, healing, bleeding
 export function tickCondition(b, hrs, ctx) {
   // rest takes the fatigue back off
-  if (ctx.atCamp) b.fatigue = Math.max(0, (b.fatigue || 0) - hrs * (ctx.sleeping ? 26 : ctx.resting ? 10 : 4));
+  const restMul = b.leader && hasTrait(b, 'insomniac') ? 0.7 : 1;
+  if (ctx.atCamp) b.fatigue = Math.max(0, (b.fatigue || 0) - hrs * (ctx.sleeping ? 26 : ctx.resting ? 10 : 4) * restMul);
   // wounds close with time at camp; faster in a bed, with a medic around
   const inj = b.injuries || [];
   let changed = false;

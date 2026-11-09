@@ -58,6 +58,7 @@ export class HUD {
           <button data-act="more" class="tb small" id="tb-more" aria-label="More">More</button>
           <div class="tb-more" id="tb-more-menu" hidden>
             <button data-act="inv" class="tb small">Pack</button>
+            <button data-act="people" class="tb small">People</button>
             <button data-act="camp" class="tb small">Camp</button>
             <button data-act="map" class="tb small">Map</button>
             <button data-act="claim" class="tb small">Claim</button>
@@ -190,11 +191,11 @@ export class HUD {
           <tr><td>Left click</td><td>Attack / shoot (hold for automatics)</td></tr><tr><td>Right click</td><td>Aim (scoped rifles zoom)</td></tr><tr><td>R</td><td>Reload</td></tr><tr><td>Q</td><td>Bat / gun</td></tr><tr><td>I or Tab</td><td>Pack and camp storage</td></tr>
           <tr><td>E</td><td>Open doors, search, pick up (hold to search)</td></tr><tr><td>F</td><td>Flashlight</td></tr>
           <tr><td>G</td><td>Plant claim flag</td></tr><tr><td>B</td><td>Build mode</td></tr><tr><td>H</td><td>Patch up (meds treat wounds)</td></tr>
-          <tr><td>M</td><td>Map</td></tr><tr><td>J</td><td>Camp: people, journal, plans</td></tr><tr><td>V</td><td>Top view: manage your group, take control of anyone</td></tr><tr><td>1-9</td><td>Pick a line when talking</td></tr><tr><td>Esc</td><td>Menu</td></tr>
+          <tr><td>M</td><td>Map</td></tr><tr><td>J</td><td>Camp: people, journal, plans</td></tr><tr><td>K</td><td>Everyone's stats</td></tr><tr><td>V</td><td>Top view: manage your group, take control of anyone</td></tr><tr><td>1-9</td><td>Pick a line when talking</td></tr><tr><td>Esc</td><td>Menu</td></tr>
         </table>
         <h3>On a phone</h3>
-        <p><b>Top view</b> shows your whole group from above while everyone carries on by themselves. Tap people (or their cards) to pick them, then tap the ground to send them there, tap the dead or raiders to send them in, or use the orders: send on a job (scavenge a building, fetch a plan's cache, raid a crew, a supply run), go home, rest, get patched up, hold. <b>Take control</b> drops you into anyone. Drag to look around, pinch to zoom, twist two fingers to turn.</p>
-        <p>In third person the left side of the screen moves and the right side looks. The round buttons hit, use, jump, aim, crouch, run and reload. The pills at the top go to the top view, swap weapons, patch you up and turn on the light; <b>More</b> has your pack, the camp, the map, the claim flag and building.</p>
+        <p><b>Top view</b> shows your whole group from above while everyone carries on by themselves. Tap people (or their cards) to pick them, then tap the ground to send them there, tap the dead or raiders to send them in, or use the orders: send on a job (scavenge a building, fetch a plan's cache, raid a crew, a supply run, recruit a stranger, look for survivors), go home, rest, get patched up, hold. Tap someone's pentagon for their stats. <b>Take control</b> drops you into anyone. Drag to look around, pinch to zoom, twist two fingers to turn.</p>
+        <p>In third person the left side of the screen moves and the right side looks. The round buttons hit, use, jump, aim, crouch, run and reload. The pills at the top go to the top view, swap weapons, patch you up and turn on the light; <b>More</b> has your pack, everyone's stats (People), the camp, the map, the claim flag and building.</p>
         <h3>Credits</h3>
         <p class="note">Character models, both CC BY 4.0, rigged and animated in-game:
           “<a href="https://sketchfab.com/3d-models/proportional-low-poly-man-free-download-0bfd0e2b49a348a4b64b20cc8196e3b3" target="_blank" rel="noopener">Proportional Low Poly Man</a>” by Robin Butler;
@@ -285,13 +286,13 @@ export class HUD {
         if (inMore) { more.hidden = true; this.$('tb-more').classList.remove('on'); }
         if (toggle) { const on = !inp.actionsDown.has(act); inp.actionsDown[on ? 'add' : 'delete'](act); b.classList.toggle('on', on); if (act === 'crouch') inp.pressedSet.add('KeyC'); return; }
         inp.actionsDown.add(act + '-hold');
-        const map = { attack: 'TouchAttack', interact: 'KeyE', jump: 'Space', build: 'KeyB', inv: 'KeyI', map: 'KeyM', camp: 'KeyJ', claim: 'KeyG', eat: 'KeyH', light: 'KeyF', weapon: 'KeyQ', view: 'KeyV', reload: 'KeyR' };
+        const map = { attack: 'TouchAttack', interact: 'KeyE', jump: 'Space', build: 'KeyB', inv: 'KeyI', map: 'KeyM', camp: 'KeyJ', people: 'KeyK', claim: 'KeyG', eat: 'KeyH', light: 'KeyF', weapon: 'KeyQ', view: 'KeyV', reload: 'KeyR' };
         if (map[act]) { inp.pressedSet.add(map[act]); inp.keys.add(map[act]); }
       }, { passive: false });
       b.addEventListener('touchend', (e) => {
         e.preventDefault();
         inp.actionsDown.delete(act + '-hold');
-        const map = { attack: 'TouchAttack', interact: 'KeyE', jump: 'Space', build: 'KeyB', inv: 'KeyI', map: 'KeyM', camp: 'KeyJ', claim: 'KeyG', eat: 'KeyH', light: 'KeyF', weapon: 'KeyQ', view: 'KeyV', reload: 'KeyR' };
+        const map = { attack: 'TouchAttack', interact: 'KeyE', jump: 'Space', build: 'KeyB', inv: 'KeyI', map: 'KeyM', camp: 'KeyJ', people: 'KeyK', claim: 'KeyG', eat: 'KeyH', light: 'KeyF', weapon: 'KeyQ', view: 'KeyV', reload: 'KeyR' };
         if (map[act]) inp.keys.delete(map[act]);
       });
     }

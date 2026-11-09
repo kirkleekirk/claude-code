@@ -5,7 +5,8 @@ import * as THREE from 'three';
 import { Character, makeWeaponMeshes } from '../characters.js';
 import { PERSONALITIES, BACKGROUND_BY_ID } from './people.js';
 import { Pack, GUNS } from '../items.js';
-import { maybeInjure, maxHealthOf, skillMods, conditionMods } from '../condition.js';
+import { maybeInjure, maxHealthOf, conditionMods } from '../condition.js';
+import { deriveStats, statEffects, statSkill, bodyMods } from '../stats.js';
 
 const R = 0.28;
 const VAULT_IGNORE = new Set(['door', 'fence']);
@@ -33,7 +34,10 @@ export class NPC {
     this.gear = person.gear ? { gun: person.gear.gun && GUNS[person.gear.gun.id] ? { ...person.gear.gun } : null } : { gun: null };
     this.fatigue = person.fatigue || 0;
     this.injuries = (person.injuries || []).map((i) => ({ ...i }));
-    this.baseHealth = 100;
+    // what they're good for (the leader's come from the survivor screen)
+    this.stats = person.stats ? { ...person.stats } : deriveStats(person, BACKGROUND_BY_ID[person.background], PERSONALITIES[person.personality]);
+    this.xp = person.xp ? { ...person.xp } : {};
+    this.baseHealth = statEffects(this.stats).health;
     this.maxHealth = maxHealthOf(this); this.health = Math.min(this.maxHealth, person.health ?? 100);
     this.stamina = 100;
     this.needs = { hunger: 20 + Math.random() * 20, energy: 70 + Math.random() * 20, social: 50, stress: 20 + Math.random() * 20 };
@@ -65,12 +69,18 @@ export class NPC {
     this.gear.gun = { id, mag: withAmmo ? def.mag : 0 };
     if (withAmmo) this.pack.add('ammo', def.ammo, def.mag * (this.faction === 'raider' ? 1 + Math.floor(Math.random() * 3) : 1));
   }
-  mods() { return skillMods(this); }
+  mods() { return bodyMods(this, this.leader ? this.game.profile : null); }
   get pers() { return PERSONALITIES[this.person.personality]; }
   get tr() { return this.pers.t; }
   get bg() { return BACKGROUND_BY_ID[this.person.background]; }
   get first() { return this.person.name.split(' ')[0]; }
-  skill(k) { return (this.bg && this.bg.skills[k]) || 0; }
+  // 0..3: fighting, shooting, scavenging and leading come from their stats;
+  // the trades (medicine, cooking, building...) from their past
+  skill(k) {
+    const st = this.stats;
+    if (st) { if (k === 'combat') return statSkill(st.fight); if (k === 'shooting') return statSkill(st.shoot); if (k === 'scavenging') return statSkill(st.scav); if (k === 'leadership') return statSkill(st.charm); }
+    return (this.bg && this.bg.skills[k]) || 0;
+  }
   rel(id) { return this.rels[id] ?? 0; }
   adjust(id, d) { this.rels[id] = Math.max(-1, Math.min(1, this.rel(id) + d)); }
   // how much of their story they'll tell someone they like this much
@@ -139,13 +149,15 @@ export class NPC {
     const last = this.pathI === this.path.length - 1;
     let dx = wp.x - this.pos.x, dz = wp.z - this.pos.z;
     let d = Math.hypot(dx, dz);
-    while (!last && d < 0.45 && !(wp.vault && Math.abs(wp.y - this.pos.y) > 0.6)) {
+    // a waypoint counts as reached at its height too (on stairs the next
+    // few sit almost on top of each other)
+    while (!last && d < 0.45 && Math.abs(wp.y - this.pos.y) < (wp.vault ? 0.6 : 0.9)) {
       this.pathI++;
       wp = this.path[this.pathI];
       dx = wp.x - this.pos.x; dz = wp.z - this.pos.z; d = Math.hypot(dx, dz);
       if (this.pathI === this.path.length - 1) break;
     }
-    if (this.pathI === this.path.length - 1 && d < 0.18) { this.path = null; this.dest = null; return [0, 0]; }
+    if (this.pathI === this.path.length - 1 && d < 0.18 && Math.abs(wp.y - this.pos.y) < 1.2) { this.path = null; this.dest = null; return [0, 0]; }
     if (d < 1e-4) return [0, 0];
     // over a fence: a quick hop across
     if (wp.vault && d < 1.7 && !(this.vaultT > 0)) { this.vaultT = 0.6; this.vaultFrom = this.pos.y; }
@@ -426,7 +438,8 @@ export class NPC {
       if (target.dead) return;
       const dd = Math.hypot(target.pos.x - this.pos.x, target.pos.z - this.pos.z);
       if (dd > 2.2) return;
-      const dmg = 20 + this.skill('combat') * 7 + Math.random() * 10;
+      const dmg = (22 + Math.random() * 10) * statEffects(this.stats).melee;
+      this.soc.trained && this.soc.trained(this, 'fight', target.hurt ? 1 : 1.5);
       if (target.hurt) target.hurt(dmg, (target.pos.x - this.pos.x) / dd, (target.pos.z - this.pos.z) / dd, 'melee');
       else target.damage(dmg, this);
       this.game.audio && this.game.audio.thud();
@@ -439,7 +452,8 @@ export class NPC {
   toJSON() {
     const p = this.person;
     return { ...p, rels: this.rels, knows: this.knows, health: Math.round(this.health), needs: this.needs,
-      leader: this.leader || undefined, pack: this.pack.toJSON(), gear: this.gear, fatigue: Math.round(this.fatigue), injuries: this.injuries };
+      leader: this.leader || undefined, pack: this.pack.toJSON(), gear: this.gear, fatigue: Math.round(this.fatigue), injuries: this.injuries,
+      stats: this.stats, xp: Object.fromEntries(Object.entries(this.xp).map(([k, v]) => [k, Math.round(v * 10) / 10])) };
   }
   // new body (the leader's look changed on the survivor screen)
   setLook(model, palette) {

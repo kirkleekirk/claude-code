@@ -47,6 +47,7 @@ connection.
 | H | Patch up (meds for wounds, food for strength) |
 | I or Tab | Pack and camp storage |
 | J | Camp |
+| K | Everyone's stats |
 | V | Top view |
 | M | Map |
 | Esc | Menu |
@@ -56,13 +57,34 @@ round buttons hit, use, jump, aim, crouch, run and reload. The pills at the
 top switch to the top view, swap weapons, patch up and toggle the light;
 More holds Pack, Camp, Map, Claim and Build.
 
+## Starting out
+
+The survivor screen has four steps: who you were before (one of nine
+backgrounds, each a head start on some stats, a camp role and what you
+walked out with: the deputy's 1911, the hunter's scout rifle, the
+paramedic's meds, the veteran's M4...), your group and the county (start
+alone for extra points or with one or two others; how scarce supplies are;
+how many of the dead), your strengths (spend points on five stats on a
+pentagon, plus traits; weaknesses pay points back), and where to start.
+
+## Stats
+
+Every survivor has five stats, 1 to 10, shown as a pentagon on their card,
+in the Stats tab (K) and when you talk to them: **Fighting** (melee damage
+and speed), **Shooting** (accuracy and damage), **Endurance** (health,
+stamina, how slowly they tire), **Scavenging** (search speed and finds) and
+**Charm** (recruiting and talking people round). They grow with use.
+
 ## Your group
 
 Everyone in your camp is a person you can play. In the **top view** (V, or
 the default on phones) the whole group carries on by itself; pick people to
 send them somewhere, point them at a fight and watch, send them on jobs
 (scavenge a building, fetch a cache, raid a crew you know about, a supply
-run), or call them home to rest or get patched up. *Take control* drops you
+run, recruit a stranger you know about, or go looking for survivors), or
+call them home to rest or get patched up. A recruiter walks out, talks it
+over and comes back with them (or doesn't): their Charm, how the stranger
+feels about you and whether camp has what they need set the odds. *Take control* drops you
 into anyone.
 
 Everyone finds their own way around the whole map: through doors, up

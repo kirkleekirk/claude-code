@@ -21,12 +21,14 @@ import { BuildMode } from './buildmode.js';
 import { MapView } from './map.js';
 import { Audio } from './audio.js';
 import { saveGame, loadGame, clearSave, hasSave } from './save.js';
-import { SurvivorSetup, SPAWNS, traitMods, profilePalette } from './survivor.js';
+import { SurvivorSetup, SPAWNS, traitMods, profilePalette, BG_BY_ID, DEAD } from './survivor.js';
 import { START_RES } from './gameplay.js';
 import { Society } from './npc/society.js';
 import { CommandView } from './command.js';
 import { GUNS, itemName } from './items.js';
 import { treat, maxHealthOf, INJURIES, exhausted } from './condition.js';
+import { bodyMods, statsFromTraits, STAT_TRAITS } from './stats.js';
+import { setScarcity, START_BY, GUNS as GUN_DEFS } from './items.js';
 import { PackScreen } from './packui.js';
 
 import { isTouch } from './platform.js';
@@ -158,7 +160,7 @@ export class Game {
       new SurvivorSetup(this, (p) => {
         this.setupOpen = false;
         this.hud.setVisible(true);
-        this.applyProfile(p, false);
+        this.applyProfile(p, false, true);
         this.save();
         this.startView();
         setTimeout(() => this.hud.toast(`Welcome back, ${p.name.split(' ')[0]}. Your claims are where you left them.`, 4), 600);
@@ -179,11 +181,13 @@ export class Game {
         this.setupOpen = false;
         this.hud.setVisible(true);
         this.applyProfile(p, true);
-        this.society.startingCompanions(this.player.pos);
+        const nComp = p.companions ?? 2;
+        if (nComp) this.society.startingCompanions(this.player.pos, nComp);
         this.save();
         this.startView();
         const cmd = this.command.active;
-        setTimeout(() => this.hud.toast(`${p.name.split(' ')[0]}, two survivors are with you. Find a place worth holding, then ${isTouch ? 'tap Claim to plant your flag' : 'press G to plant your claim flag'}.`, 7), 600);
+        const who = nComp === 0 ? 'you\u2019re on your own for now' : nComp === 1 ? 'one survivor is with you' : 'two survivors are with you';
+        setTimeout(() => this.hud.toast(`${p.name.split(' ')[0]}, ${who}. Find a place worth holding, then ${isTouch ? 'tap Claim to plant your flag' : 'press G to plant your claim flag'}.`, 7), 600);
         setTimeout(() => this.hud.toast(cmd ? 'Pick someone and tap Take control to play as them, or send them on a job.' : isTouch ? 'Walk up to someone and tap Use to talk. Top view manages your whole group.' : 'Walk up to someone and press E to talk. J shows your camp. V for the top view.', 6), 8000);
         setTimeout(() => this.hud.toast(cmd ? 'Tap people to pick them · tap the ground to send them · drag to look around' : isTouch ? 'Left side: move · Right side: look · Buttons: hit, use, jump' : 'WASD move · Mouse look · Click to swing · E to use · Esc for help', 6), 3800);
       });
@@ -191,24 +195,42 @@ export class Game {
   }
   // Put the survivor into the world: body and colours, trait effects, and
   // (for a new game) starting kit and spawn point.
-  applyProfile(p, fresh) {
+  applyProfile(p, fresh, justMade = fresh) {
+    // a survivor from before there were stats: their stat-like traits become stats
+    if (!p.stats) { p.stats = statsFromTraits(p.traits || []); p.traits = (p.traits || []).filter((t) => !STAT_TRAITS.includes(t)); }
     this.profile = p;
+    // how picked-over and how crowded the county is
+    p.world = p.world || { supplies: 'scarce', dead: 'normal' };
+    setScarcity(p.world.supplies);
+    this.zombies.mult = (DEAD[p.world.dead] || DEAD.normal).mult;
     // the leader is a survivor like everyone else; you start out as them
     const lead = this.society.ensureLeader(p);
-    lead.baseHealth = traitMods(p.traits || []).maxHealth;
+    lead.pack.cap = 30 + (p.traits.includes('packrat') ? 6 : 0) + (BG_BY_ID[p.background] && BG_BY_ID[p.background].kit.pack ? BG_BY_ID[p.background].kit.pack : 0);
+    if (justMade) lead.stats = { ...p.stats };
+    lead.baseHealth = bodyMods(lead, p).maxHealth;
     lead.maxHealth = maxHealthOf(lead);
     if (!this.player.body || this.player.body === lead) this.switchTo(lead, true);
     const pl = this.player;
     if (fresh) {
-      Object.assign(this.inventory.res, START_RES);
+      Object.assign(this.inventory.res, START_BY[p.world.supplies] || START_BY.scarce);
       if (p.traits.includes('prepper')) this.inventory.add({ food: 4, meds: 2, wood: 15, metal: 6, stone: 6 });
       lead.pack.add('res', 'food', 2); lead.pack.add('res', 'meds', 1);
       if (p.traits.includes('prepper')) { lead.pack.add('res', 'food', 2); lead.pack.add('res', 'meds', 1); }
+      // what your old life sent you out with
+      const bg = BG_BY_ID[p.background], kit = bg ? bg.kit : {};
+      if (kit.gun) {
+        const def = GUN_DEFS[kit.gun];
+        lead.gear.gun = { id: kit.gun, mag: def.mag };
+        lead.pack.add('ammo', def.ammo, (kit.ammo || 0) + (p.traits.includes('gunnut') ? def.mag : 0));
+      }
+      for (const [k, n] of Object.entries(kit.res || {})) lead.pack.add('res', k, n);
+      if (kit.item) this.storage.put('item', kit.item, 1);
       const sp = SPAWNS.find((s) => s.id === p.spawn) || SPAWNS[0];
       pl.spawn(sp.at[0], sp.at[1]);
       lead.health = lead.maxHealth; pl.stamina = pl.maxStamina;
       this.tpc.yaw = -Math.PI / 2;
     }
+    if (lead.gear.gun && this.player.body === lead) this.setWeapon('gun');
     pl.syncModel(0.016);
   }
   // take control of a survivor (the one you were drives themselves again)
@@ -230,13 +252,21 @@ export class Game {
       if (exhausted(old) || old.health < old.maxHealth * 0.35) old.mode = home ? 'travel' : 'follow';
       old.task = null;
     }
-    this.mods = b.leader ? traitMods(this.profile ? this.profile.traits || [] : []) : b.mods();
+    this.mods = b.mods();
     pl.maxStamina = this.mods.maxStamina;
     this.setWeapon(b.gear.gun ? 'gun' : 'bat');
     this.wasInCamp = null;
     if (!quiet) this.hud.toast(`You're ${b.person.name} now.`, 2.5);
     this.hud.bodyChanged && this.hud.bodyChanged();
     return true;
+  }
+  // the one you're playing got better at something: their numbers follow
+  refreshMods() {
+    const b = this.player.body;
+    if (!b) return;
+    this.mods = b.mods();
+    this.player.maxStamina = this.mods.maxStamina;
+    if (this.player.weapon && this.player.weapon.kind !== 'gun') this.setWeapon('bat');
   }
   // the one you're playing went down: someone close takes over to help.
   // false when there's nobody left to be (then it's like dying)
@@ -395,6 +425,10 @@ export class Game {
     if (hud.paused || this.player.dead) return;
     if (inp.pressed('KeyM') && !this.buildMode.active && !this.society.ui.talking && this.society.ui.campEl.hidden) this.map.toggle();
     if (inp.pressed('KeyJ') && !this.buildMode.active && !this.society.ui.talking && this.map.el.hidden && this.packScreen.el.hidden) this.society.ui.toggleCamp();
+    if (inp.pressed('KeyK') && !this.buildMode.active && !this.society.ui.talking && this.map.el.hidden && this.packScreen.el.hidden) {
+      const ui = this.society.ui;
+      if (!ui.campEl.hidden && ui.tab === 'stats') ui.toggleCamp(false); else ui.showStats();
+    }
     if ((inp.pressed('KeyI') || inp.pressed('Tab')) && !this.buildMode.active && !this.society.ui.talking && this.map.el.hidden && this.society.ui.campEl.hidden) this.packScreen.toggle();
     if (this.modalOpen) return;
     if (inp.pressed('KeyB') && !this.buildMode.active) { this.openBuild(); inp.pressedSet.delete('KeyB'); }

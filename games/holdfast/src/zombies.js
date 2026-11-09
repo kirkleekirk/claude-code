@@ -288,7 +288,8 @@ export class Zombies {
   }
   get target() {
     const d = this.game.sky.darkness;
-    return Math.round(this.maxDay + (this.maxNight - this.maxDay) * d);
+    // how many of the dead (chosen on the survivor screen)
+    return Math.round((this.maxDay + (this.maxNight - this.maxDay) * d) * (this.mult || 1));
   }
   density(x, z) {
     // more of them in town

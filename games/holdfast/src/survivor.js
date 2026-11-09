@@ -1,43 +1,92 @@
-// Survivor creation: name, body and colours, traits bought with points (bad
-// traits pay points back), then where in the county to start.
+// Survivor creation, in four steps: who you were (a background that shapes
+// your strengths and what you carry), your group and how hard the county
+// is, your strengths (five stats on a pentagon, plus traits, from one pool
+// of points), and where to start.
 import * as THREE from 'three';
 import { Character, makeWeaponMeshes } from './characters.js';
 import { T } from './world/terrain.js';
 import { isTouch } from './platform.js';
+import { STATS, STAT_IDS, radarSVG } from './stats.js';
+import { SCARCITY, GUNS } from './items.js';
 
-export const START_POINTS = 2;
+// points to spend on stats and traits; starting with fewer people gives more
+export const POOL = 6;
+export const COMPANIONS = [
+  { n: 0, name: 'Alone', pts: 3, desc: 'Just you. Three more points to spend, and everyone you meet is someone you earned.' },
+  { n: 1, name: 'One other', pts: 1, desc: 'Somebody you found on the road. One more point.' },
+  { n: 2, name: 'Two others', pts: 0, desc: 'A small group from the first morning.' },
+];
+export const DEAD = {
+  fewer: { name: 'Fewer', mult: 0.65, desc: 'The roads are quieter. Room to breathe.' },
+  normal: { name: 'As many as there are', mult: 1, desc: 'The county as it is.' },
+  more: { name: 'More', mult: 1.4, desc: 'They\u2019re everywhere, and thicker after dark.' },
+};
+
+// who you were before: a head start on two or three stats, a camp role,
+// and what you walked out with
+export const LEADER_BGS = [
+  { id: 'deputy', name: 'Sheriff\u2019s deputy', role: 'guard', bonus: { shoot: 2, charm: 1 }, kit: { gun: '1911', ammo: 16 }, desc: 'Knows a pistol and how to talk a room down.' },
+  { id: 'hunter', name: 'Deer hunter', role: 'hunter', bonus: { shoot: 1, endure: 1, scav: 1 }, kit: { gun: 'scout', ammo: 5 }, desc: 'Patient and quiet, with a good eye. Carries a light bolt-action rifle.' },
+  { id: 'medic', name: 'Paramedic', role: 'medic', bonus: { endure: 1, charm: 1 }, kit: { res: { meds: 4 } }, skills: { medicine: 3 }, desc: 'Meds go further in your hands, and you walked out with a bag of them.' },
+  { id: 'mechanic', name: 'Mechanic', role: 'mechanic', bonus: { fight: 1, endure: 1 }, kit: { res: { metal: 5, fuel: 2 } }, skills: { mechanics: 3, building: 2 }, desc: 'Strong hands. Building costs you less.' },
+  { id: 'farmer', name: 'Farmer', role: 'farmer', bonus: { endure: 2 }, kit: { res: { food: 5 }, item: 'seeds' }, skills: { farming: 3 }, desc: 'Long days are nothing new. You brought seed and something to eat.' },
+  { id: 'bouncer', name: 'Bar bouncer', role: 'guard', bonus: { fight: 3 }, kit: {}, desc: 'Nobody gets past you up close.' },
+  { id: 'pastor', name: 'Pastor', role: 'counselor', bonus: { charm: 3 }, kit: { res: { food: 2 } }, desc: 'People listen when you talk. Strangers come round sooner.' },
+  { id: 'drifter', name: 'Drifter', role: 'scavenger', bonus: { scav: 2, endure: 1 }, kit: { pack: 6 }, desc: 'Years out of a backpack. A bigger pack, and you find what others miss.' },
+  { id: 'veteran', name: 'Army veteran', role: 'guard', bonus: { fight: 1, shoot: 2, charm: -1 }, kit: { gun: 'm4', ammo: 30 }, desc: 'Came home with a rifle. Some days you\u2019re hard to be around.' },
+];
+export const BG_BY_ID = Object.fromEntries(LEADER_BGS.map((b) => [b.id, b]));
 
 // cost > 0: a strength you pay for; cost < 0: a weakness that pays you.
+// legacy: from before stats (an older save's leader may still have them)
 export const TRAITS = [
-  { id: 'athletic', name: 'Athletic', cost: 3, desc: 'More stamina, and you sprint faster.', not: ['outofshape'] },
-  { id: 'tough', name: 'Tough', cost: 3, desc: '+30 health.', not: ['frail'] },
-  { id: 'slugger', name: 'Slugger', cost: 2, desc: 'Swings hit 25% harder and knock the dead down more often.' },
-  { id: 'marksman', name: 'Marksman', cost: 2, desc: 'Steadier aim, shots hit 30% harder.', not: ['badeyes'] },
-  { id: 'scavenger', name: 'Scavenger', cost: 2, desc: 'Search 40% faster and turn up more.', not: ['unlucky'] },
   { id: 'quiet', name: 'Light on your feet', cost: 2, desc: 'You make 40% less noise.', not: ['clumsy'] },
   { id: 'handy', name: 'Handy', cost: 2, desc: 'Building costs a quarter less.', not: ['badback'] },
+  { id: 'inspiring', name: 'Inspiring', cost: 2, desc: 'Your people tire 15% slower out there.' },
   { id: 'medic', name: 'Field medic', cost: 1, desc: 'Food and meds heal 50% more.', not: ['slowheal'] },
   { id: 'nightowl', name: 'Night owl', cost: 1, desc: 'The dead spot you less easily after dark.' },
   { id: 'prepper', name: 'Prepper', cost: 1, desc: 'Start with extra food, meds and materials.' },
-  { id: 'outofshape', name: 'Out of shape', cost: -2, desc: 'Less stamina, and a slower sprint.', not: ['athletic'] },
-  { id: 'frail', name: 'Frail', cost: -3, desc: '-30 health.', not: ['tough'] },
+  { id: 'packrat', name: 'Packrat', cost: 1, desc: 'You carry 6 more.' },
+  { id: 'gunnut', name: 'Gun nut', cost: 1, desc: 'Reload 25% faster, and start with a spare box for your gun.' },
   { id: 'clumsy', name: 'Clumsy', cost: -2, desc: 'You make 60% more noise.', not: ['quiet'] },
-  { id: 'slowhands', name: 'Slow hands', cost: -1, desc: 'Swings take 20% longer.' },
-  { id: 'badeyes', name: 'Poor eyesight', cost: -1, desc: 'Shots stray wider.', not: ['marksman'] },
-  { id: 'unlucky', name: 'Unlucky', cost: -2, desc: 'Containers turn up less.', not: ['scavenger'] },
+  { id: 'lonewolf', name: 'Lone wolf', cost: -2, desc: 'Strangers don\u2019t warm to your people: recruiting is harder.' },
+  { id: 'insomniac', name: 'Insomniac', cost: -1, desc: 'You shake off fatigue 30% slower.' },
   { id: 'slowheal', name: 'Slow healer', cost: -1, desc: 'Food and meds heal 40% less.', not: ['medic'] },
   { id: 'smoker', name: 'Smoker', cost: -1, desc: 'Stamina comes back 30% slower.' },
   { id: 'badback', name: 'Bad back', cost: -2, desc: 'Building costs a quarter more.', not: ['handy'] },
+  { id: 'athletic', name: 'Athletic', cost: 3, legacy: true, desc: 'More stamina, and you sprint faster.' },
+  { id: 'tough', name: 'Tough', cost: 3, legacy: true, desc: '+30 health.' },
+  { id: 'slugger', name: 'Slugger', cost: 2, legacy: true, desc: 'Swings hit harder.' },
+  { id: 'marksman', name: 'Marksman', cost: 2, legacy: true, desc: 'Steadier aim.' },
+  { id: 'scavenger', name: 'Scavenger', cost: 2, legacy: true, desc: 'Search faster.' },
+  { id: 'outofshape', name: 'Out of shape', cost: -2, legacy: true, desc: 'Less stamina.' },
+  { id: 'frail', name: 'Frail', cost: -3, legacy: true, desc: '-30 health.' },
+  { id: 'slowhands', name: 'Slow hands', cost: -1, legacy: true, desc: 'Swings take longer.' },
+  { id: 'badeyes', name: 'Poor eyesight', cost: -1, legacy: true, desc: 'Shots stray wider.' },
+  { id: 'unlucky', name: 'Unlucky', cost: -2, legacy: true, desc: 'Containers turn up less.' },
 ];
 const BY_ID = Object.fromEntries(TRAITS.map((t) => [t.id, t]));
+export const traitName = (id) => (BY_ID[id] ? BY_ID[id].name : id);
 
-export function pointsLeft(traits) {
-  let p = START_POINTS;
-  for (const id of traits) p -= (BY_ID[id] || { cost: 0 }).cost;
-  return p;
+// a background's starting stats (4 each, plus its head start)
+export function baseStats(bgId) {
+  const st = Object.fromEntries(STAT_IDS.map((k) => [k, 4]));
+  const bg = BG_BY_ID[bgId];
+  if (bg) for (const [k, v] of Object.entries(bg.bonus)) st[k] += v;
+  return st;
+}
+export const STAT_MIN = 1, STAT_CAP = 9;
+// points left: the pool, plus what going it alone pays, minus stats raised
+// past the background's and strengths taken (weaknesses pay back)
+export function pointsLeft(p) {
+  if (Array.isArray(p)) p = { traits: p };
+  let pts = POOL + (COMPANIONS.find((c) => c.n === (p.companions ?? 2)) || COMPANIONS[2]).pts;
+  if (p.stats) { const base = baseStats(p.background); for (const k of STAT_IDS) pts -= (p.stats[k] ?? base[k]) - base[k]; }
+  for (const id of p.traits || []) pts -= (BY_ID[id] || { cost: 0 }).cost;
+  return pts;
 }
 
-// Numbers the rest of the game reads.
+// Numbers the rest of the game reads (the leader's traits).
 export function traitMods(traits) {
   const has = (id) => traits.includes(id);
   return {
@@ -56,6 +105,8 @@ export function traitMods(traits) {
     build: (has('handy') ? 0.75 : 1) * (has('badback') ? 1.25 : 1),
     heal: (has('medic') ? 1.5 : 1) * (has('slowheal') ? 0.6 : 1),
     nightSight: has('nightowl') ? 0.7 : 1,
+    reload: has('gunnut') ? 0.75 : 1,
+    rest: has('insomniac') ? 0.7 : 1,
   };
 }
 
@@ -81,6 +132,7 @@ export function randomProfile() {
     name: `${pick(FIRST[model])} ${pick(LAST)}`, model,
     skin: pick(SKINS), hair: pick(HAIRS), shirt: pick(SHIRTS), pants: pick(PANTS),
     traits: [], spawn: 'highway', autoName: true,
+    background: 'deputy', stats: baseStats('deputy'), companions: 2, world: { supplies: 'scarce', dead: 'normal' },
   };
 }
 export function profilePalette(p) { return [p.skin, p.shirt, p.pants, '#2a2420', p.hair, '#2a2018']; }
@@ -100,25 +152,32 @@ export class SurvivorSetup {
     this.renderCreate();
   }
 
+  // the step header: where you are in the four
+  steps(n) {
+    const names = this.keepPlace ? ['Who you are', 'Strengths'] : ['Who you are', 'Group & world', 'Strengths', 'Where to start'];
+    const at = this.keepPlace ? (n === 3 ? 1 : 0) : n - 1;
+    return `<div class="su-steps">${names.map((x, k) => `<span class="${k === at ? 'on' : k < at ? 'done' : ''}"><i>${k + 1}</i>${x}</span>`).join('')}</div>`;
+  }
+  pointsBar() {
+    const pts = pointsLeft(this.profile);
+    return `<div class="su-points ${pts < 0 ? 'neg' : ''}"><b>${pts}</b> point${pts === 1 ? '' : 's'} left</div>`;
+  }
+
   // ---- step 1: who you are ----
   renderCreate() {
     const p = this.profile;
     const sw = (list, key) => list.map((c) => `<button class="swb ${p[key] === c ? 'on' : ''}" data-k="${key}" data-v="${c}" style="--c:${c}" aria-label="${key} colour ${c}"></button>`).join('');
-    const pts = pointsLeft(p.traits);
-    const tr = (t) => {
-      const on = p.traits.includes(t.id);
-      const blocked = !on && (t.not || []).some((x) => p.traits.includes(x));
-      return `<button class="trait ${on ? 'on' : ''} ${t.cost < 0 ? 'neg' : 'pos'}" data-t="${t.id}" ${blocked ? 'disabled' : ''} aria-pressed="${on}">
-        <span class="tn">${t.name}</span><span class="tc">${t.cost > 0 ? '−' + t.cost : '+' + -t.cost}</span><span class="td">${t.desc}</span></button>`;
-    };
+    const bonus = (b) => Object.entries(b.bonus).map(([k, v]) => `<i class="${v < 0 ? 'neg' : ''}">${v > 0 ? '+' : ''}${v} ${STATS.find((x) => x.id === k).name}</i>`).join('');
+    const kit = (b) => [b.kit.gun ? `${GUNS[b.kit.gun].name} + ${b.kit.ammo} rounds` : '', b.kit.res ? Object.entries(b.kit.res).map(([k, n]) => `${n} ${k}`).join(', ') : '', b.kit.item ? 'seeds' : '', b.kit.pack ? 'bigger pack' : ''].filter(Boolean).join(', ') || 'just a bat';
     this.el.innerHTML = `
       <div class="panel setup-panel">
+        ${this.steps(1)}
         <h2>NEW SURVIVOR</h2>
-        <p class="sub">Who walks out into Bridger County?</p>
+        <p class="sub">Who walks out into Bridger County, and who were they before?</p>
         <div class="setup-grid">
           <div class="setup-look">
             <div class="su-prev" id="su-prev-slot"></div>
-            <label class="su-name">Name <input id="su-name" maxlength="28" value="${p.name.replace(/"/g, '&quot;')}"></label>
+            <label class="su-name">Name <input id="su-name" maxlength="28" value="${escapeHtml(p.name)}"></label>
             <div class="su-row"><span>Body</span><button class="chipbtn ${p.model === 'man' ? 'on' : ''}" data-model="man">Man</button><button class="chipbtn ${p.model === 'woman' ? 'on' : ''}" data-model="woman">Woman</button><button class="chipbtn" id="su-rand">Random</button></div>
             <div class="su-row"><span>Skin</span>${sw(SKINS, 'skin')}</div>
             <div class="su-row"><span>Hair</span>${sw(HAIRS, 'hair')}</div>
@@ -126,17 +185,14 @@ export class SurvivorSetup {
             <div class="su-row"><span>Pants</span>${sw(PANTS, 'pants')}</div>
           </div>
           <div class="setup-traits">
-            <div class="su-points ${pts < 0 ? 'neg' : ''}"><b>${pts}</b> trait point${pts === 1 ? '' : 's'} left</div>
-            <p class="note">Strengths cost points. Weaknesses give points back.</p>
-            <h3>Strengths</h3>
-            <div class="traits">${TRAITS.filter((t) => t.cost > 0).map(tr).join('')}</div>
-            <h3>Weaknesses</h3>
-            <div class="traits">${TRAITS.filter((t) => t.cost < 0).map(tr).join('')}</div>
+            <h3>Before all this</h3>
+            <div class="bg-grid">${LEADER_BGS.map((b) => `<button class="bg-card ${p.background === b.id ? 'on' : ''}" data-bg="${b.id}" aria-pressed="${p.background === b.id}">
+              <span class="bn">${b.name}</span><span class="bb">${bonus(b)}</span><span class="bd">${b.desc}</span><span class="bk">Carrying: ${kit(b)}</span></button>`).join('')}</div>
           </div>
         </div>
         <div class="setup-actions">
-          <span class="note" id="su-why">${pts < 0 ? 'Drop a strength or take a weakness to balance your points.' : ''}</span>
-          <button class="primary" id="su-next" ${pts < 0 ? 'disabled' : ''}>${this.keepPlace ? 'Back to your game' : 'Choose where to start'}</button>
+          <span class="note"></span>
+          <button class="primary" id="su-next">${this.keepPlace ? 'Your strengths' : 'Your group'}</button>
         </div>
       </div>`;
     const $ = (id) => this.el.querySelector('#' + id);
@@ -148,15 +204,17 @@ export class SurvivorSetup {
       this.renderCreate();
     });
     for (const b of this.el.querySelectorAll('.swb')) b.addEventListener('click', () => { p[b.dataset.k] = b.dataset.v; this.renderCreate(); });
-    for (const b of this.el.querySelectorAll('[data-t]')) b.addEventListener('click', () => {
-      const id = b.dataset.t;
-      p.traits = p.traits.includes(id) ? p.traits.filter((x) => x !== id) : [...p.traits, id];
+    for (const b of this.el.querySelectorAll('[data-bg]')) b.addEventListener('click', () => {
+      // keep what you'd already moved around, on the new background's base
+      const was = baseStats(p.background), now = baseStats(b.dataset.bg);
+      p.stats = Object.fromEntries(STAT_IDS.map((k) => [k, Math.max(STAT_MIN, Math.min(STAT_CAP, now[k] + ((p.stats[k] ?? was[k]) - was[k])))]));
+      p.background = b.dataset.bg;
       const keep = this.el.querySelector('.setup-traits').scrollTop;
       this.renderCreate();
       this.el.querySelector('.setup-traits').scrollTop = keep;
     });
-    $('su-rand').addEventListener('click', () => { const r = randomProfile(); Object.assign(p, { ...r, traits: p.traits }); this.renderCreate(); });
-    $('su-next').addEventListener('click', () => { if (pointsLeft(p.traits) < 0) return; if (this.keepPlace) this.finish(); else this.renderSpawn(); });
+    $('su-rand').addEventListener('click', () => { const r = randomProfile(); Object.assign(p, { name: r.name, model: r.model, skin: r.skin, hair: r.hair, shirt: r.shirt, pants: r.pants, autoName: true }); this.renderCreate(); });
+    $('su-next').addEventListener('click', () => (this.keepPlace ? this.renderStrengths() : this.renderGroup()));
     if (!this.prevCanvas) {
       this.prevCanvas = document.createElement('canvas');
       this.prevCanvas.width = 260; this.prevCanvas.height = 320;
@@ -164,6 +222,85 @@ export class SurvivorSetup {
     }
     $('su-prev-slot').appendChild(this.prevCanvas);
     this.preview(this.prevCanvas);
+  }
+
+  // ---- step 2: your group, and how hard the county is ----
+  renderGroup() {
+    const p = this.profile, w = p.world || (p.world = { supplies: 'scarce', dead: 'normal' });
+    const card = (on, attr, val, name, desc, extra = '') => `<button class="opt-card ${on ? 'on' : ''}" data-${attr}="${val}" aria-pressed="${on}"><span class="on-n">${name}${extra}</span><span class="on-d">${desc}</span></button>`;
+    this.el.innerHTML = `
+      <div class="panel setup-panel">
+        ${this.steps(2)}
+        <h2>YOUR GROUP &amp; THE COUNTY</h2>
+        <p class="sub">Who\u2019s with you, and how hard it\u2019s going to be.</p>
+        <div class="opt-section"><h3>Who\u2019s with you</h3><div class="opt-grid">${COMPANIONS.map((c) => card((p.companions ?? 2) === c.n, 'comp', c.n, c.name, c.desc, c.pts ? ` <i class="pts">+${c.pts} pts</i>` : '')).join('')}</div></div>
+        <div class="opt-section"><h3>Supplies</h3><div class="opt-grid">${Object.entries(SCARCITY).map(([k, v]) => card(w.supplies === k, 'sup', k, v.name + (k === 'scarce' ? ' <i class="pts">usual</i>' : ''), v.desc)).join('')}</div></div>
+        <div class="opt-section"><h3>The dead</h3><div class="opt-grid">${Object.entries(DEAD).map(([k, v]) => card(w.dead === k, 'dead', k, v.name, v.desc)).join('')}</div></div>
+        <div class="setup-actions">
+          <button id="su-back">Back</button>
+          <button class="primary" id="su-next">Your strengths</button>
+        </div>
+      </div>`;
+    const $ = (id) => this.el.querySelector('#' + id);
+    for (const b of this.el.querySelectorAll('[data-comp]')) b.addEventListener('click', () => { p.companions = +b.dataset.comp; this.renderGroup(); });
+    for (const b of this.el.querySelectorAll('[data-sup]')) b.addEventListener('click', () => { w.supplies = b.dataset.sup; this.renderGroup(); });
+    for (const b of this.el.querySelectorAll('[data-dead]')) b.addEventListener('click', () => { w.dead = b.dataset.dead; this.renderGroup(); });
+    $('su-back').addEventListener('click', () => this.renderCreate());
+    $('su-next').addEventListener('click', () => this.renderStrengths());
+  }
+
+  // ---- step 3: strengths: the pentagon and traits, from one pool ----
+  renderStrengths() {
+    const p = this.profile, base = baseStats(p.background), pts = pointsLeft(p);
+    const tr = (t) => {
+      const on = p.traits.includes(t.id);
+      const blocked = !on && (t.not || []).some((x) => p.traits.includes(x));
+      return `<button class="trait ${on ? 'on' : ''} ${t.cost < 0 ? 'neg' : 'pos'}" data-t="${t.id}" ${blocked ? 'disabled' : ''} aria-pressed="${on}">
+        <span class="tn">${t.name}</span><span class="tc">${t.cost > 0 ? '\u2212' + t.cost : '+' + -t.cost}</span><span class="td">${t.desc}</span></button>`;
+    };
+    const row = (st) => {
+      const v = p.stats[st.id], b = base[st.id];
+      return `<div class="alloc"><span class="an">${st.name}${v !== b ? ` <i>${v > b ? '+' : ''}${v - b}</i>` : ''}</span>
+        <button class="chipbtn" data-dec="${st.id}" ${v <= STAT_MIN ? 'disabled' : ''} aria-label="Lower ${st.name}">\u2212</button><b>${v}</b><button class="chipbtn" data-inc="${st.id}" ${v >= STAT_CAP || pts <= 0 ? 'disabled' : ''} aria-label="Raise ${st.name}">+</button>
+        <span class="ad">${st.desc}</span></div>`;
+    };
+    const traits = TRAITS.filter((t) => !t.legacy);
+    this.el.innerHTML = `
+      <div class="panel setup-panel">
+        ${this.steps(3)}
+        <h2>YOUR STRENGTHS</h2>
+        <p class="sub">${escapeHtml(BG_BY_ID[p.background] ? BG_BY_ID[p.background].name : '')}. Raise what you\u2019re good at, lower what you\u2019re not. Strengths cost points; weaknesses give them back.</p>
+        <div class="setup-grid strengths">
+          <div class="setup-look">
+            <div class="su-radar">${radarSVG(p.stats, { size: 250, compare: base })}</div>
+            ${this.pointsBar()}
+            <div class="allocs">${STATS.map(row).join('')}</div>
+            <p class="note">Dashed: where your background puts you. Stats grow as you use them.</p>
+          </div>
+          <div class="setup-traits">
+            <h3>Strengths</h3>
+            <div class="traits">${traits.filter((t) => t.cost > 0).map(tr).join('')}</div>
+            <h3>Weaknesses</h3>
+            <div class="traits">${traits.filter((t) => t.cost < 0).map(tr).join('')}</div>
+          </div>
+        </div>
+        <div class="setup-actions">
+          <button id="su-back">Back</button>
+          <span class="note" id="su-why">${pts < 0 ? 'Lower a stat, drop a strength or take a weakness to balance your points.' : ''}</span>
+          <button class="primary" id="su-next" ${pts < 0 ? 'disabled' : ''}>${this.keepPlace ? 'Back to your game' : 'Choose where to start'}</button>
+        </div>
+      </div>`;
+    const $ = (id) => this.el.querySelector('#' + id);
+    const again = () => { const keep = this.el.querySelector('.setup-traits').scrollTop; this.renderStrengths(); this.el.querySelector('.setup-traits').scrollTop = keep; };
+    for (const b of this.el.querySelectorAll('[data-inc]')) b.addEventListener('click', () => { const k = b.dataset.inc; if (pointsLeft(p) > 0 && p.stats[k] < STAT_CAP) { p.stats[k]++; again(); } });
+    for (const b of this.el.querySelectorAll('[data-dec]')) b.addEventListener('click', () => { const k = b.dataset.dec; if (p.stats[k] > STAT_MIN) { p.stats[k]--; again(); } });
+    for (const b of this.el.querySelectorAll('[data-t]')) b.addEventListener('click', () => {
+      const id = b.dataset.t;
+      p.traits = p.traits.includes(id) ? p.traits.filter((x) => x !== id) : [...p.traits, id];
+      again();
+    });
+    $('su-back').addEventListener('click', () => (this.keepPlace ? this.renderCreate() : this.renderGroup()));
+    $('su-next').addEventListener('click', () => { if (pointsLeft(p) < 0) return; if (this.keepPlace) this.finish(); else this.renderSpawn(); });
   }
 
   // a small turntable of the survivor holding the bat
@@ -212,8 +349,9 @@ export class SurvivorSetup {
     const cards = SPAWNS.map((s) => `<button class="spawn ${p.spawn === s.id ? 'on' : ''}" data-s="${s.id}"><span class="sn">${s.name}</span><span class="sr r-${s.risk.toLowerCase()}">${s.risk} risk</span><span class="sd">${s.desc}</span></button>`).join('');
     this.el.innerHTML = `
       <div class="panel setup-panel">
+        ${this.steps(4)}
         <h2>WHERE TO START</h2>
-        <p class="sub">${escapeHtml(p.name || 'Your survivor')} · ${p.traits.length ? p.traits.map((t) => BY_ID[t].name).join(', ') : 'no traits'}</p>
+        <p class="sub">${escapeHtml(p.name || 'Your survivor')} · ${escapeHtml(BG_BY_ID[p.background] ? BG_BY_ID[p.background].name : '')} · ${(COMPANIONS.find((c) => c.n === (p.companions ?? 2)) || COMPANIONS[2]).name.toLowerCase()} · ${(SCARCITY[(p.world || {}).supplies] || SCARCITY.scarce).name.toLowerCase()} supplies${p.traits.length ? ' · ' + p.traits.map((t) => BY_ID[t].name).join(', ') : ''}</p>
         <div class="spawn-grid">
           <canvas id="sp-map" aria-label="Map of Bridger County with start points"></canvas>
           <div class="spawns">${cards}</div>
@@ -225,7 +363,7 @@ export class SurvivorSetup {
       </div>`;
     const $ = (id) => this.el.querySelector('#' + id);
     for (const b of this.el.querySelectorAll('[data-s]')) b.addEventListener('click', () => { p.spawn = b.dataset.s; this.renderSpawn(); });
-    $('sp-back').addEventListener('click', () => this.renderCreate());
+    $('sp-back').addEventListener('click', () => this.renderStrengths());
     $('sp-go').addEventListener('click', () => this.finish());
     const cv = $('sp-map');
     this.drawMap(cv);
