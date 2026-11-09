@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { Sky } from './world/sky.js';
 import { World } from './world/world.js';
 import { Water } from './world/water.js';
+import { Creek } from './world/creek.js';
 import { Physics } from './physics.js';
 import { updateWind } from './world/vegetation.js';
 import { setTextureQuality } from './textures.js';
@@ -30,6 +31,7 @@ import { treat, maxHealthOf, INJURIES, exhausted } from './condition.js';
 import { bodyMods, statsFromTraits, STAT_TRAITS } from './stats.js';
 import { setScarcity, START_BY, GUNS as GUN_DEFS } from './items.js';
 import { PackScreen } from './packui.js';
+import { Vehicles } from './vehicles/vehicles.js';
 
 import { isTouch } from './platform.js';
 export { isTouch };
@@ -96,6 +98,7 @@ export class Game {
     this.world = new World(this.scene, this.physics, this.onProgress);
     await this.world.generate({ texSize: this.quality.texSize, quality: this.quality });
     this.water = new Water(this.scene, this.world.terrain);
+    this.creek = new Creek(this.scene, this.world, this.water.uniforms);
     this.onProgress('Waking survivors', 0.94);
     // a host page may point at other copies of the models (e.g. .gltf JSON)
     const urls = window.HOLDFAST_MODELS || {};
@@ -124,6 +127,7 @@ export class Game {
     this.command = new CommandView(this);
     this.storage = this.inventory; // the camp's storage
     this.packScreen = new PackScreen(this);
+    this.vehicles = new Vehicles(this);
     this.sky.onThunder = () => setTimeout(() => this.audio.thunder(), 600 + Math.random() * 1500);
     // flashlight
     this.flashlight = new THREE.SpotLight(0xfff4dc, 0, 28, 0.42, 0.45, 1.4);
@@ -133,6 +137,8 @@ export class Game {
     const qs = new URLSearchParams(location.search);
     this.loading = true;
     const loaded = !qs.get('fresh') && loadGame(this);
+    // the cars the map left parked (a save brings back where yours are)
+    if (!this.vehicles.restored) this.vehicles.fromWorld(this.world.carSpots || []);
     this.loading = false;
     if (loaded && this.profile) {
       const L = this.society.ensureLeader(this.profile);
@@ -431,6 +437,15 @@ export class Game {
     }
     if ((inp.pressed('KeyI') || inp.pressed('Tab')) && !this.buildMode.active && !this.society.ui.talking && this.map.el.hidden && this.society.ui.campEl.hidden) this.packScreen.toggle();
     if (this.modalOpen) return;
+    // behind the wheel the car takes the keys (lights, horn); get out to build or claim
+    const driving = this.vehicles && this.vehicles.driving;
+    if (driving) {
+      if (inp.pressed('KeyE')) { inp.pressedSet.delete('KeyE'); this.vehicles.exit(); }
+      if (inp.pressed('KeyV') && this.vehicles.exit()) this.command.toggle();
+      if (inp.pressed('KeyB') || inp.pressed('KeyG')) hud.toast('Get out of the car first.', 1.5);
+      if (inp.pressed('KeyH')) this.patchUp();
+      return;
+    }
     if (inp.pressed('KeyB') && !this.buildMode.active) { this.openBuild(); inp.pressedSet.delete('KeyB'); }
     if (this.buildMode.active) return;
     if (inp.pressed('KeyV')) this.command.toggle();
@@ -498,6 +513,11 @@ export class Game {
         this.talkSide = 0; this.talkCamInit = false;
         this.command.update(dt);
         this.zombies.update(dt);
+      } else if (!this.modalOpen && this.vehicles.driving) {
+        this.talkSide = 0; this.talkCamInit = false;
+        this.vehicles.updateDriving(dt);
+        this.hud.setPrompt(null);
+        this.zombies.update(dt);
       } else if (!this.modalOpen) {
         this.talkSide = 0; this.talkCamInit = false;
         const ld = inp.lookDelta();
@@ -519,7 +539,7 @@ export class Game {
       this.command.sync();
       // walking into camp: the pack goes into storage
       const body = this.player.body;
-      if (body && !this.player.dead && !this.player.released) {
+      if (body && !this.player.dead && !this.player.released && !this.vehicles.driving) {
         const inCamp = !!this.claims.at(this.player.pos.x, this.player.pos.z);
         if (inCamp && this.wasInCamp === false) this.unload(body);
         this.wasInCamp = inCamp;
@@ -529,6 +549,7 @@ export class Game {
       this.tpc.zoom = gd ? (gd.scope || (gd.cls === 'long' ? 1.25 : 1)) : 1;
       document.getElementById('ui').classList.toggle('scoped', !!(gd && gd.scope && this.player.aiming && !this.command.active && this.tpc.aim > 0.6));
       this.society.update(dt);
+      this.vehicles.update(dt);
       this.combat.update(dt);
       this.claims.update(dt);
       this.hud.update(dt);
@@ -544,7 +565,7 @@ export class Game {
         fl.target.position.copy(fl.position).addScaledVector(f, 10);
         fl.target.updateMatrixWorld();
       }
-      if (this.sky.darkness > 0.75 && !this.player.flashlightOn && !this._flHint) { this._flHint = true; this.hud.toast(isTouch ? 'It is getting dark. Tap Light for your flashlight.' : 'It is getting dark. Press F for your flashlight.', 4); }
+      if (this.sky.darkness > 0.75 && !this.player.flashlightOn && !this._flHint && !this.vehicles.driving) { this._flHint = true; this.hud.toast(isTouch ? 'It is getting dark. Tap Light for your flashlight.' : 'It is getting dark. Press F for your flashlight.', 4); }
       // autosave
       if (this.dirtyT > 0) { this.dirtyT -= dt; if (this.dirtyT <= 0) this.save(); }
       this.autosaveT -= dt;
@@ -558,6 +579,7 @@ export class Game {
     if (this.sky.time < before) this.day++;
     this.water.update(dt, this.sky);
     this.world.update(dt, this.camera.position);
+    if (this.vehicles) this.vehicles.cull();
     updateWind(dt, this.sky.w.wind);
   }
   render() { this.renderer.render(this.scene, this.camera); }

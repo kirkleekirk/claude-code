@@ -197,6 +197,75 @@ export class PropBuilder {
     this.sphere('roofMetal', x, y + h, z, r + 0.05, '#b8bcc0', 0.7, Math.PI * 2, Math.PI / 2);
     this.solid(x - r, y, z - r, x + r, y + h, z + r);
   }
+  // A country grain elevator: a row of tall concrete bins, the headhouse and
+  // leg on top, a metal annex and a spout out to the truck lane.
+  elevator(x, z, y0) {
+    const y = (y0 ?? this.world.terrain.height(x, z)) - 0.3;
+    const r = 3.1, h = 23;
+    this.box('concrete', x - 9.6, y - 0.4, z - 4, x + 9.6, y + 0.35, z + 4, '#cfcac0');
+    for (const dx of [-6.2, 0, 6.2]) {
+      this.cyl('concrete', x + dx, y, z, r, r, h, '#d6d0c4', 24, (2 * Math.PI * r) / 3, h / 3);
+      // pour lines
+      for (let k = 1; k < 12; k++) this.cyl('plain:paint', x + dx, y + k * 1.9, z, r + 0.02, r + 0.02, 0.05, '#bab3a6', 24);
+      this.cyl('concrete', x + dx, y + h, z, r + 0.15, r + 0.15, 0.4, '#cbc4b8', 24);
+      this.solid(x + dx - r, y, z - r, x + dx + r, y + h, z + r);
+    }
+    // the gallery along the top and the headhouse over the middle bin
+    this.box('metal', x - 9.4, y + h + 0.4, z - 1.6, x + 9.4, y + h + 2.8, z + 1.6, '#b9bec2');
+    this.box('roofMetal', x - 9.6, y + h + 2.8, z - 1.8, x + 9.6, y + h + 3.0, z + 1.8, '#9aa0a4');
+    this.box('metal', x - 2.6, y + h + 2.8, z - 2.6, x + 2.6, y + h + 8.5, z + 2.6, '#c3c7ca');
+    this.box('roofMetal', x - 2.8, y + h + 8.5, z - 2.8, x + 2.8, y + h + 8.8, z + 2.8, '#8f959a');
+    for (const dz of [-2.61, 2.61]) this.box('glass', x - 1.2, y + h + 5.5, z + dz - 0.01, x + 1.2, y + h + 6.6, z + dz + 0.01, '#ffffff');
+    // the leg, running down the face to the pit
+    this.box('metal', x + 9.6, y, z - 1.0, x + 11.0, y + h + 6, z + 0.4, '#a9afb3');
+    this.solid(x + 9.6, y, z - 1.0, x + 11.0, y + h + 6, z + 0.4);
+    // a lean-to annex with a big door, and the spout over the truck lane
+    this.box('metal', x - 15.5, y, z - 3.6, x - 9.6, y + 6, z + 3.6, '#b4a58c');
+    this.box('roofMetal', x - 15.8, y + 6, z - 3.9, x - 9.4, y + 6.25, z + 3.9, '#7d6f5d');
+    this.box('plain:matte', x - 15.52, y + 0.2, z - 2.1, x - 15.48, y + 4.2, z + 2.1, '#5a5048');
+    this.solid(x - 15.5, y, z - 3.6, x - 9.6, y + 6, z + 3.6);
+    this.beam('plain:metal', x + 2.6, y + h + 7, z + 1.2, x + 7, y + 7, z + 9, 0.35, 0.35, '#8a9096');
+    // ladder up the east bin
+    this.box('plain:metal', x + 6.2 + r + 0.02, y + 1, z - 0.25, x + 6.2 + r + 0.08, y + h, z + 0.25, '#8f969c');
+    this.signQueue.push({ type: 'band', text: 'CARVER CO-OP', x, y: y + h - 4.5, z, r: r + 0.02, h: 1.8 });
+  }
+  // A green highway sign on two posts: a place name and a second line.
+  townSign(x, z, text, line2) {
+    const y = this.world.terrain.height(x, z);
+    for (const dx of [-1.25, 1.25]) {
+      this.box('plain:metal', x + dx - 0.05, y - 0.3, z - 0.05, x + dx + 0.05, y + 2.9, z + 0.05, '#9aa0a6');
+      this.solid(x + dx - 0.08, y, z - 0.08, x + dx + 0.08, y + 2.9, z + 0.08);
+    }
+    this.box('plain:paint', x - 1.75, y + 1.65, z - 0.04, x + 1.75, y + 2.95, z + 0.02, '#1f5a3a');
+    this.storeSign(text, x, y + 2.5, z + 0.03, 3.3, 0.55, [0, 0, 1], ['#1f5a3a', '#f2f2ea']);
+    this.storeSign(line2, x, y + 1.95, z + 0.03, 1.6, 0.4, [0, 0, 1], ['#1f5a3a', '#f2f2ea']);
+    this.storeSign(text, x, y + 2.5, z - 0.05, 3.3, 0.55, [0, 0, -1], ['#1f5a3a', '#f2f2ea']);
+    this.storeSign(line2, x, y + 1.95, z - 0.05, 1.6, 0.4, [0, 0, -1], ['#1f5a3a', '#f2f2ea']);
+  }
+  // A concrete culvert end: headwall and the dark mouth of the pipe. yaw is
+  // the direction the pipe runs out of the embankment.
+  culvert(x, z, y, yaw) {
+    const g = this.b(x, z);
+    const m = new THREE.Matrix4();
+    const put = (geo, key, col, lx, ly, lz, rx = 0) => {
+      m.makeRotationY(yaw).multiply(new THREE.Matrix4().makeTranslation(lx, ly, lz)).multiply(new THREE.Matrix4().makeRotationX(rx));
+      m.setPosition(new THREE.Vector3(lx, ly, lz).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).add(new THREE.Vector3(x, y, z)));
+      g.geometry(key, geo, m, rgb(col));
+      geo.dispose();
+    };
+    // the headwall across the pipe end, then the pipe ring and its dark inside
+    put(new THREE.BoxGeometry(3.6, 2.2, 0.45), 'concrete', '#b9b3a8', 0, 1.0, -0.2);
+    put(new THREE.CylinderGeometry(0.82, 0.82, 0.7, 20, 1, true), 'concrete', '#a7a196', 0, 0.85, 0.15, Math.PI / 2);
+    put(new THREE.CircleGeometry(0.78, 20), 'plain:matte', '#16140f', 0, 0.85, 0.02);
+    // wing walls angled back into the bank
+    for (const side of [-1, 1]) {
+      const geo = new THREE.BoxGeometry(0.35, 1.6, 2.0);
+      const mm = new THREE.Matrix4().makeRotationY(yaw + side * 0.5);
+      mm.setPosition(new THREE.Vector3(side * 1.95, 0.75, 0.75).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).add(new THREE.Vector3(x, y, z)));
+      g.geometry('concrete', geo, mm, rgb('#b5afa4'));
+      geo.dispose();
+    }
+  }
   waterTower(x, z) {
     const y = this.world.terrain.height(x, z);
     const H = 20, R = 4.2;
@@ -256,57 +325,9 @@ export class PropBuilder {
   }
 
   // ---------------- cars ----------------
-  car(x, z, yaw, color, kind = 'sedan', y = null) {
-    const g = this.b(x, z);
-    const yy = y == null ? this.world.terrain.height(x, z) : y;
-    const c = Math.cos(yaw), s = Math.sin(yaw);
-    const P = (lx, ly, lz) => [x + lx * c + lz * s, yy + ly, z - lx * s + lz * c];
-    const boxL = (key, x0, y0, z0, x1, y1, z1, col) => {
-      // oriented box via 6 quads
-      const v = [P(x0, y0, z0), P(x1, y0, z0), P(x1, y0, z1), P(x0, y0, z1), P(x0, y1, z0), P(x1, y1, z0), P(x1, y1, z1), P(x0, y1, z1)];
-      const C = Array.isArray(col) ? col : rgb(col);
-      const q = (a, b, cc, d, k = 1, n) => g.quad(key, v[a], v[b], v[cc], v[d], mulc(C, k), null, n);
-      const fx = [c, 0, -s], fz = [s, 0, c];
-      q(4, 7, 6, 5, 1, [0, 1, 0]); q(0, 1, 2, 3, 0.5, [0, -1, 0]);
-      q(3, 2, 6, 7, 0.9, fz); q(1, 0, 4, 5, 0.9, [-fz[0], 0, -fz[2]]);
-      q(2, 1, 5, 6, 0.85, fx); q(0, 3, 7, 4, 0.85, [-fx[0], 0, -fx[2]]);
-    };
-    const col = rgb(color);
-    const truck = kind === 'pickup';
-    const L = truck ? 2.7 : 2.35, W = 0.92;
-    boxL('plain:paint', -W, 0.32, -L, W, 0.95, L, col);
-    if (truck) {
-      boxL('plain:paint', -W + 0.04, 0.95, -0.6, W - 0.04, 1.65, 0.75, col);
-      boxL('glass', -W + 0.03, 1.05, 0.74, W - 0.03, 1.58, 0.77, [1, 1, 1]);
-      boxL('plain:matte', -W + 0.08, 0.95, -L + 0.08, W - 0.08, 0.97, -0.65, '#2a2a2a');
-    } else {
-      boxL('plain:paint', -W + 0.06, 0.95, -1.0, W - 0.06, 1.5, 0.9, col);
-      boxL('glass', -W + 0.05, 1.0, 0.89, W - 0.05, 1.45, 0.92, [1, 1, 1]);
-      boxL('glass', -W + 0.05, 1.0, -1.02, W - 0.05, 1.45, -0.99, [1, 1, 1]);
-    }
-    boxL('plain:chrome', -W + 0.05, 0.35, L - 0.02, W - 0.05, 0.5, L + 0.06, '#b0b0b0');
-    boxL('plain:chrome', -W + 0.05, 0.35, -L - 0.06, W - 0.05, 0.5, -L + 0.02, '#b0b0b0');
-    for (const lx of [-0.6, 0.6]) boxL('plain:paint', lx - 0.15, 0.7, L - 0.01, lx + 0.15, 0.82, L + 0.02, '#f4f0d8');
-    for (const lx of [-0.75, 0.75]) boxL('plain:paint', lx - 0.12, 0.7, -L - 0.02, lx + 0.12, 0.82, -L + 0.01, '#9a1a1a');
-    for (const [lx, lz] of [[-W, L - 0.7], [W, L - 0.7], [-W, -L + 0.75], [W, -L + 0.75]]) {
-      const geo = new THREE.CylinderGeometry(0.34, 0.34, 0.24, 12);
-      const m = new THREE.Matrix4().makeRotationY(yaw).multiply(new THREE.Matrix4().makeRotationZ(Math.PI / 2));
-      const p = P(lx * 0.98, 0.34, lz);
-      m.setPosition(p[0], p[1], p[2]);
-      g.geometry('plain:matte', geo, m, rgb('#1e1e1e'));
-      geo.dispose();
-    }
-    // collision: a chain of boxes along the body so angled cars stay tight
-    const carId = ++this.carCount;
-    const n = Math.max(1, Math.ceil((2 * L) / 0.9));
-    for (let i = 0; i < n; i++) {
-      const z0 = -L + (2 * L * i) / n, z1 = -L + (2 * L * (i + 1)) / n;
-      const pts = [P(-W, 0, z0), P(W, 0, z0), P(W, 0, z1), P(-W, 0, z1)];
-      const xs = pts.map((p) => p[0]), zs = pts.map((p) => p[2]);
-      const shrink = Math.abs(Math.sin(2 * yaw)) * 0.12;
-      this.world.physics.add({ min: [Math.min(...xs) + shrink, yy, Math.min(...zs) + shrink], max: [Math.max(...xs) - shrink, yy + (truck ? 1.65 : 1.5), Math.max(...zs) - shrink], kind: 'car', carId }, 'props');
-    }
-    this.loot.push({ type: 'loot', table: truck ? 'truck' : 'car', pos: P(0, 0.9, -L), label: 'Search trunk', searched: false });
+  // a parked car: the vehicle system builds and runs it once the world exists
+  car(x, z, yaw, color, kind = 'sedan', y = null, o = {}) {
+    (this.world.carSpots || (this.world.carSpots = [])).push({ x, z, yaw, paint: color, kind, y: y == null ? undefined : y, ...o });
   }
 
   mailbox(x, z, name) {

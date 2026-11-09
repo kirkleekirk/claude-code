@@ -45,6 +45,7 @@ export class Interaction {
       for (const it of S.interact) pushLoot(it);
     }
     for (const it of g.world.carLoot || []) pushLoot(it);
+    if (g.vehicles) g.vehicles.candidates(p, out, pushLoot);
     const soc = g.society;
     if (soc) {
       for (const it of soc.lootables) pushLoot(it);
@@ -75,7 +76,9 @@ export class Interaction {
     const entries = ref.left || [...rollLoot(ref.table, g.mods ? g.mods.loot : 1), ...(ref.extra || [])];
     ref.extra = null;
     if (first) train(g.player.body, 'scav', 2, g);
-    const { got, left } = g.giveLoot(g.player.body, entries);
+    const gave = g.giveLoot(g.player.body, entries), got = gave.got;
+    // what doesn't fit rides in the car you came in, if it's close
+    const left = g.vehicles ? g.vehicles.overflow(gave.left) : gave.left;
     ref.left = left.length ? left : null;
     ref.searched = !left.length;
     if (ref.prop) ref.prop.searched = ref.searched;
@@ -114,6 +117,8 @@ export class Interaction {
       g.hud.setPrompt(best.ref.label || 'Search', 'Hold E', this.hold > 0 ? this.hold / T : null);
       g.player.noise = Math.max(g.player.noise, holding ? 4 : 0);
       if (this.hold >= T) { this.hold = 0; this.finishSearch(best.ref); }
+    } else if (best.kind === 'veh') {
+      g.vehicles.interact(best, dt, inp, this);
     } else if (best.kind === 'npc') {
       const n = best.ref;
       g.hud.setPrompt(`Talk to ${n.first}`);

@@ -215,7 +215,9 @@ export function validateWorld(world) {
   }
 
   // ---------- props ----------
-  const props = ph.owners.get('props') || [];
+  // props, plus the parked cars (each car owns its own boxes)
+  const props = [...(ph.owners.get('props') || [])];
+  for (const [o, l] of ph.owners) if (o && typeof o === 'object' && o.M && o.boxes) props.push(...l);
   const fences = ph.owners.get('fences') || [];
   let propCount = 0;
   for (const b of [...props, ...fences]) {

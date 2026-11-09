@@ -6,7 +6,7 @@
 import { Structure } from '../building/structure.js';
 import { stationsFor } from './stations.js';
 import { makePerson } from './people.js';
-import { T } from '../world/terrain.js';
+import { T, creekX } from '../world/terrain.js';
 import { compass, cap, inField, dropsOf } from './raiders.js';
 
 const OWN = [
@@ -55,6 +55,7 @@ export class Strangers {
       if (x > T.town.x0 - 8 && x < T.floodwallX && Math.abs(z) < T.town.z1) continue;
       const h = tr.height(x, z);
       if (h < T.water + 1) continue;
+      if (Math.abs(x - creekX(z)) < 12) continue;
       if (Math.abs(tr.height(x + 3, z) - h) > 0.5 || Math.abs(tr.height(x, z + 3) - h) > 0.5) continue;
       if (g.world.roadDist && g.world.roadDist(x, z) < 5) continue;
       if (g.world.nearBuilding(x, z, 6)) continue;

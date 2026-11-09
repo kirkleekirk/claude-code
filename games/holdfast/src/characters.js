@@ -671,6 +671,10 @@ const ACTS = {
     grip(P, -0.1, -0.4 + Math.sin(t * 1.5) * 0.05, 0.42 + Math.sin(t * 1.5) * 0.08, 0, -0.55, 0.84);
     setArm(P, 'L', 0.6, 0.12, 0.3, 0.2, 1.1, 0);
   },
+  // behind the wheel: hands at ten and two, a glance into the turn
+  sit_drive(P, t, c, st) { sitLegs(P, c, st.seatH ?? 0.45, 1.5, 0.25); setArm(P, 'L', 1.05, 0.28, 0.35, 0.1, 0.75, 0); setArm(P, 'R', 1.05, 0.28, 0.35, 0.1, 0.75, 0); P.sP = -0.1; P.cP = 0.02; },
+  // a passenger: hands in the lap, looking out
+  sit_ride(P, t, c, st) { sitLegs(P, c, st.seatH ?? 0.45, 1.5, 0.3); setArm(P, 'L', 0.5, 0.12, 0.2, 0.2, 1.05, 0); setArm(P, 'R', 0.5, 0.12, 0.2, 0.2, 1.05, 0); P.sP = -0.08; },
   sit_chair(P, t, c, st) { sitLegs(P, c, st.seatH ?? 0.47); setArm(P, 'L', 0.55, 0.12, 0.15, 0.2, 1.0, 0); setArm(P, 'R', 0.55, 0.12, 0.15, 0.2, 1.0, 0); P.sP = -0.04; P.cP = 0; P.hY += wave(t, 0.25, c.zv.seed) * 0.3; },
   sit_eat(P, t, c, st) {
     sitLegs(P, c, st.seatH ?? 0.47);

@@ -26,8 +26,13 @@ export class Jobs {
       m.mode = 'mission'; m.job = job; m.jobT = 0; m.stop();
     }
     if (kind === 'run' || kind === 'scout') {
-      for (const m of team) { m.mode = 'away'; m.job = null; m.awayUntil = this.clock + (kind === 'scout' ? 4 + Math.random() * 2.5 : 3 + Math.random() * 2); m.runJob = kind === 'scout' ? 'scout' : true; }
-      this.soc.camp.log(kind === 'scout' ? `${names(team)} went out looking for survivors.` : `${names(team)} went out on a supply run.`, 'trip', { who: team.map((m) => m.person.name) });
+      // a car with gas parked at camp: they take it, go further, get back sooner
+      const car = this.game.vehicles && this.game.vehicles.campCar();
+      const k = car ? 0.6 : 1;
+      for (const m of team) { m.mode = 'away'; m.job = null; m.awayUntil = this.clock + (kind === 'scout' ? 4 + Math.random() * 2.5 : 3 + Math.random() * 2) * k; m.runJob = kind === 'scout' ? 'scout' : true; m.runCar = car ? car.id : null; }
+      if (car) this.game.vehicles.sendOut(car, team);
+      const how = car ? ` in the ${car.M.name.toLowerCase()}` : '';
+      this.soc.camp.log(kind === 'scout' ? `${names(team)} went out looking for survivors${how}.` : `${names(team)} went out on a supply run${how}.`, 'trip', { who: team.map((m) => m.person.name) });
       return job;
     }
     if (kind === 'recruit' && opts.target) opts.target.pitchBy = team[0];
@@ -336,6 +341,7 @@ export class Jobs {
     const hunt = m.role === 'hunter' && !m.runJob;
     if (m.runJob === 'scout') {
       m.runJob = false;
+      if (m.runCar && this.game.vehicles) { this.game.vehicles.carBack(m.runCar, m); m.runCar = null; }
       m.mode = c ? 'camp' : 'follow';
       if (c) { const a = Math.random() * Math.PI * 2; m.pos.set(c.x + Math.cos(a) * 14, 0, c.z + Math.sin(a) * 14); m.pos.y = this.game.physics.groundAt(m.pos.x, m.pos.z, this.game.world.terrain.height(m.pos.x, m.pos.z) + 0.6); m.visualY = m.pos.y; }
       addFatigue(m, 40 / (m.leader ? 0.3 : 1));
@@ -362,8 +368,15 @@ export class Jobs {
       // a few hours out always turns up something to eat or burn
       add([{ kind: 'res', id: 'food', n: 1 + Math.floor(Math.random() * 3) }, { kind: 'res', id: ['wood', 'metal', 'fuel'][Math.floor(Math.random() * 3)], n: 2 + Math.floor(Math.random() * 4) }]);
       const tables = ['kitchen', 'garage', 'bedroom', 'store', 'hardware', 'truck', 'car', 'supply_run'];
-      for (let i = 0; i < 3 + skill; i++) add(rollLoot(tables[Math.floor(Math.random() * tables.length)], 1.3));
+      // with a car they reach further and haul more (it fills the trunk, not just packs)
+      const car = m.runCar && this.game.vehicles ? this.game.vehicles.byId(m.runCar) : null;
+      for (let i = 0; i < 3 + skill + (car ? 2 : 0); i++) add(rollLoot(tables[Math.floor(Math.random() * tables.length)], 1.3));
+      if (car) {
+        const extra = rollLoot('supply_run', 1.2).concat([{ kind: 'res', id: ['wood', 'metal', 'food'][Math.floor(Math.random() * 3)], n: 3 + Math.floor(Math.random() * 4) }]);
+        for (const e of extra) if (e && e.n) { this.game.storage.put(e.kind, e.id, e.n, { mag: e.mag }); tally[e.kind + ':' + e.id] = (tally[e.kind + ':' + e.id] || 0) + e.n; }
+      }
     }
+    if (m.runCar && this.game.vehicles) { this.game.vehicles.carBack(m.runCar, m); m.runCar = null; }
     addFatigue(m, (hunt ? 30 : 45) / (m.leader ? 0.3 : 1));
     const hurt = Math.random() < 0.2 - skill * 0.03 ? maybeInjure(m, 'zombie', 40) : null;
     if (hurt) m.health = Math.max(m.maxHealth * 0.4, m.health - 20);

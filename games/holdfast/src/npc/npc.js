@@ -207,6 +207,8 @@ export class NPC {
     this.speaking = Math.max(0, this.speaking - dt);
     this.stagger = Math.max(0, this.stagger - dt);
     if (this.mode === 'away') { this.char.root.visible = false; this.items.group.visible = false; return true; }
+    // riding in a car: the car seats and animates them
+    if (this.riding) return true;
     // decide
     if (this.downed) {
       this.downT -= dt;

@@ -8,6 +8,7 @@ import { T } from './world/terrain.js';
 import { isTouch } from './platform.js';
 import { STATS, STAT_IDS, radarSVG } from './stats.js';
 import { SCARCITY, GUNS } from './items.js';
+import { W } from './world/layout.js';
 
 // points to spend on stats and traits; starting with fewer people gives more
 export const POOL = 6;
@@ -111,10 +112,11 @@ export function traitMods(traits) {
 }
 
 export const SPAWNS = [
-  { id: 'highway', name: 'Highway 34', at: [14, 2], risk: 'Medium', desc: 'Open road between the farms and town. A middle ground.' },
-  { id: 'hollis', name: 'Hollis Farm', at: [-174, -110], risk: 'Low', desc: 'A quiet farmhouse with a barn and machine shed. A long walk to town.' },
-  { id: 'price', name: 'Price Farm', at: [-56, -122], risk: 'Low', desc: 'A small cottage at the end of a gravel lane, by the woods.' },
-  { id: 'church', name: 'Bethel Church', at: [-118, 44], risk: 'Low', desc: 'A country church on the highway with room around it to build.' },
+  { id: 'crossing', name: "Carver's Crossing", at: [-460, 30], risk: 'Medium', desc: 'A crossroads hamlet halfway between the farms and town: a store, a few houses and the co-op elevator.' },
+  { id: 'hollis', name: 'Hollis Farm', at: [W(-174), -110], risk: 'Low', desc: 'A quiet farmhouse with a barn and machine shed, far out in the farm country.' },
+  { id: 'price', name: 'Price Farm', at: [W(-56), -122], risk: 'Low', desc: 'A small cottage at the end of a gravel lane, by the woods.' },
+  { id: 'church', name: 'Bethel Church', at: [W(-118), 44], risk: 'Low', desc: 'A country church on the highway with room around it to build.' },
+  { id: 'highway', name: 'Highway 34, by the Gas & Go', at: [14, 2], risk: 'High', desc: 'The highway just outside town. Close to supplies, close to trouble.' },
   { id: 'mainst', name: "Main Street, Harlan's Landing", at: [100, 0], risk: 'High', desc: 'Shops full of supplies. Full of the dead, too.' },
 ];
 
@@ -131,7 +133,7 @@ export function randomProfile() {
   return {
     name: `${pick(FIRST[model])} ${pick(LAST)}`, model,
     skin: pick(SKINS), hair: pick(HAIRS), shirt: pick(SHIRTS), pants: pick(PANTS),
-    traits: [], spawn: 'highway', autoName: true,
+    traits: [], spawn: 'crossing', autoName: true,
     background: 'deputy', stats: baseStats('deputy'), companions: 2, world: { supplies: 'scarce', dead: 'normal' },
   };
 }

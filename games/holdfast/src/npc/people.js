@@ -3,6 +3,7 @@
 // Two survivors may share a personality; within one camp no two share a
 // background, so their stories, skills and talk are their own.
 import { BG_BY_ID } from '../survivor.js';
+import { W } from '../world/layout.js';
 
 // Traits 0..1: temper, warmth, humor, bravery, honesty, social, discipline,
 // faith, greed, anxiety, optimism. tone picks the shared line pool.
@@ -70,7 +71,7 @@ export const BACKGROUNDS = [
       "I tell people {kin} got out on the school bus to Cape. I don't actually know that. I say it enough times and it gets easier to believe. Don't take that away from me." ],
     flavor: ["Smells like a Friday fish fry in here. Or I'm losing my mind.", "My feet ache like a double shift on a Sunday.", "You can feed six people on one can of beans if you know what you're doing.", "Nobody ever tipped the cook, you know that?"],
     ideas: [{ kind: 'cache', at: 'RIVER DINER', label: 'Diner walk-in pantry', table: 'food_cache', text: "The diner's walk-in had a dry pantry behind it. Sacks of flour, canned tomatoes, coffee. If nobody's broken in, that's a month of meals." }, { kind: 'build', what: 'grill', text: "Get me a grill and I'll make whatever we find taste like it came off a menu." }] },
-  { id: 'farmhand', job: 'Hired hand on the Dekker farm', role: 'farmer', skills: sk('0001011200'), kin: ['brother', 'father'], item: 'a pocketknife with a cracked bone handle', place: { name: 'Dekker Farm', at: [-238, 98] },
+  { id: 'farmhand', job: 'Hired hand on the Dekker farm', role: 'farmer', skills: sk('0001011200'), kin: ['brother', 'father'], item: 'a pocketknife with a cracked bone handle', place: { name: 'Dekker Farm', at: [W(-238), 98] },
     known: 'worked the Dekker place since high school',
     story: [
       "Worked for old man Dekker since I was sixteen. Planting, haying, fixing fence. I can tell you what's wrong with a field by smelling the dirt.",
@@ -78,7 +79,7 @@ export const BACKGROUNDS = [
       "Dekker went into the barn to check on the heifers and didn't come out right. I had to put him down with a hay fork. I can still hear the sound it made. I don't go in barns if I can help it.",
       "I knew where {kin} was that last week. Holed up in town. I didn't go. I told myself the roads were too bad. The roads were fine. I was scared." ],
     flavor: ["Hot as haying in August.", "Ground's too wet to plant. Too wet to do much of anything.", "You can't rush corn and you can't rush people.", "Rain in the morning, sailors take warning. Farmers just take a nap."],
-    ideas: [{ kind: 'cache', at: [-272, 88], label: 'Seed stock in the Dekker barn', table: 'seed_cache', text: "Dekker kept seed corn and bean seed in drums in the back of his barn. Plant that and we eat next year, not just this week." }, { kind: 'build', what: 'garden', text: "Give me a couple of garden beds. I'll have greens up in a week and potatoes by fall." }] },
+    ideas: [{ kind: 'cache', at: [W(-272), 88], label: 'Seed stock in the Dekker barn', table: 'seed_cache', text: "Dekker kept seed corn and bean seed in drums in the back of his barn. Plant that and we eat next year, not just this week." }, { kind: 'build', what: 'garden', text: "Give me a couple of garden beds. I'll have greens up in a week and potatoes by fall." }] },
   { id: 'firefighter', job: 'Volunteer firefighter and county road crew', role: 'guard', skills: sk('0102100110'), kin: ['wife', 'husband'], item: 'a brass fire department badge', place: { name: 'Water tower', at: [106, 118] },
     known: 'was a volunteer firefighter for Harlan’s Landing',
     story: [
@@ -115,7 +116,7 @@ export const BACKGROUNDS = [
       "I can make an engine run on almost anything. I've been thinking a generator could light this camp. I've also been thinking light is how they find you." ],
     flavor: ["That's not broke, it just needs persuading.", "Hand me that. No, the other one. The one I'm looking at.", "Diesel smell beats anything else in this world.", "Everything's fixable except people."],
     ideas: [{ kind: 'cache', at: [52, 14], label: 'Gas & Go underground tank', table: 'fuel_cache', text: "The Gas & Go has a tank under the lot with a hand-pump access. I know how to open it. That's more fuel than we can carry." }] },
-  { id: 'trucker', job: 'Long-haul trucker', role: 'scavenger', skills: sk('1011210000'), kin: ['ex-wife', 'twin brother'], item: 'a CB radio handset', place: { name: 'Highway 34', at: [-120, 38] },
+  { id: 'trucker', job: 'Long-haul trucker', role: 'scavenger', skills: sk('1011210000'), kin: ['ex-wife', 'twin brother'], item: 'a CB radio handset', place: { name: 'Highway 34', at: [W(-120), 38] },
     known: 'drove a rig coast to coast for twenty years',
     story: [
       "Twenty years on the road. Coast to coast, every truck stop between. I've slept in a cab more nights than in a bed.",
@@ -123,7 +124,7 @@ export const BACKGROUNDS = [
       "I was coming up 34 with a load of canned goods when traffic stopped. I watched it come down the line of cars like a wave. I jackknifed trying to turn around. Walked away. Trailer's probably still there.",
       "I had a girl in Tulsa and a woman in Memphis and neither knew about the other. Doesn't matter now. Funny how it still feels like it does." ],
     flavor: ["I've had worse coffee at a Flying J.", "Breaker, breaker. Nobody. Figures.", "You learn a lot about people at three in the morning at a truck stop.", "My back's shaped like a driver's seat."],
-    ideas: [{ kind: 'cache', at: [-215, 22], label: 'Jackknifed trailer on Highway 34', table: 'food_cache', text: "My trailer's still out on 34, west of the county road. Thirty thousand pounds of canned goods, if the dead haven't learned to use can openers." }, { kind: 'raidmod', mod: 'ambush', text: "Raiders move supplies on the highway around dawn. I've heard their engines. We set up where 34 bends and they'd never see it coming." }] },
+    ideas: [{ kind: 'cache', at: [W(-215), 22], label: 'Jackknifed trailer on Highway 34', table: 'food_cache', text: "My trailer's still out on 34, west of the county road. Thirty thousand pounds of canned goods, if the dead haven't learned to use can openers." }, { kind: 'raidmod', mod: 'ambush', text: "Raiders move supplies on the highway around dawn. I've heard their engines. We set up where 34 bends and they'd never see it coming." }] },
   { id: 'shop_teacher', job: 'High school shop teacher', role: 'builder', skills: sk('0020100320'), kin: ['wife', 'nephew'], item: 'a carpenter’s pencil behind the ear', place: null,
     known: 'taught shop class at the high school for twenty years',
     story: [
@@ -169,7 +170,7 @@ export const BACKGROUNDS = [
       "There's a houseboat on the far bank with my stash on it. Cash, mostly, which is worth nothing now. And something I owe a man I'll never see again." ],
     flavor: ["River's up. Catfish will be biting.", "On the boats we'd say: one hand for you, one for the boat.", "I can tie you nine knots and every one's useful.", "Water doesn't care about any of this."],
     ideas: [{ kind: 'cache', at: [196, -60], label: 'Riverwalk fish traps', table: 'food_cache', text: "Let me set trotlines off the riverwalk. Or better, there's a bait shop shed by the floodwall gate with traps and gear in it." }] },
-  { id: 'hunting_guide', job: 'Hunting and fishing guide', role: 'hunter', skills: sk('1002301003'), kin: ['father', 'daughter'], item: 'a turkey call carved from cedar', place: { name: 'the woods off Price Lane', at: [-30, -60] },
+  { id: 'hunting_guide', job: 'Hunting and fishing guide', role: 'hunter', skills: sk('1002301003'), kin: ['father', 'daughter'], item: 'a turkey call carved from cedar', place: { name: 'the woods off Price Lane', at: [W(-30), -60] },
     known: 'guided deer and turkey hunts in these hills',
     story: [
       "I took city folks out in these hills for deer and turkey. Showed them how to sit still, which most of them couldn't do.",
@@ -177,8 +178,8 @@ export const BACKGROUNDS = [
       "I was in a tree stand at dawn when it started. Watched a whole family walk through the woods below me, slow, wrong. I sat up there all day. Patience.",
       "I've taken a few of the living since. Men who would've killed us. I tracked them like deer. It wasn't hard. That's what scares me." ],
     flavor: ["Wind's out of the west. They'll smell us coming from the east.", "Deer don't look up. Neither do the dead.", "Sit still long enough and the world walks past you.", "Blood trail goes cold after rain."],
-    ideas: [{ kind: 'cache', at: [-34, -68], label: 'Deer stand cache', table: 'gun_cache', text: "I keep a cache in a box under my deer stand in the woods off Price Lane. A rifle, shells, jerky. Nobody knows it's there but me." }, { kind: 'raidmod', mod: 'night', text: "I've been watching their camp from the treeline. I know where their guards stand and when they piss. We go in from downwind after midnight." }] },
-  { id: 'vet', job: 'Large-animal veterinarian', role: 'medic', skills: sk('0201010200'), kin: ['wife', 'son'], item: 'a battered leather vet bag', place: { name: 'Hollis Farm', at: [-190, -105] },
+    ideas: [{ kind: 'cache', at: [W(-34), -68], label: 'Deer stand cache', table: 'gun_cache', text: "I keep a cache in a box under my deer stand in the woods off Price Lane. A rifle, shells, jerky. Nobody knows it's there but me." }, { kind: 'raidmod', mod: 'night', text: "I've been watching their camp from the treeline. I know where their guards stand and when they piss. We go in from downwind after midnight." }] },
+  { id: 'vet', job: 'Large-animal veterinarian', role: 'medic', skills: sk('0201010200'), kin: ['wife', 'son'], item: 'a battered leather vet bag', place: { name: 'Hollis Farm', at: [W(-190), -105] },
     known: 'was the county vet for cattle and horses',
     story: [
       "I was the vet for every cow, horse and stubborn goat in the county. Calving at three in the morning, arm up to the shoulder. Glamorous.",
@@ -232,7 +233,7 @@ export const BACKGROUNDS = [
       "The substation on Bluff Road has a backup generator and a fuel tank nobody's touched. I've known that the whole time. I didn't say anything because I didn't know if I could trust you." ],
     flavor: ["Never trust a wire you didn't de-energize yourself.", "Storm's coming. Can feel it in my knees.", "I've been higher up than anyone here, guaranteed.", "Squirrels caused more outages than storms. True story."],
     ideas: [{ kind: 'cache', at: [36, -230], label: 'Substation on Bluff Road', table: 'fuel_cache', text: "There's a co-op substation off Bluff Road with a diesel generator tank and spare cable. Fuel and metal, if we can get in." }, { kind: 'raidmod', mod: 'distraction', text: "Raiders run a generator at night. I can make it fail loud and bright. Every dead thing nearby will head straight for the noise." }] },
-  { id: 'elevator_op', job: 'Grain elevator operator', role: 'builder', skills: sk('0011010210'), kin: ['son', 'brother'], item: 'a moisture meter', place: { name: 'Hollis grain bins', at: [-218, -122] },
+  { id: 'elevator_op', job: 'Grain elevator operator', role: 'builder', skills: sk('0011010210'), kin: ['son', 'brother'], item: 'a moisture meter', place: { name: 'Hollis grain bins', at: [W(-218), -122] },
     known: 'ran the grain elevator during harvest',
     story: [
       "I ran the elevator during harvest. Trucks lined up for a mile, everybody in a hurry, everybody sure their corn was drier than it was.",
@@ -240,7 +241,7 @@ export const BACKGROUNDS = [
       "We had a man fall into a bin that September before all this. Grain takes you like quicksand. I think about him more than the people I lost to the dead. Isn't that strange.",
       "The Hollis bins still have corn in them. Thousands of bushels. Dry, if the roofs held. That's not hope, that's arithmetic." ],
     flavor: ["Fifteen percent moisture or it'll rot. Same with people.", "Harvest is the only time this county ever hurried.", "Never walk on grain. Never.", "Everything weighs something."],
-    ideas: [{ kind: 'cache', at: [-214, -126], label: 'Corn in the Hollis bins', table: 'food_cache', text: "The grain bins on the Hollis place. Dry corn keeps for years. We grind it, we eat. I know how to get in from the top hatch without falling in." }] },
+    ideas: [{ kind: 'cache', at: [W(-214), -126], label: 'Corn in the Hollis bins', table: 'food_cache', text: "The grain bins on the Hollis place. Dry corn keeps for years. We grind it, we eat. I know how to get in from the top hatch without falling in." }] },
   { id: 'teacher', job: 'Retired schoolteacher', role: 'counselor', skills: sk('1100000020'), kin: ['late husband', 'former student'], item: 'reading glasses on a beaded chain', place: { sign: 'POST OFFICE' },
     known: 'taught third grade in Harlan’s Landing for thirty-five years',
     story: [
@@ -250,7 +251,7 @@ export const BACKGROUNDS = [
       "I've buried a lot of former students these last weeks. I keep a list in my head. I say the names before I sleep. Somebody has to." ],
     flavor: ["Inside voices, please. The dead have good ears.", "I've handled worse than this. I've handled field trips.", "Everyone learns. Some people just take longer.", "Please and thank you cost nothing."],
     ideas: [{ kind: 'build', what: 'table', text: "We should eat together. A real table, everyone at it, at least once a day. It matters more than you'd think." }] },
-  { id: 'emt', job: 'EMT on the county ambulance', role: 'medic', skills: sk('0200210000'), kin: ['girlfriend', 'dad'], item: 'trauma shears', place: { name: 'County Road 210', at: [-150, -20] },
+  { id: 'emt', job: 'EMT on the county ambulance', role: 'medic', skills: sk('0200210000'), kin: ['girlfriend', 'dad'], item: 'trauma shears', place: { name: 'County Road 210', at: [W(-150), -20] },
     known: 'drove the county ambulance',
     story: [
       "I drove the county ambulance. Half our calls were car wrecks on 34 and the other half were old folks who fell.",
@@ -258,7 +259,7 @@ export const BACKGROUNDS = [
       "We took a bite call on County Road 210. Patient woke up in the back of the rig while I was starting a line. My partner held the door shut while I got out the side. He didn't make it out.",
       "Our rig is still out on 210 with the doors closed. I know what's in the back. I've wanted to go back for the supplies. I haven't wanted to open that door." ],
     flavor: ["ABCs. Airway, breathing, circulation. Then panic.", "You're fine. Mostly fine. Sit down.", "I've seen worse on a Saturday night on 34.", "Pressure on the wound. Harder than that."],
-    ideas: [{ kind: 'cache', at: [-148, -30], label: 'Ambulance on County Road 210', table: 'med_cache', text: "My ambulance is on County Road 210. Full trauma kit, oxygen, meds. Somebody needs to open the back. Somebody who isn't me." }] },
+    ideas: [{ kind: 'cache', at: [W(-148), -30], label: 'Ambulance on County Road 210', table: 'med_cache', text: "My ambulance is on County Road 210. Full trauma kit, oxygen, meds. Somebody needs to open the back. Somebody who isn't me." }] },
   { id: 'framer', job: 'Construction framer', role: 'builder', skills: sk('0001100310'), kin: ['brother', 'daughter'], item: 'a framing hammer with his name burned in', place: { sign: 'HARDWARE' },
     known: 'framed half the new houses in the county',
     story: [
@@ -286,7 +287,7 @@ export const BACKGROUNDS = [
       "The guy running the raiders out there? We were inside together. He owes me. Or I owe him. Depends who you ask. Either way, he'll talk to me." ],
     flavor: ["Every lock's just a question.", "Inside, you learn who to trust fast. Same here.", "Don't ask where I got it.", "Six years taught me how to wait."],
     ideas: [{ kind: 'raidmod', mod: 'inside', text: "I know their boss from Bonne Terre. Let me walk in there and talk trade. While I keep them talking, you get to that stash. They'll never see it coming." }] },
-  { id: 'beekeeper', job: 'Beekeeper and orchard keeper', role: 'farmer', skills: sk('1100002100'), kin: ['wife', 'grandson'], item: 'a smoker tin', place: { name: 'Price Farm', at: [-72, -131] },
+  { id: 'beekeeper', job: 'Beekeeper and orchard keeper', role: 'farmer', skills: sk('1100002100'), kin: ['wife', 'grandson'], item: 'a smoker tin', place: { name: 'Price Farm', at: [W(-72), -131] },
     known: 'kept bees and an orchard out by the Price place',
     story: [
       "Forty hives and an acre of apple trees. Sold honey at the farmers market on Saturdays.",
@@ -294,8 +295,8 @@ export const BACKGROUNDS = [
       "The bees knew. Hives went quiet a week before. Then whole colonies flew off. I should have packed up the truck then.",
       "I still visit the hives when I'm out. Talk to them. Tell them who's died. It's an old custom. Telling the bees. Otherwise they leave." ],
     flavor: ["Slow movements. Bees and dead things both like slow movements.", "Honey never spoils. Three thousand years in a tomb, still good.", "Apple blossoms in May. We'll see if anyone's here for them.", "Busy as a bee is not a compliment, it's a warning."],
-    ideas: [{ kind: 'cache', at: [-84, -118], label: 'Honey house at the Price place', table: 'food_cache', text: "My honey house behind the Price place. Buckets of honey, jars, wax. Honey doesn't spoil. It's medicine too." }, { kind: 'build', what: 'garden', text: "Plant me a garden and I'll make it bloom. Squash, beans, flowers for whatever bees are left." }] },
-  { id: 'mail_carrier', job: 'Rural mail carrier', role: 'scavenger', skills: sk('0000030011'), kin: ['husband', 'niece'], item: 'a mail route map, annotated', place: { name: 'County Road 210', at: [-150, 100] },
+    ideas: [{ kind: 'cache', at: [W(-84), -118], label: 'Honey house at the Price place', table: 'food_cache', text: "My honey house behind the Price place. Buckets of honey, jars, wax. Honey doesn't spoil. It's medicine too." }, { kind: 'build', what: 'garden', text: "Plant me a garden and I'll make it bloom. Squash, beans, flowers for whatever bees are left." }] },
+  { id: 'mail_carrier', job: 'Rural mail carrier', role: 'scavenger', skills: sk('0000030011'), kin: ['husband', 'niece'], item: 'a mail route map, annotated', place: { name: 'County Road 210', at: [W(-150), 100] },
     known: 'drove every mail route in the county',
     story: [
       "Rural route carrier. Every road in this county, every mailbox, every dog that chased the truck.",
@@ -303,7 +304,7 @@ export const BACKGROUNDS = [
       "I was halfway through my route when the radio said stay inside. I kept delivering. People were still waving at me from their porches. Some of them were still people.",
       "I know which houses ordered ammunition, which ordered prescriptions, which ordered gun safes. I've been using that. I know it's invading their privacy. They're dead." ],
     flavor: ["Neither rain nor sleet nor the walking dead.", "That house got a package every Tuesday. Never knew what.", "I know a back way.", "Every dog on 210 hated me."],
-    ideas: [{ kind: 'cache', at: [-240, 104], label: 'Gun safe the mail route remembers', table: 'gun_cache', text: "The Dekker house got a gun safe delivered two summers ago. Heavy one. My knees still remember it." }, { kind: 'raidmod', mod: 'scout', text: "I know every back road around their camp. Let me map it. We'll come in the way they don't watch." }] },
+    ideas: [{ kind: 'cache', at: [W(-240), 104], label: 'Gun safe the mail route remembers', table: 'gun_cache', text: "The Dekker house got a gun safe delivered two summers ago. Heavy one. My knees still remember it." }, { kind: 'raidmod', mod: 'scout', text: "I know every back road around their camp. Let me map it. We'll come in the way they don't watch." }] },
   { id: 'warden', job: 'State conservation officer', role: 'hunter', skills: sk('0002301002'), kin: ['wife', 'twin sister'], item: 'binoculars with a cracked lens', place: { name: 'the river bluffs', at: [150, -190] },
     known: 'was the game warden for the county',
     story: [

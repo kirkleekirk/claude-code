@@ -6,11 +6,16 @@
 import * as THREE from 'three';
 import { makeNoise2D, smoothstep, clamp, lerp } from '../util.js';
 
+// The farm country lies a long way west of town: everything out there sits
+// FARM_SHIFT metres west of where the old, smaller county had it, and the
+// land around Carver's Crossing (NEW_LAND) fills the gap in between.
+export const FARM_SHIFT = 640;
+export const NEW_LAND = { x0: -26 - FARM_SHIFT, x1: -26 };
 export const T = {
   // full heightfield extent (includes scenery beyond the play area)
-  x0: -448, x1: 640, z0: -384, z1: 384, res: 2,
+  x0: -448 - FARM_SHIFT, x1: 640, z0: -384, z1: 384, res: 2,
   // playable bounds (invisible walls)
-  play: { x0: -312, x1: 222, z0: -248, z1: 248 },
+  play: { x0: -312 - FARM_SHIFT, x1: 222, z0: -248, z1: 248 },
   water: 0,
   town: { x0: 66, x1: 190, z0: -134, z1: 134 },
   floodwallX: 190,
@@ -39,9 +44,39 @@ export function riverNear(z) {
 }
 export function riverFar(z) { return 334 + 16 * Math.sin(z / 170) + 6 * n4(z / 60, 7.3); }
 
+// Turkey Creek: a shallow wooded valley winding north-south through the new land
+export function creekX(z) { return -312 + 24 * Math.sin(z / 96 + 0.6) + 9 * Math.sin(z / 37 + 2.1); }
+export const CREEK = { half: 30, depth: 5.2, channel: 2.6, chanHalf: 3.2 };
+const CROSSING_AT = [-470, -10], CROSSING_Y = 22.5;
+// the rolling hills of the farm country (no town, no river)
+function hillsAt(x, z) { return 25 + 11 * n1(x / 230, z / 230) + 5 * n2(x / 95 + 3, z / 95) + 1.4 * n3(x / 33, z / 33); }
+// the land between: the same kind of hills, a little broader and lower, with
+// the creek valley cut through it; it runs into the real ground on both sides
+function newLandHeight(x, z) {
+  let h = 23 + 9 * n1((x + 4100) / 250, (z - 900) / 250) + 4 * n2((x + 4100) / 105, z / 105 + 7) + 1.3 * n3(x / 34 + 40, z / 34);
+  // Carver's Crossing sits on a broad level shelf of ground
+  const cd = Math.hypot(x - CROSSING_AT[0], (z - CROSSING_AT[1]) * 0.85);
+  h = lerp(h, CROSSING_Y, 1 - smoothstep(60, 125, cd));
+  const d = Math.abs(x - creekX(z));
+  h -= CREEK.depth * (1 - smoothstep(CREEK.chanHalf, CREEK.half, d));
+  h -= CREEK.channel * (1 - smoothstep(CREEK.chanHalf * 0.4, CREEK.chanHalf + 1.5, d));
+  const band = 120;
+  if (x < (NEW_LAND.x0 + NEW_LAND.x1) / 2) {
+    const e = smoothstep(NEW_LAND.x0, NEW_LAND.x0 + band, x);
+    return lerp(hillsAt(x + FARM_SHIFT, z), h, e);
+  }
+  const e = 1 - smoothstep(NEW_LAND.x1 - band, NEW_LAND.x1, x);
+  return lerp(oldBaseHeight(x, z), h, e);
+}
 export function baseHeight(x, z) {
+  if (x <= NEW_LAND.x0) return oldBaseHeight(x + FARM_SHIFT, z);
+  if (x >= NEW_LAND.x1) return oldBaseHeight(x, z);
+  return newLandHeight(x, z);
+}
+// the county as it was laid out before the farm country moved west
+function oldBaseHeight(x, z) {
   // rolling hills
-  let hills = 25 + 11 * n1(x / 230, z / 230) + 5 * n2(x / 95 + 3, z / 95) + 1.4 * n3(x / 33, z / 33);
+  let hills = hillsAt(x, z);
   // hills flatten a little toward the town side and rise into bluffs north & south of town
   const east = smoothstep(-40, 90, x);
   const bluff = smoothstep(120, 190, Math.abs(z)) * smoothstep(40, 150, x);

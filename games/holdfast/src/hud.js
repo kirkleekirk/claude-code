@@ -184,6 +184,12 @@ export class HUD {
         <h3>People</h3>
         <p>You're not alone out here. Walk up to someone and press <b>E</b> to talk. Your people have their own personalities and pasts, and they'll tell you more as they come to trust you. At camp they keep their own hours: cooking, working, eating together, arguing, telling stories by the fire. Give them jobs that suit them, take one or two along on runs, and listen when they have a plan. <b>J</b> opens the camp: who's who, the journal, what you've overheard, and your plans.</p>
         <p>Strangers camp out on the roads. Some will join you if you earn it; some only know things. Raider crews set up after a while and grow. Rob them carefully: your people have ideas about how.</p>
+        <h3>Cars</h3>
+        <p>The county is big: Harlan's Landing on the river, Carver's Crossing out on the highway, and the farms past Turkey Creek. Plenty of cars were left where they stopped. Walk up to one and press <b>E</b> at a door to get in; your followers pile in with you. Most have a little gas; refuel at the filler cap with <b>Fuel</b> from your pack (or from camp storage at camp) and patch up a battered one at the front with <b>Metal</b>. Searching gets easier too: what doesn't fit in your pack goes in the trunk of the car you came in, and pulling into camp unloads it. Wrecks won't run again, but you can search them and strip them for scrap. A running car with some gas parked at camp lets a supply run or a search for survivors go further and come back sooner. Cars you've used show on the map.</p>
+        <table class="keys">
+          <tr><td>W / S</td><td>Accelerate / brake, then reverse</td></tr><tr><td>A / D</td><td>Steer</td></tr><tr><td>Space</td><td>Handbrake</td></tr>
+          <tr><td>E</td><td>Get in / get out</td></tr><tr><td>F</td><td>Headlights</td></tr><tr><td>Q</td><td>Horn (the dead hear it)</td></tr>
+        </table>
         <h3>Controls</h3>
         <table class="keys">
           <tr><td>W A S D</td><td>Move</td></tr><tr><td>Mouse</td><td>Look (click the game to capture the mouse)</td></tr>
@@ -195,6 +201,7 @@ export class HUD {
         </table>
         <h3>On a phone</h3>
         <p><b>Top view</b> shows your whole group from above while everyone carries on by themselves. Tap people (or their cards) to pick them, then tap the ground to send them there, tap the dead or raiders to send them in, or use the orders: send on a job (scavenge a building, fetch a plan's cache, raid a crew, a supply run, recruit a stranger, look for survivors), go home, rest, get patched up, hold. Tap someone's pentagon for their stats. <b>Take control</b> drops you into anyone. Drag to look around, pinch to zoom, twist two fingers to turn.</p>
+        <p>Driving: the stick steers (sideways) and drives (up to go, down to brake and reverse). <b>Brake</b> is the handbrake, <b>Horn</b> sounds it, <b>Exit</b> gets you out and <b>Light</b> works the headlights. Drag the right side to look around.</p>
         <p>In third person the left side of the screen moves and the right side looks. The round buttons hit, use, jump, aim, crouch, run and reload. The pills at the top go to the top view, swap weapons, patch you up and turn on the light; <b>More</b> has your pack, everyone's stats (People), the camp, the map, the claim flag and building.</p>
         <h3>Credits</h3>
         <p class="note">Character models, both CC BY 4.0, rigged and animated in-game:

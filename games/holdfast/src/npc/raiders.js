@@ -7,7 +7,7 @@
 import { Structure } from '../building/structure.js';
 import { stationsFor } from './stations.js';
 import { makePerson, BACKGROUND_BY_ID } from './people.js';
-import { T } from '../world/terrain.js';
+import { T, creekX } from '../world/terrain.js';
 import { FIELDS } from '../world/layout.js';
 
 // in a planted field (crops would grow up through the tents)
@@ -54,6 +54,8 @@ export class Raiders {
       for (let x = P.x0 + 30; x < Math.min(P.x1 - 30, T.town.x0 - 25); x += 6) for (let z = P.z0 + 30; z < P.z1 - 30; z += 6) {
         const h = tr.height(x, z);
         if (h < T.water + 1.5) continue;
+        // not down in Turkey Creek's channel
+        if (Math.abs(x - creekX(z)) < 22) continue;
         let slope = 0;
         for (const [dx, dz] of [[11, 0], [-11, 0], [0, 11], [0, -11], [8, 8], [-8, -8], [8, -8], [-8, 8]]) slope = Math.max(slope, Math.abs(tr.height(x + dx, z + dz) - h));
         if (slope > 3) continue;

@@ -245,10 +245,12 @@ export class CommandView {
       const odds = soc.jobs.pitchOdds(best, t);
       opts.push([`Recruit ${t.person.name} (${Math.round(Math.hypot(t.pos.x - c.x, t.pos.z - c.z))} m ${compassOf(t.pos.x - c.x, t.pos.z - c.z)}, ${soc.jobs.oddsWord(odds)})`, () => this.sendRecruit(team, t)]);
     }
-    opts.push(['Look for survivors (a few hours)', () => this.sendJob(team, 'scout', {})]);
+    const car = this.game.vehicles && this.game.vehicles.campCar();
+    const inCar = car ? ` · takes the ${car.M.name.toLowerCase()}` : '';
+    opts.push([`Look for survivors (a few hours${inCar})`, () => this.sendJob(team, 'scout', {})]);
     opts.push(['Scavenge a building…', () => { this.pickMode = { kind: 'scavenge', team }; this.showPick('Tap a building to scavenge.'); }]);
     opts.push(['Go somewhere and hold…', () => { this.pickMode = { kind: 'goto', team }; this.showPick('Tap where they should go.'); }]);
-    opts.push(['Supply run (a few hours)', () => this.sendJob(team, 'run', {})]);
+    opts.push([`Supply run (a few hours${inCar})`, () => this.sendJob(team, 'run', {})]);
     const r = this.$('cmd-info').getBoundingClientRect();
     this.openMenu(r.left + r.width / 2, r.top, `Send ${team.length > 1 ? team.length + ' people' : team[0].first}`, opts);
   }
@@ -347,7 +349,7 @@ export class CommandView {
       if (P.size === 2) {
         const gnow = this.twoFinger();
         if (this.gesture) {
-          this.cam.dist = Math.max(12, Math.min(260, this.cam.dist * this.gesture.d / gnow.d));
+          this.cam.dist = Math.max(12, Math.min(330, this.cam.dist * this.gesture.d / gnow.d));
           let da = gnow.a - this.gesture.a;
           while (da > Math.PI) da -= Math.PI * 2;
           while (da < -Math.PI) da += Math.PI * 2;
@@ -374,7 +376,7 @@ export class CommandView {
     };
     cv.addEventListener('pointerup', up);
     cv.addEventListener('pointercancel', (e) => { P.delete(e.pointerId); this.gesture = null; });
-    cv.addEventListener('wheel', (e) => { if (this.active && !this.game.buildMode.active) this.cam.dist = Math.max(12, Math.min(260, this.cam.dist * (e.deltaY > 0 ? 1.12 : 0.89))); }, { passive: true });
+    cv.addEventListener('wheel', (e) => { if (this.active && !this.game.buildMode.active) this.cam.dist = Math.max(12, Math.min(330, this.cam.dist * (e.deltaY > 0 ? 1.12 : 0.89))); }, { passive: true });
   }
   twoFinger() {
     const [a, b] = [...this.ptrs.values()];

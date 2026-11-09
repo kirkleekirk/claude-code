@@ -11,13 +11,35 @@ export function updateWind(dt, wind) {
   windUniforms.uWind.value = lerp(windUniforms.uWind.value, wind, Math.min(1, dt * 0.5));
 }
 
+// Cars flatten the grass under them: up to four nearby cars as
+// (x, z, cos yaw, sin yaw) and (half length, half width).
+export const carFlat = {
+  uCarA: { value: [0, 1, 2, 3].map(() => new THREE.Vector4(1e6, 1e6, 1, 0)) },
+  uCarB: { value: [0, 1, 2, 3].map(() => new THREE.Vector4(0, 0, 0, 0)) },
+};
+const FLATTEN = `
+  {
+    vec2 gp = vec2(instanceMatrix[3][0], instanceMatrix[3][2]);
+    for (int i = 0; i < 4; i++) {
+      vec2 d = gp - uCarA[i].xy;
+      float lx = d.x * uCarA[i].z - d.y * uCarA[i].w, lz = d.x * uCarA[i].w + d.y * uCarA[i].z;
+      vec2 q = abs(vec2(lx, lz)) - uCarB[i].yx;
+      float out_ = max(q.x, q.y);
+      if (out_ < 0.6) {
+        float k = smoothstep(0.6, -0.2, out_);
+        transformed.y *= 1.0 - 0.85 * k;
+        transformed.xz += normalize(d + 1e-4) * position.y * 0.5 * k;
+      }
+    }
+  }`;
 // Inject sway into a material. `heightScale` = metres at which sway reaches full.
-function addWind(mat, heightScale, amp, instanced = true) {
+function addWind(mat, heightScale, amp, instanced = true, flatten = false) {
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = windUniforms.uTime;
     sh.uniforms.uWind = windUniforms.uWind;
+    if (flatten) Object.assign(sh.uniforms, carFlat);
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uTime; uniform float uWind;')
+      .replace('#include <common>', '#include <common>\nuniform float uTime; uniform float uWind;' + (flatten ? '\nuniform vec4 uCarA[4]; uniform vec4 uCarB[4];' : ''))
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         {
           vec3 ip = ${instanced ? 'vec3(instanceMatrix[3][0], 0.0, instanceMatrix[3][2])' : '(modelMatrix * vec4(position, 1.0)).xyz'};
@@ -27,9 +49,9 @@ function addWind(mat, heightScale, amp, instanced = true) {
           float s = sin(ph) * 0.6 + sin(ph * 2.3 + 1.7) * 0.3;
           transformed.x += s * ${amp.toFixed(3)} * k * (0.4 + uWind);
           transformed.z += cos(ph * 0.9) * ${amp.toFixed(3)} * 0.6 * k * (0.4 + uWind);
-        }`);
+        }${flatten ? FLATTEN : ''}`);
   };
-  mat.customProgramCacheKey = () => 'wind' + heightScale + amp + instanced;
+  mat.customProgramCacheKey = () => 'wind' + heightScale + amp + instanced + flatten;
 }
 
 // ---------------- tree archetypes ----------------
@@ -365,7 +387,7 @@ export class GrassField {
     this.radius = quality.level === 'low' ? 26 : 38;
     this.accept = acceptFn; this.height = heightFn;
     const tex = grassTuftTexture(false), texD = grassTuftTexture(true);
-    const mk = (t) => { const m = new THREE.MeshStandardMaterial({ map: t, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 1, vertexColors: true }); addWind(m, 0.7, 0.08); return m; };
+    const mk = (t) => { const m = new THREE.MeshStandardMaterial({ map: t, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 1, vertexColors: true }); addWind(m, 0.7, 0.08, true, true); return m; };
     this.meshes = [new THREE.InstancedMesh(crossedQuads(0.9, 0.7), mk(tex), this.count), new THREE.InstancedMesh(crossedQuads(0.9, 0.75), mk(texD), this.count)];
     for (const m of this.meshes) { m.frustumCulled = false; m.receiveShadow = true; m.count = 0; scene.add(m); }
     this.center = new THREE.Vector3(1e9, 0, 0);

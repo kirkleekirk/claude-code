@@ -5,10 +5,15 @@ Decay but with an open map and free-form base building. Instead of fixed base
 sites, you plant a **claim flag** anywhere and build inside the area it marks
 out, on a 2 m grid, from wall panels you can design yourself.
 
-The first map is **Bridger County**: rolling farm hills in the west (three
-farmsteads, a country church, corn and bean fields, county roads) and the
-river town of **Harlan's Landing** in the east (brick downtown on Main St,
-residential streets, a church, a water tower, a floodwall on the river).
+The first map is **Bridger County**, about 1.2 km across: rolling farm
+hills in the far west (three farmsteads, a country church, corn and bean
+fields, county roads), the river town of **Harlan's Landing** in the east
+(brick downtown on Main St, residential streets, a church, a water tower, a
+floodwall on the river), and between them 640 m of open country along
+Highway 34: **Turkey Creek** winding south through its valley under the
+road culverts, three more farms (Ostrander, Lindqvist and Kessler), and the
+hamlet of **Carver's Crossing** (a general store and post office, a co-op
+grain elevator, a handful of houses and the gravel Carver Road).
 
 Every building in the world is made from the same grid pieces the player
 builds with, so a house inside your claim can be altered or torn down and
@@ -52,10 +57,20 @@ connection.
 | M | Map |
 | Esc | Menu |
 
+| Driving | |
+| --- | --- |
+| E | Get in at a door / get out |
+| W / S | Accelerate / brake, then reverse |
+| A / D | Steer |
+| Space | Handbrake |
+| F | Headlights |
+| Q | Horn (the dead hear it) |
+
 **Phones:** the left side of the screen moves, the right side looks; the
 round buttons hit, use, jump, aim, crouch, run and reload. The pills at the
 top switch to the top view, swap weapons, patch up and toggle the light;
-More holds Pack, Camp, Map, Claim and Build.
+More holds Pack, Camp, Map, Claim and Build. Behind the wheel the stick
+steers and drives, and the round buttons become Brake, Exit and Horn.
 
 ## Starting out
 
@@ -113,6 +128,31 @@ scout rifle and a heavy scoped long rifle).
 remove), click or tap to place, R rotates, F flips a wall inside/out, M
 mirrors it, E / Q change floor, X removes. The **Wall designer** paints your
 own wall panels (solid, window, door, open cells on an 8 × 12 grid).
+
+## Cars
+
+Pickups, sedans and wood-panelled station wagons were left where they
+stopped: angled in at the curb on Main St, in farmyards, at the Crossing's
+store, piled up on the highway. Most still run if they have gas (each has a
+tank that empties with distance); wrecks never will, but can be searched
+and stripped for scrap metal. Refuel at the filler cap with Fuel from your
+pack (or camp storage at camp) and patch up a battered car at the front
+with Metal. Crashes and the dead dent the body; hit something hard enough
+and you get hurt too. Driving through the dead knocks them flat.
+
+Your followers ride with you (two seats in a pickup, four in a sedan or
+wagon). Loot that doesn't fit your pack goes in the trunk of the car you
+came in, and pulling into camp unloads it into storage. A running car with
+gas parked inside your claim lets a supply run or a search for survivors go
+further and come back sooner with more. Cars you've used are marked on the
+map, and every car's place, fuel, damage and trunk are saved.
+
+The models are built in code: side profiles extruded with rounded edges and
+real wheel arches, open cabins with pillars, glass, seats and a dashboard
+(so you can see who's driving), chrome, lamps that light up at night, door
+seams, mirrors and plates. Each car is one mesh plus its glass, with a tiny
+region texture telling paint, chrome, rubber, lenses and wood apart, and a
+shader that adds mud, rust on the wrecks and woodgrain.
 
 ## Developer checks
 

@@ -261,6 +261,8 @@ export class Player {
   }
   damage(n, source) {
     if (this.dead || this.godMode) return;
+    // behind the wheel the car takes the blows (a crash still hurts you)
+    if (this.vehicle && !(source && source.crash)) { this.vehicle.takeHit(n * 0.6); this.hurtFlash = 0.15; return; }
     const b = this.body;
     // in the top view the body looks after itself
     if (this.released && b) return b.damage(n, source);
@@ -269,7 +271,7 @@ export class Player {
     if (this.game.hud) this.game.hud.hurt();
     // some hits leave a mark that lasts
     if (b && this.health > 0) {
-      const how = source == null ? 'fall' : source.hurt || source.chaseSpeed ? 'zombie' : source.gear && source.weapon === 'gun' ? 'shot' : 'melee';
+      const how = source == null || source.crash ? 'fall' : source.hurt || source.chaseSpeed ? 'zombie' : source.gear && source.weapon === 'gun' ? 'shot' : 'melee';
       const inj = maybeInjure(b, how, n);
       if (inj && this.game.hud) this.game.hud.toast(`${b.first}: ${inj.name}`, 3);
     }

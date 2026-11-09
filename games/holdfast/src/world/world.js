@@ -1,7 +1,7 @@
 // World generation: terrain stamps, structures, roads, props and vegetation.
 import * as THREE from 'three';
 import { Terrain, T, terrainMaterial, townPlane } from './terrain.js';
-import { STREETS, ROADS, FARMS, FIELDS, WOODS, TOWN_LOTS, FEATURES } from './layout.js';
+import { STREETS, ROADS, FARMS, FIELDS, WOODS, TOWN_LOTS, FEATURES, CROSSING, CREEK_WOODS, W } from './layout.js';
 import { roadCentreline, buildRoadRibbon, buildTownStreets, buildTownMarkings, adjustSurface } from './roads.js';
 import { GeoBuilder, rgb } from '../geom.js';
 import { buildingMaterial } from '../atlas.js';
@@ -13,7 +13,7 @@ import { CELL, STORY, HALF_T, CELL_DOOR, wallGridE, shapeGrid as shapeGridOf } f
 const HALF_T_STEP = 0.1;
 import { smoothstep, clamp, mulberry32, makeNoise2D, catmullRom } from '../util.js';
 import { Trees, TREE, buildCrops, buildClumps, GrassField, canopyRadius } from './vegetation.js';
-import { riverFar } from './terrain.js';
+import { riverFar, creekX, CREEK, NEW_LAND } from './terrain.js';
 
 const noise = makeNoise2D(2024);
 
@@ -62,6 +62,7 @@ export class World {
     P('Raising buildings', 0.25); await tick();
     this.placeTown();
     this.placeFarms();
+    this.placeCrossing();
     for (const S of this.structures) {
       this.addSteps(S);
       const v = validateReachability(S);
@@ -86,6 +87,12 @@ export class World {
         const start = nearestOnPoly(catmullRom(hwy.pts, 6), end[0], end[1]);
         drives.push({ name: 'Bethel Church lane', type: 'gravel', width: 3.0, pts: [start, end], endGround: true });
       }
+    }
+    // lanes that leave another road start exactly on it
+    for (const r of ROADS) {
+      if (!r.from) continue;
+      const host = ROADS.find((o) => o.name === r.from);
+      if (host) r.pts = [nearestOnPoly(catmullRom(host.pts, 6), r.pts[1][0], r.pts[1][1]), ...r.pts.slice(1)];
     }
     this.roads = [...ROADS, ...drives];
     // profile in priority order: each road is pinned to the ones before it
@@ -216,6 +223,7 @@ export class World {
     if (this.inOccupied(x, z, occM)) return false;
     if (this.onStreet(x, z, 1.5) || this.inLot(x, z)) return false;
     if (x > T.floodwallX - 4 && x < 205 && Math.abs(z) < T.town.z1 + 4) return false;
+    if (x > NEW_LAND.x0 && x < NEW_LAND.x1 && Math.abs(x - creekX(z)) < CREEK.chanHalf + 1) return false;
     void p;
     return true;
   }
@@ -245,6 +253,17 @@ export class World {
         const x = w.x + Math.cos(a) * r, z = w.z + Math.sin(a) * r;
         plant(x, z, rng() < 0.2 ? [TREE.CEDAR, TREE.CEDAR2, TREE.SHRUB] : broad, 0.85, 1.3);
       }
+    }
+    // Turkey Creek's banks: cottonwoods and maples along its course
+    for (const cz of CREEK_WOODS) {
+      const cx = creekX(cz);
+      const n = 18 + Math.floor(rng() * 8);
+      for (let i = 0; i < n; i++) {
+        const z = cz + (rng() - 0.5) * 34, side = rng() < 0.5 ? -1 : 1;
+        const x = creekX(z) + side * (CREEK.chanHalf + 1.5 + rng() * 15);
+        plant(x, z, rng() < 0.15 ? [TREE.CEDAR, TREE.SHRUB] : [TREE.COTTON, TREE.MAPLE, TREE.OAK, TREE.COTTON, TREE.MAPLE_FALL], 0.85, 1.3);
+      }
+      void cx;
     }
     // fence-row tree lines along field edges
     for (const f of FIELDS) {
@@ -295,14 +314,14 @@ export class World {
       }
     }
     // scattered field-edge & pasture trees
-    for (let i = 0; i < 260; i++) {
+    for (let i = 0; i < 700; i++) {
       const x = T.play.x0 + rng() * (60 - T.play.x0), z = T.play.z0 + rng() * (T.play.z1 - T.play.z0);
       const f = this.inField(x, z, 2);
       if (f && f.crop !== 'pasture') continue;
       plant(x, z, [TREE.OAK, TREE.OAK2, TREE.COTTON, TREE.SHRUB, TREE.CEDAR, TREE.OAK_FALL], 0.8, 1.3);
     }
     // scenery ring beyond the play area (west, north, south)
-    for (let i = 0; i < 900; i++) {
+    for (let i = 0; i < 1300; i++) {
       const x = T.x0 + rng() * (T.x1 - T.x0), z = T.z0 + rng() * (T.z1 - T.z0);
       const inside = x > T.play.x0 - 10 && x < T.play.x1 + 10 && z > T.play.z0 - 10 && z < T.play.z1 + 10;
       if (inside || tr.height(x, z) < 1.5) continue;
@@ -338,6 +357,7 @@ export class World {
       if (this.inTownGrid(x, z) && Math.abs(z) < T.town.z1 - 6) return r < 0.04 ? 0 : -1; // mown lawns
       if (this.roadDist(x, z) < 2.8) return -1;
       if (x > T.floodwallX - 2 && Math.abs(z) < T.town.z1 + 8) return -1; // riprap bank
+      if (x > NEW_LAND.x0 && x < NEW_LAND.x1 && Math.abs(x - creekX(z)) < CREEK.chanHalf) return -1; // creek water
       if (r > 0.72) return -1;
       const f = fieldOf(x, z);
       if (f && (f.crop === 'corn' || f.crop === 'beans')) return -1;
@@ -439,29 +459,70 @@ export class World {
     }
   }
 
-  placeFarms() {
-    for (const farm of FARMS) {
-      const [yx0, yz0, yx1, yz1] = farm.yard;
-      const yardY = avgHeight(this.terrain, yx0, yz0, yx1, yz1);
-      // soften the farmyard so buildings sit naturally
-      this.terrain.flattenRect(yx0 + 6, yz0 + 6, yx1 - 6, yz1 - 6, yardY, 14, 'set');
-      const h = farm.house;
-      const fn = PLANS[h.plan] || PLANS.foursquare;
-      const S = fn({ name: farm.name + ' house', ext: h.ext, roof: h.roof, seed: farm.name.length });
-      const g = avgHeight(this.terrain, h.at[0], h.at[1], h.at[0] + 10, h.at[1] + 10);
-      this.placeLot(S, h.rot, h.at[0], h.at[1], g + 0.6, 6, 0.55);
-      this.farmHouses.set(farm, S);
-      if (farm.barn) {
-        const B = PLANS[farm.barn.plan]({ name: farm.name + ' barn', style: farm.barn.style });
-        const gb = avgHeight(this.terrain, farm.barn.at[0], farm.barn.at[1], farm.barn.at[0] + 12, farm.barn.at[1] + 16);
-        this.placeLot(B, farm.barn.rot, farm.barn.at[0], farm.barn.at[1], gb + 0.15, 8, 0.15);
-      }
-      if (farm.shed) {
-        const M = PLANS[farm.shed.plan]({ name: farm.name + ' shed' });
-        const gs = avgHeight(this.terrain, farm.shed.at[0], farm.shed.at[1], farm.shed.at[0] + 12, farm.shed.at[1] + 12);
-        this.placeLot(M, farm.shed.rot, farm.shed.at[0], farm.shed.at[1], gs + 0.12, 8, 0.12);
+  // Carver's Crossing: storefronts and houses on the ground where they stand
+  placeCrossing() {
+    for (const lot of CROSSING.lots) {
+      const [x, z] = lot.at;
+      if (lot.type === 'house') {
+        const fn = PLANS[lot.plan] || PLANS.foursquare;
+        const S = fn({ name: lot.plan + ' @' + lot.at.join(','), ext: lot.ext, roof: lot.roof, seed: x * 7 + z });
+        const g = avgHeight(this.terrain, x, z, x + 12, z + 12);
+        this.placeLot(S, lot.rot, x, z, g + 0.6, 6, 0.55);
+        S.crossing = true;
+      } else if (lot.type === 'block') {
+        const S = townBlock(lot.units, "Carver's Crossing store");
+        for (const u of S.units) {
+          S.addProp('anchor_sign', (u.x0 + u.x1 + 1) * CELL / 2, 3.12, S.depth * CELL + 0.13, 0, { text: u.sign, w: (u.x1 - u.x0 + 1) * CELL - 1.2 });
+          S.addProp('anchor_awning', (u.x0 * CELL + 0.35 + (u.x1) * CELL - 0.15) / 2, 2.78, S.depth * CELL, 0, { w: (u.x1 - u.x0) * CELL - 0.5, kind: u.kind });
+        }
+        const g = avgHeight(this.terrain, x, z, x + 18, z + 18);
+        this.placeLot(S, lot.rot, x, z, g + 0.25, 7, 0.2);
+        S.kind = 'commercial'; S.crossing = true;
+        this.crossingStore = S;
+        // its concrete apron out to the highway: no trees or grass on it
+        const b = S.bounds();
+        this.occupied.push([b.wx0 - 2, b.wz1, b.wx1 + 2, b.wz1 + 9, 'paved']);
       }
     }
+    // the elevator's footprint is spoken for
+    const [ex, ez] = CROSSING.elevator;
+    const ge = avgHeight(this.terrain, ex - 8, ez - 8, ex + 8, ez + 8);
+    this.terrain.flattenRect(ex - 10, ez - 9, ex + 10, ez + 9, ge, 8, 'set');
+    this.elevatorY = ge;
+    this.occupied.push([ex - 10, ez - 9, ex + 10, ez + 9, 'building']);
+    this.terrain.forRect(ex - 10, ez - 9, ex + 10, ez + 9, (i, j) => { this.terrain.padMask[this.terrain.idx(i, j)] = 1; });
+  }
+
+  placeFarms() {
+    // the old farms, then the country church, then the new places (so the
+    // old buildings keep the ids saves know them by)
+    for (const farm of FARMS.filter((f) => !f.isNew)) this.placeFarm(farm);
+    this.placeCountryChurch();
+    for (const farm of FARMS.filter((f) => f.isNew)) this.placeFarm(farm);
+  }
+  placeFarm(farm) {
+    const [yx0, yz0, yx1, yz1] = farm.yard;
+    const yardY = avgHeight(this.terrain, yx0, yz0, yx1, yz1);
+    // soften the farmyard so buildings sit naturally
+    this.terrain.flattenRect(yx0 + 6, yz0 + 6, yx1 - 6, yz1 - 6, yardY, 14, 'set');
+    const h = farm.house;
+    const fn = PLANS[h.plan] || PLANS.foursquare;
+    const S = fn({ name: farm.name + ' house', ext: h.ext, roof: h.roof, seed: farm.name.length });
+    const g = avgHeight(this.terrain, h.at[0], h.at[1], h.at[0] + 10, h.at[1] + 10);
+    this.placeLot(S, h.rot, h.at[0], h.at[1], g + 0.6, 6, 0.55);
+    this.farmHouses.set(farm, S);
+    if (farm.barn) {
+      const B = PLANS[farm.barn.plan]({ name: farm.name + ' barn', style: farm.barn.style });
+      const gb = avgHeight(this.terrain, farm.barn.at[0], farm.barn.at[1], farm.barn.at[0] + 12, farm.barn.at[1] + 16);
+      this.placeLot(B, farm.barn.rot, farm.barn.at[0], farm.barn.at[1], gb + 0.15, 8, 0.15);
+    }
+    if (farm.shed) {
+      const M = PLANS[farm.shed.plan]({ name: farm.name + ' shed' });
+      const gs = avgHeight(this.terrain, farm.shed.at[0], farm.shed.at[1], farm.shed.at[0] + 12, farm.shed.at[1] + 12);
+      this.placeLot(M, farm.shed.rot, farm.shed.at[0], farm.shed.at[1], gs + 0.12, 8, 0.12);
+    }
+  }
+  placeCountryChurch() {
     // country church at the crossroads
     const cc = FEATURES.churchCountry;
     const C = PLANS.church({ name: 'Bethel Church', ext: 'white_siding' });
@@ -590,14 +651,19 @@ export class World {
       P.barricade(st.x0 + 0.8, cz, townPlane(st.x0 + 0.8), false, st.z1 - st.z0 - 0.6);
     }
     // benches & hydrants downtown
+    const curbStuff = [];
     for (let x = 96; x < 168; x += 18) {
       if (STREETS.ns.some((n) => x > n.x0 - 6 && x < n.x1 + 6)) continue;
       P.bench(x + 3, -8.2, townPlane(x + 3) + 0.15, 0);
       P.bench(x + 9, 8.2, townPlane(x + 9) + 0.15, 0);
       P.hydrant(x + 6, -6.6, townPlane(x + 6) + 0.15);
+      curbStuff.push([x + 3, -8.2], [x + 9, 8.2], [x + 6, -6.6]);
     }
-    // parked cars: diagonal on Main St, a few elsewhere, wrecks on the highway
-    const carCols = ['#7a2a24', '#2f4a6a', '#d8d4c8', '#3a5a3a', '#8a7a5a', '#4a4a4a', '#a8a090', '#2a2a2a'];
+    // parked cars: angled on Main St, a few elsewhere, wrecks on the roads.
+    // Some still run if you can find them fuel; the wrecks are for parts.
+    const carCols = ['#7a2a24', '#2f4a6a', '#d8d4c8', '#3a5a3a', '#8a7a5a', '#4a4a4a', '#a8a090', '#2a2a2a', '#6b4a2a', '#5b6f7a', '#9a8a4a'];
+    const col = () => carCols[Math.floor(rng() * carCols.length)];
+    const runs = (lo, hi) => ({ fuel: +(lo + rng() * (hi - lo)).toFixed(2), wear: +(0.15 + rng() * 0.3).toFixed(2) });
     const lastStall = { n: -99, s: -99 };
     for (let x = 96; x < 168; x += 3) {
       if (STREETS.ns.some((n) => x > n.x0 - 6 && x < n.x1 + 6)) continue;
@@ -606,15 +672,45 @@ export class World {
       // angled cars in neighbouring stalls would touch: leave a gap
       if (x - lastStall[north ? 'n' : 's'] < 6) continue;
       lastStall[north ? 'n' : 's'] = x;
-      const zz = north ? -4.6 : 4.6;
-      P.car(x + 1.5, zz, (north ? Math.PI : 0) + (north ? -0.9 : 0.9), carCols[Math.floor(rng() * carCols.length)], rng() < 0.3 ? 'pickup' : 'sedan', townPlane(x + 1.5));
+      const zz = north ? -4.3 : 4.3, r = rng();
+      const kind = r < 0.3 ? 'pickup' : r < 0.5 ? 'wagon' : 'sedan';
+      const o = rng() < 0.4 ? { wreck: true } : runs(0, 0.3), paint = col();
+      // nosed in at the curb: keep the bumper clear of hydrants and benches
+      const yaw = (north ? Math.PI : 0) + (north ? -0.9 : 0.9), half = kind === 'pickup' ? 2.7 : 2.6;
+      const fx = x + 1.5 + Math.sin(yaw) * half, fz = zz + Math.cos(yaw) * half;
+      if (curbStuff.some(([cx, cz]) => Math.hypot(cx - fx, cz - fz) < 2.2)) continue;
+      P.car(x + 1.5, zz, yaw, paint, kind, townPlane(x + 1.5), o);
     }
-    P.car(176.5, 40, 0.05, '#7a2a24', 'pickup', townPlane(176.5));
-    P.car(60, 4.5, -1.2, '#d8d4c8', 'sedan');
-    P.car(-90, 31, 2.4, '#2f4a6a', 'sedan');
-    P.car(-176, 27, 0.4, '#4a4a4a', 'pickup');
-    // fire truck parked by the floodwall gate (like the photo)
-    P.car(184, -2, Math.PI / 2, '#a8231c', 'pickup', townPlane(184));
+    P.car(176.5, 40, 0.05, '#7a2a24', 'pickup', townPlane(176.5), runs(0.2, 0.45));
+    P.car(60, 4.5, -1.2, '#d8d4c8', 'wagon', null, runs(0.1, 0.3));
+    // pulled over on the highway's shoulder (or off in the ditch)
+    const shoulder = (name, x, side, skew, color, kind, o) => {
+      const r = this.roadSamples.find((q) => q.name === name);
+      if (!r) return;
+      let i = 1;
+      for (let k = 1; k < r.samples.length - 1; k++) if (Math.abs(r.samples[k].x - x) < Math.abs(r.samples[i].x - x)) i = k;
+      const a = r.samples[i - 1], b = r.samples[i + 1], h = Math.atan2(b.x - a.x, b.z - a.z);
+      const off = side * (r.width / 2 + 1.5);
+      P.car(r.samples[i].x + Math.cos(h) * off, r.samples[i].z - Math.sin(h) * off, h + skew, color, kind, null, o);
+    };
+    shoulder('Highway 34', W(-90), 1, 0.06, '#2f4a6a', 'sedan', runs(0.05, 0.3));
+    shoulder('Highway 34', W(-176), -1, -0.35, '#4a4a4a', 'pickup', { wreck: true });
+    // the fire department's red pickup, left by the floodwall gate
+    P.car(184, -2, Math.PI / 2, '#a8231c', 'pickup', townPlane(184), runs(0.3, 0.55));
+    // pile-ups and dead cars along the highway and county roads
+    const wreckOn = (name, frac, side, skew, kind) => {
+      const r = this.roadSamples.find((q) => q.name === name);
+      if (!r) return;
+      const i = Math.max(1, Math.min(r.samples.length - 2, Math.floor(r.samples.length * frac)));
+      const a = r.samples[i - 1], b = r.samples[i + 1], h = Math.atan2(b.x - a.x, b.z - a.z);
+      const nx = Math.cos(h), nz = -Math.sin(h), off = side * (r.width / 2 - 0.6);
+      P.car(r.samples[i].x + nx * off, r.samples[i].z + nz * off, h + skew, col(), kind, null, { wreck: true });
+    };
+    wreckOn('Highway 34', 0.36, 1, 0.5, 'sedan');
+    wreckOn('Highway 34', 0.362, -1, 2.6, 'pickup');
+    wreckOn('Highway 34', 0.55, 1, -0.25, 'wagon');
+    wreckOn('County Road 210', 0.45, -1, 0.35, 'sedan');
+    wreckOn('Carver Road', 0.7, 1, -0.4, 'sedan');
     // farms: fences, bins, silos, mailboxes, trucks
     for (const farm of FARMS) {
       const [x0, z0, x1, z1] = farm.yard;
@@ -628,8 +724,9 @@ export class World {
         const L = Math.hypot(bx - ax, bz - az) || 1, dx = (bx - ax) / L, dz = (bz - az) / L;
         P.mailbox(ax + dx * 5 - dz * 2.6, az + dz * 5 + dx * 2.6, farm.name);
       }
+      // farmers kept a truck and a little gas
       const spot = this.clearSpot(x0 + 8, z0 + 8, x1 - 8, z1 - 8, 3.4, rng);
-      if (spot) P.car(spot[0], spot[1], rng() * 3, carCols[Math.floor(rng() * carCols.length)], 'pickup');
+      if (spot) P.car(spot[0], spot[1], rng() * 3, col(), rng() < 0.75 ? 'pickup' : 'wagon', null, runs(0.15, 0.5));
     }
     // field fences (barbed wire) around pastures & hay
     for (const f of FIELDS) {
@@ -644,7 +741,10 @@ export class World {
       if (r.name === 'Highway 34') P.powerLine(r.samples, 1, 44, 8.5);
       if (r.name === 'County Road 210') P.powerLine(r.samples, -1, 46, 6.5);
       if (r.name === 'Bluff Road') P.powerLine(r.samples, 1, 44, 7);
+      if (r.name === 'Carver Road') P.powerLine(r.samples, 1, 46, 6.5);
     }
+    this.placeCrossingProps(P, rng);
+    this.placeCulverts(P);
     // town picket fences in some yards
     for (const S of this.structures) {
       if (S.kind !== 'house' || !this.inTownGrid(S.ox, S.oz)) continue;
@@ -689,6 +789,59 @@ export class World {
     this.carLoot = P.loot;
   }
 }
+
+// The crossing's yard furniture: the elevator, the store's gravel apron,
+// mailboxes, picket fences, the town sign.
+World.prototype.placeCrossingProps = function (P, rng) {
+  const [ex, ez] = CROSSING.elevator;
+  P.elevator(ex, ez, this.elevatorY);
+  if (this.crossingStore) {
+    const S = this.crossingStore, b = S.bounds(), y = S.oy - 0.14;
+    // a concrete apron from the storefront out to the highway
+    P.box('concrete', b.wx0 - 2, y - 0.5, b.wz1, b.wx1 + 2, y, b.wz1 + 9, '#bdb8ac', { ny: false });
+    this.physics.add({ min: [b.wx0 - 2, y - 0.5, b.wz1], max: [b.wx1 + 2, y, b.wz1 + 9], kind: 'walk' }, 'props');
+    P.bench(b.wx0 + 3, b.wz1 + 1.2, y + 0.02, 0);
+    // a farm truck nosed in at the store, an old sedan by the post office
+    P.car(b.wx1 - 3.2, b.wz1 + 4.6, Math.PI + 0.06, '#5b6f7a', 'pickup', y, { fuel: 0.32, wear: 0.3 });
+    P.car(b.wx0 + 2.4, b.wz1 + 5.2, Math.PI - 0.1, '#8a7a5a', 'sedan', y, { fuel: 0.08, wear: 0.4 });
+  }
+  for (const S of this.structures) {
+    if (!S.crossing || S.kind !== 'house') continue;
+    const b = S.bounds();
+    // the front faces the road they're on
+    const toHwy = Math.abs((b.wz0 + b.wz1) / 2 - CROSSING.at[1]) < 40;
+    if (toHwy) {
+      const fz = b.wz0 < CROSSING.at[1] ? b.wz1 + 3 : b.wz0 - 3;
+      if (rng() < 0.7) P.fence([[b.wx0 - 3, fz], [b.wx1 + 3, fz]], 'picket', [[(b.wx0 + b.wx1) / 2 + 2, fz, 1.6]]);
+      P.mailbox(b.wx0 - 2, b.wz0 < CROSSING.at[1] ? CROSSING.at[1] + 6 : CROSSING.at[1] - 6, 'Crossing');
+    } else P.mailbox(CROSSING.at[0] - 5, (b.wz0 + b.wz1) / 2, 'Crossing');
+  }
+  // the sign coming in from either side
+  P.townSign(CROSSING.at[0] + 64, CROSSING.at[1] - 8, "CARVER'S CROSSING", 'POP. 38');
+  P.townSign(CROSSING.at[0] - 64, CROSSING.at[1] + 10, "CARVER'S CROSSING", 'POP. 38');
+};
+// Where a road crosses Turkey Creek it runs on a fill over a culvert: a
+// concrete pipe end on each side of the embankment.
+World.prototype.placeCulverts = function (P) {
+  this.culverts = [];
+  for (const r of this.roads) {
+    for (let i = 1; i < r.samples.length; i++) {
+      const a = r.samples[i - 1], b = r.samples[i];
+      const sa = a.x - creekX(a.z), sb = b.x - creekX(b.z);
+      if (Math.sign(sa) === Math.sign(sb) || a.x < NEW_LAND.x0 || a.x > NEW_LAND.x1) continue;
+      const t = sa / (sa - sb), x = a.x + (b.x - a.x) * t, z = a.z + (b.z - a.z) * t, y = a.y + (b.y - a.y) * t;
+      const dx = b.x - a.x, dz = b.z - a.z, L = Math.hypot(dx, dz) || 1;
+      // the pipe runs across the road, along the creek
+      const off = r.width / 2 + 2.6;
+      const bed = this.terrain.height(creekX(z), z);
+      for (const side of [-1, 1]) {
+        const px = x - dz / L * off * side, pz = z + dx / L * off * side;
+        P.culvert(px, pz, Math.min(bed + 0.1, y - 1.4), Math.atan2(-dz / L * side, dx / L * side));
+      }
+      this.culverts.push({ x, z, y, road: r.name });
+    }
+  }
+};
 
 // A point 3.2 m in front of the exterior ground-floor door of S nearest to
 // `from` (where a drive or path should end). Works from the wall layout, so
@@ -775,6 +928,11 @@ function makeSplatFn(world) {
         else if (f.crop === 'pasture') { dry *= 0.4; }
         break;
       }
+    }
+    // Turkey Creek's muddy bed and banks
+    if (x > NEW_LAND.x0 && x < NEW_LAND.x1) {
+      const cd = Math.abs(x - creekX(z));
+      if (cd < CREEK.chanHalf + 6) dirt = Math.max(dirt, 1 - smoothstep(CREEK.chanHalf + 0.5, CREEK.chanHalf + 4 + 2 * nv, cd));
     }
     const rd = roadD(x, z);
     let gravel = 1 - smoothstep(0.6, 2.6, rd);
