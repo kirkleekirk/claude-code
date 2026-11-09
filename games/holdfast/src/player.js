@@ -273,7 +273,7 @@ export class Player {
     }
     if (this.health <= 0) {
       this.health = 0;
-      if (b && !b.leader) { this.game.onBodyDown && this.game.onBodyDown(b, source); return; }
+      if (b && !b.leader && this.game.onBodyDown && this.game.onBodyDown(b, source)) return;
       this.dead = true; this.game.onPlayerDeath && this.game.onPlayerDeath(source);
     }
   }

@@ -88,9 +88,14 @@ export class NpcUI {
       b.el.style.zIndex = String(1000 - Math.round(d * 10));
     }
     // objective
-    const obj = this.soc.missions.objective();
-    const txt = obj ? 'Plan: ' + obj : '';
-    if (txt !== this.lastObj) { this.lastObj = txt; this.objEl.textContent = txt; }
+    // the plan you're on, as one line: what to do next (the plan's name on hover)
+    const ms = this.soc.missions.active[0];
+    const txt = ms ? ms.step || ms.title : '';
+    if (txt !== this.lastObj) {
+      this.lastObj = txt;
+      this.objEl.innerHTML = txt ? `<b>Plan</b><span></span>` : '';
+      if (txt) { this.objEl.querySelector('span').textContent = txt; this.objEl.title = ms.title + (ms.step ? ': ' + ms.step : ''); }
+    }
     if (this.talking) this.updateTalkMeta();
     if (!this.campEl.hidden) { this.campT = (this.campT || 0) - dt; if (this.campT <= 0) { this.campT = 1; if (this.tab === 'people' && !this.detail) this.renderCamp(); } }
   }

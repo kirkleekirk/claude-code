@@ -12,6 +12,8 @@ import { Raiders } from './raiders.js';
 import { Strangers } from './strangers.js';
 import { Missions } from './missions.js';
 import { Jobs } from './jobs.js';
+import { WorldNav } from './worldnav.js';
+import { Tactics } from './tactics.js';
 import { NpcUI } from './ui.js';
 import { rollLoot, GUNS } from '../items.js';
 
@@ -33,6 +35,10 @@ export class Society {
     this.jobs = new Jobs(this);
     this.ui = new NpcUI(this);
     this.fires = new Fires(this);
+    // routes anywhere on the map, a few new searches a frame
+    this.nav = new WorldNav(game);
+    this.pathBudget = 3;
+    this.tactics = new Tactics(this);
     // edits to the camp's structure rebuild its stations and paths
     const w = game.world, attach = w.attach.bind(w);
     w.attach = (S) => { attach(S); if (this.camp.claim && this.camp.claim.structure === S) this.camp.dirty = true; };
@@ -47,6 +53,7 @@ export class Society {
   }
 
   // ---------------- services for brains ----------------
+  takePath() { if (this.pathBudget > 0) { this.pathBudget--; return true; } return false; }
   navFor(ax, az, bx, bz) {
     const nav = this.camp.nav;
     if (nav && nav.contains(ax, az) && nav.contains(bx, bz)) return nav;
@@ -88,18 +95,34 @@ export class Society {
     v3.project(cam);
     return v3.z < 1 && Math.abs(v3.x) < 1.1 && Math.abs(v3.y) < 1.1;
   }
-  // zombies and hostile people near an NPC that it should deal with
+  // the thing near an NPC that most needs dealing with: the dead on top of
+  // a friend first, then whatever's coming for them, then the nearest; a
+  // target already being fought keeps a little priority so they don't
+  // flip-flop
   threatNear(m, r, pos = m.pos) {
-    let best = null, bd = r;
+    const pl = this.game.player;
+    let best = null, bs = Infinity;
     for (const z of this.game.zombies.list) {
       if (z.dead) continue;
       const d = Math.hypot(z.pos.x - pos.x, z.pos.z - pos.z);
-      if (d < bd && Math.abs(z.pos.y - pos.y) < 2.5 && (z.state === 'chase' || d < 7)) { best = z; bd = d; }
+      if (d >= r || Math.abs(z.pos.y - pos.y) > 2.5 || !(z.state === 'chase' || d < 7)) continue;
+      let s = d;
+      const prey = z.prey;
+      if (prey === m) s -= 3;
+      else if (prey && prey !== m && (prey === pl || prey.faction === m.faction) && !prey.dead) s -= Math.hypot(z.pos.x - prey.pos.x, z.pos.z - prey.pos.z) < 2.2 ? 6 : 1;
+      if (m.combatTarget === z) s -= 1.5;
+      if (z.health < 30) s -= 0.8;
+      if (s < bs) { bs = s; best = z; }
     }
     for (const o of this.npcs) {
       if (o.dead || o === m || o.downed || !this.enemies(m, o)) continue;
       const d = Math.hypot(o.pos.x - pos.x, o.pos.z - pos.z);
-      if (d < bd * 1.6 && Math.abs(o.pos.y - pos.y) < 3) { best = o; bd = d / 1.6; }
+      if (d >= r * 1.6 || Math.abs(o.pos.y - pos.y) > 3) continue;
+      let s = d / 1.6;
+      const ct = o.combatTarget;
+      if (ct && (ct === m || ct === pl || ct.faction === m.faction)) s -= 2.5;
+      if (m.combatTarget === o) s -= 1.5;
+      if (s < bs) { bs = s; best = o; }
     }
     return best;
   }
@@ -112,31 +135,8 @@ export class Society {
     if (fb === 'stranger') return b.angry;
     return false;
   }
-  // close in and hit, or keep distance and shoot
-  fight(m, t, dt) {
-    m.combatTarget = t;
-    m.locked = false;
-    if (m.anim.act) m.setAct(null);
-    const d = Math.hypot(t.pos.x - m.pos.x, t.pos.z - m.pos.z);
-    m.faceTarget = t.pos;
-    m.seeT = (m.seeT || 0) - dt;
-    if (m.seeT <= 0) { m.seeT = 0.35; m.sees = this.clear(m.pos, t.pos); }
-    if (m.weapon === 'gun' && d > 3.2 && d < 30 && m.sees) {
-      m.aiming = true;
-      if (m.path) m.stop();
-      // zombies closing in: back off a step while firing
-      if (d < 6 && t.hurt) { const bx = m.pos.x - (t.pos.x - m.pos.x) / d * 2, bz = m.pos.z - (t.pos.z - m.pos.z) / d * 2; m.goTo(bx, m.pos.y, bz, true); }
-      m.attack(t);
-      return;
-    }
-    m.aiming = false;
-    m.repathT = (m.repathT || 0) - dt;
-    if (m.repathT <= 0) {
-      m.repathT = 0.35;
-      if (d > 1.25) m.goTo(t.pos.x, t.pos.y, t.pos.z, true); else m.stop();
-    }
-    if (d < 1.8) m.attack(t);
-  }
+  // how they fight: see tactics.js
+  fight(m, t, dt) { return this.tactics.fight(m, t, dt); }
   // one shot from an NPC's gun: every pellet rolls to hit; shotguns
   // catch whatever is crowded around the target too
   shoot(m, t) {
@@ -147,7 +147,8 @@ export class Society {
     const moving = t.vel ? Math.hypot(t.vel.x, t.vel.z) : 0;
     const fall = Math.max(0, d - def.range) / def.range;
     const base = def.pellets > 1 ? Math.max(0.15, 0.95 - d / (def.range * 1.3)) : 0.5 + sk * 0.12 - d / (def.range * 1.6) - def.spread * 2;
-    const p = Math.max(0.1, Math.min(0.92, base - moving * 0.04 - g.sky.darkness * 0.12 - fall * 0.3));
+    const self = Math.hypot(m.vel.x, m.vel.z);
+    const p = Math.max(0.1, Math.min(0.92, base - moving * 0.04 - g.sky.darkness * 0.12 - fall * 0.3 - (self > 0.8 ? 0.12 : 0)));
     m.items.group.updateMatrixWorld(true);
     const from = this.items_muzzle(m);
     let hits = 0;
@@ -237,7 +238,10 @@ export class Society {
     const pl = this.game.player, pp = pl.pos;
     if (m.healing) return this.healBrain(m, dt);
     if (m.anim.act && !m.convo) m.setAct(null);
-    const threat = this.threatNear(m, 15) || this.threatNear(m, 11, pp);
+    let threat = this.threatNear(m, 15) || this.threatNear(m, 11, pp);
+    // don't get dragged off chasing things far from you
+    const lead = Math.hypot(pp.x - m.pos.x, pp.z - m.pos.z);
+    if (threat && lead > 24 && threat.prey !== m && Math.hypot(threat.pos.x - pp.x, threat.pos.z - pp.z) > 14) threat = null;
     const coward = m.tr.bravery < 0.3 && m.health < 45;
     if (threat && !coward) {
       if (!m.combatTarget && Math.random() < 0.3) m.say(this.speech.line(m, threat.hurt ? 't_zombie' : 't_raiders'));
@@ -247,6 +251,16 @@ export class Society {
     if (m.combatTarget && !threat && Math.random() < 0.25) m.say(this.speech.line(m, 't_kill'));
     m.combatTarget = null; m.aiming = false; m.faceTarget = null;
     m.crouch = pl.crouch;
+    this.tactics.idle(m, dt);
+    // standing where you're aiming: step out of the way
+    if (pl.aiming && !pl.released && !m.path) {
+      const yaw = this.game.tpc.yaw, fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+      const rx = m.pos.x - pp.x, rz = m.pos.z - pp.z, along = rx * fx + rz * fz, across = rx * fz - rz * fx;
+      if (along > 0.5 && along < 25 && Math.abs(across) < 1.3) {
+        const sgn = across >= 0 ? 1 : -1, p = { x: m.pos.x + fz * sgn * 2, y: m.pos.y, z: m.pos.z - fx * sgn * 2 };
+        if (this.nav.lineClear(m.pos, p)) { m.goTo(p.x, p.y, p.z, true); m.followT = 1.2; }
+      }
+    }
     const d = Math.hypot(pp.x - m.pos.x, pp.z - m.pos.z), dy = Math.abs(pp.y - m.pos.y);
     // left far behind: catch up out of sight
     if ((d > 55 || (dy > 5 && d > 18)) && !this.onScreen(m.pos)) { this.placeNearPlayer(m); return; }
@@ -259,11 +273,10 @@ export class Society {
     const keep = 2.2 + idx * 0.9;
     m.followT = (m.followT || 0) - dt;
     if (m.followT <= 0) {
-      m.followT = 0.5;
+      m.followT = 0.4;
       if (d > keep + 0.8 || dy > 1.2) {
-        const path = this.trailPath(m, keep);
-        m.dest = path[path.length - 1];
-        m.path = path; m.pathI = 0; m.run = d > 7 || pl.speed > 4;
+        const spot = this.followSpot(m, idx, keep);
+        m.goTo(spot.x, spot.y, spot.z, d > 7 || pl.speed > 4);
       } else if (d < keep) m.stop();
     }
     if (!m.path) { m.lookAt = d < 8 ? pp : null; if (d < 3 && Math.hypot(pl.vel.x, pl.vel.z) < 0.2) m.faceTarget = pp; }
@@ -292,6 +305,25 @@ export class Society {
       this.game.hud.toast(`${m.first} patched you up (+${n} health)`, 2.5);
       m.adjust('player', 0.02);
     }
+  }
+  // where a follower should stand: a few steps back along the way you came
+  // (always somewhere you could walk), a little to one side
+  followSpot(m, idx, keep) {
+    const pp = this.game.player.pos, tr = this.trail;
+    let acc = 0, prev = pp, at = null;
+    for (let i = tr.length - 1; i >= 0; i--) {
+      const t = tr[i];
+      if (Math.abs(t.y - pp.y) > 1.5) break;
+      acc += Math.hypot(t.x - prev.x, t.z - prev.z);
+      prev = t;
+      if (acc >= keep) { at = t; break; }
+    }
+    if (!at) at = prev !== pp ? prev : pp;
+    // a little apart from each other
+    const dx = pp.x - at.x, dz = pp.z - at.z, d = Math.hypot(dx, dz) || 1;
+    const side = idx === 0 ? 0 : (idx % 2 ? 0.8 : -0.8) * Math.ceil(idx / 2);
+    const sp = { x: at.x - dz / d * side, y: at.y, z: at.z + dx / d * side };
+    return side && this.nav.lineClear(at, sp) ? sp : { x: at.x, y: at.y, z: at.z };
   }
   // the way you came: through the doors and halls you walked, ending a
   // few steps short of you
@@ -331,6 +363,7 @@ export class Society {
     const threat = this.threatNear(m, 12);
     if (threat) return this.fight(m, threat, dt);
     m.combatTarget = null; m.aiming = false; m.faceTarget = null;
+    this.tactics.idle(m, dt);
     if (m.waitAt && !m.path && Math.hypot(m.waitAt.x - m.pos.x, m.waitAt.z - m.pos.z) > 1.5) m.goTo(m.waitAt.x, m.waitAt.y, m.waitAt.z);
     if (!m.path && !m.anim.act) m.setAct(['idle_crossed', 'lean', 'idle_hips', 'smoke'][m.person.seed % (m.smoker ? 4 : 3)], m.smoker && m.person.seed % 4 === 3 ? 'cigarette' : null);
     m.lookAt = this.playerNear(m.pos, 10) ? this.game.player.pos : null;
@@ -449,6 +482,9 @@ export class Society {
   // ---------------- per frame ----------------
   update(dt) {
     const g = this.game, p = g.player;
+    this.pathBudget = 3;
+    this.trimT = (this.trimT || 0) - dt;
+    if (this.trimT <= 0) { this.trimT = 20; this.nav.trim(); }
     // the player's trail, for followers to retrace through doors and halls
     const last = this.trail[this.trail.length - 1];
     if (last && Math.hypot(p.pos.x - last.x, p.pos.z - last.z) > 25) this.trail.length = 0;

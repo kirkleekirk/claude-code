@@ -1,6 +1,8 @@
 // Collision world: static & dynamic axis-aligned boxes in a spatial hash, plus
 // the terrain heightfield. Characters are vertical capsules (circle in XZ).
 const CELLSZ = 4;
+// a flight of stairs can be stepped onto from its side, a tread or two up
+const STAIR_EXTRA = 0.3;
 
 export class Physics {
   constructor(terrain) {
@@ -71,7 +73,8 @@ export class Physics {
     const list = this.query(x - r, z - r, x + r, z + r, this._q || (this._q = []));
     for (const b of list) {
       if (b.kind === 'glass' || b.noGround) continue;
-      if (b.max[1] > maxY) continue;
+      // stair treads take a taller step (onto a flight from its side)
+      if (b.max[1] > maxY + (b.kind === 'stair' ? STAIR_EXTRA : 0)) continue;
       if (x + r < b.min[0] || x - r > b.max[0] || z + r < b.min[2] || z - r > b.max[2]) continue;
       if (b.max[1] > g) g = b.max[1];
     }
@@ -84,8 +87,8 @@ export class Physics {
       const list = this.query(x - r - 0.1, z - r - 0.1, x + r + 0.1, z + r + 0.1, this._c || (this._c = []));
       let moved = false;
       for (const b of list) {
-        if (b === ignore || (ignore && b.owner === ignore) || (ignoreKind && b.kind === ignoreKind)) continue;
-        if (b.max[1] <= y0 + step || b.min[1] >= y1) continue;
+        if (b === ignore || (ignore && b.owner === ignore) || (ignoreKind && (b.kind === ignoreKind || (ignoreKind.has && ignoreKind.has(b.kind))))) continue;
+        if (b.max[1] <= y0 + step + (b.kind === 'stair' ? STAIR_EXTRA : 0) || b.min[1] >= y1) continue;
         // closest point on box (XZ)
         const cx = Math.max(b.min[0], Math.min(x, b.max[0]));
         const cz = Math.max(b.min[2], Math.min(z, b.max[2]));

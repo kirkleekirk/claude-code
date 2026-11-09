@@ -126,7 +126,8 @@ export const PLANS = {
       ext: st, int: st, found: 'concrete', floor: 'concrete',
       levels: [
         ['aaaaaa', 'aaaaaa', 'aaaaaa', 'aaaaaa', 'aaaaaa', 'aaaaaa', 'aaaaaa', 'aaaaaa'],
-        ['ffffff', 'ffffff', 'ffffff', 'ffffff', 'ffFFff', 'ffFFff', 'ffFFff', 'ffFFff'],
+        // F: open to below (the hay hole, and the stairwell over the stairs at x 0)
+        ['ffffff', 'ffffff', 'ffffff', 'ffffff', 'ffFFff', 'FfFFff', 'FfFFff', 'ffFFff'],
       ],
       rooms: { a: { kind: 'barn', floor: 'concrete', wall: st }, f: { kind: 'loft', floor: 'barn', wall: st } },
       exits: [{ x: 2, z: 7, side: 's', shape: 'barn_door' }, { x: 3, z: 7, side: 's', shape: 'barn_door' },

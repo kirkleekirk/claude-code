@@ -187,7 +187,7 @@ export class CommandView {
     const info = this.$('cmd-info');
     if (!sel.length) { info.innerHTML = `<p class="cmd-hint">${isTouch ? 'Tap' : 'Click'} someone to give orders, or ${isTouch ? 'tap' : 'click'} Play to carry on.</p>`; return; }
     const one = sel.length === 1 ? sel[0] : null;
-    let h = '';
+    let h = '<button class="ci-x" data-o="clear" aria-label="Done">\u00d7</button>';
     if (one) {
       const gun = one.gear.gun ? GUNS[one.gear.gun.id] : null;
       const inj = injuryList(one);
@@ -204,7 +204,6 @@ export class CommandView {
     h += btn('rest', 'Rest', !!g.claims.list.length && ok.length > 0);
     h += btn('heal', 'Get patched up', !!g.claims.list.length && ok.some((m) => m.injuries.length || m.health < m.maxHealth));
     h += btn('hold', 'Hold here', ok.length > 0);
-    h += btn('clear', 'Done', true, 'ghost');
     h += `</div><p class="cmd-hint">${isTouch ? 'Tap the ground to send them there. Tap the dead or raiders to fight.' : 'Click the ground to send them there. Click the dead or raiders to fight.'}</p>`;
     info.innerHTML = h;
   }

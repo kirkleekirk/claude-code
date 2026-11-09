@@ -124,8 +124,20 @@ class Zombie {
     let tx = 0, tz = 0, speed = 0;
     if (this.stagger > 0) { this.stagger -= dt; }
     else if (this.state === 'chase' || this.state === 'investigate') {
-      // stuck against a building: head for a doorway first
+      // stuck against something, or the prey's on another floor: a real
+      // route (through doors, up stairs, around fences); a doorway guess if
+      // there's no time to think this frame
+      const soc = g.society;
+      const otherFloor = this.state === 'chase' && Math.abs(this.target.y - this.pos.y) > 1.6 && dist < 30;
+      this.navCd = (this.navCd || 0) - dt;
+      if ((this.blocked > 0.8 || otherFloor) && !this.waypoint && full && soc && soc.nav && this.navCd <= 0 && soc.takePath()) {
+        this.navCd = 2.5;
+        const r = soc.nav.path(this.pos, this.target, { budget: 5000, noVault: true, near: 1.2 });
+        if (r && r.pts.length) { this.waypoint = r.pts.map((p) => new THREE.Vector3(p.x, p.y, p.z)); this.wpStage = 0; this.wpT = 4 + r.pts.length * 2; this.blocked = 0; }
+      }
       if (this.blocked > 1.0 && !this.waypoint) this.findDoorway(this.target);
+      // close and on the same floor: straight at them
+      if (this.waypoint && this.state === 'chase' && dist < 3 && Math.abs(pp.y - this.pos.y) < 1) this.waypoint = null;
       if (this.waypoint) {
         this.wpT -= dt;
         const w = this.waypoint[this.wpStage];

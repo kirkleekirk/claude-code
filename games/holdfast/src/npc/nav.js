@@ -15,24 +15,26 @@ export class NavGrid {
   }
   cell(x, z) { return [Math.floor((x - this.x0) / this.res), Math.floor((z - this.z0) / this.res)]; }
   build() {
-    const ph = this.ph, r = this.res, rad = 0.26;
+    const ph = this.ph, r = this.res, rad = 0.2; // 1 m doorways stay two cells wide
     this.nodes = []; // {i, j, y}
     this.byCell = new Map(); // i*nz+j -> [node ids]
     const q = [];
     for (let j = 0; j < this.nz; j++) for (let i = 0; i < this.nx; i++) {
       const x = this.x0 + (i + 0.5) * r, z = this.z0 + (j + 0.5) * r;
-      const ys = [ph.terrain.height(x, z)];
+      // anything you can stand on, as the physics sees it (entry steps and
+      // thresholds too), and whether it's a stair tread
+      const ys = [[ph.terrain.height(x, z), false]];
       ph.query(x - rad, z - rad, x + rad, z + rad, q);
       for (const b of q) {
-        if (!SURF.has(b.kind)) continue;
+        if (b.kind === 'glass' || b.kind === 'door' || b.noGround) continue;
         if (x < b.min[0] - 0.05 || x > b.max[0] + 0.05 || z < b.min[2] - 0.05 || z > b.max[2] + 0.05) continue;
-        ys.push(b.max[1]);
+        ys.push([b.max[1], b.kind === 'stair']);
       }
-      ys.sort((a, b) => a - b);
+      ys.sort((a, b) => a[0] - b[0]);
       const ids = [];
       let last = -1e9;
-      for (const y of ys) {
-        if (y - last < 0.3) continue; // same surface
+      for (const [y, stair] of ys) {
+        if (y - last < 0.3) { if (stair && ids.length) this.nodes[ids[ids.length - 1]].stair = true; continue; } // same surface
         // standing room: nothing solid from knee to head within the body radius
         let ok = true;
         for (const b of q) {
@@ -42,7 +44,7 @@ export class NavGrid {
           ok = false; break;
         }
         // not standing inside a higher surface (ground under a floor slab)
-        if (ok) { ids.push(this.nodes.length); this.nodes.push({ i, j, y, x, z }); last = y; }
+        if (ok) { ids.push(this.nodes.length); this.nodes.push({ i, j, y, x, z, stair }); last = y; }
       }
       if (ids.length) this.byCell.set(i * this.nz + j, ids);
     }
@@ -55,7 +57,8 @@ export class NavGrid {
         if (!ids || n.i + di < 0 || n.i + di >= this.nx) continue;
         for (const m of ids) {
           const o = this.nodes[m];
-          if (Math.abs(o.y - n.y) > 0.5) continue;
+          // a body steps 0.48 m; onto or off a stair cell (two treads) 0.75
+          if (Math.abs(o.y - n.y) > (o.stair || n.stair ? 0.75 : 0.48)) continue;
           if (di && dj) {
             // diagonal: both side cells must be walkable at this height
             const a = this.at(n.i + di, n.j, n.y), b = this.at(n.i, n.j + dj, n.y);

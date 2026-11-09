@@ -184,8 +184,8 @@ export class Game {
         this.startView();
         const cmd = this.command.active;
         setTimeout(() => this.hud.toast(`${p.name.split(' ')[0]}, two survivors are with you. Find a place worth holding, then ${isTouch ? 'tap Claim to plant your flag' : 'press G to plant your claim flag'}.`, 7), 600);
-        setTimeout(() => this.hud.toast(cmd ? 'Tap a person to talk. Camp shows your people. 3rd person switches the view.' : isTouch ? 'Walk up to someone and tap Use to talk. Top view shows your group from above.' : 'Walk up to someone and press E to talk. J shows your camp. V for the top view.', 6), 8000);
-        setTimeout(() => this.hud.toast(cmd ? 'Tap the ground to move · double-tap to run · drag to look around' : isTouch ? 'Left side: move · Right side: look · Buttons: hit, use, jump' : 'WASD move · Mouse look · Click to swing · E to use · Esc for help', 6), 3800);
+        setTimeout(() => this.hud.toast(cmd ? 'Pick someone and tap Take control to play as them, or send them on a job.' : isTouch ? 'Walk up to someone and tap Use to talk. Top view manages your whole group.' : 'Walk up to someone and press E to talk. J shows your camp. V for the top view.', 6), 8000);
+        setTimeout(() => this.hud.toast(cmd ? 'Tap people to pick them · tap the ground to send them · drag to look around' : isTouch ? 'Left side: move · Right side: look · Buttons: hit, use, jump' : 'WASD move · Mouse look · Click to swing · E to use · Esc for help', 6), 3800);
       });
     }
   }
@@ -218,6 +218,9 @@ export class Game {
     if (b.mode === 'away') { this.hud.toast(`${b.first} is out on a run.`, 2); return false; }
     if (exhausted(b) && !quiet) { this.hud.toast(`${b.first} is exhausted and needs rest at camp.`, 2.5); return false; }
     if (this.society.ui.talking) this.society.ui.closeTalk();
+    // whatever they'd been told to do, you're doing it now
+    if (b.job) this.society.jobs.cancel(b);
+    b.orderTarget = null; b.restOrder = false; b.healOrder = false; b.rescue = null; b.healing = null; b.runJob = false;
     pl.attach(b);
     b.mode = 'controlled';
     if (old && !old.dead) {
@@ -235,16 +238,31 @@ export class Game {
     this.hud.bodyChanged && this.hud.bodyChanged();
     return true;
   }
-  // the one you're playing went down: someone close takes over to help
+  // the one you're playing went down: someone close takes over to help.
+  // false when there's nobody left to be (then it's like dying)
   onBodyDown(b, src) {
     const alive = this.society.camp.members.filter((m) => m !== b && !m.dead && !m.downed && m.mode !== 'away');
     alive.sort((x, y) => Math.hypot(x.pos.x - b.pos.x, x.pos.z - b.pos.z) - Math.hypot(y.pos.x - b.pos.x, y.pos.z - b.pos.z));
     const near = alive.find((m) => Math.hypot(m.pos.x - b.pos.x, m.pos.z - b.pos.z) < 40);
     const next = near || alive.find((m) => m.leader) || alive[0];
-    if (next) this.switchTo(next, true);
+    if (!next) return false;
+    this.switchTo(next, true);
     b.health = 1;
     b.goDown(src);
     this.hud.toast(near ? `${b.first} is down! You're ${next.first} now. Get to them (hold ${isTouch ? 'Use' : 'E'}).` : `${b.first} is down, out there alone. Send someone, fast.`, 5);
+    return true;
+  }
+  // the leader, down with nobody coming: they come to at camp, worse for wear
+  wakeAtCamp(b) {
+    const c = this.claims.list[0];
+    const at = c ? [c.flag[0] + 1.5, c.flag[2] + 1.5] : [b.pos.x, b.pos.z];
+    b.downed = false; b.setAct(null); b.locked = false;
+    b.pos.set(at[0], this.physics.groundAt(at[0], at[1], 999), at[1]); b.visualY = b.pos.y; b.stop();
+    if (!b.injuries.some((i) => i.id === 'concussion')) b.injuries.push({ id: 'concussion', t: INJURIES.concussion.heal });
+    b.maxHealth = maxHealthOf(b); b.health = b.maxHealth * 0.5; b.fatigue = Math.max(b.fatigue || 0, 80);
+    b.mode = c ? 'camp' : 'follow';
+    this.society.camp.log(`${b.person.name} came to back at camp, aching and confused.`, 'hurt');
+    this.hud.toast(`${b.first} came to back at camp.`, 3);
   }
   onExhausted(b) {
     this.hud.toast(`${b.first} is exhausted. ${b.leader ? 'Get back to camp and rest.' : 'Switch to someone rested (top view) or head home.'}`, 5);

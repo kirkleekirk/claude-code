@@ -66,6 +66,9 @@ export class HUD {
         </div>
       </div>`;
     this.$ = (id) => document.getElementById(id);
+    // phones: who you are, the plan and what you just found stack under the
+    // clock in one column, so nothing ends up on top of anything else
+    if (isTouch) { const tl = ui.querySelector('.hud-top-left'); tl.appendChild(ui.querySelector('.hud-bars')); tl.appendChild(this.$('hud-loot')); }
     this.toastsEl = this.$('hud-toasts');
     this.lootEl = this.$('hud-loot');
     this.lastRes = '';
@@ -117,7 +120,8 @@ export class HUD {
     const claim = g.claims && g.claims.at(p.pos.x, p.pos.z);
     this.$('hud-claim').textContent = claim ? (isTouch ? 'Inside your claim · tap Build' : 'Inside your claim · B to build') : '';
     const wb = this.$('tb-weapon');
-    if (wb) { const t = p.weapon.kind === 'gun' ? 'Bat' : b && b.gear.gun ? GUNS[b.gear.gun.id].name.split(' ')[0] : 'Swap'; if (wb.textContent !== t) wb.textContent = t; }
+    // the swap pill says what you'd switch to
+    if (wb) { const t = p.weapon.kind === 'gun' ? '\u21c4 Bat' : b && b.gear.gun ? '\u21c4 ' + GUNS[b.gear.gun.id].name.split(' ')[0] : 'No gun'; if (wb.textContent !== t) { wb.textContent = t; wb.disabled = t === 'No gun'; } }
     for (const b of this.root.querySelectorAll('.tbtns-top [data-act=light]')) b.classList.toggle('on', !!p.flashlightOn);
     this.$('vignette').style.opacity = Math.max(p.hurtFlash * 2.2, p.health < 30 ? 0.35 + 0.15 * Math.sin(performance.now() / 300) : 0).toFixed(2);
     this.$('crosshair').classList.toggle('aim', p.aiming);
@@ -133,6 +137,8 @@ export class HUD {
   }
   // what you just picked up, briefly, bottom left
   loot(text, secs = 3.5) {
+    // in the top view the feed's hidden: say it as a toast
+    if (this.game.command && this.game.command.active) { this.toast(text, secs); return; }
     const d = document.createElement('div');
     d.className = 'loot-line';
     d.textContent = text;
@@ -187,8 +193,8 @@ export class HUD {
           <tr><td>M</td><td>Map</td></tr><tr><td>J</td><td>Camp: people, journal, plans</td></tr><tr><td>V</td><td>Top view: manage your group, take control of anyone</td></tr><tr><td>1-9</td><td>Pick a line when talking</td></tr><tr><td>Esc</td><td>Menu</td></tr>
         </table>
         <h3>On a phone</h3>
-        <p><b>Top view</b> is made for phones: you see your group from above. Tap the ground to walk there (double-tap to run), tap the dead or raiders to fight, tap the search and door icons to use them, and tap a person to talk or give orders. Drag to look around, pinch to zoom, twist two fingers to turn. Pick who you're ordering on the bar at the bottom; everything else (claim flag, building, camp, map, pack, eating, weapon, flashlight, sneaking) is on the buttons at the right. <b>3rd person</b> switches back.</p>
-        <p>In third person the left side of the screen moves and the right side looks. The round buttons hit, use, jump, aim, crouch and run; Top view, Claim, Build, Camp, Map, Pack, Eat and Light sit on the right, and the button by your health swaps weapons.</p>
+        <p><b>Top view</b> shows your whole group from above while everyone carries on by themselves. Tap people (or their cards) to pick them, then tap the ground to send them there, tap the dead or raiders to send them in, or use the orders: send on a job (scavenge a building, fetch a plan's cache, raid a crew, a supply run), go home, rest, get patched up, hold. <b>Take control</b> drops you into anyone. Drag to look around, pinch to zoom, twist two fingers to turn.</p>
+        <p>In third person the left side of the screen moves and the right side looks. The round buttons hit, use, jump, aim, crouch, run and reload. The pills at the top go to the top view, swap weapons, patch you up and turn on the light; <b>More</b> has your pack, the camp, the map, the claim flag and building.</p>
         <h3>Credits</h3>
         <p class="note">Character models, both CC BY 4.0, rigged and animated in-game:
           “<a href="https://sketchfab.com/3d-models/proportional-low-poly-man-free-download-0bfd0e2b49a348a4b64b20cc8196e3b3" target="_blank" rel="noopener">Proportional Low Poly Man</a>” by Robin Butler;

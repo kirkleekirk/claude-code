@@ -65,6 +65,14 @@ send them somewhere, point them at a fight and watch, send them on jobs
 run), or call them home to rest or get patched up. *Take control* drops you
 into anyone.
 
+Everyone finds their own way around the whole map: through doors, up
+stairs, over low fences and around buildings, and the dead do too. In a
+fight your people pick what matters most (anything on top of a friend
+first), fight at their weapon's range, back off to keep shooting, never fire
+through a friend, reload in the lulls, strafe against gunmen, fall back when
+it's too many or they're hurt, go quiet with a bat when you're sneaking, call
+out what's behind you and hand you ammo when you run dry.
+
 Anyone who isn't your leader tires quickly out in the world and is useless
 once exhausted, so you rotate people and let the others rest at camp. Hits
 can leave injuries (sprains, deep cuts that bleed, cracked ribs, a hurt arm,

@@ -8,6 +8,7 @@ import { Pack, GUNS } from '../items.js';
 import { maybeInjure, maxHealthOf, skillMods, conditionMods } from '../condition.js';
 
 const R = 0.28;
+const VAULT_IGNORE = new Set(['door', 'fence']);
 const tmpV = new THREE.Vector3();
 
 export class NPC {
@@ -91,17 +92,45 @@ export class NPC {
   }
 
   // ---------------- movement ----------------
-  // go to (x,y,z): nav grid path if inside a camp grid, else straight line
+  // go to (x,y,z): on the camp's grid inside camp, the world's grid
+  // everywhere else (when nobody can see them, a straight line does)
   goTo(x, y, z, run = false) {
-    this.dest = { x, y, z };
+    const d0 = this.dest;
     this.run = run;
-    const nav = this.soc.navFor(this.pos.x, this.pos.z, x, z);
-    this.path = nav ? nav.path(this.pos.x, this.pos.y, this.pos.z, x, y, z) : null;
-    if (!this.path) this.path = [{ x, y, z }];
-    this.pathI = 0;
-    this.stuckT = 0;
+    // same place as a moment ago and the route still holds: keep it
+    if (d0 && this.path && this.navPath && !this.stuckN && this.t - (this.planT || -9) < 3 && Math.hypot(d0.x - x, d0.z - z) < 1.2 && Math.abs(d0.y - y) < 1) {
+      this.dest = { x, y, z };
+      const last = this.path[this.path.length - 1];
+      if (!last.vault && !this.partial) { last.x = x; last.y = y; last.z = z; }
+      return;
+    }
+    this.dest = { x, y, z };
+    this.pathI = 0; this.stuckT = 0; this.navPath = false; this.pathPending = false; this.partial = false;
+    const camp = this.soc.navFor(this.pos.x, this.pos.z, x, z);
+    if (camp) { this.path = camp.path(this.pos.x, this.pos.y, this.pos.z, x, y, z) || [{ x, y, z }]; this.navPath = true; this.planT = this.t; return; }
+    this.path = [{ x, y, z }];
+    if (this.isNear) this.plan();
   }
-  stop() { this.path = null; this.dest = null; }
+  // a route on the world grid; when this frame's searching is spent, a
+  // straight line now and the route next frame
+  plan(force = false) {
+    const nav = this.soc.nav, dst = this.dest;
+    if (!nav || !dst) return;
+    this.planT = this.t;
+    const d = Math.hypot(dst.x - this.pos.x, dst.z - this.pos.z);
+    if (d < 1 && Math.abs(dst.y - this.pos.y) < 0.6) return;
+    if (!force && d < 45 && Math.abs(dst.y - this.pos.y) < 1.2 && nav.lineClear(this.pos, dst)) { this.path = [{ x: dst.x, y: dst.y, z: dst.z }]; this.pathI = 0; this.navPath = true; this.pathPending = false; return; }
+    // last time there was no way there, and it's barely moved: don't search again yet
+    const f = this.failed;
+    if (!force && f && this.t - f.t < 4 && Math.hypot(f.x - dst.x, f.z - dst.z) < 6) { this.path = f.path ? f.path.slice() : [{ x: dst.x, y: dst.y, z: dst.z }]; this.pathI = 0; this.navPath = true; this.partial = true; return; }
+    if (!this.soc.takePath()) { this.pathPending = true; return; }
+    this.pathPending = false;
+    const r = nav.path(this.pos, dst, { budget: d < 30 ? 4000 : d < 80 ? 10000 : 22000 });
+    this.navPath = true;
+    if (r && r.pts.length) { this.path = r.pts; this.pathI = 0; this.partial = r.partial; }
+    this.failed = !r || r.partial ? { t: this.t, x: dst.x, z: dst.z, path: r && r.pts } : null;
+  }
+  stop() { this.path = null; this.dest = null; this.pathPending = false; }
   arrived(r = 0.35) { return !this.path && this.dest == null; }
   // advance along the path; returns desired horizontal velocity
   steer(dt) {
@@ -110,22 +139,54 @@ export class NPC {
     const last = this.pathI === this.path.length - 1;
     let dx = wp.x - this.pos.x, dz = wp.z - this.pos.z;
     let d = Math.hypot(dx, dz);
-    while (!last && d < 0.45) {
+    while (!last && d < 0.45 && !(wp.vault && Math.abs(wp.y - this.pos.y) > 0.6)) {
       this.pathI++;
       wp = this.path[this.pathI];
       dx = wp.x - this.pos.x; dz = wp.z - this.pos.z; d = Math.hypot(dx, dz);
       if (this.pathI === this.path.length - 1) break;
     }
     if (this.pathI === this.path.length - 1 && d < 0.18) { this.path = null; this.dest = null; return [0, 0]; }
+    if (d < 1e-4) return [0, 0];
+    // over a fence: a quick hop across
+    if (wp.vault && d < 1.7 && !(this.vaultT > 0)) { this.vaultT = 0.6; this.vaultFrom = this.pos.y; }
     const cm = conditionMods(this);
-    const sp = (this.run && cm.sprint ? 3.6 : this.run ? 2.2 : 1.35) * (this.health < 35 ? 0.7 : 1) * cm.speed;
+    let sp = (this.run && cm.sprint ? 3.6 : this.run ? 2.2 : 1.35) * (this.health < 35 ? 0.7 : 1) * cm.speed;
+    if (this.vaultT > 0) sp = Math.max(sp, 2.8);
     const slow = this.pathI === this.path.length - 1 ? Math.min(1, d / 0.8) : 1;
     return [dx / d * sp * Math.max(0.35, slow), dz / d * sp * Math.max(0.35, slow)];
+  }
+  // stuck against something: a proper route, then a step aside, then give up
+  // (or, where nobody's looking, just get on with it)
+  unstick(dt) {
+    this.stuckT = 0; this.stuckN = (this.stuckN || 0) + 1;
+    const dst = this.dest;
+    if (!dst) { this.stop(); return; }
+    if (this.stuckN === 1) { this.plan(true); return; }
+    if (this.stuckN === 2) {
+      const wp = this.path ? this.path[this.pathI] : dst, dx = wp.x - this.pos.x, dz = wp.z - this.pos.z, d = Math.hypot(dx, dz) || 1;
+      const side = (this.person.seed % 2 ? 1 : -1) * 1.1;
+      const sx = this.pos.x - dz / d * side, sz = this.pos.z + dx / d * side;
+      const nav = this.soc.nav;
+      if (nav && nav.lineClear(this.pos, { x: sx, y: this.pos.y, z: sz })) { this.path = [{ x: sx, y: this.pos.y, z: sz }, ...(this.path ? this.path.slice(this.pathI) : [dst])]; this.pathI = 0; }
+      else this.plan(true);
+      return;
+    }
+    this.stuckN = 0;
+    if (!this.soc.onScreen(this.pos, 80)) {
+      const wp = this.path ? this.path[Math.min(this.path.length - 1, this.pathI)] : dst;
+      this.pos.set(wp.x, this.game.physics.groundAt(wp.x, wp.z, wp.y + 0.6), wp.z); this.visualY = this.pos.y;
+      if (this.path && this.pathI < this.path.length - 1) this.pathI++; else this.stop();
+    } else { this.stop(); this.blockedT = this.t; }
   }
 
   // ---------------- per frame ----------------
   update(dt, near) {
     this.t += dt;
+    const wasNear = this.isNear;
+    this.isNear = near;
+    // came into view on a straight line: find a real route now
+    if (near && this.dest && this.path && !this.controlled && (!wasNear && !this.navPath || this.pathPending)) this.plan();
+    if (this.vaultT > 0) this.vaultT -= dt;
     if (this.dead) return this.updateDead(dt);
     // the one you're playing: the controller moves and animates them
     if (this.controlled) { this.items.group.visible = false; this.char.root.visible = true; return true; }
@@ -138,7 +199,11 @@ export class NPC {
     if (this.downed) {
       this.downT -= dt;
       this.locked = true; this.stop();
-      if (this.downT <= 0) { this.die(this.lastAttacker || null); return true; }
+      if (this.downT <= 0) {
+        // the leader always comes to at camp, as they do when you play them
+        if (this.leader && this.game.wakeAtCamp) { this.game.wakeAtCamp(this); return true; }
+        this.die(this.lastAttacker || null); return true;
+      }
       if (this.downT % 6 < dt && Math.random() < 0.6) this.say(['Help me\u2026', 'Somebody\u2026 please\u2026', 'I can\u2019t get up\u2026', 'Don\u2019t leave me\u2026'][Math.floor(Math.random() * 4)]);
     } else if (this.talking) {
       // turned to face you while you talk
@@ -159,19 +224,14 @@ export class NPC {
     let nx = ox + this.vel.x * dt, nz = oz + this.vel.z * dt;
     if (near && !this.anim.lie && !this.seated) {
       this.openDoorsAhead();
-      [nx, nz] = ph.collide(nx, nz, R, this.pos.y, this.pos.y + 1.7, 0.48, null, 'door');
+      [nx, nz] = ph.collide(nx, nz, R, this.pos.y, this.pos.y + 1.7, 0.48, null, this.vaultT > 0 ? VAULT_IGNORE : 'door');
     }
     const moved = Math.hypot(nx - ox, nz - oz);
     const want = Math.hypot(tx, tz) * dt;
-    if (this.path && want > 0.005 && moved < want * 0.25) {
+    if (this.path && want > 0.005 && moved < want * 0.25 && near) {
       this.stuckT += dt;
-      if (this.stuckT > 1.6) {
-        // nudge, then re-path, then give up on this spot
-        this.stuckT = 0; this.stuckN = (this.stuckN || 0) + 1;
-        if (this.stuckN > 2 && this.dest) { this.pos.set(this.dest.x, this.dest.y, this.dest.z); nx = this.dest.x; nz = this.dest.z; this.stop(); this.stuckN = 0; }
-        else if (this.dest) this.goTo(this.dest.x, this.dest.y, this.dest.z, this.run);
-      }
-    } else { this.stuckT = Math.max(0, this.stuckT - dt); if (!this.path) this.stuckN = 0; }
+      if (this.stuckT > 1.1) { this.unstick(dt); nx = this.pos.x; nz = this.pos.z; }
+    } else { this.stuckT = Math.max(0, this.stuckT - dt * 0.5); if (!this.path) this.stuckN = 0; }
     if (!this.anim.lie && !this.seated) {
       const gy = ph.groundAt(nx, nz, this.pos.y + 0.5, 0.15);
       this.pos.set(nx, gy > this.pos.y - 5 ? gy : this.pos.y, nz);
@@ -243,6 +303,7 @@ export class NPC {
       speed: hs, mode: hs > 0.15 ? 'walk' : 'idle', act, seatH: a.seatH, weapon, crouch: !!(this.crouch && !act),
       attack: this.attackT >= 0 ? this.attackT : null, aim: !!(this.aiming && gdef && this.reloadT <= 0), aimPitch: 0, recoil: gdef ? Math.min(1.2, gdef.recoil) : 1,
       lookYaw, turn: this.turnRate, stagger: this.stagger > 0 ? Math.min(1, this.stagger / 0.3) : 0,
+      air: this.vaultT > 0.08, vy: this.vaultT > 0 ? (this.vaultT - 0.3) * 12 : 0,
       search: a.search,
     });
     // place the body
@@ -253,7 +314,8 @@ export class NPC {
     } else {
       this.visualY += (this.pos.y - this.visualY) * Math.min(1, dt * 14);
       if (Math.abs(this.pos.y - this.visualY) > 1) this.visualY = this.pos.y;
-      root.position.set(this.pos.x, this.visualY, this.pos.z);
+      const hop = this.vaultT > 0 ? Math.sin((1 - this.vaultT / 0.6) * Math.PI) * 0.6 : 0;
+      root.position.set(this.pos.x, this.visualY + hop, this.pos.z);
       root.rotation.set(0, this.facing, 0);
     }
     root.updateMatrixWorld(true);
@@ -294,7 +356,7 @@ export class NPC {
     if (this.downed) { if (this.health <= 0) this.die(src); return; }
     if (this.health <= 0) {
       // your people usually go down before they die: get to them in time
-      if (this.faction === 'camp' && Math.random() < 0.8) return this.goDown(src);
+      if (this.faction === 'camp' && (this.leader || Math.random() < 0.8)) return this.goDown(src);
       this.die(src);
     } else if (this.onHurt) this.onHurt(src, n);
   }

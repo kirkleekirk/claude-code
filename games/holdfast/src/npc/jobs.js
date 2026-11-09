@@ -35,8 +35,11 @@ export class Jobs {
   }
   cancel(m) {
     const job = m.job;
-    m.job = null;
-    if (job) job.team = job.team.filter((x) => x !== m);
+    m.job = null; m.jobHome = false; m.homeBound = false; m.jobItem = null; m.jobGoT = 0;
+    if (job) {
+      job.team = job.team.filter((x) => x !== m);
+      if (!job.team.length) { job.done = true; this.list = this.list.filter((x) => x !== job); }
+    }
     m.mode = this.soc.camp.claim ? 'travel' : 'follow';
   }
   status(m) {
@@ -57,19 +60,28 @@ export class Jobs {
     if (threat && !(j.stage === 'home' && Math.hypot(threat.pos.x - m.pos.x, threat.pos.z - m.pos.z) > 6)) return this.soc.fight(m, threat, dt);
     m.combatTarget = null; m.aiming = false;
     if (m.orderTarget && !m.orderTarget.dead) return this.soc.fight(m, m.orderTarget, dt);
+    this.soc.tactics.idle(m, dt);
     m.orderTarget = null;
     if (m.jobHome) return this.homeBrain(m, dt, near);
     const tgt = this.targetFor(m, j);
     if (!tgt) return this.goHome(m);
-    const d = Math.hypot(tgt.x - m.pos.x, tgt.z - m.pos.z);
+    const d = Math.hypot(tgt.x - m.pos.x, tgt.z - m.pos.z), dy = Math.abs(tgt.y - m.pos.y);
     // walking there (spread out a little, not single file on one spot)
-    if (d > (j.kind === 'goto' ? 1.2 : 1.6)) {
+    if (d > (j.kind === 'goto' ? 1.2 : 1.6) || dy > 1.3) {
+      // can't get to it (or taking far too long): try the next thing
+      m.jobGoT = (m.jobGoT || 0) + dt;
+      if (j.kind !== 'goto' && m.jobItem && (m.jobGoT > 50 || (!m.path && m.partial && m.jobGoT > 5))) {
+        (m.jobItem.failed || (m.jobItem.failed = new Set())).add(m);
+        m.jobItem = null; m.jobGoT = 0; m.stop();
+        if (j.kind === 'scavenge' && this.nextContainer(j, m)) return;
+        return this.goHome(m);
+      }
       m.jobRepath = (m.jobRepath || 0) - dt;
       if (!m.path || m.jobRepath <= 0) { m.jobRepath = 4; this.walk(m, tgt, j.kind === 'raid' && d < 40 ? false : d > 40); }
       if (m.anim.act) m.setAct(null);
       return;
     }
-    m.stop();
+    m.stop(); m.jobGoT = 0;
     if (j.kind === 'goto') { j.stage = 'work'; if (!m.anim.act) m.setAct('idle_crossed'); m.lookAt = null; return; }
     // searching what's in front of them
     j.stage = 'work';
@@ -117,8 +129,9 @@ export class Jobs {
     const S = j.structure;
     if (!S) return false;
     const taken = new Set(j.team.filter((o) => o !== m).map((o) => o.jobItem));
-    const left = S.interact.filter((it) => !it.searched && !taken.has(it) && Math.abs(it.pos[1] - (S.oy + 0.8)) < 2.2);
-    left.sort((a, b) => Math.hypot(a.pos[0] - m.pos.x, a.pos[2] - m.pos.z) - Math.hypot(b.pos[0] - m.pos.x, b.pos[2] - m.pos.z));
+    const left = S.interact.filter((it) => !it.searched && !taken.has(it) && !(it.failed && it.failed.has(m)));
+    // nearest first, and the floor they're on before the next one up
+    left.sort((a, b) => Math.hypot(a.pos[0] - m.pos.x, a.pos[2] - m.pos.z) + Math.abs(a.pos[1] - 0.8 - m.pos.y) * 4 - Math.hypot(b.pos[0] - m.pos.x, b.pos[2] - m.pos.z) - Math.abs(b.pos[1] - 0.8 - m.pos.y) * 4);
     m.jobItem = left[0] || null;
     return !!m.jobItem;
   }
@@ -136,13 +149,7 @@ export class Jobs {
     if (it.prop && it.prop.mission) this.soc.missions.onSearched(it);
     if (this.soc.playerNear(m.pos, 35) && got.length) m.say(`Got ${got.slice(0, 2).join(', ')}.`);
   }
-  walk(m, tgt, run) {
-    const g = this.game;
-    // around obstacles when someone can see; straight when nobody is looking
-    const path = m.char.root.visible ? g.command.plan(m.pos, tgt) : null;
-    if (path) { m.path = path; m.pathI = 0; m.dest = path[path.length - 1]; m.run = run; m.stuckT = 0; }
-    else m.goTo(tgt.x, tgt.y, tgt.z, run);
-  }
+  walk(m, tgt, run) { m.goTo(tgt.x, tgt.y, tgt.z, run); }
   goHome(m) {
     const j = m.job;
     if (j && j.team.every((o) => o === m || o.jobHome)) j.stage = 'home';
