@@ -36,7 +36,7 @@ function kindsFor(planet) {
 function rulesFor(planet) {
   if (planet === 'korr') {
     return [
-      { kind: 'boulder', spacing: 9, scale: [0.4, 2.6, 2.2], sink: 0.2, density: (c) => 0.18 + c.slope * 0.5 + c.wE * 0.35, tint: (c, r) => { const v = 0.35 + r() * 0.3; return [v * 1.05, v * 0.92, v * 0.86]; } },
+      { kind: 'boulder', spacing: 9, scale: [0.4, 2.6, 2.2], sink: 0.2, density: (c) => 0.18 + c.slope * 0.5 + c.wE * 0.35, tint: (c, r) => { const v = 0.14 + r() * 0.14; return [v * 1.1, v * 0.92, v * 0.84]; } },
       { kind: 'basalt', spacing: 24, scale: [3, 11, 2], sink: 0.4, maxSlope: 0.4, density: (c) => c.wM * 0.5 * smoothstep(0.1, 0.5, c.n1) + 0.03, tint: () => [0.6, 0.58, 0.62] },
       { kind: 'ore', spacing: 13, scale: [0.8, 3.4, 2.5], sink: 0.1, density: (c) => c.wC * 0.55, tint: (c, r) => [0.5, 0.6 + r() * 0.2, 1.8] },
       { kind: 'slag', spacing: 10, scale: [0.5, 1.8, 2], sink: 0.1, minH: 0.1, density: (c) => smoothstep(9, 1, c.h - c.sea) * 0.7, tint: () => [2.4, 0.5, 0.14] },

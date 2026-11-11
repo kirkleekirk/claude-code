@@ -1,7 +1,6 @@
 // Planet definitions: world layout, sky, and the surface shading recipe.
 
 const VEYRA_SURFACE = /* glsl */`
-float gLedge = 0.0;
 void planetSurface(vec3 wp, vec3 N, float curv, vec4 sp, vec4 nA, vec4 nB, vec4 nC, out vec3 albedo, out vec3 emissive, out float gloss){
   float wC = sp.r, wE = sp.g, wM = sp.b;
   float wB = max(1.0 - wC - wE - wM, 0.0);
@@ -70,15 +69,16 @@ void planetSurface(vec3 wp, vec3 N, float curv, vec4 sp, vec4 nA, vec4 nB, vec4 
   float ore = sp.r, rim = sp.g, hi = sp.b;
   float slope = 1.0 - N.y;
   float h = wp.y;
-  vec3 dust = mix(vec3(0.30, 0.17, 0.11), vec3(0.42, 0.26, 0.16), nA.r);
-  vec3 basalt = mix(vec3(0.07, 0.07, 0.085), vec3(0.15, 0.14, 0.16), nB.g) * (0.7 + 0.6 * nC.r);
+  vec3 dust = mix(vec3(0.15, 0.085, 0.06), vec3(0.22, 0.14, 0.095), nA.r) * (0.75 + 0.5 * nC.g);
+  vec3 basalt = mix(vec3(0.05, 0.05, 0.062), vec3(0.11, 0.105, 0.12), nB.g) * (0.7 + 0.6 * nC.r);
   float rockAmt = smoothstep(0.14, 0.36, slope + (nB.r - 0.5) * 0.2);
   albedo = mix(dust, basalt, max(rockAmt, hi * 0.6));
   float sband = sin(h * 0.23 + nA.g * 5.0) * 0.5 + 0.5;
-  albedo = mix(albedo, vec3(0.34, 0.20, 0.13), sband * rockAmt * 0.45);
-  albedo = mix(albedo, vec3(0.52, 0.46, 0.42), rim * 0.55);
-  vec4 nV = texture2D(uNoise, wp.xz * 0.019 + 0.3);
-  float vein = (1.0 - smoothstep(0.0, 0.07, nV.a)) * ore;
+  albedo = mix(albedo, vec3(0.22, 0.12, 0.08), sband * rockAmt * 0.45);
+  albedo = mix(albedo, vec3(0.3, 0.27, 0.25), rim * 0.5);
+  gLedge = sin(h * 1.4 + nA.g * 9.0) * rockAmt * 0.6;
+  vec4 nV = texture2D(uNoise, wp.xz * 0.019 + 0.3 + (nB.rg - 0.5) * 0.08 + (nA.gr - 0.5) * 0.14);
+  float vein = (1.0 - smoothstep(0.0, 0.03 + 0.025 * nB.g, nV.a)) * smoothstep(0.25, 0.8, ore) * smoothstep(0.35, 0.6, nB.r);
   albedo = mix(albedo, vec3(0.10, 0.22, 0.42), vein * 0.8);
   emissive = vec3(0.12, 0.45, 1.0) * vein * (0.5 + 0.3 * sin(uTime * 0.9 + wp.x * 0.07)) * 0.9;
   float heat = smoothstep(4.5, -1.0, h + (nB.r - 0.5) * 2.0);
@@ -148,10 +148,10 @@ export const KORR = {
     ],
     nebA: 0x4a5cff, nebB: 0xe060ff, galN: [0.3, 0.55, 0.78], galX: [0.65, 0.55, -0.5],
     keys: [
-      { s: -0.3, zenith: 0x010103, horizon: 0x06080f, glow: 0x000000, glowI: 0, sun: 0x000000, sunI: 0, ambSky: 0x1c2c4c, ambGround: 0x1a0f0a, ambI: 0.45, cloudLit: 0, cloudDark: 0, starVis: 1.2, nebVis: 1.1, planetVis: 0.85, exposure: 1.3, fog: 1 },
-      { s: 0.0, zenith: 0x010104, horizon: 0x100a0c, glow: 0xffd0a0, glowI: 0.3, sun: 0xffe0c0, sunI: 1.4, ambSky: 0x20283c, ambGround: 0x24140c, ambI: 0.45, cloudLit: 0, cloudDark: 0, starVis: 1.1, nebVis: 1.0, planetVis: 0.85, exposure: 1.15, fog: 1 },
-      { s: 0.25, zenith: 0x010104, horizon: 0x140c0c, glow: 0xfff0e0, glowI: 0.25, sun: 0xfff2e4, sunI: 3.4, ambSky: 0x24304a, ambGround: 0x2c1a10, ambI: 0.5, cloudLit: 0, cloudDark: 0, starVis: 0.9, nebVis: 0.85, planetVis: 0.85, exposure: 0.95, fog: 1 },
-      { s: 0.8, zenith: 0x010104, horizon: 0x140c0c, glow: 0xfff0e0, glowI: 0.25, sun: 0xfff6ec, sunI: 3.6, ambSky: 0x24304a, ambGround: 0x2c1a10, ambI: 0.5, cloudLit: 0, cloudDark: 0, starVis: 0.9, nebVis: 0.85, planetVis: 0.85, exposure: 0.92, fog: 1 },
+      { s: -0.3, zenith: 0x010103, horizon: 0x06080f, glow: 0x000000, glowI: 0, sun: 0x000000, sunI: 0, ambSky: 0x3a5a94, ambGround: 0x2a1a14, ambI: 1.0, cloudLit: 0, cloudDark: 0, starVis: 1.2, nebVis: 1.1, planetVis: 0.85, exposure: 1.3, fog: 1 },
+      { s: 0.0, zenith: 0x010104, horizon: 0x100a0c, glow: 0xffd0a0, glowI: 0.3, sun: 0xffe0c0, sunI: 1.4, ambSky: 0x364a74, ambGround: 0x30201a, ambI: 0.95, cloudLit: 0, cloudDark: 0, starVis: 1.1, nebVis: 1.0, planetVis: 0.85, exposure: 1.15, fog: 1 },
+      { s: 0.25, zenith: 0x010104, horizon: 0x140c0c, glow: 0xfff0e0, glowI: 0.25, sun: 0xfff2e4, sunI: 2.5, ambSky: 0x3a4e78, ambGround: 0x34221a, ambI: 0.9, cloudLit: 0, cloudDark: 0, starVis: 0.9, nebVis: 0.85, planetVis: 0.85, exposure: 0.95, fog: 1 },
+      { s: 0.8, zenith: 0x010104, horizon: 0x140c0c, glow: 0xfff0e0, glowI: 0.25, sun: 0xfff6ec, sunI: 2.6, ambSky: 0x3a4e78, ambGround: 0x34221a, ambI: 0.9, cloudLit: 0, cloudDark: 0, starVis: 0.9, nebVis: 0.85, planetVis: 0.85, exposure: 0.92, fog: 1 },
     ],
   },
 };

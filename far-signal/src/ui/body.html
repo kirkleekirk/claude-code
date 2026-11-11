@@ -1,4 +1,80 @@
 <div id="app">
   <canvas id="view"></canvas>
-  <div id="ui"></div>
+  <div id="ui">
+    <div id="hud" hidden>
+      <div class="vitals">
+        <div class="suit-tag" id="suitTag">RIG</div>
+        <div class="bar hp"><span class="lb">HP</span><div class="tr"><i id="hpFill"></i></div><b id="hpNum">100</b></div>
+        <div class="bar en"><span class="lb">PWR</span><div class="tr"><i id="enFill"></i></div><b id="enNum">100</b></div>
+        <div class="bar o2"><span class="lb">AIR</span><div class="tr"><i id="o2Fill"></i></div><b id="o2Num">100</b></div>
+        <div class="buffs" id="buffs"></div>
+      </div>
+      <div class="compass" id="compass"><div class="needle"></div></div>
+      <div class="objective" id="objective">
+        <div class="ot" id="objTitle"></div>
+        <div class="ox" id="objText"></div>
+      </div>
+      <div class="topbtns">
+        <button class="ibtn" data-act="craft" aria-label="Craft"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.2 5.2L3 18l3 3 6.5-6.5a4 4 0 0 0 5.2-5.2l-2.6 2.6-2.1-.6-.6-2.1z"/></svg><span>Craft</span></button>
+        <button class="ibtn" data-act="journal" aria-label="Journal"><svg viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3zM8 8h8M8 12h8"/></svg><span>Log</span></button>
+        <button class="ibtn" data-act="menu" aria-label="Menu"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span>Menu</span></button>
+      </div>
+      <div class="cross" id="cross"><i></i><i></i><i></i><i></i><b></b></div>
+      <div class="target" id="target" hidden><span id="targetName"></span><div class="tb"><i id="targetFill"></i></div></div>
+      <div class="prompt" id="prompt" hidden></div>
+      <div class="toasts" id="toasts"></div>
+      <div class="say" id="say" hidden></div>
+      <div class="banner" id="banner" hidden><div class="bt"></div><div class="bs"></div></div>
+      <div class="hotbar" id="hotbar"></div>
+      <div class="touch" id="touch" hidden>
+        <div class="stick" id="stick"><i></i></div>
+        <button class="tbtn fire" id="tFire">FIRE</button>
+        <button class="tbtn jump" id="tJump">JUMP</button>
+        <button class="tbtn use" id="tUse" hidden>USE</button>
+      </div>
+      <div class="floats" id="floats"></div>
+      <div class="bossbar" id="bossbar" hidden><span>THE WARDEN</span><div class="tb"><i id="bossFill"></i></div></div>
+    </div>
+
+    <div id="panel" class="panel" hidden>
+      <div class="pwin">
+        <div class="phead"><div class="ptitle" id="panelTitle"></div><div class="ptabs" id="panelTabs"></div><button class="pclose" data-act="close" aria-label="Close">&times;</button></div>
+        <div class="pbody" id="panelBody"></div>
+      </div>
+    </div>
+
+    <div id="title" class="screen" hidden>
+      <div class="tinner">
+        <div class="eyebrow">A signal from an empty patch of sky</div>
+        <h1 class="logo">FAR<span>SIGNAL</span></h1>
+        <p class="tag">Build the machine. Survive the moon. Find the Spire.</p>
+        <div class="tbuttons">
+          <button class="mbtn primary" id="btnContinue" hidden>Continue</button>
+          <button class="mbtn" id="btnNew">New Game</button>
+          <button class="mbtn ghost" id="btnSettings">Settings</button>
+        </div>
+        <div class="thelp" id="titleHelp"></div>
+      </div>
+    </div>
+
+    <div id="loading" class="screen solid">
+      <div class="linner">
+        <div class="logo small">FAR<span>SIGNAL</span></div>
+        <div class="ltext" id="loadText">Tuning the array</div>
+        <div class="lbar"><i id="loadFill"></i></div>
+      </div>
+    </div>
+
+    <div id="cine" class="cine" hidden>
+      <div class="cbar top"></div><div class="cbar bot"></div>
+      <div class="ctext" id="cineText"></div>
+      <button class="mbtn ghost cskip" id="cineSkip">Skip</button>
+      <button class="mbtn primary caction" id="cineAction" hidden></button>
+    </div>
+
+    <div id="death" class="screen dim" hidden>
+      <div class="dinner"><h2>Suit failure</h2><p id="deathText">The Gate's tether drags you back to camp.</p></div>
+    </div>
+    <div id="fade"></div>
+  </div>
 </div>

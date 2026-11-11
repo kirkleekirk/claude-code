@@ -199,9 +199,9 @@ void main(){
   float core = smoothstep(0.13, 0.0, r);
   float n = texture2D(uNoise, vUv2 * 1.5 + vec2(0.0, uTime * 0.05)).r;
   float g = ring + spokes * 0.7 + dots + core;
-  vec3 col = uCol * g * (1.2 + 0.6 * sin(uTime * 2.0)) * mix(1.0, 0.25, uLocked);
+  vec3 col = uCol * g * (0.9 + 0.4 * sin(uTime * 2.0)) * mix(1.0, 0.3, uLocked);
   col += uCol * 0.06 * n;
-  col += uCol * uOpen * (0.6 + n) * 1.5;
+  col += uCol * uOpen * (0.3 + n) * 0.6;
   col += vec3(0.012, 0.012, 0.018);
   gl_FragColor = vec4(applyFog(col, vWp), 1.0);
 }`;
@@ -314,13 +314,13 @@ export function buildWreckage(seed = 3) {
   for (let i = 0; i < 16; i++) {
     const a = r() * 6.283, d = 5 + r() * 15;
     const w = 0.6 + r() * 1.8, h = 0.05 + r() * 0.12, dp = 0.5 + r() * 1.3;
-    const c = r() < 0.5 ? [0.12, 0.11, 0.11] : [0.3, 0.26, 0.22];
+    const c = r() < 0.5 ? [0.07, 0.065, 0.065] : [0.15, 0.13, 0.12];
     g.add(temp(new THREE.BoxGeometry(w, h, dp)), M.trs(Math.cos(a) * d, 0.08 + r() * 0.3, Math.sin(a) * d, (r() - 0.5) * 1.1, r() * 3, (r() - 0.5) * 0.9), (p, n, o) => {
       o[0] = c[0]; o[1] = c[1]; o[2] = c[2];
       if (p.x > w * 0.42) { o[0] = 1; o[1] = 0.35; o[2] = 0.08; o[3] = 0.5; }
     }, true);
   }
-  return new THREE.Mesh(g.build(), metalMat());
+  return new THREE.Mesh(g.build(), stoneMat());
 }
 
 // --- Harvestable resource nodes -----------------------------------------------------------
@@ -333,7 +333,7 @@ export function nodeGeometry(kind) {
         const w = 0.35 + r() * 0.5, d = 0.3 + r() * 0.4;
         g.add(temp(new THREE.BoxGeometry(w, 0.06, d)), M.trs((r() - 0.5) * 0.6, 0.1 + i * 0.09, (r() - 0.5) * 0.6, (r() - 0.5) * 0.9, r() * 3, (r() - 0.5) * 0.9), (p, n, o) => {
           const v = 0.7 + r() * 0.3;
-          o[0] = 0.46 * v; o[1] = 0.4 * v; o[2] = 0.34 * v;
+          o[0] = 0.3 * v; o[1] = 0.26 * v; o[2] = 0.22 * v;
           if (p.x > w * 0.38) { o[0] = 1; o[1] = 0.45; o[2] = 0.1; o[3] = 0.9; }
         }, true);
       }

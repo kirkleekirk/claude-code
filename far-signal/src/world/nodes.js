@@ -4,12 +4,12 @@ import { hash2, smoothstep, Noise } from '../core/noise.js';
 import { nodeGeometry } from './structures.js';
 
 export const NODE_TYPES = {
-  scrap: { label: 'Gate Scrap', item: 'scrap', n: [1, 1], hp: 10, scale: [0.9, 1.3], respawn: 0, radius: 0.6, tall: 0.6 },
+  scrap: { hand: 'Salvage', label: 'Gate Scrap', item: 'scrap', n: [1, 1], hp: 10, scale: [0.9, 1.3], respawn: 0, radius: 0.6, tall: 0.6 },
   ferrite: { label: 'Ferrite Deposit', item: 'ferrite', n: [2, 3], hp: 36, scale: [0.9, 1.5], respawn: 240, radius: 0.85, tall: 0.9 },
   lumen: { label: 'Lumen Crystal', item: 'lumen', n: [1, 2], hp: 26, scale: [0.8, 1.3], respawn: 240, radius: 0.6, tall: 1.3, gem: true },
-  pod: { label: 'Breather Pod', item: 'pod', n: [1, 2], hp: 12, scale: [0.8, 1.25], respawn: 180, radius: 0.5, tall: 1.3, sway: true, extra: ['fiber', 0.3] },
-  bloom: { label: 'Aether Bloom', item: 'bloom', n: [1, 1], hp: 9, scale: [0.85, 1.3], respawn: 200, radius: 0.4, tall: 0.9, sway: true },
-  reed: { label: 'Sinew Reed', item: 'fiber', n: [2, 3], hp: 12, scale: [0.8, 1.3], respawn: 160, radius: 0.45, tall: 1.6, sway: true },
+  pod: { hand: 'Pick', label: 'Breather Pod', item: 'pod', n: [1, 2], hp: 12, scale: [0.8, 1.25], respawn: 180, radius: 0.5, tall: 1.3, sway: true, extra: ['fiber', 0.3] },
+  bloom: { hand: 'Pick', label: 'Aether Bloom', item: 'bloom', n: [1, 1], hp: 9, scale: [0.85, 1.3], respawn: 200, radius: 0.4, tall: 0.9, sway: true },
+  reed: { hand: 'Cut', label: 'Sinew Reed', item: 'fiber', n: [2, 3], hp: 12, scale: [0.8, 1.3], respawn: 160, radius: 0.45, tall: 1.6, sway: true },
   emberglass: { label: 'Emberglass', item: 'emberglass', n: [1, 2], hp: 40, scale: [0.9, 1.5], respawn: 300, radius: 0.6, tall: 1.0, gem: true },
   korrite: { label: 'Korrite Ore', item: 'korrite', n: [2, 3], hp: 50, scale: [0.9, 1.6], respawn: 300, radius: 0.9, tall: 1.0 },
   voltite: { label: 'Voltite', item: 'voltite', n: [1, 2], hp: 42, scale: [0.8, 1.4], respawn: 300, radius: 0.6, tall: 1.4, gem: true },
@@ -86,7 +86,7 @@ export class Nodes {
     for (const nd of this.list) (byType[nd.type] = byType[nd.type] || []).push(nd);
     for (const type in byType) {
       const T = NODE_TYPES[type], arr = byType[type];
-      const mat = litMaterial({ wrap: 0.35, glow: 1.5, nightBoost: 0.8, spec: 0.7, shin: 50, rim: 0.35, rimCol: 0xffffff, gem: !!T.gem, sway: T.sway ? 0.1 : 0, double: !!T.sway, metal: type === 'korrite' || type === 'scrap' ? 0.4 : 0 });
+      const mat = litMaterial({ wrap: 0.35, glow: 1.5, nightBoost: 0.8, spec: 0.7, shin: 50, rim: 0.35, rimCol: 0xffffff, gem: !!T.gem, sway: T.sway ? 0.1 : 0, double: !!T.sway, metal: type === 'korrite' ? 0.35 : type === 'scrap' ? 0.15 : 0 });
       const mesh = new THREE.InstancedMesh(nodeGeometry(type), mat, arr.length);
       mesh.frustumCulled = false;
       arr.forEach((nd, i) => {

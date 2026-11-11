@@ -476,7 +476,7 @@ export class Creature {
     // vertical placement
     const gy = ground();
     if (T.fly) {
-      const target = Math.max(gy, w.sea ?? -1e9) + this.alt + Math.sin(this.t * 1.3) * 0.35;
+      const target = Math.max(gy, w.flyFloor ?? -1e9) + this.alt + Math.sin(this.t * 1.3) * 0.35;
       this.pos.y += (target - this.pos.y) * Math.min(1, dt * 2.5);
     } else this.pos.y += (gy - this.pos.y) * Math.min(1, dt * 14);
     this.group.position.copy(this.pos);

@@ -16,6 +16,7 @@ const terrainFrag = (surface) => /* glsl */`
 ${COMMON}
 uniform sampler2D uNormTex; uniform sampler2D uSplatTex;
 varying vec3 vWp;
+float gLedge = 0.0;
 ${surface}
 void main(){
   if (vWp.y < uClipY) discard;
@@ -27,13 +28,13 @@ void main(){
   vec4 nA = texture2D(uNoise, vWp.xz * 0.0113);
   vec4 nB = texture2D(uNoise, vWp.xz * 0.071 + 0.31);
   vec4 nC = texture2D(uNoise, vWp.xz * 0.53 + 0.17);
-  vec4 nD = texture2D(uNoise, vWp.xz * 2.3 + 0.61);
+  vec4 nD = texture2D(uNoise, vWp.xz * 1.37 + 0.61);
   float micro = 1.0 / (1.0 + dist * dist * 0.004);
   vec3 albedo; vec3 emissive; float gloss;
   planetSurface(vWp, N, nt.w, sp, nA, nB, nC, albedo, emissive, gloss);
   float df = 1.0 / (1.0 + dist * 0.025);
-  albedo *= 1.0 + (nD.r - 0.5) * 0.5 * micro;
-  vec3 Nd = normalize(N + vec3(nB.r - 0.5, nB.b - 0.4, nB.g - 0.5) * 0.36 + vec3(nC.r - 0.5, nC.b - 0.4, nC.g - 0.5) * 0.55 * df + vec3(nD.g - 0.5, 0.0, nD.r - 0.5) * 0.5 * micro + vec3(0.0, gLedge * 0.42, 0.0));
+  albedo *= 1.0 + (nD.r - 0.5) * 0.3 * micro;
+  vec3 Nd = normalize(N + vec3(nB.r - 0.5, nB.b - 0.4, nB.g - 0.5) * 0.36 + vec3(nC.r - 0.5, nC.b - 0.4, nC.g - 0.5) * 0.55 * df + vec3(nD.g - 0.5, 0.0, nD.r - 0.5) * 0.3 * micro + vec3(0.0, gLedge * 0.42, 0.0));
   float ndl = max(dot(Nd, uSunDir), 0.0);
   float sh = keyShadow(vWp);
   vec3 amb = hemiAmbient(Nd) * (0.18 + 0.82 * nt.z * nt.z);

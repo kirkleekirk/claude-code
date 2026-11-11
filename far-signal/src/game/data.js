@@ -53,7 +53,7 @@ export const SUITS = [
 // cat: build | gear | suit | serum | supply
 export const RECIPES = [
   { id: 'g_gauntlet', cat: 'gear', name: 'Pulse Gauntlet', station: null, cost: { scrap: 3 }, gives: { unlock: 'gauntlet' }, hero: 'rampart',
-    desc: 'Fires kinetic bolts and a cutting beam for mining.', note: 'Rampart\'s bracers stored every hit she blocked and handed it back. Same idea, one tenth the hit.' },
+    desc: 'Fires kinetic bolts, and a cutting beam that mines rock and crystal.', note: 'Rampart\'s bracers stored every hit she blocked and handed it back. Same idea, one tenth the hit.' },
   { id: 'c_oxy', cat: 'supply', name: 'Oxy-Cell', station: null, cost: { pod: 2 }, gives: { item: 'oxycell', n: 2 }, need: ['gauntlet'], desc: 'Two pocket canisters of air.' },
   { id: 'b_still', cat: 'build', name: 'Atmo Still', station: null, cost: { scrap: 4, pod: 3 }, gives: { station: 'still' }, need: ['gauntlet'], hero: 'evergreen',
     desc: 'Refills your air whenever you are at camp.', note: 'Evergreen grew a breathing hedge on the roof of the Vigil tower. I am borrowing the chemistry.' },
@@ -111,7 +111,7 @@ export const NOTES = {
 
 // Linear main objective chain. `done` receives the save state.
 export const QUESTS = [
-  { id: 'scrap', title: 'Crash Landing', text: 'Salvage Gate Scrap from the wreckage', count: (s) => [s.inv.scrap || 0, 3], done: (s) => (s.inv.scrap || 0) >= 3 || s.unlocks.gauntlet, marker: 'landing',
+  { id: 'scrap', title: 'Crash Landing', text: 'Walk up to the wreckage and salvage Gate Scrap', count: (s) => [s.inv.scrap || 0, 3], done: (s) => (s.inv.scrap || 0) >= 3 || s.unlocks.gauntlet, marker: 'landing',
     say: 'Suit integrity nominal. Gate integrity... not. Start with what fell off.' },
   { id: 'gauntlet', title: 'Crash Landing', text: 'Open Craft and assemble the Pulse Gauntlet', done: (s) => s.unlocks.gauntlet, say: 'Rampart\'s bracer design. I can build that from scrap in my sleep.' },
   { id: 'pods', title: 'Thin Air', text: 'Harvest Breather Pods near the lagoon', count: (s) => [s.inv.pod || 0, 3], done: (s) => (s.inv.pod || 0) >= 3 || s.stations.still, marker: 'lagoon', note: 'air',
