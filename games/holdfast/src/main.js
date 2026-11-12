@@ -32,28 +32,15 @@ import { bodyMods, statsFromTraits, STAT_TRAITS } from './stats.js';
 import { setScarcity, START_BY, GUNS as GUN_DEFS } from './items.js';
 import { PackScreen } from './packui.js';
 import { Vehicles } from './vehicles/vehicles.js';
+import { detectQuality } from './gfx/quality.js';
+import { installGfx, GFX } from './gfx/globals.js';
+import { Post } from './gfx/post.js';
+import { smallThingsCastNear } from './gfx/shadows.js';
 
 import { isTouch } from './platform.js';
 export { isTouch };
 
-export function detectQuality() {
-  let stored = null;
-  try { stored = localStorage.getItem('holdfast.quality'); } catch (e) { /* ignore */ }
-  const q = new URLSearchParams(location.search).get('q') || stored;
-  const mobile = isTouch || /Android|iPhone|iPad/i.test(navigator.userAgent);
-  const level = q || (mobile ? 'low' : 'high');
-  return {
-    level,
-    mobile,
-    pixelRatio: level === 'low' ? Math.min(devicePixelRatio, 1.25) : Math.min(devicePixelRatio, 2),
-    shadowSize: level === 'low' ? 1024 : 2048,
-    shadowRange: level === 'low' ? 38 : 60,
-    viewDistance: level === 'low' ? 380 : 620,
-    texSize: level === 'low' ? 256 : 512,
-    grass: level === 'low' ? 0.4 : 1,
-    antialias: level !== 'low',
-  };
-}
+export { detectQuality };
 
 const WEAPONS = {
   bat: { kind: 'bat', name: 'Baseball bat', damage: 38, reach: 2.0, speed: 0.6 },
@@ -66,14 +53,18 @@ export class Game {
     setTextureQuality(this.quality.texSize >= 512 ? 1 : 0.5);
     setAtlasSize(this.quality.texSize);
     this.onProgress = onProgress || (() => {});
-    const r = this.renderer = new THREE.WebGLRenderer({ antialias: this.quality.antialias, powerPreference: 'high-performance' });
+    // the game's own haze, shadow cascades and film look go into the engine's shaders before anything compiles
+    installGfx();
+    const r = this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
     r.setPixelRatio(this.quality.pixelRatio);
     r.setSize(innerWidth, innerHeight);
     r.shadowMap.enabled = true;
     r.shadowMap.type = THREE.PCFSoftShadowMap;
-    r.toneMapping = THREE.ACESFilmicToneMapping;
+    r.toneMapping = GFX.ready ? THREE.CustomToneMapping : THREE.ACESFilmicToneMapping;
     r.toneMappingExposure = 1.0;
     canvasParent.appendChild(r.domElement);
+    this.post = new Post(r);
+    this.applyPost();
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 5000);
     this.clock = new THREE.Clock();
@@ -86,6 +77,11 @@ export class Game {
     this.mods = traitMods([]);
     this.profile = null;
     addEventListener('resize', () => this.resize());
+  }
+  // the post pipeline's stages for the current graphics setting
+  applyPost() {
+    const q = this.quality;
+    this.post.configure({ on: !!q.post && GFX.ready, msaa: q.msaa, bloom: q.bloom, fxaa: q.fxaa, ao: q.ao, aoSamples: q.aoSamples });
   }
   resize() {
     this.camera.aspect = innerWidth / innerHeight;
@@ -140,6 +136,7 @@ export class Game {
     // the cars the map left parked (a save brings back where yours are)
     if (!this.vehicles.restored) this.vehicles.fromWorld(this.world.carSpots || []);
     this.loading = false;
+    smallThingsCastNear(this.scene); // cars and props stay out of the widest shadow map
     if (loaded && this.profile) {
       const L = this.society.ensureLeader(this.profile);
       this.society.restoreControl(this.society.savedControl);
@@ -578,16 +575,43 @@ export class Game {
     this.sky.update(dt, this.focus || this.camera.position);
     if (this.sky.time < before) this.day++;
     this.water.update(dt, this.sky);
+    this.world.lightDir = this.sky.lightDir; this.world.focus = this.focus; this.world.wind = this.sky.w.wind;
+    this.grassPushers(dt);
     this.world.update(dt, this.camera.position);
     if (this.vehicles) this.vehicles.cull();
     updateWind(dt, this.sky.w.wind);
   }
-  render() { this.renderer.render(this.scene, this.camera); }
+  // whoever is walking near the camera parts the grass: you, your people, the dead
+  grassPushers(dt) {
+    const gr = this.world.grass;
+    if (!gr || !this.player) return;
+    this.pushT = (this.pushT || 0) - dt;
+    const cam = this.camera.position, list = this.pushList || (this.pushList = []);
+    if (this.pushT <= 0) {
+      // who is near enough to matter is worked out a few times a second; their positions follow every frame
+      this.pushT = 0.3;
+      const near = [];
+      const add = (o) => { const d = (o.pos.x - cam.x) ** 2 + (o.pos.z - cam.z) ** 2; if (d < 1600) near.push([d, o]); };
+      if (!this.player.vehicle) add(this.player);
+      for (const z of this.zombies ? this.zombies.list : []) if (!z.dead) add(z);
+      for (const n of this.society ? this.society.npcs : []) if (!n.dead && !n.controlled && !n.riding && n.mode !== 'away') add(n);
+      near.sort((a, b) => a[0] - b[0]);
+      this.pushWho = near.slice(0, 8).map((e) => e[1]);
+    }
+    list.length = 0;
+    for (const o of this.pushWho || []) list.push([o.pos.x, o.pos.z, 0.75, 1]);
+    gr.setPushers(list);
+  }
+  render(dt = 0) {
+    // the sky decides how the frame is exposed and graded
+    if (this.sky) Object.assign(this.post.look, this.sky.look);
+    this.post.render(this.scene, this.camera, dt);
+  }
   start() {
     const loop = () => {
       const dt = Math.min(0.05, this.clock.getDelta());
       this.update(dt);
-      this.render();
+      this.render(dt);
       if (this.input) this.input.endFrame();
       requestAnimationFrame(loop);
     };

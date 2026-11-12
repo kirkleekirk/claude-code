@@ -12,7 +12,11 @@ import { rotateStructure, validateReachability } from '../building/planner.js';
 import { CELL, STORY, HALF_T, CELL_DOOR, wallGridE, shapeGrid as shapeGridOf } from '../building/defs.js';
 const HALF_T_STEP = 0.1;
 import { smoothstep, clamp, mulberry32, makeNoise2D, catmullRom } from '../util.js';
-import { Trees, TREE, buildCrops, buildClumps, GrassField, canopyRadius } from './vegetation.js';
+import { buildClumps } from './vegetation.js';
+import { buildCrops } from './crops.js';
+import { Trees, TREE, canopyRadius } from './trees.js';
+import { GroundMap } from './groundmap.js';
+import { Grass } from './grass.js';
 import { riverFar, creekX, CREEK, NEW_LAND } from './terrain.js';
 
 const noise = makeNoise2D(2024);
@@ -345,26 +349,19 @@ export class World {
         clumps.push({ x, y: tr.height(x, z), z, r: rng() * 6.28, s: 0.7 + rng() * 0.6 });
       }
     }
-    buildClumps(this.scene, clumps);
+    buildClumps(this.scene, clumps, quality);
 
-    // grass tufts near the camera
-    const fieldOf = (x, z) => this.inField(x, z, 0);
-    this.grass = new GrassField(this.scene, quality, (x, z, r) => {
-      const h = tr.height(x, z);
-      if (h < T.water + 0.8) return -1;
-      if (this.roadDist(x, z) < 1.4) return -1;
-      if (this.onStreet(x, z, 0.4) || this.inLot(x, z)) return -1;
-      if (this.inTownGrid(x, z) && Math.abs(z) < T.town.z1 - 6) return r < 0.04 ? 0 : -1; // mown lawns
-      if (this.roadDist(x, z) < 2.8) return -1;
-      if (x > T.floodwallX - 2 && Math.abs(z) < T.town.z1 + 8) return -1; // riprap bank
-      if (x > NEW_LAND.x0 && x < NEW_LAND.x1 && Math.abs(x - creekX(z)) < CREEK.chanHalf) return -1; // creek water
-      if (r > 0.72) return -1;
-      const f = fieldOf(x, z);
-      if (f && (f.crop === 'corn' || f.crop === 'beans')) return -1;
-      if (this.inOccupied(x, z, 0.5)) return -1;
-      const dry = noise(x / 60, z / 60) * 0.5 + 0.5 > 0.62 || (f && f.crop === 'hay');
-      return dry ? 1 : 0;
-    }, (x, z) => tr.height(x, z));
+    // grass: what grows where is baked into a texture, and the blades find it on the GPU
+    this.ground = new GroundMap(this, noise);
+    this.grass = new Grass(this.scene, quality, this.ground);
+    const under = this.terrain.material.userData.ground;
+    if (under) { under.uGround.value = this.ground.tex; under.uGRect.value.copy(this.ground.rect); this.grassReach(); }
+  }
+
+  // the ground under the blades is darkened out to where the blades thin away
+  grassReach() {
+    const under = this.terrain.material.userData.ground;
+    if (under && this.grass) under.uGFade.value.set(this.grass.reach * 0.3, this.grass.reach * 0.8);
   }
 
   // Remove trees and grass from a rect (when a foundation goes down there).
@@ -383,12 +380,12 @@ export class World {
       }
     }
     this.occupied.push([x0, z0, x1, z1, 'claim']);
-    if (this.grass) this.grass.center.set(1e9, 0, 0);
+    if (this.ground) this.ground.clear(x0 - 0.3, z0 - 0.3, x1 + 0.3, z1 + 0.3);
   }
 
   update(dt, camPos) {
-    if (this.trees) this.trees.update(camPos);
-    if (this.grass) this.grass.update(camPos);
+    if (this.trees) this.trees.update(camPos, this.focus || camPos, this.lightDir);
+    if (this.grass) this.grass.update(camPos, dt, this.wind ?? 0.3, this.lightDir);
   }
 
   // Merge a GeoBuilder into static meshes

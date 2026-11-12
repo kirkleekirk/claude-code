@@ -411,7 +411,11 @@ export function terrainMaterial(size = 512) {
   };
   const albedo = mk(A, true), normal = mk(N, false);
   const m = new THREE.MeshStandardMaterial({ roughness: 0.96, metalness: 0 });
+  // where grass blades stand (set once the ground map exists): the ground under
+  // them is shaded as the thatch it is, close to the camera
+  const under = m.userData.ground = { uGround: { value: null }, uGRect: { value: new THREE.Vector4(0, 0, 1, 1) }, uGFade: { value: new THREE.Vector2(8, 30) } };
   m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, under);
     sh.uniforms.uTA = { value: albedo };
     sh.uniforms.uTN = { value: normal };
     sh.uniforms.uTiles = { value: tiles };
@@ -422,6 +426,7 @@ export function terrainMaterial(size = 512) {
       .replace('#include <common>', `#include <common>
         precision highp sampler2DArray;
         uniform sampler2DArray uTA; uniform sampler2DArray uTN; uniform float uTiles[5];
+        uniform sampler2D uGround; uniform vec4 uGRect; uniform vec2 uGFade;
         varying vec4 vSplat; varying vec3 vWPos;
         float thash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
         float tnoise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
@@ -450,6 +455,9 @@ export function terrainMaterial(size = 512) {
           tn += (texture(uTN, vec3(uvA, float(i))).xyz * 2.0 - 1.0) * wl[i];
         }
         float macro = 0.82 + 0.36 * tnoise(wp * 0.02) + 0.12 * (tnoise(wp * 0.11) - 0.5);
+        vec4 gm = texture2D(uGround, (wp - uGRect.xy) / uGRect.zw);
+        float under = gm.r * (1.0 - gm.a * 0.75) * (1.0 - smoothstep(uGFade.x, uGFade.y, distance(wp, cameraPosition.xz))) * (wl[0] + wl[1]);
+        tc *= mix(vec3(1.0), vec3(0.62, 0.6, 0.66), under);
         diffuseColor.rgb *= tc * macro;
       `)
       .replace('#include <normal_fragment_maps>', `
@@ -465,6 +473,14 @@ export function terrainMaterial(size = 512) {
           mat3 tbnT = mat3( Tt * scale, -Bt * scale, N );
           vec3 mn = normalize(vec3(tn.xy * 0.8, max(tn.z, 0.2)));
           normal = normalize( tbnT * mn );
+          #if NUM_DIR_LIGHTS > 0
+          {
+            // grass stands up: a low sun still lights it, so grassy ground leans its normal toward the light
+            vec3 upV = normalize( ( viewMatrix * vec4( 0.0, 1.0, 0.0, 0.0 ) ).xyz ), dl = directionalLights[ 0 ].direction;
+            vec3 hl = dl - upV * dot( dl, upV );
+            normal = normalize( normal + hl * ( 0.38 * ( wl[0] + wl[1] ) ) );
+          }
+          #endif
         }
       `);
   };

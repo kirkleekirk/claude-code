@@ -45,6 +45,7 @@ const params = new URLSearchParams(location.search);
       if (opts.fov) { game.camera.fov = opts.fov; game.camera.updateProjectionMatrix(); }
       game.focus = game.camera.position;
       game.sky.envTimer = 0;
+      game.sky.shadows.refresh();
       for (let i = 0; i < 3; i++) game.update(1 / 60);
       game.render();
     };

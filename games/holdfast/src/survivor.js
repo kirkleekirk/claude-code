@@ -9,6 +9,7 @@ import { isTouch } from './platform.js';
 import { STATS, STAT_IDS, radarSVG } from './stats.js';
 import { SCARCITY, GUNS } from './items.js';
 import { W } from './world/layout.js';
+import { GFX } from './gfx/globals.js';
 
 // points to spend on stats and traits; starting with fewer people gives more
 export const POOL = 6;
@@ -327,7 +328,10 @@ export class SurvivorSetup {
           this.pr.w.group.position.copy(c.grip.pos).applyMatrix4(c.root.matrixWorld);
           this.pr.w.group.quaternion.copy(c.root.quaternion).multiply(c.grip.quat);
         }
+        // (the world's cloud shadows don't belong on the turntable)
+        const cs = GFX.cloud[3]; GFX.cloud[3] = 0;
         this.pr.r.render(this.pr.scene, this.pr.cam);
+        GFX.cloud[3] = cs;
         this.pr.raf = requestAnimationFrame(loop);
       };
       loop();
