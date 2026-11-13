@@ -1,0 +1,4 @@
+dist/*.html
+!dist/ashfall-kingpin.html
+node_modules/
+*.png.tmp
