@@ -1,0 +1,34 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>chars</title>
+<style>html,body{margin:0;height:100%;overflow:hidden}</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+</head><body><script type="module">
+import * as THREE from 'three';
+import { loadCharacterModels, Character, randomPalette } from '../src/characters.js';
+import { mulberry32 } from '../src/util.js';
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(innerWidth, innerHeight); document.body.appendChild(r.domElement);
+r.shadowMap.enabled = true; r.toneMapping = THREE.ACESFilmicToneMapping;
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x9ab0c4);
+const cam = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 100);
+scene.add(new THREE.HemisphereLight(0xdfe8f0, 0x6a5a48, 1.2));
+const sun = new THREE.DirectionalLight(0xffffff, 2.2); sun.position.set(3, 6, 5); sun.castShadow = true; scene.add(sun);
+const g = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: 0x6a7a50 })); g.rotation.x = -Math.PI / 2; g.receiveShadow = true; scene.add(g);
+await loadCharacterModels({ man: { url: '../assets/models/man.glb', height: 1.78 }, woman: { url: '../assets/models/woman.glb', height: 1.68 } });
+const rng = mulberry32(5);
+const poses = [{ mode: 'idle', speed: 0 }, { mode: 'walk', speed: 1.5 }, { mode: 'run', speed: 5 }, { mode: 'zombie', speed: 0.9 }, { mode: 'idle', speed: 0, attack: 0.25 }, { mode: 'idle', speed: 0, aim: true }];
+const chars = [];
+const qs = new URLSearchParams(location.search);
+const raw = qs.get('raw');
+let i = 0;
+for (const model of ['man', 'woman']) {
+  poses.forEach((st, k) => {
+    const c = new Character(model, randomPalette(rng, st.mode === 'zombie'));
+    c.root.position.set((k - 2.5) * 1.1, 0, model === 'man' ? 0 : -1.8);
+    if (raw) { /* rest pose */ } else { c.t = 1.0; c.animate(0, st); }
+    scene.add(c.root); chars.push(c);
+  });
+}
+window.__test = (code) => { for (const c of chars) scene.remove(c.root); const c = new Character(qs.get('m') || 'man', randomPalette(rng)); scene.add(c.root); window.C = c; eval(code); };
+window.__setCam = (p, t) => { cam.position.set(...p); cam.lookAt(...t); r.render(scene, cam); };
+window.__ready = true;
+</script></body></html>

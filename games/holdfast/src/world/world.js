@@ -1,0 +1,945 @@
+// World generation: terrain stamps, structures, roads, props and vegetation.
+import * as THREE from 'three';
+import { Terrain, T, terrainMaterial, townPlane } from './terrain.js';
+import { STREETS, ROADS, FARMS, FIELDS, WOODS, TOWN_LOTS, FEATURES, CROSSING, CREEK_WOODS, W } from './layout.js';
+import { roadCentreline, buildRoadRibbon, buildTownStreets, buildTownMarkings, adjustSurface } from './roads.js';
+import { GeoBuilder, rgb } from '../geom.js';
+import { buildingMaterial } from '../atlas.js';
+import { PLANS, townBlock } from '../building/prefabs.js';
+import { PropBuilder } from './props.js';
+import { DoorPool, setDoorPool } from '../building/doors.js';
+import { rotateStructure, validateReachability } from '../building/planner.js';
+import { CELL, STORY, HALF_T, CELL_DOOR, wallGridE, shapeGrid as shapeGridOf } from '../building/defs.js';
+const HALF_T_STEP = 0.1;
+import { smoothstep, clamp, mulberry32, makeNoise2D, catmullRom } from '../util.js';
+import { buildClumps } from './vegetation.js';
+import { buildCrops } from './crops.js';
+import { Trees, TREE, canopyRadius } from './trees.js';
+import { GroundMap } from './groundmap.js';
+import { Grass } from './grass.js';
+import { riverFar, creekX, CREEK, NEW_LAND } from './terrain.js';
+
+const noise = makeNoise2D(2024);
+
+export class World {
+  constructor(scene, physics, progress = () => {}) {
+    this.scene = scene;
+    this.physics = physics;
+    this.progress = progress;
+    this.structures = [];
+    this.roadSamples = [];
+    this.group = new THREE.Group();
+    this.group.name = 'world';
+    scene.add(this.group);
+    this.occupied = []; // rects reserved by buildings/roads [x0,z0,x1,z1,kind]
+    this.farmHouses = new Map();
+  }
+
+  async generate(opts) {
+    const P = this.progress;
+    setDoorPool(new DoorPool(this.scene, 512));
+    this.terrain = new Terrain();
+    physicsBounds(this.physics);
+    this.physics.terrain = this.terrain;
+    const tr = this.terrain;
+
+    P('Shaping the land', 0.05); await tick();
+    // ---- town terrace: lawns level with the town plane ----
+    tr.forRect(T.town.x0 - 24, T.town.z0, T.floodwallX, T.town.z1, (i, j, x, z) => {
+      const k = tr.idx(i, j);
+      const inner = 1 - smoothstep(T.town.z1 - 8, T.town.z1 + 2, Math.abs(z));
+      const ix = smoothstep(T.town.x0 - 22, T.town.x0 + 4, x);
+      tr.h[k] = tr.h[k] + (townPlane(x) + 0.02 - tr.h[k]) * inner * ix;
+    });
+    // riverwalk behind the floodwall, then riprap down to the water
+    tr.forRect(T.floodwallX, T.town.z0 - 10, 232, T.town.z1 + 10, (i, j, x, z) => {
+      const k = tr.idx(i, j);
+      const inner = 1 - smoothstep(T.town.z1 - 4, T.town.z1 + 10, Math.abs(z));
+      const walkY = townPlane(T.floodwallX) - 0.6;
+      let y;
+      if (x <= 201) y = walkY;
+      else y = walkY + (-1.2 - walkY) * smoothstep(201, 224, x);
+      tr.h[k] = tr.h[k] + (y - tr.h[k]) * inner;
+    });
+
+    // ---- structures ----
+    P('Raising buildings', 0.25); await tick();
+    this.placeTown();
+    this.placeFarms();
+    this.placeCrossing();
+    for (const S of this.structures) {
+      this.addSteps(S);
+      const v = validateReachability(S);
+      if (!v.ok) console.warn('unreachable rooms in', S.name, v.unreachable.slice(0, 6).join(' '));
+    }
+
+    // ---- rural roads: profile & stamp ----
+    P('Laying roads', 0.35); await tick();
+    // farm drives are short gravel lanes from the county road to just in
+    // front of the house's front door; the country church gets one too
+    const drives = [];
+    for (const f of FARMS) {
+      const S = this.farmHouses.get(f);
+      const end = S && f.drive && frontApproach(S, f.drive[0]);
+      if (end) drives.push({ name: f.name + ' drive', type: 'gravel', width: 3.4, pts: [...f.drive, end], endGround: true });
+    }
+    if (this.countryChurch) {
+      const C = this.countryChurch, b = C.bounds();
+      const hwy = ROADS.find((r) => r.name === 'Highway 34');
+      const end = frontApproach(C, [(b.wx0 + b.wx1) / 2, b.wz0 - 20]);
+      if (end && hwy) {
+        const start = nearestOnPoly(catmullRom(hwy.pts, 6), end[0], end[1]);
+        drives.push({ name: 'Bethel Church lane', type: 'gravel', width: 3.0, pts: [start, end], endGround: true });
+      }
+    }
+    // lanes that leave another road start exactly on it
+    for (const r of ROADS) {
+      if (!r.from) continue;
+      const host = ROADS.find((o) => o.name === r.from);
+      if (host) r.pts = [nearestOnPoly(catmullRom(host.pts, 6), r.pts[1][0], r.pts[1][1]), ...r.pts.slice(1)];
+    }
+    this.roads = [...ROADS, ...drives];
+    // profile in priority order: each road is pinned to the ones before it
+    for (const road of this.roads) {
+      road.samples = roadCentreline(tr, road, this.roadSamples);
+      this.roadSamples.push(road);
+    }
+    // stamp lowest priority first, so the main roads' surfaces win at junctions
+    for (const road of [...this.roads].reverse()) {
+      tr.stampRoad(road.samples, road.width / 2 + (road.type === 'paved' ? 1.1 : 0), road.type === 'paved' ? 6 : 4.5, 0, 0.06, adjustSurface);
+    }
+    // town streets: terrain just under the asphalt; sidewalks sit on a
+    // level bed so neither the lawn nor a hole shows at their edges
+    const walkBed = (x0, z0, x1, z1) => tr.forRect(x0 - 1, z0 - 1, x1 + 1, z1 + 1, (i, j, x) => {
+      const k = tr.idx(i, j);
+      tr.h[k] = clamp(tr.h[k], townPlane(x) - 0.2, townPlane(x) + 0.05);
+    });
+    for (const s of STREETS.ns) { walkBed(s.x0 - s.walk, s.z0, s.x0, s.z1); walkBed(s.x1, s.z0, s.x1 + s.walk, s.z1); }
+    for (const s of STREETS.ew) { walkBed(s.x0, s.z0 - s.walk, s.x1, s.z0); walkBed(s.x0, s.z1, s.x1, s.z1 + s.walk); }
+    for (const s of [...STREETS.ns, ...STREETS.ew, ...(STREETS.lots || [])]) {
+      tr.forRect(s.x0 - 0.5, s.z0 - 0.5, s.x1 + 0.5, s.z1 + 0.5, (i, j, x) => { tr.h[tr.idx(i, j)] = townPlane(x) - 0.08; });
+    }
+    // ease any cliffs the stamps left, holding road beds, streets, the
+    // town terrace and building pads where they are
+    {
+      const fixed = tr.roadMask.slice();
+      const hold = (x0, z0, x1, z1) => tr.forRect(x0, z0, x1, z1, (i, j) => { fixed[tr.idx(i, j)] = 1; });
+      hold(T.town.x0 - 2, T.town.z0 - 1.5, T.floodwallX + 40, T.town.z1 + 1.5);
+      for (const S of this.structures) { const b = S.bounds(); hold(b.wx0 - 2.5, b.wz0 - 2.5, b.wx1 + 2.5, b.wz1 + 2.5); }
+      tr.relax(0.62, 80, fixed);
+    }
+
+    // ---- build meshes ----
+    P('Building terrain', 0.45); await tick();
+    const splat = makeSplatFn(this);
+    tr.build(terrainMaterial(opts.texSize), splat, { farStep: 4 });
+    this.group.add(tr.group);
+
+    P('Paving streets', 0.55); await tick();
+    const rb = new GeoBuilder();
+    for (const road of this.roads) buildRoadRibbon(rb, road.samples, road);
+    const town = new GeoBuilder();
+    this.walk = [];
+    buildTownStreets(town, STREETS, { x0: 30, z0: -136, x1: 192, z1: 136 }, { walk: this.walk });
+    buildTownMarkings(town, STREETS);
+    for (const b of [rb, town]) this.addStatic(b, { receive: true, cast: false });
+    for (const w of this.walk) this.physics.add({ ...w, kind: 'walk' }, 'streets');
+
+    P('Furnishing', 0.65); await tick();
+    this.doors = [];
+    for (const S of this.structures) this.attach(S);
+
+    P('Growing trees', 0.78); await tick();
+    this.placeVegetation(opts.quality);
+    P('Placing props', 0.88); await tick();
+    this.placeProps();
+  }
+
+  // (Re)build a structure and register its collision & doors.
+  attach(S) {
+    if (S.group.parent) this.detach(S);
+    S.rebuild((x, z) => this.terrain.height(x, z));
+    this.group.add(S.group);
+    for (const b of S.boxes) this.physics.add(b, S);
+    for (const d of S.doors) {
+      d.colBox = this.physics.add(d.collider(), d);
+      this.doors.push(d);
+    }
+  }
+  detach(S) {
+    this.physics.removeOwner(S);
+    for (const d of S.doors) { this.physics.removeOwner(d); if (d.colBox) this.physics.remove(d.colBox); }
+    this.doors = this.doors.filter((d) => d.structure !== S);
+    if (S.group.parent) S.group.parent.remove(S.group);
+  }
+  toggleDoor(d) {
+    d.toggle();
+    this.physics.remove(d.colBox);
+    d.colBox = this.physics.add(d.collider(), d);
+  }
+
+  inField(x, z, m = 0) {
+    for (const f of FIELDS) if (x > f.x0 - m && x < f.x1 + m && z > f.z0 - m && z < f.z1 + m) return f;
+    return null;
+  }
+  inOccupied(x, z, m = 0) {
+    for (const o of this.occupied) if (x > o[0] - m && x < o[2] + m && z > o[1] - m && z < o[3] + m) return true;
+    return false;
+  }
+  // A random spot in a rect with nothing solid within r (for parked vehicles).
+  clearSpot(x0, z0, x1, z1, r, rng) {
+    for (let tries = 0; tries < 40; tries++) {
+      const x = x0 + rng() * (x1 - x0), z = z0 + rng() * (z1 - z0);
+      if (this.roadDist && this.roadDist(x, z) < r) continue;
+      if (this.nearBuilding(x, z, r)) continue;
+      const hit = this.physics.query(x - r, z - r, x + r, z + r, []).some((b) => b.kind !== 'walk' && b.kind !== 'floor');
+      if (!hit) return [x, z];
+    }
+    return null;
+  }
+  // within r metres of a building's walls?
+  nearBuilding(x, z, r) {
+    for (const o of this.occupied) {
+      if (o[4] !== 'building') continue;
+      const dx = Math.max(o[0] + 1 - x, 0, x - (o[2] - 1)), dz = Math.max(o[1] + 1 - z, 0, z - (o[3] - 1));
+      if (dx * dx + dz * dz < r * r) return true;
+    }
+    return false;
+  }
+  inTownGrid(x, z) {
+    return x > T.town.x0 - 2 && x < T.floodwallX + 1 && Math.abs(z) < T.town.z1 + 1;
+  }
+  inLot(x, z) {
+    for (const l of STREETS.lots || []) if (x > l.x0 - 0.5 && x < l.x1 + 0.5 && z > l.z0 - 0.5 && z < l.z1 + 0.5) return true;
+    return false;
+  }
+  onStreet(x, z, m = 0) {
+    for (const st of STREETS.ns) if (x > st.x0 - st.walk - m && x < st.x1 + st.walk + m && z > st.z0 - m && z < st.z1 + m) return true;
+    for (const st of STREETS.ew) if (z > st.z0 - st.walk - m && z < st.z1 + st.walk + m && x > st.x0 - m && x < st.x1 + m) return true;
+    return false;
+  }
+  // can a tree / clump stand here?
+  clearFor(x, z, roadM = 4, occM = 3) {
+    const p = T.play;
+    const h = this.terrain.height(x, z);
+    if (h < T.water + 0.9) return false;
+    if (this.roadDist && this.roadDist(x, z) < roadM) return false;
+    if (this.inOccupied(x, z, occM)) return false;
+    if (this.onStreet(x, z, 1.5) || this.inLot(x, z)) return false;
+    if (x > T.floodwallX - 4 && x < 205 && Math.abs(z) < T.town.z1 + 4) return false;
+    if (x > NEW_LAND.x0 && x < NEW_LAND.x1 && Math.abs(x - creekX(z)) < CREEK.chanHalf + 1) return false;
+    void p;
+    return true;
+  }
+
+  placeVegetation(quality) {
+    const tr = this.terrain;
+    const rng = mulberry32(777);
+    const trees = this.trees = new Trees(this.scene, quality);
+    const H = (x, z) => tr.height(x, z) - 0.15;
+    const broad = [TREE.OAK, TREE.OAK2, TREE.MAPLE, TREE.OAK, TREE.MAPLE_FALL, TREE.OAK_FALL, TREE.MAPLE, TREE.MAPLE_RED];
+    const plant = (x, z, kinds, sMin = 0.8, sMax = 1.2) => {
+      if (!this.clearFor(x, z)) return false;
+      if (this.inField(x, z, 1)) return false;
+      const k = kinds[Math.floor(rng() * kinds.length)];
+      const sc = sMin + rng() * (sMax - sMin);
+      // keep the foliage out of walls and roofs
+      if (this.nearBuilding(x, z, canopyRadius(k) * sc * 0.85)) return false;
+      trees.add(x, H(x, z), z, k, sc, rng);
+      this.physics.add({ min: [x - 0.35, H(x, z), z - 0.35], max: [x + 0.35, H(x, z) + 4, z + 0.35], kind: 'tree', noGround: true }, 'trees');
+      return true;
+    };
+    // woods
+    for (const w of WOODS) {
+      const n = Math.round((Math.PI * w.r * w.r) / 38);
+      for (let i = 0; i < n; i++) {
+        const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * w.r;
+        const x = w.x + Math.cos(a) * r, z = w.z + Math.sin(a) * r;
+        plant(x, z, rng() < 0.2 ? [TREE.CEDAR, TREE.CEDAR2, TREE.SHRUB] : broad, 0.85, 1.3);
+      }
+    }
+    // Turkey Creek's banks: cottonwoods and maples along its course
+    for (const cz of CREEK_WOODS) {
+      const cx = creekX(cz);
+      const n = 18 + Math.floor(rng() * 8);
+      for (let i = 0; i < n; i++) {
+        const z = cz + (rng() - 0.5) * 34, side = rng() < 0.5 ? -1 : 1;
+        const x = creekX(z) + side * (CREEK.chanHalf + 1.5 + rng() * 15);
+        plant(x, z, rng() < 0.15 ? [TREE.CEDAR, TREE.SHRUB] : [TREE.COTTON, TREE.MAPLE, TREE.OAK, TREE.COTTON, TREE.MAPLE_FALL], 0.85, 1.3);
+      }
+      void cx;
+    }
+    // fence-row tree lines along field edges
+    for (const f of FIELDS) {
+      const edges = [[f.x0, f.z0 - 4, f.x1, f.z0 - 4], [f.x0, f.z1 + 4, f.x1, f.z1 + 4], [f.x0 - 4, f.z0, f.x0 - 4, f.z1], [f.x1 + 4, f.z0, f.x1 + 4, f.z1]];
+      for (const [ax, az, bx, bz] of edges) {
+        if (rng() < 0.45) continue;
+        const L = Math.hypot(bx - ax, bz - az);
+        let t = rng() * 10;
+        while (t < L) {
+          if (rng() < 0.8) plant(ax + (bx - ax) * (t / L) + (rng() - 0.5) * 2, az + (bz - az) * (t / L) + (rng() - 0.5) * 2, rng() < 0.35 ? [TREE.CEDAR, TREE.CEDAR2] : [TREE.OAK, TREE.MAPLE, TREE.SHRUB, TREE.OAK_FALL], 0.7, 1.1);
+          t += 6 + rng() * 9;
+        }
+      }
+    }
+    // farm windbreaks & yard trees
+    for (const farm of FARMS) {
+      const [x0, z0, x1, z1] = farm.yard;
+      for (let x = x0; x < x1; x += 5 + rng() * 2) plant(x, z0 - 6 + rng(), [TREE.CEDAR, TREE.CEDAR2], 0.9, 1.15);
+      for (let z = z0; z < z1; z += 5 + rng() * 2) plant(x0 - 6 + rng(), z, [TREE.CEDAR, TREE.CEDAR2], 0.9, 1.15);
+      for (let i = 0; i < 6; i++) plant(x0 + rng() * (x1 - x0), z0 + rng() * (z1 - z0), [TREE.OAK, TREE.MAPLE, TREE.COTTON], 0.9, 1.25);
+    }
+    // town: street trees on residential parkways & yard trees
+    for (const st of STREETS.ew) {
+      if (st.name === 'Main St') continue;
+      for (let x = st.x0 + 6; x < st.x1 - 6; x += 11 + rng() * 4) {
+        for (const z of [st.z0 - st.walk - 2.5, st.z1 + st.walk + 2.5]) plant(x, z, [TREE.MAPLE, TREE.OAK, TREE.MAPLE_FALL], 0.8, 1.05);
+      }
+    }
+    for (let i = 0; i < 140; i++) {
+      const x = T.town.x0 + rng() * (T.floodwallX - T.town.x0 - 10), z = T.town.z0 + rng() * (T.town.z1 - T.town.z0);
+      if (Math.abs(z) < 64 && x > 90) continue; // downtown stays paved
+      plant(x, z, [TREE.MAPLE, TREE.OAK, TREE.OAK2, TREE.SHRUB, TREE.MAPLE_FALL], 0.8, 1.1);
+    }
+    // riverbank cottonwoods outside the floodwall
+    for (let z = T.z0; z < T.z1; z += 7) {
+      if (Math.abs(z) < T.town.z1 + 6) continue;
+      for (let k = 0; k < 2; k++) {
+        const x = 150 + rng() * 70;
+        plant(x, z + rng() * 6, [TREE.COTTON, TREE.OAK, TREE.MAPLE], 0.9, 1.3);
+      }
+    }
+    // far bank forest (scenery)
+    for (let z = T.z0; z < T.z1; z += 9) {
+      for (let x = riverFar(z) + 6; x < T.x1 - 10; x += 8 + rng() * 6) {
+        const xx = x + rng() * 4, zz = z + rng() * 6;
+        if (tr.height(xx, zz) < 1.2) continue;
+        trees.add(xx, H(xx, zz), zz, broad[Math.floor(rng() * broad.length)], 0.9 + rng() * 0.5, rng);
+      }
+    }
+    // scattered field-edge & pasture trees
+    for (let i = 0; i < 700; i++) {
+      const x = T.play.x0 + rng() * (60 - T.play.x0), z = T.play.z0 + rng() * (T.play.z1 - T.play.z0);
+      const f = this.inField(x, z, 2);
+      if (f && f.crop !== 'pasture') continue;
+      plant(x, z, [TREE.OAK, TREE.OAK2, TREE.COTTON, TREE.SHRUB, TREE.CEDAR, TREE.OAK_FALL], 0.8, 1.3);
+    }
+    // scenery ring beyond the play area (west, north, south)
+    for (let i = 0; i < 1300; i++) {
+      const x = T.x0 + rng() * (T.x1 - T.x0), z = T.z0 + rng() * (T.z1 - T.z0);
+      const inside = x > T.play.x0 - 10 && x < T.play.x1 + 10 && z > T.play.z0 - 10 && z < T.play.z1 + 10;
+      if (inside || tr.height(x, z) < 1.5) continue;
+      trees.add(x, H(x, z), z, broad[Math.floor(rng() * broad.length)], 0.9 + rng() * 0.4, rng);
+    }
+    trees.build();
+
+    // crops
+    buildCrops(this.scene, FIELDS, tr, quality);
+
+    // pampas & tall grass clumps along road ditches and field margins
+    const clumps = [];
+    for (const r of this.roadSamples) {
+      for (let i = 0; i < r.samples.length; i += 2) {
+        if (rng() > 0.22) continue;
+        const p = r.samples[i];
+        const side = rng() < 0.5 ? -1 : 1;
+        const off = r.width / 2 + 3.2 + rng() * 2.5;
+        const x = p.x + (p.nx || 0) * off * side, z = p.z + (p.nz || 0) * off * side;
+        if (!this.clearFor(x, z, 2.8, 2) || this.inTownGrid(x, z)) continue;
+        clumps.push({ x, y: tr.height(x, z), z, r: rng() * 6.28, s: 0.7 + rng() * 0.6 });
+      }
+    }
+    buildClumps(this.scene, clumps, quality);
+
+    // grass: what grows where is baked into a texture, and the blades find it on the GPU
+    this.ground = new GroundMap(this, noise);
+    this.grass = new Grass(this.scene, quality, this.ground);
+    const under = this.terrain.material.userData.ground;
+    if (under) { under.uGround.value = this.ground.tex; under.uGRect.value.copy(this.ground.rect); this.grassReach(); }
+  }
+
+  // the ground under the blades is darkened out to where the blades thin away
+  grassReach() {
+    const under = this.terrain.material.userData.ground;
+    if (under && this.grass) under.uGFade.value.set(this.grass.reach * 0.3, this.grass.reach * 0.8);
+  }
+
+  // Remove trees and grass from a rect (when a foundation goes down there).
+  clearVegetation(x0, z0, x1, z1) {
+    if (this.trees) {
+      let changed = false;
+      for (const list of this.trees.items) {
+        for (let i = list.length - 1; i >= 0; i--) {
+          const t = list[i];
+          if (t.x > x0 - 1 && t.x < x1 + 1 && t.z > z0 - 1 && t.z < z1 + 1) { list.splice(i, 1); changed = true; }
+        }
+      }
+      if (changed) {
+        for (const b of this.physics.query(x0 - 1, z0 - 1, x1 + 1, z1 + 1, [])) if (b.kind === 'tree') this.physics.remove(b);
+        this.trees.lastPos.set(1e9, 0, 0);
+      }
+    }
+    this.occupied.push([x0, z0, x1, z1, 'claim']);
+    if (this.ground) this.ground.clear(x0 - 0.3, z0 - 0.3, x1 + 0.3, z1 + 0.3);
+  }
+
+  update(dt, camPos) {
+    if (this.trees) this.trees.update(camPos, this.focus || camPos, this.lightDir);
+    if (this.grass) this.grass.update(camPos, dt, this.wind ?? 0.3, this.lightDir);
+  }
+
+  // Merge a GeoBuilder into static meshes
+  addStatic(builder, { receive = true, cast = true } = {}) {
+    for (const [key, geo] of builder.build()) {
+      const m = new THREE.Mesh(geo, key === 'glass' ? null : buildingMaterial());
+      m.receiveShadow = receive; m.castShadow = cast;
+      m.matrixAutoUpdate = false;
+      this.group.add(m);
+    }
+  }
+
+  // Place a structure so its local cell (0,0) lands at world (x,z); floor at y.
+  place(S, x, z, y) {
+    S.ox = x; S.oz = z; S.oy = y;
+    const b = S.bounds();
+    // reserve and level the ground under its footprint
+    const fp = S.footprintCells();
+    for (const k of fp) {
+      const [cx, cz] = k.split(',').map(Number);
+      const x0 = x + cx * CELL, z0 = z + cz * CELL;
+      this.terrain.clampBelow(x0, z0, x0 + CELL, z0 + CELL, y - 0.12);
+    }
+    this.occupied.push([b.wx0 - 1, b.wz0 - 1, b.wx1 + 1, b.wz1 + 1, 'building']);
+    // road banks must not cut into the pad around a building
+    this.terrain.forRect(b.wx0 - 1.5, b.wz0 - 1.5, b.wx1 + 1.5, b.wz1 + 1.5, (i, j) => { this.terrain.padMask[this.terrain.idx(i, j)] = 1; });
+    this.structures.push(S);
+    return S;
+  }
+
+  // Lot placement: rotate a plan, put its min corner at (x, z), floor at y.
+  placeLot(S, rot, x, z, y, padMargin = 4, padDrop = 0.5) {
+    rotateStructure(S, rot || 0);
+    const b = S.bounds();
+    const w = (b.x1 - b.x0) * CELL, d = (b.z1 - b.z0) * CELL;
+    if (padMargin > 0) this.terrain.flattenRect(x - 1, z - 1, x + w + 1, z + d + 1, y - padDrop, padMargin);
+    this.place(S, x, z, y);
+    return S;
+  }
+
+  placeTown() {
+    for (const lot of TOWN_LOTS) {
+      const [x, z] = lot.at;
+      if (lot.type === 'house') {
+        const fn = PLANS[lot.plan] || PLANS.foursquare;
+        const S = fn({ name: lot.plan + ' @' + lot.at.join(','), ext: lot.ext, roof: lot.roof, seed: x * 7 + z });
+        const y = townPlane(x + 5) + 0.6;
+        this.placeLot(S, lot.rot, x, z, y, 5, 0.55);
+      } else if (lot.type === 'block') {
+        const S = townBlock(lot.units, 'Block @' + lot.at.join(','));
+        // anchors for signs/awnings travel with the structure through rotation
+        for (const u of S.units) {
+          S.addProp('anchor_sign', (u.x0 + u.x1 + 1) * CELL / 2, 3.12, S.depth * CELL + 0.13, 0, { text: u.sign, w: (u.x1 - u.x0 + 1) * CELL - 1.2 });
+          S.addProp('anchor_awning', (u.x0 * CELL + 0.35 + (u.x1) * CELL - 0.15) / 2, 2.78, S.depth * CELL, 0, { w: (u.x1 - u.x0) * CELL - 0.5, kind: u.kind });
+        }
+        const y = townPlane(x + 4) + 0.17;
+        this.placeLot(S, lot.rot, x, z, y, 0);
+        S.kind = 'commercial';
+      } else if (lot.type === 'church') {
+        const S = PLANS.church({ name: 'First Church' });
+        this.placeLot(S, lot.rot, x, z, townPlane(x + 4) + 0.7, 5, 0.6);
+      } else if (lot.type === 'gas') {
+        const S = PLANS.gas({ name: 'Gas & Go' });
+        const y = this.terrain.height(x + 6, z + 6) + 0.25;
+        this.placeLot(S, lot.rot, x, z, y, 8, 0.2);
+        this.gasStation = S;
+      }
+    }
+  }
+
+  // Carver's Crossing: storefronts and houses on the ground where they stand
+  placeCrossing() {
+    for (const lot of CROSSING.lots) {
+      const [x, z] = lot.at;
+      if (lot.type === 'house') {
+        const fn = PLANS[lot.plan] || PLANS.foursquare;
+        const S = fn({ name: lot.plan + ' @' + lot.at.join(','), ext: lot.ext, roof: lot.roof, seed: x * 7 + z });
+        const g = avgHeight(this.terrain, x, z, x + 12, z + 12);
+        this.placeLot(S, lot.rot, x, z, g + 0.6, 6, 0.55);
+        S.crossing = true;
+      } else if (lot.type === 'block') {
+        const S = townBlock(lot.units, "Carver's Crossing store");
+        for (const u of S.units) {
+          S.addProp('anchor_sign', (u.x0 + u.x1 + 1) * CELL / 2, 3.12, S.depth * CELL + 0.13, 0, { text: u.sign, w: (u.x1 - u.x0 + 1) * CELL - 1.2 });
+          S.addProp('anchor_awning', (u.x0 * CELL + 0.35 + (u.x1) * CELL - 0.15) / 2, 2.78, S.depth * CELL, 0, { w: (u.x1 - u.x0) * CELL - 0.5, kind: u.kind });
+        }
+        const g = avgHeight(this.terrain, x, z, x + 18, z + 18);
+        this.placeLot(S, lot.rot, x, z, g + 0.25, 7, 0.2);
+        S.kind = 'commercial'; S.crossing = true;
+        this.crossingStore = S;
+        // its concrete apron out to the highway: no trees or grass on it
+        const b = S.bounds();
+        this.occupied.push([b.wx0 - 2, b.wz1, b.wx1 + 2, b.wz1 + 9, 'paved']);
+      }
+    }
+    // the elevator's footprint is spoken for
+    const [ex, ez] = CROSSING.elevator;
+    const ge = avgHeight(this.terrain, ex - 8, ez - 8, ex + 8, ez + 8);
+    this.terrain.flattenRect(ex - 10, ez - 9, ex + 10, ez + 9, ge, 8, 'set');
+    this.elevatorY = ge;
+    this.occupied.push([ex - 10, ez - 9, ex + 10, ez + 9, 'building']);
+    this.terrain.forRect(ex - 10, ez - 9, ex + 10, ez + 9, (i, j) => { this.terrain.padMask[this.terrain.idx(i, j)] = 1; });
+  }
+
+  placeFarms() {
+    // the old farms, then the country church, then the new places (so the
+    // old buildings keep the ids saves know them by)
+    for (const farm of FARMS.filter((f) => !f.isNew)) this.placeFarm(farm);
+    this.placeCountryChurch();
+    for (const farm of FARMS.filter((f) => f.isNew)) this.placeFarm(farm);
+  }
+  placeFarm(farm) {
+    const [yx0, yz0, yx1, yz1] = farm.yard;
+    const yardY = avgHeight(this.terrain, yx0, yz0, yx1, yz1);
+    // soften the farmyard so buildings sit naturally
+    this.terrain.flattenRect(yx0 + 6, yz0 + 6, yx1 - 6, yz1 - 6, yardY, 14, 'set');
+    const h = farm.house;
+    const fn = PLANS[h.plan] || PLANS.foursquare;
+    const S = fn({ name: farm.name + ' house', ext: h.ext, roof: h.roof, seed: farm.name.length });
+    const g = avgHeight(this.terrain, h.at[0], h.at[1], h.at[0] + 10, h.at[1] + 10);
+    this.placeLot(S, h.rot, h.at[0], h.at[1], g + 0.6, 6, 0.55);
+    this.farmHouses.set(farm, S);
+    if (farm.barn) {
+      const B = PLANS[farm.barn.plan]({ name: farm.name + ' barn', style: farm.barn.style });
+      const gb = avgHeight(this.terrain, farm.barn.at[0], farm.barn.at[1], farm.barn.at[0] + 12, farm.barn.at[1] + 16);
+      this.placeLot(B, farm.barn.rot, farm.barn.at[0], farm.barn.at[1], gb + 0.15, 8, 0.15);
+    }
+    if (farm.shed) {
+      const M = PLANS[farm.shed.plan]({ name: farm.name + ' shed' });
+      const gs = avgHeight(this.terrain, farm.shed.at[0], farm.shed.at[1], farm.shed.at[0] + 12, farm.shed.at[1] + 12);
+      this.placeLot(M, farm.shed.rot, farm.shed.at[0], farm.shed.at[1], gs + 0.12, 8, 0.12);
+    }
+  }
+  placeCountryChurch() {
+    // country church at the crossroads
+    const cc = FEATURES.churchCountry;
+    const C = PLANS.church({ name: 'Bethel Church', ext: 'white_siding' });
+    const gc = avgHeight(this.terrain, cc.at[0], cc.at[1], cc.at[0] + 8, cc.at[1] + 18);
+    this.placeLot(C, cc.rot, cc.at[0], cc.at[1], gc + 0.7, 8, 0.6);
+    this.countryChurch = C;
+  }
+
+  // Concrete steps outside level-0 openings where the ground is lower.
+  addSteps(S) {
+    const has = (x, z) => S.floors.has(`${x},${z},0`);
+    const tryEdge = (x, z, a, outDx, outDz, inX, inZ) => {
+      const w = S.walls.get(`${x},${z},0,${a}`);
+      let open = !w;
+      if (w) {
+        const g = shapeGridOf(w.shape);
+        // passable door/opening in the bottom rows
+        open = g[0].some((c, k) => c !== '#' && c !== 'w' && g[4][k] !== '#' && g[4][k] !== 'w');
+        if (!open) return;
+      } else {
+        // open edge (porch): only if there's a gap in the railing line
+      }
+      if (!w && S.porch === undefined) return;
+      // world point just outside the edge centre
+      const cx = S.ox + (a === 0 ? x * CELL + 1 : x * CELL), cz = S.oz + (a === 0 ? z * CELL : z * CELL + 1);
+      const ox = cx + outDx * 0.9, oz = cz + outDz * 0.9;
+      const drop = S.oy - this.terrain.height(ox, oz);
+      if (drop < 0.22) return;
+      const rot = outDz > 0 ? 0 : outDz < 0 ? 2 : outDx > 0 ? 1 : 3;
+      const lx = (a === 0 ? x * CELL + 1 : x * CELL) + outDx * HALF_T_STEP, lz = (a === 0 ? z * CELL : z * CELL + 1) + outDz * HALF_T_STEP;
+      S.addProp('steps', lx, 0, lz, rot, { h: Math.min(drop + 0.05, 1.6), w: w ? 1.5 : 1.9 });
+      void inX; void inZ;
+    };
+    for (const k of [...S.floors.keys()]) {
+      const [x, z, l] = k.split(',').map(Number);
+      if (l !== 0) continue;
+      if (!has(x, z - 1)) tryEdge(x, z, 0, 0, -1, x, z);
+      if (!has(x, z + 1)) tryEdge(x, z + 1, 0, 0, 1, x, z);
+      if (!has(x - 1, z)) tryEdge(x, z, 1, -1, 0, x, z);
+      if (!has(x + 1, z)) tryEdge(x + 1, z, 1, 1, 0, x, z);
+    }
+  }
+
+  // Ground fences and other runs must stay off: building walls (+0.8 m) and
+  // a 4 m apron in front of every ground-floor opening.
+  buildFenceClear() {
+    const rects = [];
+    for (const S of this.structures) {
+      const b = S.bounds();
+      if (!b) continue;
+      rects.push([b.wx0 - 0.8, b.wz0 - 0.8, b.wx1 + 0.8, b.wz1 + 0.8]);
+      const has = (x, z) => S.floors.has(`${x},${z},0`);
+      for (const [key, w] of S.walls) {
+        const [x, z, l, a] = key.split(',').map(Number);
+        if (l !== 0) continue;
+        const g = shapeGridOf(w.shape);
+        if (!g[0].some((c, k) => c !== '#' && c !== 'w' && g[4][k] !== '#' && g[4][k] !== 'w')) continue;
+        const inA = a === 0 ? has(x, z - 1) : has(x - 1, z), inB = has(x, z);
+        if (inA === inB) continue; // interior wall
+        const ex = S.ox + x * CELL, ez = S.oz + z * CELL;
+        if (a === 0) {
+          const out = inB ? -1 : 1;
+          rects.push([ex - 0.6, Math.min(ez, ez + out * 4), ex + CELL + 0.6, Math.max(ez, ez + out * 4)]);
+        } else {
+          const out = inB ? -1 : 1;
+          rects.push([Math.min(ex, ex + out * 4), ez - 0.6, Math.max(ex, ex + out * 4), ez + CELL + 0.6]);
+        }
+      }
+    }
+    this.fenceClear = rects;
+    this.fenceBlocked = (x, z) => rects.some((r) => x > r[0] && x < r[2] && z > r[1] && z < r[3]);
+  }
+
+  placeProps() {
+    const P = this.props = new PropBuilder(this);
+    this.buildFenceClear();
+    const tr = this.terrain;
+    const rng = mulberry32(99);
+    // signs & awnings on storefronts
+    const awningColors = { hardware: '#3a5a3a', store: '#8a2a22', diner: '#a33a2a', pharmacy: '#2f4a6a', bar: '#3a2a2a', office: '#2f4a3a' };
+    for (const S of this.structures) {
+      for (const p of S.props) {
+        if (p.type !== 'anchor_sign' && p.type !== 'anchor_awning') continue;
+        const wx = S.ox + p.x, wy = S.oy + p.y, wz = S.oz + p.z;
+        const nz = p.rot === 0 ? 1 : -1;
+        if (p.type === 'anchor_sign') P.storeSign(p.text, wx, wy, wz, p.w, 0.62, [0, 0, nz], [['#2f3b33', '#efe6c8'], ['#5a2a22', '#f4e8c8'], ['#1f2d3d', '#efe6c8'], ['#e8dcc0', '#3a2a1a']][Math.floor(rng() * 4)]);
+        else P.awning(wx - p.w / 2, wx + p.w / 2, wy, S.oz + p.z, nz, awningColors[p.kind] || '#6a3a2a');
+      }
+    }
+    // floodwall + gate
+    const fw = FEATURES.floodwall;
+    P.floodwall(fw.x, fw.z0, fw.z1, fw.gate, townPlane(fw.x) + 3.2);
+    // water tower
+    P.waterTower(FEATURES.waterTower[0], FEATURES.waterTower[1]);
+    // street lamps along Main St (acorn) and other streets (single)
+    for (const st of STREETS.ew) {
+      const acorn = st.name === 'Main St';
+      for (let x = st.x0 + 8; x < st.x1 - 4; x += acorn ? 12 : 26) {
+        if (STREETS.ns.some((n) => x > n.x0 - n.walk - 1 && x < n.x1 + n.walk + 1)) continue;
+        for (const [z, side] of [[st.z0 - 0.7, -1], [st.z1 + 0.7, 1]]) {
+          if (!acorn && side < 0) continue;
+          P.lamp(x, z, townPlane(x) + 0.15, acorn ? 'acorn' : 'single');
+        }
+      }
+    }
+    for (const st of STREETS.ns) {
+      for (let z = st.z0 + 10; z < st.z1 - 4; z += 28) {
+        if (STREETS.ew.some((e) => z > e.z0 - e.walk - 1 && z < e.z1 + e.walk + 1)) continue;
+        P.lamp(st.x1 + 0.7, z, townPlane(st.x1 + 0.7) + 0.15, 'single');
+      }
+    }
+    // barricades where a town street dead-ends (no road carries on)
+    const roadEnds = this.roads.flatMap((r) => [r.samples[0], r.samples[r.samples.length - 1]]);
+    const carriesOn = (x, z) => roadEnds.some((p) => Math.hypot(p.x - x, p.z - z) < 6);
+    for (const st of STREETS.ns) {
+      const cx = (st.x0 + st.x1) / 2;
+      for (const z of [st.z0, st.z1]) {
+        if (carriesOn(cx, z)) continue;
+        const zz = z + (z === st.z0 ? 0.8 : -0.8);
+        P.barricade(cx, zz, townPlane(cx), true, st.x1 - st.x0 - 0.6);
+      }
+    }
+    for (const st of STREETS.ew) {
+      const cz = (st.z0 + st.z1) / 2;
+      if (carriesOn(st.x0, cz)) continue;
+      P.barricade(st.x0 + 0.8, cz, townPlane(st.x0 + 0.8), false, st.z1 - st.z0 - 0.6);
+    }
+    // benches & hydrants downtown
+    const curbStuff = [];
+    for (let x = 96; x < 168; x += 18) {
+      if (STREETS.ns.some((n) => x > n.x0 - 6 && x < n.x1 + 6)) continue;
+      P.bench(x + 3, -8.2, townPlane(x + 3) + 0.15, 0);
+      P.bench(x + 9, 8.2, townPlane(x + 9) + 0.15, 0);
+      P.hydrant(x + 6, -6.6, townPlane(x + 6) + 0.15);
+      curbStuff.push([x + 3, -8.2], [x + 9, 8.2], [x + 6, -6.6]);
+    }
+    // parked cars: angled on Main St, a few elsewhere, wrecks on the roads.
+    // Some still run if you can find them fuel; the wrecks are for parts.
+    const carCols = ['#7a2a24', '#2f4a6a', '#d8d4c8', '#3a5a3a', '#8a7a5a', '#4a4a4a', '#a8a090', '#2a2a2a', '#6b4a2a', '#5b6f7a', '#9a8a4a'];
+    const col = () => carCols[Math.floor(rng() * carCols.length)];
+    const runs = (lo, hi) => ({ fuel: +(lo + rng() * (hi - lo)).toFixed(2), wear: +(0.15 + rng() * 0.3).toFixed(2) });
+    const lastStall = { n: -99, s: -99 };
+    for (let x = 96; x < 168; x += 3) {
+      if (STREETS.ns.some((n) => x > n.x0 - 6 && x < n.x1 + 6)) continue;
+      if (rng() < 0.62) continue;
+      const north = rng() < 0.5;
+      // angled cars in neighbouring stalls would touch: leave a gap
+      if (x - lastStall[north ? 'n' : 's'] < 6) continue;
+      lastStall[north ? 'n' : 's'] = x;
+      const zz = north ? -4.3 : 4.3, r = rng();
+      const kind = r < 0.3 ? 'pickup' : r < 0.5 ? 'wagon' : 'sedan';
+      const o = rng() < 0.4 ? { wreck: true } : runs(0, 0.3), paint = col();
+      // nosed in at the curb: keep the bumper clear of hydrants and benches
+      const yaw = (north ? Math.PI : 0) + (north ? -0.9 : 0.9), half = kind === 'pickup' ? 2.7 : 2.6;
+      const fx = x + 1.5 + Math.sin(yaw) * half, fz = zz + Math.cos(yaw) * half;
+      if (curbStuff.some(([cx, cz]) => Math.hypot(cx - fx, cz - fz) < 2.2)) continue;
+      P.car(x + 1.5, zz, yaw, paint, kind, townPlane(x + 1.5), o);
+    }
+    P.car(176.5, 40, 0.05, '#7a2a24', 'pickup', townPlane(176.5), runs(0.2, 0.45));
+    P.car(60, 4.5, -1.2, '#d8d4c8', 'wagon', null, runs(0.1, 0.3));
+    // pulled over on the highway's shoulder (or off in the ditch)
+    const shoulder = (name, x, side, skew, color, kind, o) => {
+      const r = this.roadSamples.find((q) => q.name === name);
+      if (!r) return;
+      let i = 1;
+      for (let k = 1; k < r.samples.length - 1; k++) if (Math.abs(r.samples[k].x - x) < Math.abs(r.samples[i].x - x)) i = k;
+      const a = r.samples[i - 1], b = r.samples[i + 1], h = Math.atan2(b.x - a.x, b.z - a.z);
+      const off = side * (r.width / 2 + 1.5);
+      P.car(r.samples[i].x + Math.cos(h) * off, r.samples[i].z - Math.sin(h) * off, h + skew, color, kind, null, o);
+    };
+    shoulder('Highway 34', W(-90), 1, 0.06, '#2f4a6a', 'sedan', runs(0.05, 0.3));
+    shoulder('Highway 34', W(-176), -1, -0.35, '#4a4a4a', 'pickup', { wreck: true });
+    // the fire department's red pickup, left by the floodwall gate
+    P.car(184, -2, Math.PI / 2, '#a8231c', 'pickup', townPlane(184), runs(0.3, 0.55));
+    // pile-ups and dead cars along the highway and county roads
+    const wreckOn = (name, frac, side, skew, kind) => {
+      const r = this.roadSamples.find((q) => q.name === name);
+      if (!r) return;
+      const i = Math.max(1, Math.min(r.samples.length - 2, Math.floor(r.samples.length * frac)));
+      const a = r.samples[i - 1], b = r.samples[i + 1], h = Math.atan2(b.x - a.x, b.z - a.z);
+      const nx = Math.cos(h), nz = -Math.sin(h), off = side * (r.width / 2 - 0.6);
+      P.car(r.samples[i].x + nx * off, r.samples[i].z + nz * off, h + skew, col(), kind, null, { wreck: true });
+    };
+    wreckOn('Highway 34', 0.36, 1, 0.5, 'sedan');
+    wreckOn('Highway 34', 0.362, -1, 2.6, 'pickup');
+    wreckOn('Highway 34', 0.55, 1, -0.25, 'wagon');
+    wreckOn('County Road 210', 0.45, -1, 0.35, 'sedan');
+    wreckOn('Carver Road', 0.7, 1, -0.4, 'sedan');
+    // farms: fences, bins, silos, mailboxes, trucks
+    for (const farm of FARMS) {
+      const [x0, z0, x1, z1] = farm.yard;
+      P.fence([[x0, z0], [x1, z0], [x1, z1], [x0, z1], [x0, z0]], 'board', [[(x0 + x1) / 2, z1, 5], [x1, (z0 + z1) / 2, 5], [farm.house.at[0] + 4, z1, 6]]);
+      for (const [bx, bz, r] of farm.bins) P.grainBin(bx, bz, r);
+      if (farm.silo) P.silo(farm.silo[0], farm.silo[1]);
+      if (farm.drive) {
+        // mailbox beside the drive, just off the road it leaves from
+        const dr = this.roads.find((r) => r.name === farm.name + ' drive');
+        const [ax, az] = dr ? dr.pts[0] : farm.drive[0], [bx, bz] = dr ? dr.pts[1] : [ax + 1, az];
+        const L = Math.hypot(bx - ax, bz - az) || 1, dx = (bx - ax) / L, dz = (bz - az) / L;
+        P.mailbox(ax + dx * 5 - dz * 2.6, az + dz * 5 + dx * 2.6, farm.name);
+      }
+      // farmers kept a truck and a little gas
+      const spot = this.clearSpot(x0 + 8, z0 + 8, x1 - 8, z1 - 8, 3.4, rng);
+      if (spot) P.car(spot[0], spot[1], rng() * 3, col(), rng() < 0.75 ? 'pickup' : 'wagon', null, runs(0.15, 0.5));
+    }
+    // field fences (barbed wire) around pastures & hay
+    for (const f of FIELDS) {
+      if (f.crop !== 'pasture' && f.crop !== 'hay') continue;
+      P.fence([[f.x0 - 2, f.z0 - 2], [f.x1 + 2, f.z0 - 2], [f.x1 + 2, f.z1 + 2], [f.x0 - 2, f.z1 + 2], [f.x0 - 2, f.z0 - 2]], 'wire', [[f.x0 - 2, (f.z0 + f.z1) / 2, 4]]);
+      if (f.crop === 'hay') {
+        for (let i = 0; i < 22; i++) P.roundBale(f.x0 + 6 + rng() * (f.x1 - f.x0 - 12), f.z0 + 6 + rng() * (f.z1 - f.z0 - 12), rng() * 3);
+      }
+    }
+    // power lines along the highway and county road
+    for (const r of this.roadSamples) {
+      if (r.name === 'Highway 34') P.powerLine(r.samples, 1, 44, 8.5);
+      if (r.name === 'County Road 210') P.powerLine(r.samples, -1, 46, 6.5);
+      if (r.name === 'Bluff Road') P.powerLine(r.samples, 1, 44, 7);
+      if (r.name === 'Carver Road') P.powerLine(r.samples, 1, 46, 6.5);
+    }
+    this.placeCrossingProps(P, rng);
+    this.placeCulverts(P);
+    // town picket fences in some yards
+    for (const S of this.structures) {
+      if (S.kind !== 'house' || !this.inTownGrid(S.ox, S.oz)) continue;
+      if (rng() < 0.5) continue;
+      const b = S.bounds();
+      const x0 = b.wx0 - 3, x1 = b.wx1 + 3, z0 = b.wz0 - 3, z1 = b.wz1 + 3;
+      P.fence([[x0, z1], [x1, z1]], 'picket', [[(x0 + x1) / 2, z1, 1.6]]);
+    }
+    // church spires & cemetery
+    for (const S of this.structures) {
+      for (const p of S.props) if (p.type === 'anchor_spire') P.spire(S.ox + p.x, S.oy + p.y, S.oz + p.z);
+    }
+    if (this.countryChurch) {
+      const C = this.countryChurch;
+      const b = C.bounds();
+      for (let i = 0; i < 26; i++) P.headstone(b.wx1 + 4 + (i % 5) * 2.4, b.wz0 + 2 + Math.floor(i / 5) * 2.6 + rng() * 0.3, rng);
+      P.fence([[b.wx1 + 2, b.wz0], [b.wx1 + 16, b.wz0], [b.wx1 + 16, b.wz0 + 16], [b.wx1 + 2, b.wz0 + 16]], 'picket');
+    }
+    // gas pumps under the canopy
+    if (this.gasStation) {
+      // concrete apron and pumps under the canopy
+      const G = this.gasStation, b = G.bounds();
+      const y = G.oy - 0.12;
+      P.box('concrete', b.wx0 - 3, y - 0.4, b.wz0 - 3, b.wx1 + 3, y, b.wz1 + 1, '#cfcbc2', { ny: false });
+      this.physics.add({ min: [b.wx0 - 3, y - 0.4, b.wz0 - 3], max: [b.wx1 + 3, y, b.wz1 + 1], kind: 'walk' }, 'props');
+      const can = G.props.length ? null : null; void can;
+      for (const p of G.props) if (p.type === 'anchor_pump') { /* reserved */ }
+      // pump islands between the canopy columns
+      const cx = (b.wx0 + b.wx1) / 2;
+      const front = G.oz + 2; // canopy side after rotation lies toward the highway (north)
+      for (const dx of [-2.6, 2.6]) {
+        const px = cx + dx, pz = b.wz0 + 5;
+        P.box('concrete', px - 0.6, y, pz - 1.6, px + 0.6, y + 0.18, pz + 1.6, '#d8d4cc');
+        P.box('plain:paint', px - 0.3, y + 0.18, pz - 0.4, px + 0.3, y + 1.7, pz + 0.4, '#c4332a');
+        P.box('plain:paint', px - 0.31, y + 1.2, pz - 0.41, px + 0.31, y + 1.55, pz + 0.41, '#efe9dc');
+        P.solid(px - 0.6, y, pz - 1.6, px + 0.6, y + 1.7, pz + 1.6);
+      }
+      void front;
+    }
+    P.finish(this.scene);
+    this.lampPositions = P.lampPositions;
+    this.carLoot = P.loot;
+  }
+}
+
+// The crossing's yard furniture: the elevator, the store's gravel apron,
+// mailboxes, picket fences, the town sign.
+World.prototype.placeCrossingProps = function (P, rng) {
+  const [ex, ez] = CROSSING.elevator;
+  P.elevator(ex, ez, this.elevatorY);
+  if (this.crossingStore) {
+    const S = this.crossingStore, b = S.bounds(), y = S.oy - 0.14;
+    // a concrete apron from the storefront out to the highway
+    P.box('concrete', b.wx0 - 2, y - 0.5, b.wz1, b.wx1 + 2, y, b.wz1 + 9, '#bdb8ac', { ny: false });
+    this.physics.add({ min: [b.wx0 - 2, y - 0.5, b.wz1], max: [b.wx1 + 2, y, b.wz1 + 9], kind: 'walk' }, 'props');
+    P.bench(b.wx0 + 3, b.wz1 + 1.2, y + 0.02, 0);
+    // a farm truck nosed in at the store, an old sedan by the post office
+    P.car(b.wx1 - 3.2, b.wz1 + 4.6, Math.PI + 0.06, '#5b6f7a', 'pickup', y, { fuel: 0.32, wear: 0.3 });
+    P.car(b.wx0 + 2.4, b.wz1 + 5.2, Math.PI - 0.1, '#8a7a5a', 'sedan', y, { fuel: 0.08, wear: 0.4 });
+  }
+  for (const S of this.structures) {
+    if (!S.crossing || S.kind !== 'house') continue;
+    const b = S.bounds();
+    // the front faces the road they're on
+    const toHwy = Math.abs((b.wz0 + b.wz1) / 2 - CROSSING.at[1]) < 40;
+    if (toHwy) {
+      const fz = b.wz0 < CROSSING.at[1] ? b.wz1 + 3 : b.wz0 - 3;
+      if (rng() < 0.7) P.fence([[b.wx0 - 3, fz], [b.wx1 + 3, fz]], 'picket', [[(b.wx0 + b.wx1) / 2 + 2, fz, 1.6]]);
+      P.mailbox(b.wx0 - 2, b.wz0 < CROSSING.at[1] ? CROSSING.at[1] + 6 : CROSSING.at[1] - 6, 'Crossing');
+    } else P.mailbox(CROSSING.at[0] - 5, (b.wz0 + b.wz1) / 2, 'Crossing');
+  }
+  // the sign coming in from either side
+  P.townSign(CROSSING.at[0] + 64, CROSSING.at[1] - 8, "CARVER'S CROSSING", 'POP. 38');
+  P.townSign(CROSSING.at[0] - 64, CROSSING.at[1] + 10, "CARVER'S CROSSING", 'POP. 38');
+};
+// Where a road crosses Turkey Creek it runs on a fill over a culvert: a
+// concrete pipe end on each side of the embankment.
+World.prototype.placeCulverts = function (P) {
+  this.culverts = [];
+  for (const r of this.roads) {
+    for (let i = 1; i < r.samples.length; i++) {
+      const a = r.samples[i - 1], b = r.samples[i];
+      const sa = a.x - creekX(a.z), sb = b.x - creekX(b.z);
+      if (Math.sign(sa) === Math.sign(sb) || a.x < NEW_LAND.x0 || a.x > NEW_LAND.x1) continue;
+      const t = sa / (sa - sb), x = a.x + (b.x - a.x) * t, z = a.z + (b.z - a.z) * t, y = a.y + (b.y - a.y) * t;
+      const dx = b.x - a.x, dz = b.z - a.z, L = Math.hypot(dx, dz) || 1;
+      // the pipe runs across the road, along the creek
+      const off = r.width / 2 + 2.6;
+      const bed = this.terrain.height(creekX(z), z);
+      for (const side of [-1, 1]) {
+        const px = x - dz / L * off * side, pz = z + dx / L * off * side;
+        P.culvert(px, pz, Math.min(bed + 0.1, y - 1.4), Math.atan2(-dz / L * side, dx / L * side));
+      }
+      this.culverts.push({ x, z, y, road: r.name });
+    }
+  }
+};
+
+// A point 3.2 m in front of the exterior ground-floor door of S nearest to
+// `from` (where a drive or path should end). Works from the wall layout, so
+// it can run before the structure is meshed.
+function frontApproach(S, from) {
+  let best = null, bd = Infinity;
+  const hasFloor = (x, z) => S.floors.has(`${Math.floor((x - S.ox) / CELL)},${Math.floor((z - S.oz) / CELL)},0`);
+  for (const [key, w] of S.walls) {
+    const [x, z, l, a] = key.split(',').map(Number);
+    if (l !== 0) continue;
+    const g = wallGridE(w, a);
+    const cols = [];
+    for (let k = 0; k < g[0].length; k++) if (g[0][k] === CELL_DOOR) cols.push(k);
+    if (!cols.length) continue;
+    const e = ((cols[0] + cols[cols.length - 1] + 1) / 2) / g[0].length * CELL;
+    const cx = S.ox + (a === 0 ? x * CELL + e : x * CELL), cz = S.oz + (a === 0 ? z * CELL : z * CELL + e);
+    const n = a === 0 ? [0, 1] : [1, 0];
+    for (const sg of [1, -1]) {
+      if (hasFloor(cx + n[0] * sg * 1.2, cz + n[1] * sg * 1.2)) continue;
+      if (!hasFloor(cx - n[0] * sg * 1.2, cz - n[1] * sg * 1.2)) continue; // must lead inside
+      const p = [cx + n[0] * sg * 3.2, cz + n[1] * sg * 3.2];
+      const dd = Math.hypot(p[0] - from[0], p[1] - from[1]);
+      if (dd < bd) { bd = dd; best = p; }
+    }
+  }
+  return best;
+}
+function nearestOnPoly(poly, x, z) {
+  let best = null, bd = Infinity;
+  for (let i = 0; i < poly.length - 1; i++) {
+    const [ax, az] = poly[i], [bx, bz] = poly[i + 1];
+    const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz || 1;
+    const t = clamp(((x - ax) * dx + (z - az) * dz) / l2, 0, 1);
+    const px = ax + dx * t, pz = az + dz * t, d = Math.hypot(x - px, z - pz);
+    if (d < bd) { bd = d; best = [px, pz]; }
+  }
+  return best;
+}
+
+function avgHeight(tr, x0, z0, x1, z1) {
+  let s = 0, n = 0;
+  for (let x = x0; x <= x1; x += 2) for (let z = z0; z <= z1; z += 2) { s += tr.height(x, z); n++; }
+  return s / n;
+}
+
+function physicsBounds(ph) {
+  ph.bounds = { ...T.play };
+}
+
+export function tick() { return new Promise((r) => setTimeout(r, 0)); }
+
+// Ground cover weights [grass, dry, dirt, gravel] (sand = remainder)
+function makeSplatFn(world) {
+  // distance-to-road raster (2 m), filled from road samples
+  const R = 2, W = Math.ceil((T.x1 - T.x0) / R) + 1, H = Math.ceil((T.z1 - T.z0) / R) + 1;
+  const dist = new Float32Array(W * H).fill(99);
+  const halfW = new Float32Array(W * H).fill(0);
+  for (const r of world.roadSamples) {
+    const reach = r.width / 2 + 5;
+    for (const p of r.samples) {
+      const i0 = Math.floor((p.x - reach - T.x0) / R), i1 = Math.ceil((p.x + reach - T.x0) / R);
+      const j0 = Math.floor((p.z - reach - T.z0) / R), j1 = Math.ceil((p.z + reach - T.z0) / R);
+      for (let j = Math.max(0, j0); j <= Math.min(H - 1, j1); j++) for (let i = Math.max(0, i0); i <= Math.min(W - 1, i1); i++) {
+        const d = Math.hypot(T.x0 + i * R - p.x, T.z0 + j * R - p.z) - r.width / 2;
+        const k = j * W + i;
+        if (d < dist[k]) { dist[k] = d; halfW[k] = r.width / 2; }
+      }
+    }
+  }
+  const roadD = (x, z) => {
+    const i = Math.round((x - T.x0) / R), j = Math.round((z - T.z0) / R);
+    if (i < 0 || j < 0 || i >= W || j >= H) return 99;
+    return dist[j * W + i];
+  };
+  world.roadDist = roadD;
+  return (x, z, h, slope) => {
+    const nv = noise(x / 60, z / 60) * 0.5 + 0.5;
+    let dry = smoothstep(0.5, 0.85, nv) * 0.75 + smoothstep(0.3, 0.6, noise(x / 17, z / 17)) * 0.15;
+    let dirt = smoothstep(0.22, 0.45, slope);
+    for (const f of FIELDS) {
+      if (x > f.x0 - 1 && x < f.x1 + 1 && z > f.z0 - 1 && z < f.z1 + 1) {
+        if (f.crop === 'corn' || f.crop === 'beans') { dirt = Math.max(dirt, 0.9); }
+        else if (f.crop === 'hay') { dry = Math.max(dry, 0.85); }
+        else if (f.crop === 'pasture') { dry *= 0.4; }
+        break;
+      }
+    }
+    // Turkey Creek's muddy bed and banks
+    if (x > NEW_LAND.x0 && x < NEW_LAND.x1) {
+      const cd = Math.abs(x - creekX(z));
+      if (cd < CREEK.chanHalf + 6) dirt = Math.max(dirt, 1 - smoothstep(CREEK.chanHalf + 0.5, CREEK.chanHalf + 4 + 2 * nv, cd));
+    }
+    const rd = roadD(x, z);
+    let gravel = 1 - smoothstep(0.6, 2.6, rd);
+    // in town: mown lawns, no dry patches
+    if (x > T.town.x0 && x < T.floodwallX && Math.abs(z) < T.town.z1) { dry *= 0.25; }
+    if (x > T.floodwallX && x < 226 && Math.abs(z) < 140) gravel = Math.max(gravel, smoothstep(200, 204, x) * (1 - smoothstep(222, 226, x)));
+    const sand = 1 - smoothstep(0.6, 2.2, h - T.water);
+    const k = 1 - sand;
+    const gW = gravel, dW = dirt * (1 - gravel), dryW = dry * (1 - dirt) * (1 - gravel), grW = (1 - dry) * (1 - dirt) * (1 - gravel);
+    return [clamp(grW * k, 0, 1), clamp(dryW * k, 0, 1), clamp(dW * k, 0, 1), clamp(gW * k, 0, 1)];
+  };
+}
+export { STORY };
