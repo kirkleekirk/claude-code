@@ -24,11 +24,35 @@ const STATE = globalThis.__hfGfx || (globalThis.__hfGfx = {
     fogB: new Float32Array([0.0002, 420, 620, 0]), // thin haze per metre, fade-out start, fade-out end
     cloud: new Float32Array([0, 0, 0.3, 0]),     // cloud drift (uv x, y), cover, shadow strength
     misc: new Float32Array([0, 0, 0.3, 0]),      // wetness, time, wind, lightning
+    cover: new Float32Array([0, 0, 64, -1e5]),   // the cover map's corner (x, z), its size, and the height of its top (see cover.js)
     ready: false,
   },
   uniforms: null, orig: null,
 });
 export const GFX = STATE.GFX;
+
+// The cover map (cover.js): a top-down height map of what stands around the
+// camera, so rain and wetness know what is open to the sky.
+export const COVER = { size: 64, px: 512, near: 1, far: 170, up: 70, layer: 3 };
+// things the cover map must not see (the sky's dome, grass, the rain itself, particles) live on this layer only
+export function skyAndEffects(obj) { obj.layers.set(COVER.layer); return obj; }
+// the height of the highest thing over a point, and whether a point is open to the sky
+// (v runs north to south in the map: its camera looks down with north up)
+export const COVER_GLSL = /* glsl */`
+#ifndef HF_COVER_FN
+#define HF_COVER_FN
+uniform sampler2D hfCover;
+uniform vec4 hfCoverRect;
+float hfCoverTop( vec2 xz ) {
+	vec2 uv = ( xz - hfCoverRect.xy ) / hfCoverRect.z;
+	if ( uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0 ) return - 1e5;
+	vec3 e = texture2D( hfCover, vec2( uv.x, 1.0 - uv.y ) ).rgb;
+	float d = dot( e, vec3( 1.0, 1.0 / 255.0, 1.0 / 65025.0 ) );
+	return hfCoverRect.w - ${COVER.near.toFixed(1)} - d * ${(COVER.far - COVER.near).toFixed(1)};
+}
+float hfOpenSky( vec3 wp ) { return 1.0 - smoothstep( 0.3, 0.7, hfCoverTop( wp.xz ) - wp.y ); }
+#endif
+`;
 
 // height of the cloud deck and the size of the noise tile over the land
 export const CLOUD_H = 900, CLOUD_S = 1 / 4200;
@@ -79,12 +103,21 @@ vec3 hfFog( vec3 col, vec3 viewPos ) {
 `;
 
 // the uniform objects themselves, for hand-written shader materials
+// the cover map every material reads: a plain texture the renderer copies its top-down pass into
+function coverTexture() {
+  const t = new THREE.FramebufferTexture(COVER.px, COVER.px);
+  t.magFilter = t.minFilter = THREE.NearestFilter;
+  t.generateMipmaps = false;
+  t.name = 'hfCover';
+  return t;
+}
 export function globalUniforms() {
   if (STATE.uniforms) return STATE.uniforms;
   STATE.uniforms = {
     hfSunDir: { value: GFX.sunDir }, hfFogCol: { value: GFX.fogCol }, hfSunGlow: { value: GFX.sunGlow },
     hfFogA: { value: GFX.fogA }, hfFogB: { value: GFX.fogB }, hfCloud: { value: GFX.cloud }, hfMisc: { value: GFX.misc },
     hfNoise: { value: noiseTexture() },
+    hfCover: { value: coverTexture() }, hfCoverRect: { value: GFX.cover },
   };
   return STATE.uniforms;
 }
@@ -93,7 +126,7 @@ export function installGfx(again = false) {
   if (GFX.ready && !again) return true;
   const C = THREE.ShaderChunk;
   // always patch from the engine's own text
-  if (!STATE.orig) STATE.orig = { lf: C.lights_fragment_begin, tm: C.tonemapping_pars_fragment, lp: C.lights_pars_begin };
+  if (!STATE.orig) STATE.orig = { lf: C.lights_fragment_begin, tm: C.tonemapping_pars_fragment, lp: C.lights_pars_begin, rm: C.roughnessmap_fragment };
   const lf = STATE.orig.lf, tm = STATE.orig.tm || '';
   const a = lf ? lf.indexOf('#if ( NUM_DIR_LIGHTS > 0 ) && defined( RE_Direct )') : -1;
   const b = lf ? lf.indexOf('#if ( NUM_RECT_AREA_LIGHTS > 0 )') : -1;
@@ -139,6 +172,8 @@ vec3 CustomToneMapping( vec3 color ) { return hfTonemap( color * toneMappingExpo
   // ---- sun: shadow cascades and cloud shadows ----
   C.lights_pars_begin = STATE.orig.lp + `
 ${CLOUD_GLSL}
+uniform vec4 hfMisc;
+${COVER_GLSL}
 // the sun as it reaches this fragment: its colour under the clouds before
 // shadows, and how much of it the shadow maps let through (for light that
 // passes through leaves and grass)
@@ -195,6 +230,25 @@ float hfCloudShade( vec3 viewPos, vec3 lightDirView ) {
 
 `;
   C.lights_fragment_begin = lf.slice(0, a) + sunBlock + lf.slice(b);
+
+  // ---- rain: ground the sky can see darkens and shines, and pools where it lies level ----
+  C.roughnessmap_fragment = STATE.orig.rm + `
+#if defined( HF_SUN ) && ! defined( FLAT_SHADED )
+	if ( hfMisc.x > 0.01 ) {
+		vec3 hfWp = cameraPosition - vViewPosition * mat3( viewMatrix );
+		float hfUpN = ( normalize( vNormal ) * mat3( viewMatrix ) ).y;
+		float hfWet = hfMisc.x * hfOpenSky( hfWp ) * smoothstep( - 0.2, 0.5, hfUpN );
+		float hfPool = smoothstep( 0.6, 0.76, texture2D( hfNoise, hfWp.xz * 0.045 ).r ) * smoothstep( 0.9, 0.99, hfUpN ) * smoothstep( 0.45, 1.0, hfMisc.x );
+		#ifdef HF_TERRAIN
+			// (grass hides the wet earth under it: only bare dirt, gravel and sand pool and shine)
+			float hfBare = wl[ 2 ] + wl[ 3 ] + wl[ 4 ];
+			hfPool *= hfBare; hfWet *= 0.45 + 0.55 * hfBare;
+		#endif
+		diffuseColor.rgb *= 1.0 - 0.36 * hfWet;
+		roughnessFactor = mix( roughnessFactor, mix( 0.32, 0.05, hfPool ), hfWet * smoothstep( 0.3, 0.9, hfUpN ) );
+	}
+#endif
+`;
   GFX.ready = true;
   return true;
 }

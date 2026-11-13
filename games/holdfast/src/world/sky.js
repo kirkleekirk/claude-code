@@ -6,7 +6,7 @@
 // not screen colours; the film look turns them into what you see.
 import * as THREE from 'three';
 import { clamp, lerp, smoothstep } from '../util.js';
-import { GFX, HAZE_GLSL, CLOUD_GLSL, CLOUD_H, CLOUD_S, globalUniforms } from '../gfx/globals.js';
+import { GFX, HAZE_GLSL, CLOUD_GLSL, CLOUD_H, CLOUD_S, globalUniforms, skyAndEffects } from '../gfx/globals.js';
 import { SunShadows } from '../gfx/shadows.js';
 
 const SKY_VS = /* glsl */`
@@ -163,6 +163,7 @@ export class Sky {
     }));
     this.dome.frustumCulled = false;
     this.dome.renderOrder = -10;
+    skyAndEffects(this.dome);
     scene.add(this.dome);
 
     this.shadows = new SunShadows(scene, quality.cascades);

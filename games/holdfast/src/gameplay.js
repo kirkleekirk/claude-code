@@ -241,7 +241,8 @@ export class Combat {
     if (anyHead && dealt.size) g.hud.toast('Headshot', 0.8);
     if (dealt.size) train(player.body, 'shoot', anyHead ? 2 : 1, g);
     this.muzzle.position.copy(hand);
-    this.muzzle.intensity = 6;
+    this.muzzle.intensity = 2.6;
+    if (g.fx) { g.fx.burst('muzzle', 1, hand.x, hand.y, hand.z); g.fx.burst('gunsmoke', 3, hand.x, hand.y, hand.z); }
     // the kick (third person only)
     if (!aim && g.tpc) g.tpc.pitch = Math.min(0.95, g.tpc.pitch + def.recoil * 0.012);
     if (gun.mag === 0) setTimeout(() => player.gun === gun && player.startReload(), 250);
@@ -256,6 +257,6 @@ export class Combat {
       if (tr.t <= 0) { this.game.scene.remove(tr.line); tr.line.geometry.dispose(); }
     }
     this.tracers = this.tracers.filter((t) => t.t > 0);
-    this.muzzle.intensity = Math.max(0, this.muzzle.intensity - dt * 80);
+    this.muzzle.intensity = Math.max(0, this.muzzle.intensity - dt * 34);
   }
 }

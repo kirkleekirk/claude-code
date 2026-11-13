@@ -537,6 +537,11 @@ export class Vehicles {
     }
     // wheels: roll, steer, follow the ground
     v.spin += v.speed / v.M.wheelR * dt;
+    const fx = g.fx, sp = Math.abs(v.speed);
+    if (fx && sp > 4 && g.world.roadDist && g.world.roadDist(v.x, v.z) > 0.6) {
+      const bx = v.x - Math.sin(v.yaw) * v.M.L * 0.4 * Math.sign(v.speed), bz = v.z - Math.cos(v.yaw) * v.M.L * 0.4 * Math.sign(v.speed);
+      fx.flow('dust', Math.min(16, sp * 1.1), dt, bx, v.y + 0.25, bz, { spread: 3 });
+    }
     v.placeWheels();
     // the driver
     this.placeRider(v, p.body, dt);
@@ -755,7 +760,7 @@ export class Vehicles {
     const hl = this.headlight;
     const brake = v.brake ? 1 : 0;
     v.setLamps(v.lights ? 2.6 : 0, v.lights ? 1.2 + brake * 2 : brake * 2.2);
-    hl.intensity += ((v.lights ? 120 : 0) - hl.intensity) * Math.min(1, dt * 10);
+    hl.intensity += ((v.lights ? 46 : 0) - hl.intensity) * Math.min(1, dt * 10);
     if (hl.intensity > 0.5) {
       const f = v.toWorld(0, 0.75, v.M.L / 2 + 0.2);
       hl.position.copy(f);

@@ -47,6 +47,8 @@ class Zombie {
   hurt(dmg, kx, kz, kind) {
     if (this.dead) return;
     this.health -= dmg;
+    const fx = this.mgr.game.fx;
+    if (fx) fx.burst('blood', kind === 'melee' ? 7 : 5, this.pos.x, this.pos.y + (kind === 'head' ? 1.6 : 1.25), this.pos.z, { vel: [kx * 1.6, 0.5, kz * 1.6] });
     this.stagger = kind === 'melee' ? 0.45 : 0.25;
     // hit from behind: they go down on their face, otherwise on their back
     this.fallDir = (kx * Math.sin(this.facing) + kz * Math.cos(this.facing)) > 0.3 ? 1 : -1;

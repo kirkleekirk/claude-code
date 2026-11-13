@@ -542,9 +542,10 @@ export class Trees {
   update(camPos, focus = camPos, lightDir = null) {
     // (a low sun throws a tree's shadow a long way: allow for it)
     if (lightDir) this.slack = Math.min(170, 14 / Math.max(0.08, lightDir.y / Math.max(0.05, Math.hypot(lightDir.x, lightDir.z))));
-    if (camPos.distanceToSquared(this.lastPos) < 16 && focus.distanceToSquared(this.lastFocus) < 16) return;
+    const fdx = focus.x - this.lastFocus.x, fdz = focus.z - this.lastFocus.z; // (the focus may be a plain {x, y, z})
+    if (camPos.distanceToSquared(this.lastPos) < 16 && fdx * fdx + fdz * fdz < 16) return;
     const hr = this.hiddenRect;
-    this.lastPos.copy(camPos); this.lastFocus.copy(focus);
+    this.lastPos.copy(camPos); this.lastFocus.set(focus.x, focus.y || 0, focus.z);
     const n2 = this.nearDist * this.nearDist, f2 = this.farDist * this.farDist, c2 = this.cullDist * this.cullDist;
     const v = new THREE.Vector3(), s = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
     for (const { lods, list } of this.meshes) {

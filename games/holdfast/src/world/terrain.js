@@ -411,6 +411,7 @@ export function terrainMaterial(size = 512) {
   };
   const albedo = mk(A, true), normal = mk(N, false);
   const m = new THREE.MeshStandardMaterial({ roughness: 0.96, metalness: 0 });
+  m.defines = { ...m.defines, HF_TERRAIN: 1 }; // (the wet-ground shading asks which ground cover this is)
   // where grass blades stand (set once the ground map exists): the ground under
   // them is shaded as the thatch it is, close to the camera
   const under = m.userData.ground = { uGround: { value: null }, uGRect: { value: new THREE.Vector4(0, 0, 1, 1) }, uGFade: { value: new THREE.Vector2(8, 30) } };

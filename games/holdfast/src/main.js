@@ -33,8 +33,10 @@ import { setScarcity, START_BY, GUNS as GUN_DEFS } from './items.js';
 import { PackScreen } from './packui.js';
 import { Vehicles } from './vehicles/vehicles.js';
 import { detectQuality } from './gfx/quality.js';
-import { installGfx, GFX } from './gfx/globals.js';
+import { installGfx, GFX, COVER } from './gfx/globals.js';
 import { Post } from './gfx/post.js';
+import { Particles } from './gfx/particles.js';
+import { WeatherFx } from './world/weatherfx.js';
 import { smallThingsCastNear } from './gfx/shadows.js';
 
 import { isTouch } from './platform.js';
@@ -67,6 +69,7 @@ export class Game {
     this.applyPost();
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 5000);
+    this.camera.layers.enable(COVER.layer); // the sky, grass, rain and particles (kept out of the cover map)
     this.clock = new THREE.Clock();
     this.systems = [];
     this.day = 1;
@@ -93,7 +96,7 @@ export class Game {
     this.physics = new Physics(null);
     this.world = new World(this.scene, this.physics, this.onProgress);
     await this.world.generate({ texSize: this.quality.texSize, quality: this.quality });
-    this.water = new Water(this.scene, this.world.terrain);
+    this.water = new Water(this.scene, this.world.terrain, this.sky, this.world.ground);
     this.creek = new Creek(this.scene, this.world, this.water.uniforms);
     this.onProgress('Waking survivors', 0.94);
     // a host page may point at other copies of the models (e.g. .gltf JSON)
@@ -124,7 +127,10 @@ export class Game {
     this.storage = this.inventory; // the camp's storage
     this.packScreen = new PackScreen(this);
     this.vehicles = new Vehicles(this);
-    this.sky.onThunder = () => setTimeout(() => this.audio.thunder(), 600 + Math.random() * 1500);
+    this.fx = new Particles(this.scene, this.quality);
+    this.weather = new WeatherFx(this);
+    // each strike draws a bolt; its thunder arrives as late as it is far
+    this.sky.onThunder = () => { const d = this.weather.lightning(); setTimeout(() => this.audio.thunder(), Math.min(4200, (d / 343) * 1000)); };
     // flashlight
     this.flashlight = new THREE.SpotLight(0xfff4dc, 0, 28, 0.42, 0.45, 1.4);
     this.scene.add(this.flashlight, this.flashlight.target);
@@ -552,7 +558,7 @@ export class Game {
       this.hud.update(dt);
       // flashlight follows the view
       const fl = this.flashlight;
-      fl.intensity = this.player.flashlightOn && !this.buildMode.active ? 40 : 0;
+      fl.intensity = this.player.flashlightOn && !this.buildMode.active ? 26 : 0;
       if (fl.intensity) {
         const f = new THREE.Vector3();
         // from above, the light goes where you face, not where the camera looks
@@ -575,6 +581,7 @@ export class Game {
     this.sky.update(dt, this.focus || this.camera.position);
     if (this.sky.time < before) this.day++;
     this.water.update(dt, this.sky);
+    if (this.weather) this.weather.update(dt);
     this.world.lightDir = this.sky.lightDir; this.world.focus = this.focus; this.world.wind = this.sky.w.wind;
     this.grassPushers(dt);
     this.world.update(dt, this.camera.position);

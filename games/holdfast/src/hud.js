@@ -214,7 +214,7 @@ export class HUD {
     const g = this.game;
     this.$('pause-body').innerHTML = `
       <div class="settings">
-        <label>Graphics <select id="set-q"><option value="low">Low (phones)</option><option value="high">High</option></select></label>
+        <label>Graphics <select id="set-q"><option value="low">Low (phones, old laptops)</option><option value="medium">Medium</option><option value="high">High</option><option value="ultra">Ultra</option></select></label>
         <label>Look sensitivity <input id="set-sens" type="range" min="0.5" max="2.5" step="0.1" value="${(g.tpc.sens / 0.0024).toFixed(1)}"></label>
         <label><input id="set-inv" type="checkbox" ${g.tpc.invertY ? 'checked' : ''}> Invert look</label>
         <p class="note">Graphics changes apply after reloading the page.</p>

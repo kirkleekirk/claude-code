@@ -583,11 +583,6 @@ class Fires {
     this.soc = soc;
     const g = soc.game;
     this.lights = [0, 1].map(() => { const l = new THREE.PointLight(0xff9a40, 0, 14, 1.6); g.scene.add(l); return l; });
-    this.flameMat = new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
-    this.coreMat = new THREE.MeshBasicMaterial({ color: 0xfff0a0, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
-    this.flames = new Map();
-    this.cone = new THREE.ConeGeometry(0.22, 0.7, 7, 1, true);
-    this.cone.translate(0, 0.35, 0);
     this.t = 0;
   }
   list() {
@@ -604,31 +599,21 @@ class Fires {
     if (this.scanT <= 0) { this.scanT = 2; this.cached = this.list(); }
     const g = this.soc.game, p = g.player.pos;
     const fires = (this.cached || []).map((f) => [Math.hypot(f.x - p.x, f.z - p.z), f]).filter((e) => e[0] < 90).sort((a, b) => a[0] - b[0]);
-    const live = new Set();
-    for (const [, f] of fires.slice(0, 6)) {
-      live.add(f.key);
-      let m = this.flames.get(f.key);
-      if (!m) {
-        m = new THREE.Group();
-        const a = new THREE.Mesh(this.cone, this.flameMat), b = new THREE.Mesh(this.cone, this.coreMat);
-        b.scale.set(0.55, 0.6, 0.55);
-        m.add(a, b);
-        g.scene.add(m);
-        this.flames.set(f.key, m);
-      }
-      m.position.set(f.x, f.y + 0.08, f.z);
-      const k = 0.85 + Math.sin(this.t * 13 + f.x) * 0.1 + Math.sin(this.t * 7.3 + f.z) * 0.08;
-      m.scale.set(1, k, 1);
-      m.rotation.y = this.t * 0.7;
+    // flames, a few embers and a thread of smoke for the nearest few
+    const fx = g.fx;
+    if (fx) for (const [d, f] of fires.slice(0, 6)) {
+      if (d > 60) continue;
+      fx.flow('flame', 18, dt, f.x, f.y + 0.16, f.z);
+      fx.flow('ember', 1.4, dt, f.x, f.y + 0.3, f.z);
+      fx.flow('smoke', 2.4, dt, f.x, f.y + 0.95, f.z);
     }
-    for (const [k, m] of this.flames) if (!live.has(k)) { g.scene.remove(m); this.flames.delete(k); }
     const dark = g.sky.darkness;
     this.lights.forEach((l, i) => {
       const e = fires[i];
       if (!e || e[0] > 70) { l.intensity = 0; return; }
       const f = e[1];
       l.position.set(f.x, f.y + 0.8, f.z);
-      l.intensity = (2 + dark * 14) * (0.85 + Math.sin(this.t * 17 + i) * 0.08 + Math.sin(this.t * 5.1 + i * 2) * 0.07);
+      l.intensity = (1.6 + dark * 7) * (0.85 + Math.sin(this.t * 17 + i) * 0.08 + Math.sin(this.t * 5.1 + i * 2) * 0.07);
     });
   }
 }

@@ -6,7 +6,7 @@
 // rebuilt as you move; the rings simply wrap around you.
 import * as THREE from 'three';
 import { mulberry32 } from '../util.js';
-import { globalUniforms } from '../gfx/globals.js';
+import { globalUniforms, skyAndEffects } from '../gfx/globals.js';
 import { carFlat } from './vegetation.js';
 
 // rings per graphics setting: cell size (m), cells across, blades per clump,
@@ -212,6 +212,7 @@ export class Grass {
       mesh.receiveShadow = true;
       mesh.castShadow = false;
       mesh.name = 'grass' + i;
+      skyAndEffects(mesh);
       mesh.userData.u = uniforms;
       this.scene.add(mesh);
       this.meshes.push(mesh);

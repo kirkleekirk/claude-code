@@ -1,9 +1,10 @@
 // Turkey Creek: a narrow ribbon of moving water along the bottom of its
-// valley, shaded like the river (sky reflection, sun glint, muddy depth)
-// and sharing its time, sun and sky. It runs south and only ever runs
-// downhill; where a road crosses it goes under through a culvert.
+// valley, shaded like the river (watershade.js) and sharing its uniforms.
+// It runs south and only ever runs downhill; where a road crosses it goes
+// under through a culvert.
 import * as THREE from 'three';
 import { T, creekX, CREEK } from './terrain.js';
+import { WATER_PARS } from './watershade.js';
 
 const VS = `
 #include <fog_pars_vertex>
@@ -24,38 +25,21 @@ void main() {
 const FS = `
 #include <common>
 #include <fog_pars_fragment>
-uniform float uTime; uniform vec3 uSunDir; uniform vec3 uSunCol; uniform vec3 uHorizon; uniform vec3 uZenith; uniform float uRain; uniform float uLight;
+${WATER_PARS}
 varying vec3 vW; varying float vDepth; varying float vEdge;
-float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
-float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y); }
-float waves(vec2 p) {
-  float t = uTime;
-  float s = n(p * 0.45 + vec2(0.0, t * 0.55)) * 0.5;
-  s += n(p * 1.3 + vec2(t * 0.1, t * 0.9)) * 0.25;
-  s += n(p * 3.1 + vec2(-t * 0.2, t * 1.6)) * 0.1 * (1.0 + uRain * 3.0);
-  return s;
-}
 void main() {
-  vec2 p = vW.xz;
-  float e = 0.15;
-  float bump = 1.6 / (1.0 + length(cameraPosition - vW) * 0.02);
-  vec3 N = normalize(vec3((waves(p - vec2(e, 0.0)) - waves(p + vec2(e, 0.0))) * bump, 1.0, (waves(p - vec2(0.0, e)) - waves(p + vec2(0.0, e))) * bump));
-  vec3 V = normalize(cameraPosition - vW);
-  float fres = 0.04 + 0.96 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
-  vec3 R = reflect(-V, N);
-  vec3 sky = mix(uHorizon, uZenith, pow(clamp(R.y, 0.0, 1.0), 0.5));
-  // muddy creek water: olive-brown, darker where deeper, a soft sky sheen
-  vec3 body = mix(vec3(0.20, 0.19, 0.12), vec3(0.075, 0.085, 0.055), smoothstep(0.0, 0.5, vDepth)) * (0.3 + 0.7 * uLight);
-  vec3 col = mix(body, sky * 0.55, clamp(fres * 0.42, 0.0, 0.4));
-  vec3 H = normalize(uSunDir + V);
-  col += uSunCol * pow(max(dot(N, H), 0.0), 260.0) * 3.0 * uLight;
+  vec3 toEye = cameraPosition - vW;
+  float dist = length(toEye), fres;
+  // quick, shallow and small: finer ripples moving faster, the bed showing through
+  vec3 col = hfWater(vW, toEye / dist, dist, vDepth, vec3(0.0, 1.0, 0.95), 3.2, vec3(0.3, 0.25, 0.15), vec3(0.06, 0.065, 0.04), 0.55, fres);
+  float nz = texture2D(uWaveTex, vW.xz * 0.35 - vec2(0.0, uTime * 0.25)).b;
   // a little froth where it's shallow and quick
-  col = mix(col, vec3(0.62, 0.6, 0.52) * (0.3 + 0.7 * uLight), (1.0 - smoothstep(0.0, 0.2, vDepth)) * 0.18 * n(p * 4.0 + vec2(0.0, uTime * 2.0)));
-  // a soft, uneven shoreline
-  float shore = smoothstep(0.0, 0.5, vEdge + (n(p * 0.6) - 0.5) * 0.35 + (n(p * 2.3) - 0.5) * 0.12);
+  col = mix(col, vec3(0.75, 0.73, 0.66) * (uAmb * 2.2 + uSunCol * max(uSunDir.y, 0.0) * 0.3), (1.0 - smoothstep(0.0, 0.16, vDepth)) * 0.4 * nz);
   // darker, glossier mid-channel where the current runs
-  col *= mix(1.0, 0.82, smoothstep(0.4, 1.0, vEdge));
-  gl_FragColor = vec4(col, mix(0.7, 0.97, smoothstep(0.0, 0.3, vDepth)) * shore);
+  col *= mix(1.0, 0.86, smoothstep(0.4, 1.0, vEdge));
+  // a soft, uneven shoreline
+  float shore = smoothstep(0.0, 0.5, vEdge + (nz - 0.5) * 0.4);
+  gl_FragColor = vec4(col, max(mix(0.5, 0.94, smoothstep(0.0, 0.3, vDepth)), fres) * shore);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
   #include <fog_fragment>
@@ -71,7 +55,7 @@ function baseAt(tr, x, z) {
 }
 
 export class Creek {
-  // riverUniforms: the river's live uniforms (time, sun, sky), shared
+  // riverUniforms: the river's live uniforms (time, light, sky), shared
   constructor(scene, world, riverUniforms) {
     const tr = world.terrain, step = 2, half = CREEK.chanHalf + 0.6;
     const across = [-1, -0.5, 0, 0.5, 1];
@@ -114,11 +98,7 @@ export class Creek {
     geo.setAttribute('aEdge', new THREE.Float32BufferAttribute(edge, 1));
     geo.setIndex(idx);
     geo.computeBoundingSphere();
-    const u = riverUniforms;
-    const uniforms = { ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog), uTime: u.uTime, uSunDir: u.uSunDir, uSunCol: u.uSunCol, uHorizon: u.uHorizon, uZenith: u.uZenith, uRain: u.uRain, uLight: u.uLight };
-    const mat = new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: FS, uniforms, transparent: true, fog: true, depthWrite: false });
-    // fog colour follows the scene's: share the river's fog uniforms too
-    for (const k of Object.keys(THREE.UniformsLib.fog)) if (u[k]) uniforms[k] = u[k];
+    const mat = new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: FS, uniforms: riverUniforms, transparent: true, fog: true, depthWrite: false });
     this.mesh = new THREE.Mesh(geo, mat);
     this.mesh.renderOrder = 1;
     this.mesh.frustumCulled = false;

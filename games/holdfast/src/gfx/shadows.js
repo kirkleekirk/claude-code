@@ -29,7 +29,7 @@ export function smallThingsCastNear(root, radius = 4.5) {
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
-const X = new THREE.Vector3(), Y = new THREE.Vector3(), Z = new THREE.Vector3(), C = new THREE.Vector3();
+const X = new THREE.Vector3(), Y = new THREE.Vector3(), Z = new THREE.Vector3(), C = new THREE.Vector3(), F = new THREE.Vector3();
 
 export class SunShadows {
   constructor(scene, cascades) {
@@ -60,6 +60,7 @@ export class SunShadows {
   // dir: unit vector toward the light. scale widens every map (the top view looks at far more ground)
   update(focus, dir, scale = 1) {
     this.frame++;
+    F.set(focus.x, focus.y, focus.z); // (the focus may be a plain {x, y, z})
     Z.set(dir.x, Math.max(dir.y, 0.17), dir.z).normalize();
     X.crossVectors(UP, Z).normalize();
     Y.crossVectors(Z, X);
@@ -69,7 +70,7 @@ export class SunShadows {
       if (cam.right !== r) { cam.left = -r; cam.right = r; cam.top = r; cam.bottom = -r; cam.near = 1; cam.far = 900; cam.updateProjectionMatrix(); }
       const texel = (2 * r) / c.size;
       // keep the map's texels fixed on the ground as the focus moves
-      const cx = Math.round(focus.dot(X) / texel) * texel, cy = Math.round(focus.dot(Y) / texel) * texel, cz = focus.dot(Z);
+      const cx = Math.round(F.dot(X) / texel) * texel, cy = Math.round(F.dot(Y) / texel) * texel, cz = F.dot(Z);
       C.set(0, 0, 0).addScaledVector(X, cx).addScaledVector(Y, cy).addScaledVector(Z, cz);
       l.target.position.copy(C);
       l.position.copy(C).addScaledVector(Z, 420);

@@ -154,6 +154,37 @@ seams, mirrors and plates. Each car is one mesh plus its glass, with a tiny
 region texture telling paint, chrome, rubber, lenses and wood apart, and a
 shader that adds mud, rust on the wrecks and woodgrain.
 
+## How it looks
+
+The whole picture is drawn in scene light and finished the way a camera
+would: bloom, ambient occlusion, a film tone curve and a colour grade that
+follows the hour and the weather.
+
+- **Light and air.** The sun's height drives everything, from blue hour
+  through a long golden hour to moonlight. Haze thickens with distance, lies
+  in the low ground at dawn and takes the colour of the sky toward the sun;
+  clouds drift over and their shadows cross the fields.
+- **Shadows** come from a ring of maps centred on what you are looking at:
+  sharp at your feet, still there across the valley.
+- **Grass** is real blades, placed around the camera from a map of what
+  grows where. It moves in gusts, parts around people and the dead, and
+  flattens under wheels. **Trees** carry leafy canopies and shed leaves in
+  the wind; **corn and soybeans** stand in full rows.
+- **Water** mirrors the sky, the clouds and the dark line of the banks, and
+  the sun or moon lays a glittering path across the river.
+- **Weather.** Rain falls as streaks with rings where it lands, but not
+  under a roof, a porch or an awning; open ground darkens, shines and pools
+  while covered ground stays dry. Storms throw lightning with thunder that
+  arrives late when the strike is far.
+- **Small things:** campfires with flames, embers and smoke; dust behind a
+  car off the road; muzzle flash and powder smoke; fireflies over the rough
+  grass on a dry night.
+
+Graphics has four steps under Menu > Settings (it applies after a reload),
+or add `?q=low`, `?q=medium`, `?q=high` or `?q=ultra` to the address. Phones
+start on Low, which keeps the same light and colour without the extra
+passes; everything else starts on High.
+
 ## Developer checks
 
 - `index.html?validate=1` runs the world-generation validator after loading
