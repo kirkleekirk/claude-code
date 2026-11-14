@@ -69,9 +69,9 @@ export function canSee(world, e, t) {
     let df = Math.abs(((a - e.face + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
     if (df > 1.0) return false;
   }
-  const blocked = raycast(e.x, e.y - 8, t.x, t.y - 8, (tx, ty) => world.Q.blocksSight(tx, ty), e.elevated ? 20 : 0);
+  const blocked = raycast(e.x, e.y, t.x, t.y, (tx, ty) => world.Q.blocksSight(tx, ty), e.elevated ? 24 : 0);
   if (blocked) return false;
-  if (world.combat.smokeBlocks(e.x, e.y - 8, t.x, t.y - 8)) return false;
+  if (world.combat.smokeBlocks(e.x, e.y, t.x, t.y)) return false;
   return true;
 }
 
@@ -173,7 +173,7 @@ export function think(world, e, dt) {
   // Medic: heal hurt allies nearby.
   if (e.A.heals && ai.state !== 'retreat' && world.time > (ai.healT || 0)) {
     ai.healT = world.time + 3;
-    for (const o of world.hash.query(e.x, e.y, 5 * T, [])) if (o !== e && o.alive && o.faction === e.faction && o.hp < o.maxHp) { o.hp = Math.min(o.maxHp, o.hp + e.A.heals); world.R.fx.text(o.x, o.y - 22, '+' + e.A.heals, '#7cbf62'); break; }
+    for (const o of world.hash.query(e.x, e.y, 5 * T, [])) if (o !== e && o.alive && o.faction === e.faction && o.hp < o.maxHp) { o.hp = Math.min(o.maxHp, o.hp + e.A.heals); world.R.fx.text(o.x, o.y, '+' + e.A.heals, '#7cbf62', 26); break; }
   }
 }
 
@@ -200,7 +200,7 @@ function fireAt(world, e, t) {
   let accMult = 1;
   for (const o of world.hash.query(e.x, e.y, 6 * T, [])) if (o.alive && o.faction === e.faction && o.A && o.A.buff) accMult = 1 + o.A.buff;
   const lead = 0.12;
-  const ok = world.combat.tryFire(e, e.weapon, t.x + (t.vx || 0) * lead, t.y - 7 + (t.vy || 0) * lead, { accMult, autoReload: true });
+  const ok = world.combat.tryFire(e, e.weapon, t.x + (t.vx || 0) * lead, t.y + (t.vy || 0) * lead, { accMult, autoReload: true });
   if (!ok && e.weapon.loaded <= 0) world.combat.startReload(e, e.weapon);
 }
 
@@ -233,7 +233,7 @@ function hunt(world, e, dt) {
   // Snipers telegraph with a laser before firing.
   if (e.A.telegraph) {
     ai.telegraph += dt;
-    e.laser = { x: t.x, y: t.y - 7 };
+    e.laser = { x: t.x, y: t.y };
     if (ai.telegraph >= e.A.telegraph) { ai.telegraph = 0; fireAt(world, e, t); e.laser = null; }
     return;
   }
@@ -282,7 +282,7 @@ export function scare(world, e, from, witnessCrime) {
   e.ai.state = 'flee';
   e.ai.timer = 4 + Math.random() * 3;
   e.ai.fear = from;
-  if (witnessCrime && !e.witness && !world.noViolenceAt(e.x, e.y)) { e.witness = { t: 6 + Math.random() * 3 }; world.R.fx.text(e.x, e.y - 24, '!', '#e2452a'); }
+  if (witnessCrime && !e.witness && !world.noViolenceAt(e.x, e.y)) { e.witness = { t: 6 + Math.random() * 3 }; world.R.fx.text(e.x, e.y, '!', '#e2452a', 28); }
 }
 
 // ---------- crew AI (squad) ----------
@@ -304,7 +304,7 @@ function thinkCrew(world, e, dt) {
   if (d > 18 * T && order.kind === 'follow') { e.x = P.x + (Math.random() - 0.5) * 20; e.y = P.y + 10; }
   if (foe && e.weapon) {
     setFace(e, angleTo(e, foe));
-    const ok = world.combat.tryFire(e, e.weapon, foe.x, foe.y - 7, { accMult: e.accMult || 1, dmgMult: e.dmgMult || 1 });
+    const ok = world.combat.tryFire(e, e.weapon, foe.x, foe.y, { accMult: e.accMult || 1, dmgMult: e.dmgMult || 1 });
     if (!ok && e.weapon.loaded <= 0) world.combat.startReload(e, e.weapon);
   }
   if (e.coward && e.hp < e.maxHp * 0.5 && foe) { const a = angleTo(foe, e); moveBox(world.Q, e, Math.cos(a) * e.speed * dt, Math.sin(a) * e.speed * dt); }

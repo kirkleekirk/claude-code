@@ -8,7 +8,8 @@ import { buildingSprites, towerSprite, gateSprite, propSprite, highlightSprite }
 import { Lighting, ambientAt, isNight } from './lighting.js';
 import { Particles } from './particles.js';
 
-const LIGHT_PROPS = { lamp: [52, 'rgba(255,196,120,1)'], fire: [64, 'rgba(255,150,70,1)'], stall: [30, 'rgba(255,170,110,0.8)'], jobboard: [26, 'rgba(255,200,140,0.7)'] };
+// radius, colour, height of the light source above the ground
+export const LIGHT_PROPS = { lamp: [52, 'rgba(255,196,120,1)', 24], fire: [64, 'rgba(255,150,70,1)', 6], stall: [30, 'rgba(255,170,110,0.8)', 12], jobboard: [26, 'rgba(255,200,140,0.7)', 12] };
 
 export class WorldRenderer {
   constructor(W) {
@@ -91,8 +92,8 @@ export class WorldRenderer {
         if (hl) { const h = highlightSprite(s.sp.img); const a = 0.55 + 0.45 * Math.sin(timeSec * 6); ctx.globalAlpha = a; ctx.drawImage(h, s.x0 - camX - 2, s.y0 - camY - 2); ctx.globalAlpha = 1; }
         ctx.drawImage(s.sp.img, s.x0 - camX, s.y0 - camY);
         const L = LIGHT_PROPS[s.p.type];
-        if (L && night) this.light.add(s.p.x * 16 + 8, s.p.y * 16 + 2, L[0], L[1], s.p.type === 'fire' ? 0.85 + Math.random() * 0.25 : 1);
-        if (s.p.type === 'fire' && Math.random() < 0.3) this.fx.fire(s.p.x * 16 + 8, s.p.y * 16 + 10);
+        if (L && night) this.light.add(s.p.x * 16 + 8, s.p.y * 16 + 8, L[0], L[1], s.p.type === 'fire' ? 0.85 + Math.random() * 0.25 : 1, L[2]);
+        if (s.p.type === 'fire' && Math.random() < 0.3) this.fx.fire(s.p.x * 16 + 8, s.p.y * 16 + 9);
       }
     }
     this.fx.draw(ctx, camX, camY);
@@ -130,7 +131,7 @@ export class WorldRenderer {
     }
     if (night && !b.ruined && b.role !== 'lot') {
       for (let t = 1; t < b.w - 1; t++) {
-        if (t % 2 === 1 || b.w <= 4) this.light.add((b.x + t) * 16 + 8, (b.y + b.h - 1) * 16 + 7, 18, 'rgba(255,190,110,0.9)', 0.8);
+        if (t % 2 === 1 || b.w <= 4) this.light.add((b.x + t) * 16 + 8, (b.y + b.h) * 16, 18, 'rgba(255,190,110,0.9)', 0.8, 9);
       }
     }
   }

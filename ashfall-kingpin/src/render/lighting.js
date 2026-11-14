@@ -42,7 +42,7 @@ export class Lighting {
     return c;
   }
   clear() { this.lights.length = 0; }
-  add(x, y, r, color = 'rgba(255,190,110,1)', k = 1) { this.lights.push(x, y, r, color, k); }
+  add(x, y, r, color = 'rgba(255,190,110,1)', k = 1, h = 0) { this.lights.push(x, y - h, r, color, k); }
   // Composite onto ctx (already holding the scene in view space).
   apply(ctx, camX, camY, w, h, ambient) {
     const strength = (765 - ambient[0] - ambient[1] - ambient[2]) / 765;

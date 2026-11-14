@@ -57,7 +57,7 @@ export function newGame(seed = 1337, diff = 'normal', opts = {}) {
   S.inv['seed:dust_devil'] = 5;
   S.inv['ammo:light'] = 12;
   S.inv.compost = 4;
-  const g = makeGun(S, 'pipe_pistol', { barrel: ['scrap', 3], frame: ['scrap', 3], action: ['scrap', 3], stock: ['scrap', 3], mag: ['scrap', 3] }, 'common', false, {});
+  const g = makeGun(S, 'pipe_pistol', { barrel: ['iron', 3], frame: ['iron', 3], action: ['iron', 3], stock: ['iron', 3], mag: ['iron', 3] }, 'common', false, {});
   g.name = 'Old Faithful';
   g.loaded = 8;
   S.player.loadout[0] = g.id;

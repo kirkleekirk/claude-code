@@ -29,7 +29,7 @@ export class Combat {
     wpn.loaded--;
     wpn.cd = 60 / st.rpm;
     if (wpn.gun) wpn.gun.dur = Math.max(0, wpn.gun.dur - st.wear);
-    const base = Math.atan2(ay - (e.y - 7), ax - e.x);
+    const base = Math.atan2(ay - e.y, ax - e.x);
     let spread = (1 - st.acc / 100) * 0.42 + wpn.bloom;
     if (e.moving) spread *= 1.35;
     if (e.sneaking) spread *= 0.7;
@@ -39,14 +39,14 @@ export class Combat {
     for (let i = 0; i < pel; i++) {
       const a = base + (Math.random() - 0.5) * spread * (pel > 1 ? 1.5 * st.spread : 1) * 2;
       const dmg = st.dmg * (opts.dmgMult || 1) * (0.9 + Math.random() * 0.2);
-      this.spawn(e.x + Math.cos(base) * 8, e.y - 7 + Math.sin(base) * 8, Math.cos(a) * sp * (0.92 + Math.random() * 0.16), Math.sin(a) * sp, dmg, st.range * T, e, wpn.ammoVar || 'std');
+      this.spawn(e.x + Math.cos(base) * 8, e.y + Math.sin(base) * 8, Math.cos(a) * sp * (0.92 + Math.random() * 0.16), Math.sin(a) * sp, dmg, st.range * T, e, wpn.ammoVar || 'std');
     }
     wpn.bloom = Math.min(0.5, wpn.bloom + st.recoil * 0.08);
     const fam = FAMILIES[st.family] || FAMILIES.sidearm;
     this.w.sfx(fam.sound, e);
     if (st.noise > 0) this.noise(e.x, e.y, st.noise * T, e);
-    this.w.flash(e.x + Math.cos(base) * 10, e.y - 7 + Math.sin(base) * 10, st.flash);
-    if (st.family !== 'silent' && st.family !== 'shotgun') this.w.R.fx.casing(e.x, e.y - 6, base);
+    this.w.flash(e.x + Math.cos(base) * 10, e.y + Math.sin(base) * 10, st.flash, e.elevated ? 33 : 9);
+    if (st.family !== 'silent' && st.family !== 'shotgun') this.w.R.fx.casing(e.x, e.y, base);
     if (e.isPlayer) { this.w.shake(st.family === 'heavy' ? 2.2 : st.family === 'shotgun' ? 2 : 0.8); this.w.stat('shotsFired'); }
     e.lastShot = this.w.time;
     return true;
@@ -76,11 +76,13 @@ export class Combat {
   spawn(x, y, vx, vy, dmg, range, owner, variant) {
     for (const b of this.bullets) {
       if (b.on) continue;
-      Object.assign(b, { on: true, x, y, x0: x, y0: y, vx, vy, dmg, range, life: (range * 2.2) / Math.hypot(vx, vy), owner, fac: owner.faction, variant, trail: 0 });
+      Object.assign(b, { on: true, x, y, x0: x, y0: y, vx, vy, dmg, range, life: (range * 2.2) / Math.hypot(vx, vy), owner, fac: owner.faction, variant, trail: 0, skip: owner.elevated ? 30 : 0, h0: owner.elevated ? 33 : 9 });
       return b;
     }
     return null;
   }
+
+  bulletHeight(b) { return Math.max(9, b.h0 - Math.hypot(b.x - b.x0, b.y - b.y0) * 0.5); }
 
   noise(x, y, r, src) { this.noises.push({ x, y, r, src, t: 0.1 }); }
 
@@ -91,14 +93,15 @@ export class Combat {
       b.life -= dt;
       if (b.life <= 0) { b.on = false; continue; }
       const nx = b.x + b.vx * dt, ny = b.y + b.vy * dt;
-      const hit = raycast(b.x, b.y, nx, ny, (tx, ty) => { const s = Q.solidAt(tx, ty); if (s === SOLID.FULL) return true; if (s === SOLID.LOW) return Math.hypot(tx * T + 8 - b.x0, ty * T + 8 - b.y0) > 22; return false; });
+      const flown = Math.hypot(b.x - b.x0, b.y - b.y0);
+      const hit = flown < b.skip ? null : raycast(b.x, b.y, nx, ny, (tx, ty) => { const s = Q.solidAt(tx, ty); if (s === SOLID.FULL) return true; if (s === SOLID.LOW) return Math.hypot(tx * T + 8 - b.x0, ty * T + 8 - b.y0) > 22; return false; });
       // Entities along the segment.
       const victims = this.w.hash.query((b.x + nx) / 2, (b.y + ny) / 2, 40, this._tmp || (this._tmp = []));
       let struck = null, bestT = 2;
       for (const v of victims) {
-        if (!v.alive || v === b.owner || v.ko || !v.hittable) continue;
+        if (!v.alive || v === b.owner || v.ko || !v.hittable || v.elevated) continue;
         if (!this.w.hostileShot(b, v)) continue;
-        const t = segCircle(b.x, b.y, nx, ny, v.x, v.y - 7, v.r || 6);
+        const t = segCircle(b.x, b.y, nx, ny, v.x, v.y, v.r || 6);
         if (t !== null && t < bestT) { bestT = t; struck = v; }
       }
       const wallT = hit ? Math.hypot(hit.x - b.x, hit.y - b.y) / Math.max(1e-6, Math.hypot(nx - b.x, ny - b.y)) : 2;
@@ -109,7 +112,14 @@ export class Combat {
         b.on = false;
         continue;
       }
-      if (hit) { this.w.R.fx.sparks(hit.x, hit.y, Math.atan2(b.vy, b.vx)); if (b.variant === 'inc') this.addZone('fire', hit.x, hit.y, 14, 2.5, b.owner); b.on = false; continue; }
+      if (hit) {
+        // A shot that reaches a watchtower's tile can hit the sniper posted on it.
+        const up = victims.find((v) => v.elevated && v.alive && Math.floor(v.x / T) === hit.tx && Math.floor(v.y / T) === hit.ty && this.w.hostileShot(b, v));
+        if (up && Math.random() < 0.75) this.w.damage(up, b.dmg, b.owner, { dir: Math.atan2(b.vy, b.vx), variant: b.variant, x: up.x, y: up.y });
+        else { this.w.R.fx.sparks(hit.x, hit.y, Math.atan2(b.vy, b.vx)); if (b.variant === 'inc') this.addZone('fire', hit.x, hit.y, 14, 2.5, b.owner); }
+        b.on = false;
+        continue;
+      }
       b.x = nx; b.y = ny;
     }
     for (const n of this.noises) n.t -= dt;
@@ -122,7 +132,7 @@ export class Combat {
   throwItem(e, type, tx, ty) {
     const d = Math.min(7 * T, Math.hypot(tx - e.x, ty - e.y));
     const a = Math.atan2(ty - e.y, tx - e.x);
-    this.throws.push({ type, x: e.x, y: e.y - 8, sx: e.x, sy: e.y - 8, ex: e.x + Math.cos(a) * d, ey: e.y + Math.sin(a) * d, t: 0, dur: 0.35 + d / 400, owner: e, fuse: type === 'pipebomb' ? 1.2 : 0 });
+    this.throws.push({ type, x: e.x, y: e.y, h: 8, sx: e.x, sy: e.y, ex: e.x + Math.cos(a) * d, ey: e.y + Math.sin(a) * d, t: 0, dur: 0.35 + d / 400, owner: e, fuse: type === 'pipebomb' ? 1.2 : 0 });
     this.w.sfx('throw', e);
   }
 
@@ -131,7 +141,8 @@ export class Combat {
       th.t += dt;
       const k = Math.min(1, th.t / th.dur);
       th.x = th.sx + (th.ex - th.sx) * k;
-      th.y = th.sy + (th.ey - th.sy) * k - Math.sin(k * Math.PI) * 18;
+      th.y = th.sy + (th.ey - th.sy) * k;
+      th.h = 8 * (1 - k) + Math.sin(k * Math.PI) * 18;
       if (k >= 1 && !th.landed) {
         th.landed = true;
         if (th.type === 'molotov') { this.addZone('fire', th.ex, th.ey, 26, 6, th.owner); this.w.sfx('fire_whoosh', th); this.noise(th.ex, th.ey, 10 * T, th.owner); }
@@ -148,14 +159,14 @@ export class Combat {
     this.w.sfx('explosion', { x, y });
     this.noise(x, y, 30 * T, owner);
     this.w.shake(5);
-    this.w.R.fx.burst(x, y, 26, [RAMPS.heat[3], RAMPS.gold[3], RAMPS.heat[2], RAMPS.bone[1]], 120, 0.6, 2);
+    this.w.R.fx.burst(x, y, 26, [RAMPS.heat[3], RAMPS.gold[3], RAMPS.heat[2], RAMPS.bone[1]], 120, 0.6, 2, 8);
     this.w.R.fx.smoke(x, y, 10, true);
-    this.w.flash(x, y, 3);
+    this.w.flash(x, y, 3, 10);
     for (const v of this.w.hash.query(x, y, r + 8, [])) {
       if (!v.alive || !v.hittable) continue;
       const d = Math.hypot(v.x - x, v.y - y);
       if (d > r) continue;
-      if (raycast(x, y - 4, v.x, v.y - 6, (tx, ty) => this.w.Q.blocksSight(tx, ty))) continue;
+      if (raycast(x, y, v.x, v.y, (tx, ty) => this.w.Q.blocksSight(tx, ty))) continue;
       this.w.damage(v, dmg * (1 - 0.6 * d / r), owner, { dir: Math.atan2(v.y - y, v.x - x), blast: true });
     }
     this.w.onExplosion(x, y, r, owner);
@@ -195,15 +206,16 @@ export class Combat {
       ctx.strokeStyle = b.variant === 'inc' ? RAMPS.heat[3] : RAMPS.gold[3];
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(Math.round(b.x - camX), Math.round(b.y - camY));
-      ctx.lineTo(Math.round(b.x - camX - Math.cos(a) * 5), Math.round(b.y - camY - Math.sin(a) * 5));
+      const bh = this.bulletHeight(b);
+      ctx.moveTo(Math.round(b.x - camX), Math.round(b.y - bh - camY));
+      ctx.lineTo(Math.round(b.x - camX - Math.cos(a) * 5), Math.round(b.y - bh - camY - Math.sin(a) * 5));
       ctx.stroke();
     }
     for (const th of this.throws) {
       ctx.fillStyle = RAMPS.ink[0];
-      ctx.fillRect(Math.round(th.x - camX) - 2, Math.round(th.y - camY) - 2, 4, 4);
+      ctx.fillRect(Math.round(th.x - camX) - 2, Math.round(th.y - th.h - camY) - 2, 4, 4);
       ctx.fillStyle = th.type === 'molotov' ? RAMPS.heat[3] : th.type === 'smokepot' ? RAMPS.bone[2] : RAMPS.ink[3];
-      ctx.fillRect(Math.round(th.x - camX) - 1, Math.round(th.y - camY) - 1, 2, 2);
+      ctx.fillRect(Math.round(th.x - camX) - 1, Math.round(th.y - th.h - camY) - 1, 2, 2);
     }
   }
 

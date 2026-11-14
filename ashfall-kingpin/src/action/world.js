@@ -68,7 +68,7 @@ export class ActionWorld {
   }
   toast(text, kind = 'info') { this.game.toast(text, kind); }
   shake(n) { this.game.shake(n); }
-  flash(x, y, k = 1) { if (k > 0) this.flashes.push({ x, y, t: 0.06, k: k * (this.game.settings.reduceFlash ? 0.4 : 1) }); }
+  flash(x, y, k = 1, h = 9) { if (k > 0) this.flashes.push({ x, y, h, t: 0.06, k: k * (this.game.settings.reduceFlash ? 0.4 : 1) }); }
   stat(k, n = 1) { stat(this.S, k, n); }
   perk(id) { return hasPerk(this.S, id); }
   enemyMult() { return D(this.S).enemy; }
@@ -116,7 +116,7 @@ export class ActionWorld {
     if (place.kind === 'settlement') {
       for (const e of this.hash.query(x, y, 12 * T, [])) {
         if (!e.alive || e.ko) continue;
-        const seesIt = Math.hypot(e.x - x, e.y - y) < 4 * T || !raycast(e.x, e.y - 8, x, y - 8, (tx, ty) => this.Q.blocksSight(tx, ty));
+        const seesIt = Math.hypot(e.x - x, e.y - y) < 4 * T || !raycast(e.x, e.y, x, y, (tx, ty) => this.Q.blocksSight(tx, ty));
         if (!seesIt) continue;
         if (e.civilian) scare(this, e, this.player, true);
         else if (e.faction === 'compact') { this.alertTown(place.id); startHunt(this, e, this.player); }
@@ -128,11 +128,11 @@ export class ActionWorld {
     if (!(this.townAlert[id] > 0)) { this.sfx('alarm'); this.toast(`${PLACE[id].name} is on alert!`, 'bad'); this.missions.onAlarm(id); }
     this.townAlert[id] = secs;
   }
-  onSuspicious(e) { if (!e.civilian) this.R.fx.text(e.x, e.y - 26, '?', RAMPS.gold[3]); }
+  onSuspicious(e) { if (!e.civilian) this.R.fx.text(e.x, e.y, '?', RAMPS.gold[3], e.elevated ? 60 : 28); }
   onCalm() {}
   onHunt(e, target, heard) {
     if (e.civilian) return;
-    this.R.fx.text(e.x, e.y - 26, '!', SEM.enemy);
+    this.R.fx.text(e.x, e.y, '!', SEM.enemy, e.elevated ? 60 : 28);
     this.sfx('alert', e);
     if (e.faction === 'compact' && e.place && target.faction === 'player') this.alertTown(e.place);
     if (this.S.rivals[e.faction] && e.place) this.campAlert[e.place] = 60;
@@ -142,7 +142,7 @@ export class ActionWorld {
     const place = w.place || (this.placeAt(w.x, w.y) || {}).id;
     if (!place) return;
     addHeat(this.S, place, 5, 'witness');
-    this.R.fx.text(w.x, w.y - 26, 'Reported!', SEM.bad);
+    this.R.fx.text(w.x, w.y, 'Reported!', SEM.bad, 28);
     this.toast('A witness reported you to the Wardens. Heat +5.', 'bad');
   }
 
@@ -162,10 +162,10 @@ export class ActionWorld {
     }
     if (t.kind === 'vehicle') return this.damageVehicle(t, amt);
     const fromMe = src && (src.faction === 'player' || src.faction === 'crew');
-    if (t.shielded) { this.R.fx.sparks(o.x || t.x, (o.y || t.y) - 8, o.dir || 0); return; }
+    if (t.shielded) { this.R.fx.sparks(o.x || t.x, o.y || t.y, o.dir || 0); return; }
     if (t.A && t.A.shield && o.dir !== undefined && o.variant !== 'ap' && !o.blast) {
       const facing = Math.abs(((o.dir + Math.PI - t.face + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
-      if (facing < 1.0) { this.R.fx.sparks(o.x || t.x, (o.y || t.y) - 8, o.dir); this.sfx('tick', t); return; }
+      if (facing < 1.0) { this.R.fx.sparks(o.x || t.x, o.y || t.y, o.dir); this.sfx('tick', t); return; }
     }
     let dmg = amt * (1 - (o.variant === 'ap' ? t.armor * 0.3 : t.armor));
     const unaware = t.ai && t.ai.state !== 'hunt';
@@ -173,7 +173,7 @@ export class ActionWorld {
     if (o.variant === 'inc') t.burnT = 3;
     t.hp -= dmg;
     t.flashT = 0.1;
-    if (!o.quiet) { this.R.fx.sparks(o.x || t.x, (o.y || t.y) - 8, o.dir || 0); this.sfx('hit', t); }
+    if (!o.quiet) { this.R.fx.sparks(o.x || t.x, o.y || t.y, o.dir || 0, t.elevated ? 36 : 8); this.sfx('hit', t); }
     if (fromMe && src === P) this.game.hitstop(0.04);
     if (fromMe && t.ai && t.ai.state !== 'hunt' && !t.civilian) startHunt(this, t, src);
     if (fromMe) { if (t.civilian) { scare(this, t, P, true); this.crime('assault', t.x, t.y); } else if (t.faction === 'compact' && !(this.townAlert[t.place] > 0)) this.crime('assault', t.x, t.y); }
@@ -211,7 +211,7 @@ export class ActionWorld {
         e.ko = true; e.alive = false; e.hittable = false; e.deadT = 0;
         this.stat('kos');
         this.sfx('melee', e);
-        this.R.fx.text(e.x, e.y - 24, 'KO', SEM.text);
+        this.R.fx.text(e.x, e.y, 'KO', SEM.text, 24);
         this.missions.onKill(e, P, true);
         this.dropLoot(e, true);
         return true;
@@ -309,7 +309,7 @@ export class ActionWorld {
       let k = 0;
       for (const g of posts) { if (k >= n) break; const [x, y] = tile(g.x, g.y); put(makeNPC(this, k === 2 ? 'captain' : 'militia', x, y, { faction: 'compact', place: p.id, state: 'post' })); k++; }
       for (const route of L.spawns.patrols || []) { if (k >= n) break; const [x, y] = tile(route[0][0], route[0][1]); put(makeNPC(this, comp[k % comp.length] === 'sniper' ? 'militia' : comp[k % comp.length], x, y, { faction: 'compact', place: p.id, state: 'patrol', route })); k++; }
-      if (n >= 7) for (const s of (L.spawns.snipers || []).slice(0, n >= 12 ? 4 : 2)) { const [x, y] = tile(s[0], s[1]); put(makeNPC(this, 'sniper', x, y - 6, { faction: 'compact', place: p.id, elevated: true })); k++; }
+      if (n >= 7) for (const s of (L.spawns.snipers || []).slice(0, n >= 12 ? 4 : 2)) { const [x, y] = tile(s[0], s[1]); put(makeNPC(this, 'sniper', x, y - 2, { faction: 'compact', place: p.id, elevated: true })); k++; }
       const streets = this.streetTiles(L);
       while (k < n && streets.length) { const [tx, ty] = streets[Math.floor(Math.random() * streets.length)]; const [x, y] = tile(tx, ty); put(makeNPC(this, comp[k % comp.length], x, y, { faction: 'compact', place: p.id, state: 'wander' })); k++; }
       const folkN = Math.round((p.folk || 8) * (T0.status === 'devastated' ? 0.4 : 1));
@@ -328,14 +328,14 @@ export class ActionWorld {
           const [x, y] = tile(g.x + (i >= posts.length ? (i % 3) - 1 : 0), g.y);
           put(makeNPC(this, comp[i % comp.length], x, y, { faction: r.id, place: p.id, state: i % 3 === 2 ? 'wander' : 'post' }));
         }
-        for (const s of L.spawns.snipers || []) { const [x, y] = tile(s[0], s[1]); put(makeNPC(this, r.id === 'palehand' ? 'smuggler' : 'raider', x, y - 6, { faction: r.id, place: p.id, elevated: true, state: 'post' })); }
+        for (const s of L.spawns.snipers || []) { const [x, y] = tile(s[0], s[1]); put(makeNPC(this, r.id === 'palehand' ? 'smuggler' : 'raider', x, y - 2, { faction: r.id, place: p.id, elevated: true, state: 'post' })); }
         const b = L.spawns.boss;
         if (b) { const [x, y] = tile(b.x, b.y); put(makeNPC(this, 'captain', x, y, { faction: r.id, place: p.id, boss: r.id, state: 'post' })); }
       }
     } else if (p.kind === 'ruin') {
       const cleared = S.flags['ruin_' + p.id] && S.day - S.flags['ruin_' + p.id] < 3;
       const comp = COMPOSITION[p.enemies] || COMPOSITION.dogs;
-      const n = cleared ? 1 : 2 + p.tier + (p.id === 'ruin_motel' ? 1 : 0);
+      const n = cleared ? 1 : p.id === 'ruin_motel' && !S.flags.motelParts ? 2 : 2 + p.tier;
       const fac = p.enemies === 'zealots' ? 'ashchoir' : p.enemies === 'raiders' ? 'rustjaw' : p.enemies === 'elite' ? 'compact' : 'wild';
       for (let i = 0; i < n; i++) {
         const den = L.spawns.dens[i % L.spawns.dens.length];
@@ -679,7 +679,7 @@ export class ActionWorld {
   }
 
   drawEntity(ctx, e, cx, cy) {
-    const x = Math.round(e.x - cx), y = Math.round(e.y - cy);
+    const x = Math.round(e.x - cx), y = Math.round(e.y - cy) - (e.elevated ? 16 : 0);
     ctx.fillStyle = 'rgba(18,15,14,0.35)';
     if (e.alive) ctx.fillRect(x - 4 + 2, y - 1, 9, 3);
     let img;
@@ -703,7 +703,7 @@ export class ActionWorld {
       if (e.ai && e.ai.state === 'suspicious') drawText(ctx, '?', x, y - 32, RAMPS.gold[3], { align: 'center', shadow: RAMPS.ink[0] });
       if (e.hp < e.maxHp || e.boss) { const w = e.boss ? 24 : 12; ctx.fillStyle = RAMPS.ink[0]; ctx.fillRect(x - w / 2, y - 27, w, 2); ctx.fillStyle = e.faction === 'crew' ? this.game.sem.friendly : this.game.sem.enemy; ctx.fillRect(x - w / 2, y - 27, Math.round(w * Math.max(0, e.hp / e.maxHp)), 2); }
     }
-    if (e.laser) { ctx.strokeStyle = 'rgba(226,69,42,0.55)'; ctx.beginPath(); ctx.moveTo(x, y - 9); ctx.lineTo(Math.round(e.laser.x - cx), Math.round(e.laser.y - cy)); ctx.stroke(); }
+    if (e.laser) { ctx.strokeStyle = 'rgba(226,69,42,0.55)'; ctx.beginPath(); ctx.moveTo(x, y - 9); ctx.lineTo(Math.round(e.laser.x - cx), Math.round(e.laser.y - 7 - cy)); ctx.stroke(); }
     if (e.witness) drawText(ctx, '!', x, y - 32, SEM.bad, { align: 'center', shadow: RAMPS.ink[0] });
   }
 
@@ -720,11 +720,12 @@ export class ActionWorld {
 
   lights(L) {
     const P = this.player;
-    if (this.night) L.add(P.x, P.y - 6, 46, 'rgba(255,214,160,1)', 0.75);
-    for (const f of this.flashes) L.add(f.x, f.y, 40 * f.k, 'rgba(255,220,140,1)', 1.2);
-    for (const z of this.combat.zones) if (z.type === 'fire') L.add(z.x, z.y, z.r * 2.2, 'rgba(255,140,60,1)', 0.8 + Math.random() * 0.3);
-    for (const v of this.vehicles) if (this.night && this.player.vehicle === v) L.add(v.x + Math.cos(v.angle) * 40, v.y + Math.sin(v.angle) * 40, 60, 'rgba(255,240,200,1)', 0.9);
-    for (const e of this.ents) if (e.vendor && this.night) L.add(e.x, e.y - 10, 30, 'rgba(255,170,90,1)', 0.7);
+    // add(x, y, radius, colour, strength, height): ground position + height above it.
+    if (this.night) L.add(P.x, P.y, 46, 'rgba(255,214,160,1)', 0.75, 7);
+    for (const f of this.flashes) L.add(f.x, f.y, 40 * f.k, 'rgba(255,220,140,1)', 1.2, f.h);
+    for (const z of this.combat.zones) if (z.type === 'fire') L.add(z.x, z.y, z.r * 2.2, 'rgba(255,140,60,1)', 0.8 + Math.random() * 0.3, 5);
+    for (const v of this.vehicles) if (this.night && this.player.vehicle === v) L.add(v.x + Math.cos(v.angle) * 40, v.y + Math.sin(v.angle) * 40, 60, 'rgba(255,240,200,1)', 0.9, 5);
+    for (const e of this.ents) if (e.vendor && this.night) L.add(e.x, e.y, 30, 'rgba(255,170,90,1)', 0.7, 12);
   }
 }
 

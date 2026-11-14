@@ -78,7 +78,7 @@ export function updatePlayer(world, dt, input, aim, uiBlocked) {
   P.moving = n > 0;
   if (P.moving) { P.anim += dt * (P.sprint ? 12 : 8); if (P.sprint && Math.random() < dt * 4) world.R.fx.dust(P.x, P.y, 1); if (P.sprint && !world.perk('fx_feet')) world.combat.noise(P.x, P.y, 4 * T, P); }
   // Aim + facing.
-  P.face = Math.atan2(aim.y - (P.y - 7), aim.x - P.x);
+  P.face = Math.atan2(aim.y - P.y, aim.x - P.x);
   P.dir = dirFromAngle(P.face);
   if (uiBlocked) return;
   // Weapon select.

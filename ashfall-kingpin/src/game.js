@@ -248,7 +248,7 @@ export class Game {
       const P = this.act.player;
       return { x: P.x + this.input.pad.rx * 80, y: P.y - 7 + this.input.pad.ry * 80 };
     }
-    return { x: this.cam.x + this.input.mouse.x / s, y: this.cam.y + this.input.mouse.y / s };
+    return { x: this.cam.x + this.input.mouse.x / s, y: this.cam.y + this.input.mouse.y / s + 7 };
   }
 
   updateMood() {
@@ -273,12 +273,12 @@ export class Game {
     for (const f of list) {
       switch (f.type) {
         case 'toast': if (f.kind !== 'event') this.toast(f.text, f.kind); break;
-        case 'sale': this.audio.play('kaching'); if (this.act) this.R.fx.coins(this.act.player.x, this.act.player.y - 12, 8); this.R.fx.text(this.act.player.x, this.act.player.y - 30, '+$' + Math.round(f.amount), this.sem.dirty); break;
+        case 'sale': this.audio.play('kaching'); if (this.act) this.R.fx.coins(this.act.player.x, this.act.player.y - 12, 8); this.R.fx.text(this.act.player.x, this.act.player.y, '+$' + Math.round(f.amount), this.sem.dirty, 30); break;
         case 'level': this.audio.play('levelup'); break;
         case 'rank': this.audio.play('levelup'); this.banner = { text: 'RANK UP: ' + ['Scavenger', 'Hustler', 'Supplier', 'Boss', 'Warlord', 'Kingpin'][f.rank], t: 4 }; break;
         case 'achievement': this.audio.play('achievement'); break;
         case 'heat': this.audio.play('heat'); break;
-        case 'heatpop': if (this.act) this.R.fx.text(this.act.player.x, this.act.player.y - 34, `Heat +${f.amount.toFixed(0)}`, this.sem.heat[1]); break;
+        case 'heatpop': if (this.act) this.R.fx.text(this.act.player.x, this.act.player.y, `Heat +${f.amount.toFixed(0)}`, this.sem.heat[1], 36); break;
         case 'dialog': this.showDialog({ who: f.who, title: f.title, lines: f.lines, i: 0 }); break;
         case 'event': this.audio.play('card'); if (!this.overlay && !S.mission) this.overlay = 'event'; break;
         case 'dawn': this.onDawn(f); break;
@@ -291,7 +291,7 @@ export class Game {
         case 'audit': case 'crackdown': this.audio.play('alarm'); break;
         case 'boss': this.audio.play('achievement'); break;
         case 'daybreak': this.audio.play('siren'); break;
-        case 'witness': if (this.act) { const P = this.act.player; this.R.fx.text(P.x, P.y - 30, 'Seen!', this.sem.bad); } break;
+        case 'witness': if (this.act) { const P = this.act.player; this.R.fx.text(P.x, P.y, 'Seen!', this.sem.bad, 30); } break;
         default: break;
       }
     }
