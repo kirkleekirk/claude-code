@@ -2,24 +2,12 @@
 // Recruit portraits come from the same parameters. Dogs, vehicles and held guns live here too.
 import { RAMPS } from '../data/palette.js';
 import { createCanvas, ctx2d, outlineSprite } from './canvas.js';
+import { randomLook, SKINS, HAIRS, CLOTH } from '../data/looks.js';
+export { randomLook, SKINS, HAIRS, CLOTH };
 
 const K = RAMPS;
 const cache = new Map();
 export const FRAME_W = 16, FRAME_H = 20;
-
-export const SKINS = [K.sand[3], K.sand[2], K.wood[3], K.wood[2], K.bone[2], K.rust[3]];
-export const HAIRS = [K.ink[0], K.wood[0], K.wood[1], K.sand[2], K.bone[1], K.rust[2], K.ink[2]];
-export const CLOTH = ['rust', 'wood', 'sand', 'olive', 'teal', 'sea', 'ink', 'bone', 'amber', 'green', 'heat', 'gold'];
-
-// Appearance: { skin, hair, hairStyle 0-5, hat 0-6, hatC, top ramp, top2 ramp, topStyle, pants ramp, boots }
-export function randomLook(rand, overrides = {}) {
-  const pick = (a) => a[Math.floor(rand() * a.length)];
-  return {
-    skin: pick(SKINS), hair: pick(HAIRS), hairStyle: Math.floor(rand() * 6), hat: rand() < 0.45 ? 1 + Math.floor(rand() * 4) : 0,
-    hatC: pick(CLOTH), top: pick(CLOTH), top2: pick(CLOTH), topStyle: pick(['shirt', 'jacket', 'vest', 'shirt', 'apron']),
-    pants: pick(['wood', 'ink', 'sea', 'olive', 'sand']), boots: pick([K.ink[1], K.wood[0], K.ink[0]]), ...overrides,
-  };
-}
 
 export function lookKey(L) { return [L.skin, L.hair, L.hairStyle, L.hat, L.hatC, L.top, L.top2, L.topStyle, L.pants, L.boots].join('|'); }
 

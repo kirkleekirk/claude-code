@@ -12,7 +12,7 @@ export const BUSINESSES = {
   tradepost: { name: 'Trading Post', cost: 6000, rev: 520, upkeep: 0.5, wash: 2, audit: 1.0, rank: 2, staff: 2, icon: 'case', special: 'Extra market: bulk sales here at -15% with no heat.' },
   fightpit: { name: 'Fight Pit', cost: 7800, rev: 620, upkeep: 0.45, wash: 1, audit: 1.4, rank: 3, staff: 2, icon: 'fist', special: 'Gambling take (dirty) + spectators boost REP daily.' },
   radio: { name: 'Radio Station', cost: 9500, rev: 500, upkeep: 0.5, wash: 3, audit: 0.6, rank: 3, staff: 2, icon: 'speaker', special: 'Broadcasts sway attitudes: -1.5 heat/day in its town, +goodwill.' },
-  casino: { name: 'Casino', cost: 42000, rev: 4200, upkeep: 0.5, wash: 1, audit: 1.8, rank: 3, staff: 4, icon: 'dice', special: 'Massive laundering capacity and massive audit risk.' },
+  casino: { name: 'Casino', cost: 50000, rev: 6000, upkeep: 0.5, wash: 1, audit: 1.8, rank: 3, staff: 4, icon: 'dice', special: 'Massive laundering capacity and massive audit risk.' },
 };
 export const BUSINESS_IDS = Object.keys(BUSINESSES);
 
@@ -31,4 +31,4 @@ export const RACKETS = {
 
 export const COUNCIL_SEATS = 12;
 export const SEATS_NEEDED = 7;
-export const SEAT_COST = (n) => ({ clean: 60000 + n * 25000, favors: 2 + n });
+export const SEAT_COST = (n) => ({ clean: 30000 + n * 12000, favors: 1 + Math.floor(n / 2) });
