@@ -50,6 +50,7 @@ export function newGame(seed = 1337, diff = 'normal', opts = {}) {
   }
   for (const id of MARKET_IDS) S.markets[id] = { sat: {}, mods: [] };
   for (const rid of RIVAL_IDS) S.rivals[rid] = newRival(rid);
+  S.regulars = makeRegulars(seed);
   // Starting Hollow: 4 outdoor plots on the top row and Bench I below them.
   for (let i = 0; i < 4; i++) S.hollow.cells[i] = { fac: 'plot', plant: null };
   S.hollow.cells[6] = { fac: 'bench' };
@@ -62,6 +63,20 @@ export function newGame(seed = 1337, diff = 'normal', opts = {}) {
   S.player.loadout[0] = g.id;
   S.inv['ammo:light'] = 4;
   return S;
+}
+
+const REG_FIRST = ['Old Tam', 'Widow Pike', 'Dusty Jo', 'Brother Ames', 'Lefty Mara', 'Captain Sol', 'Nan Hollis', 'Rook', 'Sweet Iggy', 'Doc Veil', 'Cass the Kid', 'Marrow Ma', 'Patch', 'Slow Eddie'];
+const REG_TOWNS = ['millbrook', 'millbrook', 'coppergate', 'coppergate', 'harbor9', 'harbor9', 'stverity', 'stverity', 'foundry', 'foundry', 'newhaven', 'newhaven', 'crossroads', 'crossroads'];
+const REG_LIKES = ['dust_devil', 'ashleaf', 'ashleaf', 'rail_rose', 'glowvine', 'marrow_kush', 'rail_rose', 'glowvine', 'marrow_kush', 'ashleaf', 'rail_rose', 'glowvine', 'dust_devil', 'marrow_kush'];
+const REG_COL = ['rust', 'wood', 'sand', 'olive', 'teal', 'sea', 'ink', 'bone', 'amber', 'green', 'heat', 'gold'];
+function makeRegulars(seed) {
+  return REG_FIRST.map((name, i) => {
+    const h = hashStr(seed + name);
+    return {
+      id: i + 1, name, town: REG_TOWNS[i], likes: REG_LIKES[i], form: i % 3 === 0 ? 'jar' : 'baggie', minQ: i % 4 === 3 ? 2 : 1, budget: 4 + (h % 8), bought: 0, loyalty: 0, premium: 0.25 + (h % 26) / 100, gifts: 0,
+      look: { skin: ['#e2c98f', '#c0a064', '#a8804e', '#7d5733'][h % 4], hair: ['#120f0e', '#34231a', '#d8cab0', '#a2472a'][(h >> 3) % 4], hairStyle: h % 6, hat: (h >> 5) % 5, hatC: REG_COL[(h >> 7) % 12], top: REG_COL[(h >> 9) % 12], top2: REG_COL[(h >> 11) % 12], topStyle: ['shirt', 'jacket', 'vest', 'apron'][(h >> 13) % 4], pants: ['wood', 'ink', 'sea', 'olive'][(h >> 15) % 4], boots: '#2a2420' },
+    };
+  });
 }
 
 export function newLedgerDay() { return { inc: {}, exp: {}, dirtyIn: 0, cleanIn: 0, dirtyOut: 0, cleanOut: 0, rep: 0, heat: 0 }; }

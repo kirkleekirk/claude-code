@@ -5,7 +5,7 @@ import { rnd, rint, rchance, rpick } from '../core/rng.js';
 import { log, fx, stat, earn, addRep, rank, hour, newLedgerDay, marketOpen, journal } from './state.js';
 import { growHour, growDaily, processHour, labHour, utilitiesHour } from './grow.js';
 import { craftHour } from './craft.js';
-import { sellPacks, weedPrice, marketsDaily, tradeAllowed, shineSell } from './economy.js';
+import { sellPacks, weedPrice, marketsDaily, tradeAllowed, shineSell, regularsDaily } from './economy.js';
 import { heatDaily } from './heat.js';
 import { active, onJob, effSkill, productivity, wagesDaily, crewDaily, refreshCandidates, injure } from './crew.js';
 import { businessDaily, racketsDaily } from './business.js';
@@ -96,6 +96,7 @@ export function dawn(S) {
   racketsDaily(S);
   heatDaily(S);
   marketsDaily(S);
+  regularsDaily(S);
   townsDaily(S);
   crewDaily(S);
   rivalsDaily(S);

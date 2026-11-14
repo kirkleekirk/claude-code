@@ -29,6 +29,7 @@ function parseModule(abs) {
     return `/*import:${imports.length - 1}*/`;
   });
   if (/^\s*import\s/m.test(code)) fail(`${id}: unsupported import syntax`);
+  if (/\bimport\s*\(/.test(code)) fail(`${id}: dynamic import() is not supported in the single-file build`);
   const exports = [];
   code = code.replace(EXPORT_LIST_RE, (_, list) => {
     for (const n of list.split(',').map(s => s.trim()).filter(Boolean)) exports.push(n);

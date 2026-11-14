@@ -114,6 +114,41 @@ export function sellPacks(S, town, key, n, seller = { hustle: 0, stealth: 0, who
   return { ok: true, total, units, sold, msg: `Sold ${sold} ${pk.name.toLowerCase()}${sold > 1 ? 's' : ''} for $${Math.round(total)}` };
 }
 
+// ---------- named regulars ----------
+export function regularPrice(S, reg, key) {
+  const [, strain, q, form] = key.split(':');
+  const match = strain === reg.likes && form === reg.form && +q >= reg.minQ;
+  const mult = 1 + reg.premium * (match ? 1 : 0.3) + reg.loyalty / 300;
+  return { ...weedPrice(S, reg.town, strain, +q, form, 0, { regular: mult }), match };
+}
+
+export function sellToRegular(S, regId, key, n = 1) {
+  const reg = S.regulars.find((r) => r.id === regId);
+  if (!reg) return { ok: false, msg: 'Gone.' };
+  if (!key.startsWith('pack:')) return { ok: false, msg: 'They only buy packed product.' };
+  if (S.laylow > 0) return { ok: false, msg: "You're laying low." };
+  let total = 0, sold = 0, units = 0;
+  const pk = PACKS[key.split(':')[3]];
+  for (let i = 0; i < n; i++) {
+    if (reg.bought + pk.units > reg.budget) break;
+    if (!takeItem(S, key, 1)) break;
+    const { price, match } = regularPrice(S, reg, key);
+    total += price; sold++; units += pk.units; reg.bought += pk.units;
+    reg.loyalty = Math.min(100, reg.loyalty + (match ? 4 : 1));
+  }
+  if (!sold) return { ok: false, msg: reg.bought >= reg.budget ? reg.name + ' has bought enough today.' : 'Nothing to sell.' };
+  earn(S, 'carried', total, 'regulars');
+  if (reg.town !== 'crossroads') addHeat(S, reg.town, units * streetHeatPerUnit(S, reg.town) * 0.5, 'regular', { quiet: true });
+  addRep(S, units * 0.2, null, 'sales');
+  stat(S, 'unitsSold', units);
+  if (reg.loyalty >= 50 && reg.gifts === 0) { reg.gifts = 1; const s = reg.likes; addItem(S, 'seed:' + s, 3); S.strains.known[s] = true; log(S, reg.name + ' gave you 3 ' + STRAINS[s].name + ' seeds. "For a friend."', 'good'); }
+  if (reg.loyalty >= 100 && reg.gifts === 1) { reg.gifts = 2; S.tips.push({ day: S.day, town: reg.town === 'crossroads' ? 'millbrook' : reg.town, src: 'regular' }); S.favors += 1; log(S, reg.name + ' owes you: +1 favor and a tip-off for the Job Board.', 'good'); }
+  fx(S, 'sale', { amount: total, town: reg.town });
+  return { ok: true, total, msg: reg.name + ' paid $' + Math.round(total) + '.' };
+}
+
+export function regularsDaily(S) { for (const r of S.regulars) r.bought = 0; }
+
 // ---------- guns ----------
 export function compMult(c) { return MATERIALS[c.mat].mult * (1 + 0.08 * (c.stars - 3)); }
 
