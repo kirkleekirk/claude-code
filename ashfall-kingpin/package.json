@@ -1,0 +1,13 @@
+{
+  "name": "ashfall-kingpin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Post-collapse crime-empire sim + top-down action game. Single-file HTML build, zero runtime dependencies.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.js",
+    "sim": "node tools/sim.js",
+    "validate": "node tools/layout-validate.js",
+    "smoke": "node tools/smoke.js"
+  }
+}
