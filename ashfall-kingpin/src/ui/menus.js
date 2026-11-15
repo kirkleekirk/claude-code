@@ -41,7 +41,7 @@ export function drawTitle(g) {
   y += 20;
   if (bigButton(g, 'ti:credits', x, y, w, 'Credits')) g.overlay = 'credits';
   void auto;
-  ui.text('WASD move | mouse aim | LMB fire | E interact | Tab Ledger | Esc pause', ui.W / 2, ui.H - 22, K.bone[1], { align: 'center', shadow: K.ink[0] });
+  ui.text('WASD move | mouse aim | LMB fire | E interact | Tab Ledger | RMB-drag orbit | wheel zoom', ui.W / 2, ui.H - 22, K.bone[1], { align: 'center', shadow: K.ink[0] });
   ui.text('A fictional post-collapse crime fantasy. Every drug, gun, faction and place is invented.', ui.W / 2, ui.H - 11, K.ink[3], { align: 'center' });
   if (g.overlay === 'saves') drawSaves(g);
   if (g.overlay === 'settings') drawSettings(g);
@@ -94,6 +94,13 @@ export function drawSettings(g) {
     row('', (xx) => { s.subtitles = ui.toggle('st:subs', xx, yy, 'Subtitles for important sounds', s.subtitles); });
   } else if (g.setTab === 1) {
     row('UI scale', (xx, yy2) => { [0.8, 1, 1.25, 1.5].forEach((v, i) => { if (ui.button('st:ui:' + v, xx + i * 44, yy2, 40, 13, Math.round(v * 100) + '%', { active: s.uiScale === v, tip: 'Rounded to whole pixels; large values cap at what fits the window.' })) s.uiScale = v; }); });
+    row('World view', (xx, yy2) => {
+      [['3d', '3D (WebGL2)'], ['2d', 'Classic 2D']].forEach(([v, l], i) => {
+        if (ui.button('st:rend:' + v, xx + i * 92, yy2, 88, 13, l, { active: s.renderer === v, disabled: v === '3d' && g.gl3Failed, tip: v === '3d' ? (g.gl3Failed ? 'WebGL2 is not available in this browser.' : 'Real-time 3D: orbit with RMB-drag or the arrow keys, zoom with the wheel, Z resets.') : 'The original top-down pixel renderer.' })) { s.renderer = v; g.applyRenderer(); }
+      });
+    });
+    row('', (xx) => { s.pixel3d = ui.toggle('st:pix', xx, yy, 'Pixel 3D (chunky low-res render)', s.pixel3d, { tip: 'On: the 3D world renders at a low resolution with crisp pixels. Off: full resolution with anti-aliasing.' }); });
+    row('', (xx) => { s.shadows = ui.toggle('st:shadow', xx, yy, 'Sun and moon shadows (3D)', s.shadows); });
     row('', (xx) => { s.shake = ui.toggle('st:shake', xx, yy, 'Screen shake', s.shake); });
     row('', (xx) => { s.reduceFlash = ui.toggle('st:flash', xx, yy, 'Reduce flashes (muzzle flash lighting)', s.reduceFlash); });
     row('', (xx) => { const v = ui.toggle('st:cb', xx, yy, 'Colorblind-safe colours (blue/orange)', s.colorblind); if (v !== s.colorblind) { s.colorblind = v; g.saveSettings(); } });
@@ -166,7 +173,7 @@ export function drawEnding(g) {
 
 const CREDITS = [
   'ASHFALL KINGPIN', '', 'Design, code, pixels, synths and words', 'generated procedurally, at runtime, in your browser.', '',
-  'Built with: vanilla JavaScript, Canvas 2D, WebAudio.', 'No libraries. No assets. No fonts fetched.', '',
+  'Built with: vanilla JavaScript, WebGL2, Canvas 2D, WebAudio.', 'No libraries. No assets. No fonts fetched.', '',
   'Thanks to Mags, who lends at 20%,', 'to Pell, who waters the plots,', 'and to every guard who looked the other way.', '',
   'The wastes keep turning. Sandbox mode: all systems stay live.',
 ];

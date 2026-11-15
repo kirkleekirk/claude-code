@@ -24,7 +24,21 @@ export class TerrainRenderer {
     this.chunksY = WORLD_H / CHUNK;
     this.chunks = new Array(this.chunksX * this.chunksY).fill(null);
     this.bakeQueue = [];
+    this.flat = false;
     for (let i = 0; i < this.chunks.length; i++) this.bakeQueue.push(i);
+  }
+
+  // Flat mode bakes ground only (the 3D renderer builds walls, fences and cliffs as geometry).
+  // Switching re-queues every chunk, nearest to (fx, fy) world px first; old canvases stay until replaced.
+  setFlat(flat, fx = 1024, fy = 1024) {
+    if (this.flat === !!flat) return;
+    this.flat = !!flat;
+    const S = CHUNK * TILE;
+    this.bakeQueue = this.chunks.map((_, i) => i).sort((a, b) => {
+      const da = Math.hypot((a % this.chunksX + 0.5) * S - fx, (Math.floor(a / this.chunksX) + 0.5) * S - fy);
+      const db = Math.hypot((b % this.chunksX + 0.5) * S - fx, (Math.floor(b / this.chunksX) + 0.5) * S - fy);
+      return da - db;
+    });
   }
 
   n(wx, wy) {
@@ -221,9 +235,10 @@ export class TerrainRenderer {
     const ox = cx * CHUNK, oy = cy * CHUNK;
     const at = (a, x, y) => (x < 0 || y < 0 || x >= WORLD_W || y >= WORLD_H ? 0 : a[y * WORLD_W + x]);
     const fill = (c, x, y, w, h) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+    const flat = this.flat;
     // Building drop shadows (sun from top-left: shadow falls right and down).
     ctx.fillStyle = 'rgba(18,15,14,0.35)';
-    for (const b of W.buildings) {
+    for (const b of flat ? [] : W.buildings) {
       if (b.x > ox + CHUNK + 1 || b.y > oy + CHUNK + 1 || b.x + b.w < ox - 1 || b.y + b.h < oy - 1) continue;
       const px = (b.x - ox) * 16, py = (b.y - oy) * 16;
       ctx.fillRect(px + b.w * 16, py + 2, 5, b.h * 16);
@@ -236,15 +251,16 @@ export class TerrainRenderer {
         const x = (tx - ox) * 16, y = (ty - oy) * 16;
         const inChunk = tx >= ox && ty >= oy && tx < ox + CHUNK && ty < oy + CHUNK;
         // Cliff shadow spills onto neighbours from outside the chunk too.
-        if (W.ground[i] === T.CLIFF) {
+        if (W.ground[i] === T.CLIFF && !flat) {
           if (at(W.ground, tx + 1, ty) !== T.CLIFF) { ctx.fillStyle = 'rgba(18,15,14,0.32)'; ctx.fillRect(x + 16, y + 3, 4, 16); }
           if (at(W.ground, tx, ty + 1) !== T.CLIFF) { ctx.fillStyle = 'rgba(18,15,14,0.32)'; ctx.fillRect(x + 3, y + 16, 16, 3); }
         }
         if (!inChunk) continue;
         if (W.road[i] === 1) this.drawCurbs(ctx, tx, ty, x, y);
-        if (W.ground[i] === T.CLIFF && !W.road[i] && !W.zone[i]) this.drawCliff(ctx, tx, ty, x, y);
+        if (W.ground[i] === T.CLIFF && !W.road[i] && !W.zone[i] && !flat) this.drawCliff(ctx, tx, ty, x, y);
         const st = W.struct[i];
-        if (st === ST.WALL || st === ST.TOWER) this.drawWall(ctx, tx, ty, x, y);
+        if (flat) { /* structures are 3D geometry */ }
+        else if (st === ST.WALL || st === ST.TOWER) this.drawWall(ctx, tx, ty, x, y);
         else if (st === ST.FENCE) this.drawFence(ctx, tx, ty, x, y);
         if (!W.solid[i] && !W.road[i] && !W.floor[i] && W.bldg[i] < 0) this.drawDecal(ctx, W.ground[i], W.deco[i], x, y);
       }

@@ -51,6 +51,9 @@ export function updatePlayer(world, dt, input, aim, uiBlocked) {
     if (input.pad.active) { mx += input.pad.lx; my += input.pad.ly; }
   }
   if (input.pressed('sneak') && !uiBlocked) { P.sneaking = !P.sneaking; world.toast(P.sneaking ? 'Sneaking: slower, quieter, harder to see.' : 'Walking.'); }
+  // Movement is relative to the camera (the 3D view can orbit; yaw is 0 in the 2D view).
+  const yaw = world.game.moveYaw || 0;
+  if (yaw && (mx || my)) { const c = Math.cos(yaw), s = Math.sin(yaw); const ax = mx * c + my * s, ay = -mx * s + my * c; mx = ax; my = ay; }
   const n = Math.hypot(mx, my);
   if (n > 1) { mx /= n; my /= n; }
   P.sprint = !uiBlocked && input.down('sprint') && n > 0 && P.stamina > 0.05 && !P.sneaking;
@@ -84,7 +87,7 @@ export function updatePlayer(world, dt, input, aim, uiBlocked) {
   // Weapon select.
   for (let i = 0; i < 3; i++) if (input.pressed('slot' + (i + 1)) && P.weapons[i]) { P.wsel = i; world.sfx('tick', P); }
   if (input.pressed('swap')) { for (let k = 1; k <= 3; k++) { const j = (P.wsel + k) % 3; if (P.weapons[j]) { P.wsel = j; break; } } world.sfx('tick', P); }
-  if (input.mouse.wheel && !world.game.ui.overUI) { const dir = Math.sign(input.mouse.wheel); for (let k = 1; k <= 3; k++) { const j = (P.wsel + dir * k + 9) % 3; if (P.weapons[j]) { P.wsel = j; break; } } }
+  if (input.mouse.wheel && !world.game.ui.overUI && !world.game.use3d) { const dir = Math.sign(input.mouse.wheel); for (let k = 1; k <= 3; k++) { const j = (P.wsel + dir * k + 9) % 3; if (P.weapons[j]) { P.wsel = j; break; } } }
   if (input.pressed('reload') && wpn) world.combat.startReload(P, wpn);
   // Fire: semi-auto for slow guns, auto above 300 rpm.
   const firing = (input.mouse.down[0] && !world.game.ui.overUI) || (input.pad.active && input.padDown('fire'));

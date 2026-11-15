@@ -34,6 +34,9 @@ import { enterSandbox } from './sim/endgame.js';
 import { skipTutorial, tutorialTick } from './sim/tutorial.js';
 import { refreshCandidates } from './sim/crew.js';
 import { makeNPC, startHunt } from './action/ai.js';
+import { currentWeapon } from './action/player.js';
+import { Renderer3D } from './render3d/renderer.js';
+import { drawWorldOverlay3D } from './ui/world3d.js';
 
 const STEP = 1 / 60;
 export { SPEEDS };
@@ -41,7 +44,10 @@ export { SPEEDS };
 const DEFAULT_SETTINGS = {
   master: 0.8, music: 0.55, sfx: 0.8, uiScale: 1, shake: true, reduceFlash: false, colorblind: false, subtitles: true,
   pauseOnBlur: true, muteOnBlur: true, ledgerPause: true, hints: true, showFps: false, binds: { ...DEFAULT_BINDS },
+  renderer: '3d', pixel3d: true, shadows: true,
 };
+const CAM_DEFAULT = { yaw: 0, pitch: 1.0, dist: 470 };
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 function makeStore() {
   try { const k = '__ak_t'; localStorage.setItem(k, '1'); localStorage.removeItem(k); return { get: (x) => localStorage.getItem(x), set: (x, v) => localStorage.setItem(x, v), remove: (x) => localStorage.removeItem(x) }; }
@@ -49,8 +55,14 @@ function makeStore() {
 }
 
 export class Game {
-  constructor(canvas) {
+  constructor(canvas, canvas3d = null) {
     this.canvas = canvas;
+    this.canvas3d = canvas3d;
+    this.r3 = null;            // WebGL2 renderer (created at boot; null -> 2D fallback)
+    this.gl3Failed = false;
+    this.cam3 = { ...CAM_DEFAULT };
+    this.moveYaw = 0;
+    this.pmx = 0; this.pmy = 0;
     this.ctx = ctx2d(canvas);
     this.input = new Input(canvas);
     this.audio = new AudioEngine();
@@ -78,6 +90,7 @@ export class Game {
     this.time = 0;
     this.fps = 60;
     this.frameMs = 16;
+    this.perf = { update: 0, render: 0, world: 0 };   // smoothed CPU ms per frame (debug overlay + smoke test)
     this.playerLook = randomLook(Math.random, { top: 'rust', top2: 'sand', topStyle: 'jacket', hat: 2, hatC: 'wood', hair: RAMPS.wood[0] });
     this.cam = { x: 0, y: 0 };
     this.bootStep = 0;
@@ -86,6 +99,32 @@ export class Game {
     window.addEventListener('focus', () => { this.audio.setMuted(false); });
     canvas.addEventListener('mousedown', () => this.audio.unlock());
     window.addEventListener('keydown', () => this.audio.unlock());
+    if (canvas3d) canvas3d.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      this.r3 = null; this.gl3Failed = true; this.settings.renderer = '2d';
+      this.applyRenderer();
+      this.toast('The 3D context was lost: switched to the 2D renderer.', 'bad');
+    });
+  }
+
+  // ---------- renderer selection ----------
+  get use3d() { return this.settings.renderer === '3d' && !!this.r3; }
+
+  init3d() {
+    if (this.r3 || this.gl3Failed || !this.canvas3d || !this.R) return;
+    try { this.r3 = new Renderer3D(this.canvas3d, this.W, this.R.terrain); }
+    catch (e) { this.gl3Failed = true; this.gl3Error = String((e && e.message) || e); }
+  }
+
+  // Called after the renderer setting changes (and once at boot).
+  applyRenderer() {
+    if (this.settings.renderer === '3d') this.init3d();
+    if (this.settings.renderer === '3d' && !this.r3) {
+      this.settings.renderer = '2d';
+      this.toast('WebGL2 is not available here: using the 2D renderer.', 'bad');
+    }
+    const P = this.act ? this.act.player : null;
+    if (this.R) this.R.terrain.setFlat(this.use3d, P ? P.x : 1024, P ? P.y : 1024);
   }
 
   start() { requestAnimationFrame((t) => this.frame(t)); }
@@ -98,11 +137,12 @@ export class Game {
       if (rep.errors.length) console.error('Layout validator:', rep.errors.slice(0, 5));
       this.R = new WorldRenderer(this.W);
       this.minimap = bakeMinimap(this.W);
+      this.applyRenderer();
       this.bootStep = 2;
       return 0.2;
     }
     const p = this.R.terrain.bakeSome(14);
-    if (p >= 1) { this.scene = 'title'; this.audio.setMood('menu'); }
+    if (p >= 1) { if (this.r3) this.r3.syncGround(64); this.scene = 'title'; this.audio.setMood('menu'); }
     return 0.2 + 0.8 * p;
   }
 
@@ -125,6 +165,8 @@ export class Game {
     this.audio.setMood('calm');
     this.lastAutosaveDay = S.day;
     S._fx = S._fx || [];
+    this.lastAim = null;
+    if (this.r3) { const P = this.act.player; this.r3.cam.target[0] = P.x; this.r3.cam.target[2] = P.y; this.r3.fade.clear(); }
   }
 
   loadSlot(slot) {
@@ -170,18 +212,28 @@ export class Game {
     let dt = this.last ? now - this.last : STEP;
     this.last = now;
     dt = Math.min(dt, 0.1);
-    this.frameMs = this.frameMs * 0.95 + dt * 1000 * 0.05;
     const W = window.innerWidth, H = window.innerHeight;
     if (this.canvas.width !== W || this.canvas.height !== H) { this.canvas.width = W; this.canvas.height = H; }
-    this.input.pollPad();
-    if (this.scene === 'boot') { this.bootProgress = this.bootTick(); }
+    if (this.canvas3d && this.r3 && (this.canvas3d.width !== W || this.canvas3d.height !== H)) { this.canvas3d.width = W; this.canvas3d.height = H; }
+    if (this.scene === 'boot') { this.input.pollPad(); this.bootProgress = this.bootTick(); }
     else {
       this.acc += dt;
+      // Fixed 60 Hz simulation. On faster displays a frame without a step is skipped entirely, so
+      // one-frame input edges (clicks, key presses) are never lost between steps.
+      if (this.acc < STEP - 0.002) { requestAnimationFrame((tt) => this.frame(tt)); return; }
+      this.input.pollPad();
       let steps = 0;
-      while (this.acc >= STEP && steps < 6) { this.update(STEP); this.acc -= STEP; steps++; }
+      const tu = performance.now();
+      while (this.acc >= STEP - 0.002 && steps < 6) { this.update(STEP); this.acc -= STEP; steps++; }
       if (steps === 6) this.acc = 0;
+      if (this.R.terrain.bakeQueue.length) this.R.terrain.bakeSome(5);
+      this.perf.update += (performance.now() - tu - this.perf.update) * 0.05;
     }
+    const tr = performance.now();
+    if (this.lastRender) this.frameMs = this.frameMs * 0.95 + Math.min(100, tr - this.lastRender) * 0.05;
+    this.lastRender = tr;
     this.render();
+    this.perf.render += (performance.now() - tr - this.perf.render) * 0.05;
     this.input.endFrame();
     requestAnimationFrame((tt) => this.frame(tt));
   }
@@ -196,7 +248,8 @@ export class Game {
     if (this.scene !== 'play' || !this.S) return;
     if (this.hitstopT > 0) { this.hitstopT -= dt; return; }
     this.globalKeys();
-    if (this.frozen) { this.consumeFx(); return; }
+    if (this.frozen) { this.consumeFx(); this.pmx = this.input.mouse.x; this.pmy = this.input.mouse.y; return; }
+    this.cameraInput(dt);
     const S = this.S;
     const runClock = !(this.managing && this.settings.ledgerPause) && this.timeSpeed > 0 && !(this.mini && this.mini.kind === 'travel');
     if (runClock) {
@@ -207,6 +260,7 @@ export class Game {
     const worldRuns = !(this.managing && this.settings.ledgerPause);
     if (worldRuns) {
       const aim = this.aimWorld();
+      this.lastAim = aim;
       const blocked = this.managing || !!this.mini;
       this.act.update(dt, this.input, aim, blocked);
       this.R.fx.update(dt);
@@ -242,12 +296,38 @@ export class Game {
   openLedger(tab) { if (tab !== undefined) this.ledgerTab = tab; this.overlay = 'ledger'; this.panel = null; this.audio.play('tab'); }
   closeOverlay() { this.overlay = null; this.panel = null; this.audio.play('ui_back'); }
 
-  aimWorld() {
-    const s = this.zoom || 3;
-    if (this.input.pad.active && (this.input.pad.rx || this.input.pad.ry)) {
-      const P = this.act.player;
-      return { x: P.x + this.input.pad.rx * 80, y: P.y - 7 + this.input.pad.ry * 80 };
+  // Orbit camera controls for the 3D view: RMB-drag or keys orbit, wheel or keys zoom.
+  cameraInput(dt) {
+    const I = this.input, c = this.cam3;
+    const mx = I.mouse.x, my = I.mouse.y;
+    if (this.use3d && !this.overlay && !this.mini) {
+      if (I.mouse.down[2] && !this.ui.overUI) { c.yaw -= (mx - this.pmx) * 0.006; c.pitch += (my - this.pmy) * 0.004; }
+      if (I.down('camLeft')) c.yaw += dt * 1.9;
+      if (I.down('camRight')) c.yaw -= dt * 1.9;
+      if (I.down('camIn')) c.dist *= 1 - dt * 1.3;
+      if (I.down('camOut')) c.dist *= 1 + dt * 1.3;
+      if (I.mouse.wheel && !this.ui.overUI) c.dist *= Math.pow(1.12, Math.sign(I.mouse.wheel));
+      if (I.pressed('camReset')) { c.yaw = Math.round(c.yaw / (Math.PI * 2)) * Math.PI * 2; c.pitch = CAM_DEFAULT.pitch; c.dist = CAM_DEFAULT.dist; }
+      c.pitch = clamp(c.pitch, 0.55, 1.4);
+      c.dist = clamp(c.dist, 190, 820);
     }
+    this.pmx = mx; this.pmy = my;
+    this.moveYaw = this.use3d ? this.r3.cam.yaw : 0;
+  }
+
+  // Ground point the player is aiming at.
+  aimWorld() {
+    const P = this.act.player;
+    const pad = this.input.pad;
+    if (this.use3d) {
+      if (pad.active && (pad.rx || pad.ry)) {
+        const c = Math.cos(this.r3.cam.yaw), s = Math.sin(this.r3.cam.yaw);
+        return { x: P.x + (pad.rx * c + pad.ry * s) * 80, y: P.y + (-pad.rx * s + pad.ry * c) * 80 };
+      }
+      return this.r3.pick(this.input.mouse.x, this.input.mouse.y, 9);
+    }
+    const s = this.zoom || 3;
+    if (pad.active && (pad.rx || pad.ry)) return { x: P.x + pad.rx * 80, y: P.y + pad.ry * 80 };
     return { x: this.cam.x + this.input.mouse.x / s, y: this.cam.y + this.input.mouse.y / s + 7 };
   }
 
@@ -273,7 +353,7 @@ export class Game {
     for (const f of list) {
       switch (f.type) {
         case 'toast': if (f.kind !== 'event') this.toast(f.text, f.kind); break;
-        case 'sale': this.audio.play('kaching'); if (this.act) this.R.fx.coins(this.act.player.x, this.act.player.y - 12, 8); this.R.fx.text(this.act.player.x, this.act.player.y, '+$' + Math.round(f.amount), this.sem.dirty, 30); break;
+        case 'sale': this.audio.play('kaching'); if (this.act) { this.R.fx.coins(this.act.player.x, this.act.player.y, 8); this.R.fx.text(this.act.player.x, this.act.player.y, '+$' + Math.round(f.amount), this.sem.dirty, 30); } break;
         case 'level': this.audio.play('levelup'); break;
         case 'rank': this.audio.play('levelup'); this.banner = { text: 'RANK UP: ' + ['Scavenger', 'Hustler', 'Supplier', 'Boss', 'Warlord', 'Kingpin'][f.rank], t: 4 }; break;
         case 'achievement': this.audio.play('achievement'); break;
@@ -448,16 +528,29 @@ export class Game {
     const ctx = this.ctx;
     const W = this.canvas.width, H = this.canvas.height;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = RAMPS.ink[0];
-    ctx.fillRect(0, 0, W, H);
     const zoom = pickScale(W, H);
     this.zoom = zoom;
     const uiBase = Math.max(1, Math.floor(Math.min(W / 640, H / 360)) || 1);
     const uiMax = Math.max(1, Math.floor(Math.min(W / 480, H / 270)));
     const us = Math.max(1, Math.min(uiMax, Math.round(uiBase * this.settings.uiScale)));
     const uw = Math.floor(W / us), uh = Math.floor(H / us);
-    if (this.scene === 'play' && this.S) this.renderWorld(ctx, W, H, zoom);
-    else if (this.scene === 'title' && this.R) this.renderTitleBackdrop(ctx, W, H, zoom);
+    const world = (this.scene === 'play' && !!this.S && !!this.act) || (this.scene === 'title' && !!this.R);
+    const three = world && this.use3d;
+    if (this.canvas3d && this.shown3d !== three) { this.shown3d = three; this.canvas3d.style.display = three ? 'block' : 'none'; }
+    if (three) {
+      // The world is drawn by WebGL on the canvas underneath; this canvas carries only overlay + UI.
+      ctx.clearRect(0, 0, W, H);
+      const tw = performance.now();
+      this.render3d(H);
+      this.perf.world += (performance.now() - tw - this.perf.world) * 0.05;
+      if (this.scene === 'play') drawWorldOverlay3D(this, ctx, us);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+    } else {
+      ctx.fillStyle = RAMPS.ink[0];
+      ctx.fillRect(0, 0, W, H);
+      if (this.scene === 'play' && this.S && this.act) this.renderWorld(ctx, W, H, zoom);
+      else if (this.scene === 'title' && this.R) this.renderTitleBackdrop(ctx, W, H, zoom);
+    }
     this.ui.begin(ctx, uw, uh, us);
     if (this.scene === 'boot') drawBoot(this, this.bootProgress || 0);
     else if (this.scene === 'title') drawTitle(this);
@@ -485,6 +578,61 @@ export class Game {
     else if (o === 'credits') drawCredits(this);
   }
 
+  // ---------- 3D world ----------
+  render3d(H) {
+    const r3 = this.r3, cam = r3.cam, c = this.cam3, s = this.settings;
+    const sc = { minute: 1110, time: this.time, dt: STEP, pixel: s.pixel3d, pixelScale: Math.max(2, Math.round(H / 500)), shadows: s.shadows, focus: null, act: null, fx: null, cells: null, playerLook: this.playerLook, playerGun: null, showFocus: false };
+    if (this.scene === 'play') {
+      const S = this.S, A = this.act, P = A.player;
+      const aim = this.lastAim || P;
+      const tx = clamp(P.x + clamp((aim.x - P.x) * 0.1, -36, 36), 0, 2048), tz = clamp(P.y + clamp((aim.y - P.y) * 0.1, -36, 36), 0, 2048);
+      const k = Math.hypot(cam.target[0] - tx, cam.target[2] - tz) > 420 ? 1 : 0.2;
+      cam.target[0] += (tx - cam.target[0]) * k; cam.target[2] += (tz - cam.target[2]) * k;
+      cam.yaw += (c.yaw - cam.yaw) * 0.3; cam.pitch += (c.pitch - cam.pitch) * 0.3; cam.dist += (c.dist - cam.dist) * 0.25;
+      const w = currentWeapon(A);
+      Object.assign(sc, { minute: S.min, focus: P.alive && !P.vehicle ? P : null, act: A, fx: this.R.fx, cells: this.cells3d(), playerGun: w ? w.st.family : null, showFocus: !this.overlay && !this.mini });
+      // Camp fires breathe sparks (the 2D renderer does this while drawing the prop).
+      if (!this.frozen) for (const l of r3.lights) if (l.flicker && Math.abs(l.x - P.x) < 520 && Math.abs(l.z - P.y) < 520 && Math.random() < 0.3) this.R.fx.fire(l.x, l.z + 1);
+    } else {
+      // Title: a slow dusk flyover from Millbrook past the Hollow.
+      const t = this.time;
+      cam.target[0] = 30 * 16 + ((t * 9) % (66 * 16)); cam.target[2] = 101 * 16;
+      cam.yaw = Math.sin(t * 0.06) * 0.55; cam.pitch = 0.74; cam.dist = 500;
+    }
+    let ox = 0, oz = 0;
+    if (this.shakeAmt > 0) { ox = (Math.random() - 0.5) * this.shakeAmt * 0.9; oz = (Math.random() - 0.5) * this.shakeAmt * 0.9; }
+    cam.target[0] += ox; cam.target[2] += oz;
+    r3.render(sc);
+    cam.target[0] -= ox; cam.target[2] -= oz;
+  }
+
+  // Hollow grid cells for the 3D view: facility, plant stage, need markers, turret aim.
+  cells3d() {
+    const S = this.S, A = this.act, P = A.player;
+    if (Math.abs(P.x - 64 * 16) > 62 * 16 || Math.abs(P.y - 106 * 16) > 52 * 16) return null;
+    const out = [];
+    for (const g of this.W.layouts.hollow.gridCells) {
+      const i = g.j * 6 + g.i;
+      const cell = S.hollow.cells[i];
+      const x = g.x * 16, z = g.y * 16;
+      if (!cell) { if (cellUnlocked(S, i)) out.push({ x, z, cell: null }); continue; }
+      const info = { stage: -1, tint: 'green', power: !S.hollow.noPower, aim: 0, firing: false, thirsty: false };
+      if (cell.plant) {
+        info.stage = stageOf(cell.plant, strainData(S, cell.plant.strain));
+        info.tint = strainTint(S, cell.plant.strain);
+        info.thirsty = cell.plant.water < 25 && !cell.plant.dead;
+      }
+      if (cell.fac === 'turret') {
+        const e = A.ents.find((q) => q.turret && q.alive && Math.abs(q.x - (x + 16)) < 20 && Math.abs(q.y - (z + 20)) < 20);
+        if (e) { info.aim = e.face || 0; info.firing = e.lastShot !== undefined && A.time - e.lastShot < 0.08; }
+        else info.aim = -Math.PI / 2;
+      }
+      out.push({ x, z, cell, info });
+    }
+    return out;
+  }
+
+  // ---------- 2D world ----------
   renderWorld(ctx, W, H, zoom) {
     const S = this.S, A = this.act;
     const vw = Math.ceil(W / zoom), vh = Math.ceil(H / zoom);
@@ -578,7 +726,15 @@ export class Game {
       earn: (n) => earn(g.S, 'dirty', n, 'debug'),
       travel: (id) => g.travelTo(id),
       fps: () => 1000 / g.frameMs,
-      worldToScreen: (x, y) => ({ x: (x - g.cam.x) * g.zoom, y: (y - g.cam.y) * g.zoom }),
+      perf: () => ({ ...g.perf, fps: 1000 / g.frameMs }),
+      worldToScreen: (x, y) => { if (g.use3d) { const p = g.r3.project(x, 0, y); return p ? { x: p.x, y: p.y } : null; } return { x: (x - g.cam.x) * g.zoom, y: (y - g.cam.y) * g.zoom }; },
+      // Screen point to put the cursor on so that the player aims at ground point (x, y).
+      aimScreen: (x, y) => { if (g.use3d) { const p = g.r3.project(x, 9, y); return p ? { x: p.x, y: p.y } : null; } return { x: (x - g.cam.x) * g.zoom, y: (y - 7 - g.cam.y) * g.zoom }; },
+      renderer: () => (g.use3d ? '3d' : '2d'),
+      setRenderer: (m) => { g.settings.renderer = m; g.applyRenderer(); return g.use3d ? '3d' : '2d'; },
+      setSetting: (k, v) => { g.settings[k] = v; },
+      camera: (o) => { if (o) Object.assign(g.cam3, o); return { ...g.cam3 }; },
+      gl: () => (g.r3 ? { instances: g.r3.instances, drawn: g.r3.drawn || 0, lights: g.r3.ln, error: null } : { error: g.gl3Error || 'off' }),
       press: (code) => { g.input.pressedKeys.add(code); },
     };
   }

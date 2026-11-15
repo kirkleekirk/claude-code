@@ -25,7 +25,7 @@ export function emitCharacter(b, o) {
   const L = o.look;
   const fl = o.flash > 0 ? Math.min(1, o.flash * 6) : 0;
   const fc = (c) => (fl ? [c[0] + (1 - c[0]) * fl, c[1] + (1 - c[1]) * fl, c[2] + (1 - c[2]) * fl] : c);
-  const skin = fc(hx(L.skin)), hair = fc(hx(L.hair)), boots = fc(hx(L.boots));
+  const skin = fc(hx(L.skin || '#e2c98f')), hair = fc(hx(L.hair || '#34231a')), boots = fc(hx(L.boots || '#2a2420'));
   const top = PAL[L.top] || PAL.rust, top2 = PAL[L.top2] || PAL.bone, pants = PAL[L.pants] || PAL.wood, hat = PAL[L.hatC] || PAL.wood;
   const tC = fc(top[2]), tD = fc(top[1]), pC = fc(pants[1]);
   let M = affPlace(o.x, o.y0 || 0, o.z, o.face);
@@ -172,9 +172,9 @@ export function emitFacility(b, cell, x, z, info) {
       break;
     case 'growroom':
       B(1, 0, 1, 30, 3, 30, K.ink[2], PAT.CONCRETE); B(2.5, 3, 2.5, 27, 1, 27, K.wood[0], PAT.SOIL);
-      for (const [ax, az] of [[1, 1], [29.5, 1], [1, 29.5], [29.5, 29.5]]) B(ax, 3, az, 1.5, 15, 1.5, K.ink[3]);
-      B(1, 18, 1, 30, 1, 30, K.sea[2], F, 0, 0.3); B(1, 3, 1, 30, 15, 0.6, K.sea[2], F, 0, 0.22); B(1, 3, 30.4, 30, 15, 0.6, K.sea[2], F, 0, 0.22); B(1, 3, 1.6, 0.6, 15, 28.8, K.sea[2], F, 0, 0.22); B(30.4, 3, 1.6, 0.6, 15, 28.8, K.sea[2], F, 0, 0.22);
-      B(4, 15.5, 14.5, 24, 1.2, 3, info.power ? K.gold[3] : K.ink[1], F, info.power ? 1 : 0);
+      for (const [ax, az] of [[1, 1], [29.5, 1], [1, 29.5], [29.5, 29.5]]) B(ax, 3, az, 1.5, 21, 1.5, K.ink[3]);
+      B(1, 24, 1, 30, 1, 30, K.sea[2], F, 0, 0.3); B(1, 3, 1, 30, 21, 0.6, K.sea[2], F, 0, 0.22); B(1, 3, 30.4, 30, 21, 0.6, K.sea[2], F, 0, 0.22); B(1, 3, 1.6, 0.6, 21, 28.8, K.sea[2], F, 0, 0.22); B(30.4, 3, 1.6, 0.6, 21, 28.8, K.sea[2], F, 0, 0.22);
+      B(4, 21.5, 14.5, 24, 1.2, 3, info.power ? K.gold[3] : K.ink[1], F, info.power ? 1 : 0);
       if (cell.plant) plants(b, x, z + 0, info.stage, info.tint, cell.plant.blight, 0.8);
       break;
     case 'generator': B(4, 0, 8, 22, 13, 16, K.olive[1], PAT.CORR); B(3.5, 13, 7.5, 23, 1.5, 17, K.olive[3]); C(20, 14, 12, 3, 9, 3, K.ink[2]); C(6, 0, 2, 8, 9, 8, K.rust[1], PAT.CORR); B(7, 5, 24, 5, 3, 0.6, info.power ? K.green[3] : K.heat[2], F, 1); B(15, 4, 24, 8, 5, 0.6, K.ink[1]); break;
@@ -191,7 +191,7 @@ export function emitFacility(b, cell, x, z, info) {
     case 'bunks': for (const ax of [2, 17]) { for (const [px, pz] of [[ax, 3], [ax + 11.5, 3], [ax, 27.5], [ax + 11.5, 27.5]]) B(px, 0, pz, 1.5, 16, 1.5, K.wood[1]); B(ax, 4, 3, 13, 2, 26, ax < 10 ? K.rust[2] : K.teal[2]); B(ax, 12, 3, 13, 2, 26, ax < 10 ? K.teal[2] : K.rust[2]); B(ax + 1, 6, 4, 11, 1.2, 5, K.bone[2]); B(ax + 1, 14, 4, 11, 1.2, 5, K.bone[2]); } break;
     case 'training': B(1, 0, 1, 30, 0.6, 30, K.sand[1]); C(6.5, 0, 6.5, 2, 12, 2, K.wood[1]); B(3.5, 9, 5.5, 8, 7, 4, K.sand[2]); B(4.5, 16, 4.5, 6, 6, 6, K.sand[3]); B(0.5, 13, 6.5, 14, 2, 2, K.wood[1]); B(22, 0, 22, 2, 14, 2, K.wood[1]); C(18, 8, 21.6, 10, 10, 1.4, K.bone[3]); C(20, 10, 21.2, 6, 6, 1.4, K.heat[2]); C(22, 12, 20.8, 2, 2, 1.4, K.bone[3]); break;
     case 'turret': C(6, 0, 6, 20, 6, 20, K.ink[2], PAT.CONCRETE); { const Mt = affMul(affT(x + 16, 6, z + 16), affRotY(-(info.aim || 0))); b.add(PRIM.CUBE, Mt, -6, 0, -6, 12, 9, 12, K.olive[1], PAT.CORR); b.add(PRIM.CUBE, Mt, 5, 4, -1.2, 13, 2.4, 2.4, K.ink[1], F); b.add(PRIM.CUBE, Mt, -3, 9, -3, 6, 2, 6, K.olive[3], F); b.add(PRIM.CUBE, Mt, 17.5, 4.4, -0.8, 0.8, 1.6, 1.6, K.gold[2], F, info.firing ? 1 : 0); } break;
-    case 'watchpost': for (const [ax, az] of [[4, 4], [26, 4], [4, 26], [26, 26]]) B(ax, 0, az, 2.2, 22, 2.2, K.wood[1]); B(2, 12, 2, 28, 1.6, 28, K.wood[2], PAT.PLANK); B(2, 13.6, 2, 28, 4, 1.2, K.sand[1]); B(2, 13.6, 28.8, 28, 4, 1.2, K.sand[1]); B(2, 13.6, 3.2, 1.2, 4, 25.6, K.sand[1]); B(28.8, 13.6, 3.2, 1.2, 4, 25.6, K.sand[1]); PX(0, 22, 0, 32, 6, 32, K.rust[1], PAT.CORR); B(15, 28, 15, 1, 8, 1, K.ink[2]); B(16, 32, 15.2, 6, 4, 0.5, K.amber[2]); break;
+    case 'watchpost': for (const [ax, az] of [[4, 4], [26, 4], [4, 26], [26, 26]]) B(ax, 0, az, 2.2, 38, 2.2, K.wood[1]); B(2, 14, 2, 28, 1.6, 28, K.wood[2], PAT.PLANK); B(2, 15.6, 2, 28, 5, 1.2, K.sand[1]); B(2, 15.6, 28.8, 28, 5, 1.2, K.sand[1]); B(2, 15.6, 3.2, 1.2, 5, 25.6, K.sand[1]); B(28.8, 15.6, 3.2, 1.2, 5, 25.6, K.sand[1]); PX(0, 38, 0, 32, 7, 32, K.rust[1], PAT.CORR); B(15, 45, 15, 1, 8, 1, K.ink[2]); B(16, 49, 15.2, 6, 4, 0.5, K.amber[2]); break;
     case 'traps': B(1, 0, 1, 30, 0.5, 30, K.wood[0], PAT.SOIL); for (let k = 0; k < 14; k++) { const ax = 3 + (k * 7.3) % 25, az = 3 + (k * 11.7) % 25; B(ax, 0.5, az, 0.9, 3 + (k % 3), 0.9, K.ink[3]); } B(1, 4, 15.6, 30, 0.4, 0.4, K.bone[0]); B(1, 0, 15, 1.2, 5, 1.2, K.wood[1]); B(29.8, 0, 15, 1.2, 5, 1.2, K.wood[1]); break;
     case 'still': C(4, 0, 8, 15, 16, 15, K.rust[2], PAT.CORR); C(7, 16, 11, 9, 5, 9, K.rust[3]); C(10, 21, 14, 3, 6, 3, K.rust[1]); B(11, 25.5, 14.6, 13, 1.6, 1.6, K.rust[1]); C(22, 8, 12, 4, 19, 4, K.rust[1]); C(20, 0, 10, 9, 9, 9, K.wood[1], PAT.PLANK); B(6, 0, 22.6, 11, 3, 1, K.heat[2], F, 1); break;
     default: B(4, 0, 4, 24, 10, 24, K.wood[1], PAT.PLANK);
@@ -218,4 +218,4 @@ export function emitDiamond(b, x, y, z, size, col, time, em = 1) {
   b.add(PRIM.CUBE, M, -size / 2, -size / 2, -size / 2, size, size, size, col, F, em);
 }
 
-export { hx, IDENT };
+export { hx };

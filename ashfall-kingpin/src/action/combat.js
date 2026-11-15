@@ -7,6 +7,7 @@ import { SOLID } from '../world/tiles.js';
 
 const SPEED = { sidearm: 420, smg: 420, rifle: 520, shotgun: 360, silent: 330, heavy: 500 };
 const MAX_BULLETS = 500;
+const ELEV_GUN = 52; // muzzle height of a shooter posted on a watchtower
 
 export class Combat {
   constructor(world) {
@@ -45,7 +46,7 @@ export class Combat {
     const fam = FAMILIES[st.family] || FAMILIES.sidearm;
     this.w.sfx(fam.sound, e);
     if (st.noise > 0) this.noise(e.x, e.y, st.noise * T, e);
-    this.w.flash(e.x + Math.cos(base) * 10, e.y + Math.sin(base) * 10, st.flash, e.elevated ? 33 : 9);
+    this.w.flash(e.x + Math.cos(base) * 10, e.y + Math.sin(base) * 10, st.flash, e.elevated ? ELEV_GUN : 9);
     if (st.family !== 'silent' && st.family !== 'shotgun') this.w.R.fx.casing(e.x, e.y, base);
     if (e.isPlayer) { this.w.shake(st.family === 'heavy' ? 2.2 : st.family === 'shotgun' ? 2 : 0.8); this.w.stat('shotsFired'); }
     e.lastShot = this.w.time;
@@ -76,7 +77,7 @@ export class Combat {
   spawn(x, y, vx, vy, dmg, range, owner, variant) {
     for (const b of this.bullets) {
       if (b.on) continue;
-      Object.assign(b, { on: true, x, y, x0: x, y0: y, vx, vy, dmg, range, life: (range * 2.2) / Math.hypot(vx, vy), owner, fac: owner.faction, variant, trail: 0, skip: owner.elevated ? 30 : 0, h0: owner.elevated ? 33 : 9 });
+      Object.assign(b, { on: true, x, y, x0: x, y0: y, vx, vy, dmg, range, life: (range * 2.2) / Math.hypot(vx, vy), owner, fac: owner.faction, variant, trail: 0, skip: owner.elevated ? 30 : 0, h0: owner.elevated ? ELEV_GUN : 9 });
       return b;
     }
     return null;
@@ -206,7 +207,7 @@ export class Combat {
       ctx.strokeStyle = b.variant === 'inc' ? RAMPS.heat[3] : RAMPS.gold[3];
       ctx.lineWidth = 1;
       ctx.beginPath();
-      const bh = this.bulletHeight(b);
+      const bh = 9 + (this.bulletHeight(b) - 9) * 0.4;
       ctx.moveTo(Math.round(b.x - camX), Math.round(b.y - bh - camY));
       ctx.lineTo(Math.round(b.x - camX - Math.cos(a) * 5), Math.round(b.y - bh - camY - Math.sin(a) * 5));
       ctx.stroke();

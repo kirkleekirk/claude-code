@@ -829,7 +829,7 @@ function journal(g, R) {
   } else {
     const acts = Object.keys(ACTION_LABELS);
     acts.forEach((a, i) => { const x = B.x + (i % 3) * (B.w / 3), y = B.y + Math.floor(i / 3) * 10; ui.text(`${ACTION_LABELS[a]}: ${keyLabel(g.settings.binds[a])}`, x, y, g.sem.text); });
-    ui.text('Mouse: aim, LMB fire, wheel switches guns. Rebind in Esc > Settings > Controls.', B.x, B.y + B.h - 10, g.sem.textDim);
+    ui.text('Mouse: aim, LMB fire. 3D view: RMB-drag or arrows orbit, wheel zooms, Z resets. Rebind in Settings.', B.x, B.y + B.h - 10, g.sem.textDim);
   }
 }
 

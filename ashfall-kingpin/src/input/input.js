@@ -5,6 +5,7 @@ export const DEFAULT_BINDS = {
   dodge: 'Space', throw: 'KeyG', interact: 'KeyE', squad: 'KeyF', melee: 'KeyV', ledger: 'Tab', pause: 'Escape', map: 'KeyM',
   slot1: 'Digit1', slot2: 'Digit2', slot3: 'Digit3', slot4: 'Digit4', timePause: 'KeyP', slower: 'Comma', faster: 'Period',
   overlay: 'KeyO', jobs: 'KeyJ', inventory: 'KeyI', vehicle: 'KeyX',
+  camLeft: 'ArrowLeft', camRight: 'ArrowRight', camIn: 'ArrowUp', camOut: 'ArrowDown', camReset: 'KeyZ',
 };
 
 export const ACTION_LABELS = {
@@ -13,13 +14,14 @@ export const ACTION_LABELS = {
   ledger: 'Open Ledger', pause: 'Pause menu', map: 'Map', slot1: 'Weapon 1', slot2: 'Weapon 2', slot3: 'Weapon 3', slot4: 'Throwable',
   timePause: 'Pause time', slower: 'Slower time', faster: 'Faster time', overlay: 'Minimap overlay', jobs: 'Job board', inventory: 'Inventory',
   vehicle: 'Enter / exit vehicle',
+  camLeft: 'Camera: orbit left', camRight: 'Camera: orbit right', camIn: 'Camera: zoom in', camOut: 'Camera: zoom out', camReset: 'Camera: reset',
 };
 
 export function keyLabel(code) {
   if (!code) return '-';
   if (code.startsWith('Key')) return code.slice(3);
   if (code.startsWith('Digit')) return code.slice(5);
-  return { ShiftLeft: 'LShift', ShiftRight: 'RShift', ControlLeft: 'LCtrl', Space: 'Space', Escape: 'Esc', Tab: 'Tab', Comma: ',', Period: '.', Enter: 'Enter', Backquote: '`', Mouse0: 'LMB', Mouse2: 'RMB' }[code] || code;
+  return { ShiftLeft: 'LShift', ShiftRight: 'RShift', ControlLeft: 'LCtrl', Space: 'Space', Escape: 'Esc', Tab: 'Tab', Comma: ',', Period: '.', Enter: 'Enter', Backquote: '`', Mouse0: 'LMB', Mouse2: 'RMB', ArrowLeft: 'Left', ArrowRight: 'Right', ArrowUp: 'Up', ArrowDown: 'Down' }[code] || code;
 }
 
 export class Input {

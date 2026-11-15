@@ -2,7 +2,7 @@
 import { Game } from './game.js';
 
 const canvas = document.getElementById('game');
-const game = new Game(canvas);
+const game = new Game(canvas, document.getElementById('game3d'));
 window.__ak = game.debugApi();
 canvas.focus();
 game.start();

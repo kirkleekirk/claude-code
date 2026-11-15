@@ -26,13 +26,14 @@ float shadowAt(vec4 lp, float ndl){
   if (uShadowP.x < 0.5) return 1.0;
   vec3 sc = lp.xyz / lp.w * 0.5 + 0.5;
   if (sc.x <= 0.0 || sc.x >= 1.0 || sc.y <= 0.0 || sc.y >= 1.0 || sc.z >= 1.0) return 1.0;
-  float bias = 0.0012 + 0.0035 * (1.0 - ndl);
-  float t = uShadowP.y * 0.6, s = 0.0;
+  float bias = 0.0004 + 0.0012 * (1.0 - ndl);
+  float t = uShadowP.y * 0.7, s = 0.0;
   s += texture(uShadow, vec3(sc.xy + vec2(-t, -t), sc.z - bias));
   s += texture(uShadow, vec3(sc.xy + vec2( t, -t), sc.z - bias));
   s += texture(uShadow, vec3(sc.xy + vec2(-t,  t), sc.z - bias));
   s += texture(uShadow, vec3(sc.xy + vec2( t,  t), sc.z - bias));
-  return s * 0.25;
+  float edge = max(abs(sc.x - 0.5), abs(sc.y - 0.5)) * 2.0;
+  return mix(s * 0.25, 1.0, smoothstep(0.82, 1.0, edge));
 }
 vec3 shade(vec3 albedo, vec3 n, vec3 wp, vec4 lp, float em){
   float ndl = max(dot(n, uSunDir), 0.0);
@@ -71,7 +72,7 @@ void main(){
   float bid = floor(iPar.z / 4.0 + 0.01), kind = iPar.z - bid * 4.0;
   if (bid > 0.5) {
     vec4 h = abs(bid - uHideA.x) < 0.5 ? uHideA : (abs(bid - uHideB.x) < 0.5 ? uHideB : vec4(0.0));
-    if (h.x > 0.5) { if (kind > 1.5) alpha *= h.y; else w.y = min(w.y, mix(h.z, 48.0, h.y)); }
+    if (h.x > 0.5) { if (kind > 1.5) alpha *= h.y; else { float cut = mix(h.z, 72.0, h.y); if (iM1.w >= cut - 0.01) alpha = 0.0; else w.y = min(w.y, cut); } }
   }
   vW = w; vN = c0 * ln.x + c1 * ln.y + c2 * ln.z; vCol = vec4(iCol.rgb, alpha); vPar = iPar.xyw; vLP = uLVP * vec4(w, 1.0);
   gl_Position = uVP * vec4(w, 1.0);
@@ -127,7 +128,7 @@ void main(){
   float bid = floor(iPar.z / 4.0 + 0.01), kind = iPar.z - bid * 4.0;
   if (bid > 0.5) {
     vec4 h = abs(bid - uHideA.x) < 0.5 ? uHideA : (abs(bid - uHideB.x) < 0.5 ? uHideB : vec4(0.0));
-    if (h.x > 0.5) { if (kind > 1.5) alpha *= h.y; else w.y = min(w.y, mix(h.z, 48.0, h.y)); }
+    if (h.x > 0.5) { if (kind > 1.5) alpha *= h.y; else { float cut = mix(h.z, 72.0, h.y); if (iM1.w >= cut - 0.01) alpha = 0.0; else w.y = min(w.y, cut); } }
   }
   gl_Position = alpha < 0.5 ? vec4(2.0, 2.0, 2.0, 1.0) : uLVP * vec4(w, 1.0);
 }`;
@@ -281,29 +282,69 @@ export class GLCore {
     return { tex, fbo, size, ok };
   }
 
-  // Low-resolution colour target for the chunky "pixel 3D" look (blitted with NEAREST).
-  ensureTarget(w, h) {
+  // Colour target: low-resolution (chunky "pixel 3D", NEAREST upscale) or full-size with MSAA.
+  ensureTarget(w, h, samples = 0) {
     const gl = this.gl;
-    if (this.target && this.target.w === w && this.target.h === h) return this.target;
-    if (this.target) { gl.deleteTexture(this.target.tex); gl.deleteRenderbuffer(this.target.rb); gl.deleteFramebuffer(this.target.fbo); }
-    const tex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    const rb = gl.createRenderbuffer();
-    gl.bindRenderbuffer(gl.RENDERBUFFER, rb);
-    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, w, h);
-    const fbo = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
-    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, rb);
+    const T = this.target;
+    if (T && T.w === w && T.h === h && T.samples === samples) return T;
+    if (T) {
+      for (const k of ['tex', 'rtex']) if (T[k]) gl.deleteTexture(T[k]);
+      for (const k of ['rb', 'crb']) if (T[k]) gl.deleteRenderbuffer(T[k]);
+      for (const k of ['fbo', 'rfbo']) if (T[k]) gl.deleteFramebuffer(T[k]);
+    }
+    const mkTex = () => {
+      const tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      return tex;
+    };
+    const out = { w, h, samples, tex: null, rtex: null, rb: gl.createRenderbuffer(), crb: null, fbo: gl.createFramebuffer(), rfbo: null };
+    gl.bindFramebuffer(gl.FRAMEBUFFER, out.fbo);
+    if (samples > 0) {
+      const n = Math.min(samples, gl.getParameter(gl.MAX_SAMPLES) || 0);
+      out.crb = gl.createRenderbuffer();
+      gl.bindRenderbuffer(gl.RENDERBUFFER, out.crb);
+      gl.renderbufferStorageMultisample(gl.RENDERBUFFER, n, gl.RGBA8, w, h);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, out.crb);
+      gl.bindRenderbuffer(gl.RENDERBUFFER, out.rb);
+      gl.renderbufferStorageMultisample(gl.RENDERBUFFER, n, gl.DEPTH_COMPONENT24, w, h);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, out.rb);
+      // Resolve target (same format), so the final blit to the canvas is a plain copy.
+      out.rtex = mkTex();
+      out.rfbo = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, out.rfbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, out.rtex, 0);
+    } else {
+      out.tex = mkTex();
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, out.tex, 0);
+      gl.bindRenderbuffer(gl.RENDERBUFFER, out.rb);
+      gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, w, h);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, out.rb);
+    }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    this.target = { tex, rb, fbo, w, h };
-    return this.target;
+    this.target = out;
+    return out;
   }
 
-  texture(source, tex = null) {
+  // Copy the finished frame to the canvas.
+  present(T, cw, ch) {
+    const gl = this.gl;
+    let src = T.fbo;
+    if (T.rfbo) {
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, T.fbo);
+      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, T.rfbo);
+      gl.blitFramebuffer(0, 0, T.w, T.h, 0, 0, T.w, T.h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+      src = T.rfbo;
+    }
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, src);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+    gl.blitFramebuffer(0, 0, T.w, T.h, 0, 0, cw, ch, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  texture(source, tex = null, repeat = false) {
     const gl = this.gl;
     const t = tex || gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, t);
@@ -312,8 +353,8 @@ export class GLCore {
     gl.generateMipmap(gl.TEXTURE_2D);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, repeat ? gl.REPEAT : gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, repeat ? gl.REPEAT : gl.CLAMP_TO_EDGE);
     if (this.aniso) gl.texParameterf(gl.TEXTURE_2D, this.aniso.TEXTURE_MAX_ANISOTROPY_EXT, 4);
     return t;
   }

@@ -11,8 +11,9 @@ export const PAL = {};
 for (const [k, ramp] of Object.entries(RAMPS)) PAL[k] = ramp.map((h) => hexToRgb(h).map((v) => v / 255));
 export const rgb = (hex) => hexToRgb(hex).map((v) => v / 255);
 
-export const WALL_H = 20;
-export const TOWER_TOP = 32;
+export const WALL_H = 26;
+export const TOWER_TOP = 40;
+export const DOOR_H = 24;
 const WALL_PAT = (mat) => (mat === 'wood' ? PAT.PLANK : mat === 'rust' || mat === 'sea' ? PAT.CORR : PAT.BRICK);
 const ROOF_PAT = { tin: PAT.CORR, shingle: PAT.SHINGLE, flat: PAT.CONCRETE, tarp: PAT.STRIPE };
 
@@ -38,7 +39,7 @@ export function buildStatic(W) {
   return m;
 }
 
-export const buildingHeight = (b) => (b.ruined ? 16 : b.hq ? 28 : b.role === 'house' || b.role === 'lot' ? 20 : 22);
+export const buildingHeight = (b) => (b.ruined ? 22 : b.hq ? 44 : b.role === 'house' || b.role === 'lot' ? 30 : 33);
 
 // ---------------- buildings ----------------
 function building(m, W, b) {
@@ -59,14 +60,14 @@ function building(m, W, b) {
       if (s === ST.DOOR) {
         flush();
         // Lintel over the doorway plus two jamb posts.
-        m.box(tx * 16, 15, ty * 16, 16, H - 15, 16, wall[1], wp, 0, 1, WALLK);
-        if (horiz) { m.box(tx * 16, 0, ty * 16, 2.5, 15, 16, trim[1], PAT.FLAT, 0, 1, WALLK); m.box(tx * 16 + 13.5, 0, ty * 16, 2.5, 15, 16, trim[1], PAT.FLAT, 0, 1, WALLK); }
-        else { m.box(tx * 16, 0, ty * 16, 16, 15, 2.5, trim[1], PAT.FLAT, 0, 1, WALLK); m.box(tx * 16, 0, ty * 16 + 13.5, 16, 15, 2.5, trim[1], PAT.FLAT, 0, 1, WALLK); }
+        m.box(tx * 16, DOOR_H, ty * 16, 16, H - DOOR_H, 16, wall[1], wp, 0, 1, WALLK);
+        if (horiz) { m.box(tx * 16, 0, ty * 16, 2.5, DOOR_H, 16, trim[1], PAT.FLAT, 0, 1, WALLK); m.box(tx * 16 + 13.5, 0, ty * 16, 2.5, DOOR_H, 16, trim[1], PAT.FLAT, 0, 1, WALLK); }
+        else { m.box(tx * 16, 0, ty * 16, 16, DOOR_H, 2.5, trim[1], PAT.FLAT, 0, 1, WALLK); m.box(tx * 16, 0, ty * 16 + 13.5, 16, DOOR_H, 2.5, trim[1], PAT.FLAT, 0, 1, WALLK); }
       } else if (b.ruined) {
         flush();
         const hh = hash2(tx, ty, 31);
         if (s === ST.BROKEN) { m.box(tx * 16 + 1, 0, ty * 16 + 2, 14, 3 + hh * 5, 12, PAL.ink[2], PAT.ROCK); m.box(tx * 16 + 4, 0, ty * 16 + 5, 6, 6 + hh * 4, 6, PAL.bone[0], PAT.ROCK); }
-        else { const hgt = 9 + Math.floor(hh * 4) * 3; m.box(tx * 16, 0, ty * 16, 16, hgt, 16, wall[1], PAT.BRICK, 0, 1, WALLK); if (hh > 0.5) m.box(tx * 16 + (horiz ? 0 : 3), hgt, ty * 16 + (horiz ? 3 : 0), horiz ? 7 : 10, 3, horiz ? 10 : 7, wall[2], PAT.BRICK, 0, 1, WALLK); }
+        else { const hgt = 11 + Math.floor(hh * 4) * 5; m.box(tx * 16, 0, ty * 16, 16, hgt, 16, wall[1], PAT.BRICK, 0, 1, WALLK); if (hh > 0.5) m.box(tx * 16 + (horiz ? 0 : 3), hgt, ty * 16 + (horiz ? 3 : 0), horiz ? 7 : 10, 3, horiz ? 10 : 7, wall[2], PAT.BRICK, 0, 1, WALLK); }
       } else if (!run) run = [tx, ty, 1]; else run[2]++;
     }
     flush();
@@ -76,15 +77,15 @@ function building(m, W, b) {
   side(row(b.y), true); side(row(b.y + b.h - 1), true); side(col(b.x), false); side(col(b.x + b.w - 1), false);
   if (b.ruined) {
     // A few fallen roof beams.
-    for (let k = 0; k < 2; k++) m.box(x0 + 4, 9 + k * 3, z0 + 10 + k * (d - 28), w - 8, 2, 2, PAL.wood[1], PAT.PLANK);
+    for (let k = 0; k < 2; k++) m.box(x0 + 4, 11 + k * 5, z0 + 10 + k * (d - 28), w - 8, 2.4, 2.4, PAL.wood[1], PAT.PLANK);
     return;
   }
   // Windows on the outer faces (glow at night unless the lot is vacant).
   const lit = b.role === 'lot' ? 0 : 1;
   const win = (x, z, ww, dd, tx, ty) => {
     if (stAt(tx, ty) !== ST.BWALL) return;
-    m.box(x - (ww > 2 ? 1 : 0), 7, z - (dd > 2 ? 1 : 0), ww > 2 ? ww + 2 : ww * 0.6, 9, dd > 2 ? dd + 2 : dd * 0.6, trim[1], PAT.FLAT, 0, 1, DECO);
-    m.box(x, 8, z, ww, 7, dd, PAL.sea[0], PAT.WINDOW, 0, 1, DECO, lit);
+    m.box(x - (ww > 2 ? 1 : 0), 11, z - (dd > 2 ? 1 : 0), ww > 2 ? ww + 2 : ww * 0.6, 12, dd > 2 ? dd + 2 : dd * 0.6, trim[1], PAT.FLAT, 0, 1, DECO);
+    m.box(x, 12, z, ww, 10, dd, PAL.sea[0], PAT.WINDOW, 0, 1, DECO, lit);
   };
   for (let t = 1; t < b.w - 1; t++) {
     if (!(t % 2 === 1 || b.w <= 4)) continue;
@@ -100,13 +101,13 @@ function building(m, W, b) {
   b.doors.forEach((dr, k) => {
     const cx = dr.x * 16 + 8, cz = dr.y * 16 + 8;
     const col3 = b.lot ? PAL.bone[1] : b.hq ? PAL.gold[1] : trim[2];
-    if (dr.f === 'S') m.box(cx - 11, 15.5, z0 + d, 22, 5, 1.2, col3, PAT.FLAT, 0, 1, DECO);
-    else if (dr.f === 'N') m.box(cx - 11, 15.5, z0 - 1.2, 22, 5, 1.2, col3, PAT.FLAT, 0, 1, DECO);
-    else if (dr.f === 'E') m.box(x0 + w, 15.5, cz - 11, 1.2, 5, 22, col3, PAT.FLAT, 0, 1, DECO);
-    else m.box(x0 - 1.2, 15.5, cz - 11, 1.2, 5, 22, col3, PAT.FLAT, 0, 1, DECO);
+    if (dr.f === 'S') m.box(cx - 11, DOOR_H + 0.5, z0 + d, 22, 5.5, 1.2, col3, PAT.FLAT, 0, 1, DECO);
+    else if (dr.f === 'N') m.box(cx - 11, DOOR_H + 0.5, z0 - 1.2, 22, 5.5, 1.2, col3, PAT.FLAT, 0, 1, DECO);
+    else if (dr.f === 'E') m.box(x0 + w, DOOR_H + 0.5, cz - 11, 1.2, 5.5, 22, col3, PAT.FLAT, 0, 1, DECO);
+    else m.box(x0 - 1.2, DOOR_H + 0.5, cz - 11, 1.2, 5.5, 22, col3, PAT.FLAT, 0, 1, DECO);
     if (k === 0 && (b.sign || b.lot || b.hq)) {
       const v = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0] }[dr.f];
-      m.labels.push({ x: cx + v[0] * 10, y: H + 6, z: cz + v[1] * 10, text: b.hq ? b.name.toUpperCase() : b.sign, b, kind: b.hq ? 'hq' : b.lot ? 'lot' : 'shop' });
+      m.labels.push({ x: cx + v[0] * 9, y: DOOR_H + 9, z: cz + v[1] * 9, text: b.hq ? (b.name || 'HQ').toUpperCase() : (b.sign || ''), b, kind: b.hq ? 'hq' : b.lot ? 'lot' : 'shop' });
     }
   });
   // Roof.
@@ -119,7 +120,7 @@ function building(m, W, b) {
     if (w > 60) m.cyl(x0 + w - 22, H + 2.5, z0 + d - 20, 8, 7, 8, PAL.ink[3], PAT.CORR, 0, 1, ROOFK);
     if (b.hq) { m.box(x0 + w / 2 - 0.6, H + 2.5, z0 + d / 2 - 0.6, 1.2, 20, 1.2, PAL.ink[2], PAT.FLAT, 0, 1, ROOFK); m.box(x0 + w / 2 + 0.6, H + 15, z0 + d / 2 - 0.3, 9, 6, 0.6, (PAL[st.banner] || PAL.teal)[2], PAT.FLAT, 0, 1, ROOFK); }
   } else {
-    const rh = b.roof === 'tarp' ? 6 : Math.max(8, Math.min(15, Math.min(w, d) * 0.28));
+    const rh = b.roof === 'tarp' ? 7 : Math.max(10, Math.min(20, Math.min(w, d) * 0.3));
     const colr = b.roof === 'tarp' ? roofR[2] : roofR[2];
     if (w >= d) { m.prx(x0 - 2.5, H, z0 - 2.5, w + 5, rh, d + 5, colr, rp, 0, 1, ROOFK, 0); m.box(x0 - 2.5, H + rh - 1, z0 + d / 2 - 1.2, w + 5, 1.6, 2.4, roofR[3], PAT.FLAT, 0, 1, ROOFK); }
     else { m.prz(x0 - 2.5, H, z0 - 2.5, w + 5, rh, d + 5, colr, rp, 0, 1, ROOFK, 1); m.box(x0 + w / 2 - 1.2, H + rh - 1, z0 - 2.5, 2.4, 1.6, d + 5, roofR[3], PAT.FLAT, 0, 1, ROOFK); }
@@ -181,9 +182,9 @@ function towers(m, W) {
     const px = x * 16, pz = y * 16;
     m.box(px, 0, pz, 16, TOWER_TOP - 2, 16, ramp[0], WALL_PAT(st.wall));
     m.box(px - 3, TOWER_TOP - 2, pz - 3, 22, 2, 22, wood[2], PAT.PLANK);
-    for (const [ax, az, aw, ad] of [[-3, -3, 22, 1.5], [-3, 17.5, 22, 1.5], [-3, -1.5, 1.5, 19], [17.5, -1.5, 1.5, 19]]) m.box(px + ax, TOWER_TOP, pz + az, aw, 5, ad, wood[1], PAT.PLANK);
-    for (const [ax, az] of [[-3, -3], [17, -3], [-3, 17], [17, 17]]) m.box(px + ax, TOWER_TOP, pz + az, 2, 14, 2, wood[1], PAT.FLAT);
-    m.prx(px - 6, TOWER_TOP + 14, pz - 6, 28, 7, 28, roofR[1], ROOF_PAT[st.roof] || PAT.CORR);
+    for (const [ax, az, aw, ad] of [[-3, -3, 22, 1.5], [-3, 17.5, 22, 1.5], [-3, -1.5, 1.5, 19], [17.5, -1.5, 1.5, 19]]) m.box(px + ax, TOWER_TOP, pz + az, aw, 7, ad, wood[1], PAT.PLANK);
+    for (const [ax, az] of [[-3, -3], [17, -3], [-3, 17], [17, 17]]) m.box(px + ax, TOWER_TOP, pz + az, 2, 25, 2, wood[1], PAT.FLAT);
+    m.prx(px - 6, TOWER_TOP + 25, pz - 6, 28, 8, 28, roofR[1], ROOF_PAT[st.roof] || PAT.CORR);
   }
 }
 
@@ -194,7 +195,7 @@ function gates(m, W) {
     const st = STYLES[p.palette] || STYLES.ruin;
     const wood = st.fence === 'metal' ? PAL.ink : st.fence === 'stone' ? PAL.bone : PAL.wood;
     const banner = PAL[st.banner] || PAL.rust;
-    const tall = p.kind === 'market' ? 20 : 28;
+    const tall = p.kind === 'market' ? 32 : 40;
     for (let y = p.at[1]; y < p.at[1] + p.h; y++) for (let x = p.at[0]; x < p.at[0] + p.w; x++) {
       const i = y * WORLD_W + x;
       if (W.struct[i] !== ST.GATE || seen[i]) continue;
@@ -245,14 +246,14 @@ function cliffs(m, W) {
     const i = y * WORLD_W + x;
     if (W.ground[i] !== TER.CLIFF || W.zone[i] || W.road[i] || W.struct[i]) continue;
     const hh = hash2(x, y, 77);
-    const h = 13 + Math.floor(hh * 4) * 4;
+    const h = 18 + Math.floor(hh * 4) * 6;
     m.box(x * 16, 0, y * 16, 16, h, 16, PAL.ink[2], PAT.ROCK);
     if (hh > 0.55) m.box(x * 16 + 3, h, y * 16 + 3, 10, 4, 10, PAL.ink[3], PAT.ROCK);
   }
 }
 
 // ---------------- props ----------------
-const LIGHTS = { lamp: [26, 120, [1.0, 0.74, 0.42], 0], fire: [7, 130, [1.0, 0.52, 0.2], 1], stall: [15, 60, [0.9, 0.6, 0.35], 0], jobboard: [14, 50, [0.9, 0.7, 0.45], 0] };
+const LIGHTS = { lamp: [31, 130, [1.0, 0.74, 0.42], 0], fire: [7, 140, [1.0, 0.52, 0.2], 1], stall: [17, 64, [0.9, 0.6, 0.35], 0], jobboard: [16, 52, [0.9, 0.7, 0.45], 0] };
 
 function prop(m, W, pr) {
   const K = PAL;
@@ -265,25 +266,25 @@ function prop(m, W, pr) {
   const place = W.layouts[pr.place] ? W.layouts[pr.place].place : null;
   const st = STYLES[place ? place.palette : 'ruin'] || STYLES.ruin;
   switch (pr.type) {
-    case 'lamp': C(7, 0, 7, 2, 24, 2, K.ink[2]); B(5.5, 0, 5.5, 5, 1.5, 5, K.ink[1]); B(5, 24, 5, 6, 5, 6, K.gold[2], PAT.FLAT, -1); B(4.5, 29, 4.5, 7, 1.5, 7, K.ink[1]); break;
+    case 'lamp': C(7, 0, 7, 2, 30, 2, K.ink[2]); B(5.5, 0, 5.5, 5, 1.5, 5, K.ink[1]); B(5, 30, 5, 6, 5, 6, K.gold[2], PAT.FLAT, -1); B(4.5, 35, 4.5, 7, 1.5, 7, K.ink[1]); break;
     case 'stall': {
       const v = pr.variant || 0;
       const col = [K.rust[2], K.teal[2], K.gold[1], K.amber[2], K.sea[2], K.olive[2], K.heat[1], K.green[2]][v % 8];
-      legs(0.5, 2, 14, 12.5, 16, K.wood[1]);
+      legs(0.5, 2, 14, 12.5, 23, K.wood[1]);
       B(1, 0, 8, 14, 8, 5.5, K.wood[2], PAT.PLANK); B(0.5, 8, 7.5, 15, 1, 6.5, K.wood[3]);
-      m.prx(x - 1.5, 16, z + 0.5, 19, 4.5, 15, col, PAT.STRIPE);
+      m.prx(x - 1.5, 23, z + 0.5, 19, 5, 15, col, PAT.STRIPE);
       B(2.5, 9, 9, 3, 2, 3, K.olive[2]); B(6.5, 9, 9, 3, 2.5, 3, K.sand[3]); B(10.5, 9, 9, 2.5, 3.5, 2.5, K.rust[2]);
       break;
     }
-    case 'well': C(2, 0, 2, 12, 7, 12, K.bone[0], PAT.BRICK); C(4, 6.4, 4, 8, 0.8, 8, K.sea[1]); B(2.5, 0, 7, 1.8, 15, 1.8, K.wood[1]); B(11.7, 0, 7, 1.8, 15, 1.8, K.wood[1]); m.prx(x + 0.5, 15, z + 3, 15, 4, 10, K.rust[1], PAT.SHINGLE); B(7, 9, 7.4, 2, 3, 2, K.ink[2]); break;
+    case 'well': C(2, 0, 2, 12, 7, 12, K.bone[0], PAT.BRICK); C(4, 6.4, 4, 8, 0.8, 8, K.sea[1]); B(2.5, 0, 7, 1.8, 20, 1.8, K.wood[1]); B(11.7, 0, 7, 1.8, 20, 1.8, K.wood[1]); m.prx(x + 0.5, 20, z + 3, 15, 4.5, 10, K.rust[1], PAT.SHINGLE); B(7.6, 11, 7.6, 0.6, 9, 0.6, K.bone[1]); B(7, 9, 7.4, 2, 3, 2, K.ink[2]); break;
     case 'bench': B(1, 4, 5, 14, 1.4, 5, K.wood[2], PAT.PLANK); B(1, 5.4, 5, 14, 4, 1, K.wood[1], PAT.PLANK); legs(1.5, 5.5, 13, 8.5, 4, K.wood[0]); break;
     case 'banner': {
       const c = K[st.banner] || K.rust;
       const box = place ? place.at : [pr.x, pr.y];
-      if (place && pr.y === box[1]) { B(3, 6, -0.9, 10, 13, 0.8, c[2]); B(6, 11, -1.4, 4, 4, 0.5, c[3]); }
-      else if (place && pr.x === box[0]) { B(-0.9, 6, 3, 0.8, 13, 10, c[2]); B(-1.4, 11, 6, 0.5, 4, 4, c[3]); }
-      else if (place && pr.x === box[0] + place.w - 1) { B(16.1, 6, 3, 0.8, 13, 10, c[2]); B(16.9, 11, 6, 0.5, 4, 4, c[3]); }
-      else { B(3, 6, 16.1, 10, 13, 0.8, c[2]); B(6, 11, 16.9, 4, 4, 0.5, c[3]); }
+      if (place && pr.y === box[1]) { B(3, 9, -0.9, 10, 15, 0.8, c[2]); B(6, 15, -1.4, 4, 4, 0.5, c[3]); }
+      else if (place && pr.x === box[0]) { B(-0.9, 9, 3, 0.8, 15, 10, c[2]); B(-1.4, 15, 6, 0.5, 4, 4, c[3]); }
+      else if (place && pr.x === box[0] + place.w - 1) { B(16.1, 9, 3, 0.8, 15, 10, c[2]); B(16.9, 15, 6, 0.5, 4, 4, c[3]); }
+      else { B(3, 9, 16.1, 10, 15, 0.8, c[2]); B(6, 15, 16.9, 4, 4, 0.5, c[3]); }
       break;
     }
     case 'crates': B(1, 0, 5, 9, 9, 9, K.wood[2], PAT.PLANK); B(8.5, 0, 7.5, 7, 7, 7, K.wood[1], PAT.PLANK); B(3, 9, 6.5, 7, 7, 7, K.wood[2], PAT.PLANK); break;
@@ -307,10 +308,10 @@ function prop(m, W, pr) {
     case 'rubble': B(1, 0, 5, 14, 4, 8, K.ink[2], PAT.ROCK); B(3, 3, 4, 5, 4, 5, K.bone[0], PAT.ROCK); B(9, 2, 7, 4, 4, 4, K.ink[3], PAT.ROCK); B(12, 0, 5, 0.8, 9, 0.8, K.rust[1]); break;
     case 'wreck': B(0, 2, 3, 16, 6, 10, K.rust[1], PAT.CORR); B(3, 8, 4, 9, 5, 8, K.rust[0]); B(3.5, 9, 3.7, 8, 3, 0.5, K.sea[0]); B(3.5, 9, 11.8, 8, 3, 0.5, K.sea[0]); for (const [ax, az] of [[1, 2], [11, 2], [1, 11.5], [11, 11.5]]) B(ax, 0, az, 4, 4, 2.5, K.ink[0]); break;
     case 'tires': C(2, 0, 4, 10, 4, 10, K.ink[1]); C(4.5, 3.6, 6.5, 5, 0.6, 5, K.ink[0]); C(3, 4, 3, 10, 4, 10, K.ink[1]); C(5.5, 7.6, 5.5, 5, 0.6, 5, K.ink[0]); break;
-    case 'jobboard': B(1, 0, 7, 2, 18, 2, K.wood[1]); B(13, 0, 7, 2, 18, 2, K.wood[1]); B(0, 7, 7.3, 16, 11, 1.4, K.wood[2], PAT.PLANK); B(2, 10, 8.7, 4, 5, 0.3, K.bone[3]); B(7, 12, 8.7, 4, 4, 0.3, K.bone[2]); B(11, 9, 8.7, 3, 5, 0.3, K.sand[3]); B(7, 8, 8.7, 3, 3, 0.3, K.bone[2]); m.prx(x - 1, 18, z + 5, 18, 3, 6, K.wood[1], PAT.PLANK); break;
+    case 'jobboard': B(1, 0, 7, 2, 22, 2, K.wood[1]); B(13, 0, 7, 2, 22, 2, K.wood[1]); B(0, 9, 7.3, 16, 13, 1.4, K.wood[2], PAT.PLANK); B(2, 13, 8.7, 4, 6, 0.3, K.bone[3]); B(7, 15, 8.7, 4, 5, 0.3, K.bone[2]); B(11, 11, 8.7, 3, 6, 0.3, K.sand[3]); B(7, 10.5, 8.7, 3, 3.5, 0.3, K.bone[2]); m.prx(x - 1, 22, z + 5, 18, 3, 6, K.wood[1], PAT.PLANK); break;
     case 'bar': B(0, 0, 3, 16, 9, 7, K.wood[1], PAT.PLANK); B(-0.5, 9, 2.5, 17, 1.2, 8, K.wood[3]); C(3, 10.2, 5, 2, 4, 2, K.amber[2]); C(9, 10.2, 6, 2, 4.5, 2, K.green[2]); C(12, 10.2, 5, 1.6, 3, 1.6, K.bone[2]); break;
     case 'table': B(2, 6, 3, 12, 1.2, 9, K.wood[2], PAT.PLANK); legs(2.5, 3.5, 12, 10, 6, K.wood[0]); C(6, 7.2, 6, 2.5, 1.5, 2.5, K.bone[2]); break;
-    case 'shelf': B(1, 0, 9, 14, 18, 5, K.wood[1], PAT.PLANK); for (const hy of [3, 9, 14]) { B(2, hy, 8.2, 3, 3, 3, K.sand[2]); B(6.5, hy, 8.2, 3.5, 3.5, 3, K.rust[2]); B(11, hy, 8.2, 2.5, 2.5, 3, K.teal[2]); } break;
+    case 'shelf': B(1, 0, 9, 14, 21, 5, K.wood[1], PAT.PLANK); for (const hy of [3, 9.5, 16]) { B(2, hy, 8.2, 3, 3, 3, K.sand[2]); B(6.5, hy, 8.2, 3.5, 3.5, 3, K.rust[2]); B(11, hy, 8.2, 2.5, 2.5, 3, K.teal[2]); } break;
     case 'bunk': legs(1, 2, 13.5, 12.5, 15, K.wood[1]); B(1, 4, 2, 14, 2, 12, K.bone[1]); B(1, 11, 2, 14, 2, 12, K.bone[1]); B(1.5, 6, 2.5, 4, 1.2, 11, K.bone[3]); B(1.5, 13, 2.5, 4, 1.2, 11, K.bone[3]); break;
     case 'rack': B(0, 0, 10, 16, 16, 3, K.wood[1], PAT.PLANK); for (let k = 0; k < 4; k++) { B(1.5 + k * 3.8, 3, 8.8, 1.6, 11, 1.4, K.ink[1]); B(1.5 + k * 3.8, 3, 8.4, 1.6, 4, 1, K.wood[2]); } break;
     case 'cot': B(1, 3, 3, 14, 2, 9, K.teal[2]); B(1, 5, 3.5, 4, 1.2, 8, K.bone[3]); legs(1.5, 3.5, 13, 10.5, 3, K.ink[1]); break;
@@ -322,12 +323,12 @@ function prop(m, W, pr) {
     case 'bed': B(1, 0, 1, 14, 4, 14, K.wood[1], PAT.PLANK); B(1.5, 4, 1.5, 13, 2, 13, K.rust[2]); B(1.5, 6, 2, 13, 1.2, 4, K.bone[2]); break;
     case 'vault': B(0, 0, 1, 16, 18, 14, K.ink[2], PAT.CONCRETE); B(2, 2, 14.6, 12, 14, 0.8, K.ink[1]); C(5, 6, 15.2, 6, 6, 0.9, K.ink[3]); B(7.4, 8.4, 16, 1.2, 1.2, 0.5, K.gold[2], PAT.FLAT, 0.5); B(12.5, 7, 15.3, 1.5, 4, 0.8, K.gold[1]); break;
     case 'stash': B(1, 0, 2, 14, 11, 12, K.ink[2]); B(2.5, 2, 13.7, 11, 7, 0.6, K.amber[1]); B(6.5, 4.5, 14.2, 3, 3, 0.5, K.gold[2], PAT.FLAT, 0.4); B(0.5, 10.5, 1.5, 15, 1.2, 13, K.ink[3]); break;
-    case 'dryline': B(1, 0, 7, 1.8, 17, 1.8, K.wood[1]); B(13.2, 0, 7, 1.8, 17, 1.8, K.wood[1]); B(1, 15.5, 7.6, 14, 0.6, 0.6, K.bone[1]); for (let k = 0; k < 4; k++) B(3 + k * 3, 10, 7.2, 2, 5.5, 1.4, K.olive[2]); break;
+    case 'dryline': B(1, 0, 7, 1.8, 20, 1.8, K.wood[1]); B(13.2, 0, 7, 1.8, 20, 1.8, K.wood[1]); B(1, 18.5, 7.6, 14, 0.6, 0.6, K.bone[1]); for (let k = 0; k < 4; k++) B(3 + k * 3, 12.5, 7.2, 2, 6, 1.4, K.olive[2]); break;
     case 'cureshelf': B(1, 0, 9, 14, 18, 5, K.wood[1], PAT.PLANK); for (const hy of [3, 9, 14]) for (let k = 0; k < 3; k++) { C(2.5 + k * 4, hy, 7.6, 3, 3.5, 3, K.sea[2]); C(2.5 + k * 4, hy + 3.5, 7.6, 3, 0.7, 3, K.bone[2]); } break;
     case 'packtable': B(1, 6, 3, 14, 1.3, 8, K.wood[2], PAT.PLANK); legs(1.5, 3.5, 13, 9.5, 6, K.wood[0]); B(3, 7.3, 5, 3, 1.6, 3, K.olive[2]); B(8, 7.3, 4.5, 4, 0.8, 3, K.bone[2]); B(8.5, 8.1, 5, 3, 0.8, 2, K.bone[3]); break;
     case 'lootcrate': B(1, 0, 3, 14, 9, 11, K.wood[2], PAT.PLANK); B(0.5, 9, 2.5, 15, 1.6, 12, K.wood[3], PAT.PLANK); B(6.5, 6, 13.9, 3, 3.4, 0.7, K.gold[3], PAT.FLAT, 0.6); B(0.8, 0, 2.8, 1.2, 9, 11.4, K.ink[1]); B(14, 0, 2.8, 1.2, 9, 11.4, K.ink[1]); break;
     case 'boulder': B(2, 0, 3, 12, 7, 10, K.ink[2], PAT.ROCK); B(4, 6, 4.5, 8, 4, 7, K.ink[3], PAT.ROCK); B(5, 9.5, 6, 4, 1.5, 4, K.bone[0], PAT.ROCK); break;
-    case 'deadtree': C(6.5, 0, 6.5, 3, 20, 3, K.wood[1], PAT.PLANK); B(2, 13, 7.2, 5, 1.5, 1.5, K.wood[1]); B(1.5, 13, 7.2, 1.3, 5, 1.3, K.wood[1]); B(9, 16, 7.2, 5, 1.5, 1.5, K.wood[1]); B(13, 16, 7.2, 1.3, 4, 1.3, K.wood[1]); B(7.2, 10, 2.5, 1.5, 1.5, 5, K.wood[0]); B(7.3, 20, 7.3, 1.6, 5, 1.6, K.wood[1]); break;
+    case 'deadtree': C(6.5, 0, 6.5, 3, 27, 3, K.wood[1], PAT.PLANK); B(2, 17, 7.2, 5, 1.5, 1.5, K.wood[1]); B(1.5, 17, 7.2, 1.3, 7, 1.3, K.wood[1]); B(9, 21, 7.2, 6, 1.5, 1.5, K.wood[1]); B(14, 21, 7.2, 1.3, 6, 1.3, K.wood[1]); B(7.2, 13, 2, 1.5, 1.5, 5.5, K.wood[0]); B(7.2, 13, 0.8, 1.3, 5, 1.3, K.wood[0]); B(7.3, 27, 7.3, 1.6, 6, 1.6, K.wood[1]); break;
     case 'brokenwall': B(0, 0, 5, 16, 11, 5, K.bone[0], PAT.BRICK); B(0, 11, 5, 6, 5, 5, K.bone[0], PAT.BRICK); B(10, 11, 5, 4, 2.5, 5, K.bone[0], PAT.BRICK); B(11, 0, 10, 4, 2, 3, K.ink[2], PAT.ROCK); break;
     case 'bones': B(1, 0, 6, 11, 1.4, 1.4, K.bone[2]); for (let k = 0; k < 4; k++) B(3 + k * 2.4, 0, 3.5, 0.9, 3.5, 0.9, K.bone[3]); B(11, 0, 5, 3.5, 3, 3.5, K.bone[3]); break;
     case 'haybale': B(1, 0, 3, 14, 10, 10, K.sand[2], PAT.SOIL); B(0.7, 3, 2.7, 14.6, 1, 10.6, K.sand[1]); B(0.7, 7, 2.7, 14.6, 1, 10.6, K.sand[1]); break;

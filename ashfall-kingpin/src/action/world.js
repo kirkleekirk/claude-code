@@ -671,7 +671,7 @@ export class ActionWorld {
     const drawChar = (e) => (ctx, cx, cy) => self.drawEntity(ctx, e, cx, cy);
     const P = this.player;
     if (P.alive && !P.vehicle) out.push({ sy: P.y, draw: drawChar(P) });
-    for (const e of this.ents) if (Math.abs(e.x - P.x) < 30 * T && Math.abs(e.y - P.y) < 20 * T) out.push({ sy: e.alive ? e.y : e.y - 8, draw: drawChar(e) });
+    for (const e of this.ents) if (!e.prop && !e.turret && Math.abs(e.x - P.x) < 30 * T && Math.abs(e.y - P.y) < 20 * T) out.push({ sy: e.alive ? e.y : e.y - 8, draw: drawChar(e) });
     for (const v of this.vehicles) out.push({ sy: v.y + 4, draw: (ctx, cx, cy) => self.drawVehicle(ctx, v, cx, cy) });
     for (const pk of this.pickups) out.push({ sy: pk.y - 4, draw: (ctx, cx, cy) => { const t = this.time * 4; ctx.fillStyle = RAMPS.ink[0]; ctx.fillRect(Math.round(pk.x - cx) - 3, Math.round(pk.y - cy) - 4, 7, 5); ctx.fillStyle = RAMPS.gold[2]; ctx.fillRect(Math.round(pk.x - cx) - 2, Math.round(pk.y - cy) - 3, 5, 3); if (Math.sin(t) > 0.6) { ctx.fillStyle = RAMPS.gold[3]; ctx.fillRect(Math.round(pk.x - cx) + 1, Math.round(pk.y - cy) - 6, 1, 2); } } });
     for (const d of this.missions.drawables()) out.push(d);

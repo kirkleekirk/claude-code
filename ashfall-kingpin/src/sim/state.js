@@ -74,7 +74,7 @@ function makeRegulars(seed) {
     const h = hashStr(seed + name);
     return {
       id: i + 1, name, town: REG_TOWNS[i], likes: REG_LIKES[i], form: i % 3 === 0 ? 'jar' : 'baggie', minQ: i % 4 === 3 ? 2 : 1, budget: 4 + (h % 8), bought: 0, loyalty: 0, premium: 0.25 + (h % 26) / 100, gifts: 0,
-      look: { skin: ['#e2c98f', '#c0a064', '#a8804e', '#7d5733'][h % 4], hair: ['#120f0e', '#34231a', '#d8cab0', '#a2472a'][(h >> 3) % 4], hairStyle: h % 6, hat: (h >> 5) % 5, hatC: REG_COL[(h >> 7) % 12], top: REG_COL[(h >> 9) % 12], top2: REG_COL[(h >> 11) % 12], topStyle: ['shirt', 'jacket', 'vest', 'apron'][(h >> 13) % 4], pants: ['wood', 'ink', 'sea', 'olive'][(h >> 15) % 4], boots: '#2a2420' },
+      look: { skin: ['#e2c98f', '#c0a064', '#a8804e', '#7d5733'][h % 4], hair: ['#120f0e', '#34231a', '#d8cab0', '#a2472a'][(h >>> 3) % 4], hairStyle: h % 6, hat: (h >>> 5) % 5, hatC: REG_COL[(h >>> 7) % 12], top: REG_COL[(h >>> 9) % 12], top2: REG_COL[(h >>> 11) % 12], topStyle: ['shirt', 'jacket', 'vest', 'apron'][(h >>> 13) % 4], pants: ['wood', 'ink', 'sea', 'olive'][(h >>> 15) % 4], boots: '#2a2420' },
     };
   });
 }

@@ -92,11 +92,13 @@ const HTML = (js) => `<!doctype html>
 <title>Ashfall Kingpin</title>
 <style>
 html,body{margin:0;height:100%;background:#120f0e;overflow:hidden}
-canvas{display:block;width:100vw;height:100vh;image-rendering:pixelated;cursor:none;outline:none}
+canvas{position:absolute;left:0;top:0;display:block;width:100vw;height:100vh;image-rendering:pixelated;cursor:none;outline:none}
+#game3d{z-index:0;display:none}
+#game{z-index:1}
 #ak-text{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(80vw,720px);height:30vh;display:none;
 background:#2a2420;color:#f4ead6;border:2px solid #cf7444;font:12px monospace;padding:8px;z-index:5}
 </style></head>
-<body><canvas id="game" tabindex="0"></canvas><textarea id="ak-text" spellcheck="false"></textarea>
+<body><canvas id="game3d"></canvas><canvas id="game" tabindex="0"></canvas><textarea id="ak-text" spellcheck="false"></textarea>
 <script>
 "use strict";
 ${js}
