@@ -27,7 +27,7 @@ function titleFrame(ts) {
   if (cv.width !== Math.round(r.width * dpr) || cv.height !== Math.round(r.height * dpr)) { cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr); Title.bg = null; }
   const dt = Math.min(0.05, (ts - (Title.last || ts)) / 1000); Title.last = ts; Title.t += dt;
   const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0);
-  if (!Title.bg) { const b = document.createElement('canvas'); b.width = cv.width; b.height = cv.height; const g = b.getContext('2d'); g.scale(dpr, dpr); paintArenaBg(g, r.width, r.height, 'roof', 11); Title.bg = b; }
+  if (!Title.bg) { const b = document.createElement('canvas'); b.width = cv.width; b.height = cv.height; const g = b.getContext('2d'); g.scale(dpr, dpr); paintScene(g, r.width, r.height, r.height * 0.6, 'roof', 11); Title.bg = b; }
   c.drawImage(Title.bg, 0, 0, r.width, r.height);
   const W = r.width, H = r.height, n = W < 700 ? 5 : 9, s = Math.min(H * 0.4, W / (n * 0.66));
   const order = ['bulwark', 'cinder', 'anvil', 'skylark', 'velvet', 'fuse', 'slush', 'boomer', 'hush'];

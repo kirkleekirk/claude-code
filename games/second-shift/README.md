@@ -36,6 +36,8 @@ Single self-contained file, no assets, no build step to play: open `index.html`.
 
 **Pacing.** Shift 1 is three calls with a coach. Chemistry arrives in shift 2, fights in shift 3, radio checks and recruiting soon after. From shift 5 calls cluster, windows shrink, rivals poach missed calls, crisis calls need three heroes, and shift 10 ends on a boss fight.
 
+**Look.** Characters are flat-vector heroes with heroic proportions, drawn in code (trim, bracers, pads, boots, faces) and tinted per hero. Every fight happens in a distinct painted location: a downtown street with the armored truck, Pier 9 at sunset, the Greenway storm drain, Old Town square at night, a neon rooftop, Apex Plaza, the evacuated street, and Grid Central. The battle grid is drawn in perspective on the floor as glowing tiles, and units scale with depth.
+
 **Tactical battles.** 9×6 grid, a speed-based turn timeline you can read ten turns ahead, move + act in either order, line / cone / burst / row / dash / swap attack shapes, knockback and pull with slam damage, explosive barrels, fire, ice, live wires and time bombs, flank bonus (+40%), Hype-charged ultimates with cut-ins, telegraphed enemy attacks, and boss fights. Every hero has a 4-ability kit; enemies use the same ability engine.
 
 **Progression.** XP and levels give points for stats and perks. Funds buy recruits and five HQ upgrades. You cannot afford everything, so the choices matter.
@@ -48,7 +50,9 @@ games/second-shift/
   src/                  source, concatenated in filename order by build.mjs
     00-core.js            helpers, RNG, storage, WebAudio synth + music
     10-data.js            heroes, abilities, enemies, encounters, calls, shifts, story
-    20-art.js             icons, procedural character renderer, map, arenas
+    20-art.js             icons, portraits, city map
+    21-figures.js         flat-vector character renderer, creatures, props
+    22-scenes.js          painted battle locations (street, dock, sewer, plaza, roof, corp, grid)
     30-model.js           save, progression, success math, shift simulation
     40-ui-core.js         modals, dialogue scenes, hero sheet, settings, help
     45-hub.js             dispatch desk (clock, map, queue, roster, call panel)

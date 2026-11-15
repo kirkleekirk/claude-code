@@ -347,8 +347,14 @@ kbd { font-family: var(--f-ui); font-size: 11px; font-weight: 800; background: r
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
 
 .g-num.none { color: var(--dim); text-shadow: none; }
-.cb-rotate { display: none; position: absolute; left: 50%; top: 44%; transform: translateX(-50%); z-index: 4; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 99px; background: rgba(4,8,22,.8); border: 1.5px solid var(--line); font-family: var(--f-ui); font-weight: 700; font-size: 13px; letter-spacing: .04em; color: var(--muted); pointer-events: none; white-space: nowrap; }
+.cb-rotate { display: none; position: absolute; left: 50%; bottom: 182px; transform: translateX(-50%); z-index: 4; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 99px; background: rgba(4,8,22,.8); border: 1.5px solid var(--line); font-family: var(--f-ui); font-weight: 700; font-size: 13px; letter-spacing: .04em; color: var(--muted); pointer-events: none; white-space: nowrap; }
 @media (max-width: 720px) and (orientation: portrait) { .cb-rotate { display: inline-flex; } }
 
 .ck-opt[data-t=hype] { border-left: 8px solid #ffb84d; } .ck-opt[data-t=calm] { border-left: 8px solid #7ee8c0; } .ck-opt[data-t=joke] { border-left: 8px solid #ff8ad8; } .ck-opt[data-t=order] { border-left: 8px solid #9bb5ff; }
 .ms.hurt { color: #ff8a9a; opacity: 1; }
+
+@media (max-height: 520px) {
+  .cb-panel { padding: 5px 8px; gap: 6px; bottom: 5px; } .pn-unit { width: 190px; gap: 6px; } .pn-unit .avatar { width: 44px !important; height: 44px !important; } .pn-id b { font-size: 17px; margin-bottom: 1px; }
+  .abtn { padding: 3px 6px; min-height: 44px; } .abtn small { display: none; } .abtn b { font-size: 14px; } .pn-end .btn { padding: 4px 10px; font-size: 14px; } .pn-end .radio { display: none; }
+  .cb-top { padding: 4px 10px; } .tli { width: 36px; height: 42px; border-width: 2px; } .cb-turnlabel { top: 56px; }
+}

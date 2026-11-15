@@ -264,22 +264,24 @@ const ENEMIES = {
 /* hero spawn points (col,row) */
 const HERO_SPAWNS = [[1, 1], [2, 3], [1, 5]];
 const ARENAS = {
-  street: { theme: 'street', name: 'Fifth Street' },
-  dock: { theme: 'dock', name: 'Pier 9' },
-  park: { theme: 'park', name: 'Greenway Park' },
-  roof: { theme: 'roof', name: 'Skyline Rooftop' },
-  foundry: { theme: 'foundry', name: 'The Foundry' },
-  finale: { theme: 'finale', name: 'Grid Central' },
+  street: { theme: 'street', name: 'Fifth Street, Downtown', tint: '#8fd0ff', carColor: '#c9453c' },
+  wreck: { theme: 'wreck', name: 'Fifth Street, Evacuated', tint: '#ffb27a', carColor: '#d9a030' },
+  dock: { theme: 'dock', name: 'Pier 9, Harbor', tint: '#a8e0ff', carColor: '#3a6aa8' },
+  sewer: { theme: 'sewer', name: 'Greenway Storm Drain', tint: '#9affc0', carColor: '#6a7a8a' },
+  plaza: { theme: 'plaza', name: 'Old Town Square', tint: '#cdb6ff', carColor: '#8a3a6a' },
+  roof: { theme: 'roof', name: 'Skyline Rooftop', tint: '#8fe8ff', carColor: '#3a8a8a' },
+  corp: { theme: 'corp', name: 'Apex Plaza, Uptown', tint: '#5a98ff', carColor: '#e8eef8' },
+  grid: { theme: 'grid', name: 'Grid Central', tint: '#7df9ff', carColor: '#3a4a8a' },
 };
 const ENCOUNTERS = {
   armored: { name: 'Armored Truck Jackers', arena: 'street', par: 5, lvl: 0.5, en: [['goon', 6, 1], ['slugger', 6, 4], ['goon', 7, 3], ['gunner', 8, 2]], obs: [[4, 1, 'car'], [4, 4, 'car'], [6, 2, 'barrel'], [5, 5, 'crate'], [7, 4, 'barrel']], hz: [] },
   docks: { name: 'Dock Gang', arena: 'dock', par: 7, lvl: 2, en: [['goon', 6, 0], ['goon', 6, 5], ['gunner', 8, 3], ['brute', 7, 2], ['slugger', 7, 4]], obs: [[4, 0, 'crate'], [4, 5, 'crate'], [5, 2, 'crate'], [6, 3, 'barrel'], [3, 2, 'pillar']], hz: [] },
-  gator: { name: 'Sewer Gator', arena: 'park', par: 6, lvl: 2, en: [['gator', 7, 2], ['hatchling', 6, 4], ['hatchling', 6, 0], ['hatchling', 8, 5]], obs: [[4, 2, 'crate'], [3, 4, 'pillar'], [5, 0, 'pillar']], hz: [[5, 3, 'toxic'], [5, 4, 'toxic'], [6, 3, 'toxic']] },
+  gator: { name: 'Sewer Gator', arena: 'sewer', par: 6, lvl: 2, en: [['gator', 7, 2], ['hatchling', 6, 4], ['hatchling', 6, 0], ['hatchling', 8, 5]], obs: [[4, 2, 'crate'], [3, 4, 'pillar'], [5, 0, 'pillar']], hz: [[5, 3, 'toxic'], [5, 4, 'toxic'], [6, 3, 'toxic']] },
   bots: { name: 'Rogue Delivery Bots', arena: 'roof', par: 5, lvl: 3, en: [['drone', 6, 1], ['drone', 7, 3], ['drone', 6, 5], ['drone', 8, 4], ['bomber', 8, 2]], obs: [[4, 2, 'crate'], [4, 4, 'crate'], [5, 5, 'barrel'], [7, 0, 'pillar']], hz: [] },
-  cult: { name: 'Cult of the Giant Pigeon', arena: 'park', par: 6, lvl: 3, en: [['cultist', 6, 1], ['cultist', 6, 4], ['zealot', 8, 2], ['brute', 7, 3], ['cultist', 8, 5]], obs: [[4, 0, 'pillar'], [4, 5, 'pillar'], [5, 2, 'barrel']], hz: [[5, 1, 'fire'], [5, 4, 'fire']] },
-  apex: { name: "Apex Guardians' 'Assist'", arena: 'roof', par: 7, lvl: 4, en: [['enforcer', 6, 1], ['enforcer', 6, 4], ['sniper', 8, 3], ['hype', 8, 1]], obs: [[4, 2, 'pillar'], [4, 3, 'pillar'], [6, 2, 'crate'], [5, 5, 'barrel']], hz: [] },
-  mecha: { name: 'Giant Mecha Rampage', arena: 'street', par: 8, lvl: 4, en: [['mecha', 7, 2], ['drone', 6, 0], ['drone', 6, 5]], obs: [[4, 1, 'car'], [4, 4, 'car'], [5, 2, 'barrel'], [3, 3, 'crate']], hz: [] },
-  prince: { name: 'The Static Prince', arena: 'finale', par: 13, lvl: 5, en: [['prince', 7, 2], ['drone', 6, 0], ['drone', 6, 5], ['drone', 8, 4]], obs: [[4, 1, 'pillar'], [4, 4, 'pillar'], [5, 2, 'barrel'], [5, 3, 'barrel']], hz: [[3, 0, 'electric'], [3, 5, 'electric'], [6, 2, 'electric'], [6, 3, 'electric']] },
+  cult: { name: 'Cult of the Giant Pigeon', arena: 'plaza', par: 6, lvl: 3, en: [['cultist', 6, 1], ['cultist', 6, 4], ['zealot', 8, 2], ['brute', 7, 3], ['cultist', 8, 5]], obs: [[4, 0, 'pillar'], [4, 5, 'pillar'], [5, 2, 'barrel']], hz: [[5, 1, 'fire'], [5, 4, 'fire']] },
+  apex: { name: "Apex Guardians' 'Assist'", arena: 'corp', par: 7, lvl: 4, en: [['enforcer', 6, 1], ['enforcer', 6, 4], ['sniper', 8, 3], ['hype', 8, 1]], obs: [[4, 2, 'pillar'], [4, 3, 'pillar'], [6, 2, 'crate'], [5, 5, 'barrel']], hz: [] },
+  mecha: { name: 'Giant Mecha Rampage', arena: 'wreck', par: 8, lvl: 4, en: [['mecha', 7, 2], ['drone', 6, 0], ['drone', 6, 5]], obs: [[4, 1, 'car'], [4, 4, 'car'], [5, 2, 'barrel'], [3, 3, 'crate']], hz: [] },
+  prince: { name: 'The Static Prince', arena: 'grid', par: 13, lvl: 5, en: [['prince', 7, 2], ['drone', 6, 0], ['drone', 6, 5], ['drone', 8, 4]], obs: [[4, 1, 'pillar'], [4, 4, 'pillar'], [5, 2, 'barrel'], [5, 3, 'barrel']], hz: [[3, 0, 'electric'], [3, 5, 'electric'], [6, 2, 'electric'], [6, 3, 'electric']] },
 };
 
 /* =====================================================================

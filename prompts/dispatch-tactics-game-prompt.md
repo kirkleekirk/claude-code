@@ -45,8 +45,11 @@ You are a dispatcher. During a shift, calls come in. Each call needs a mix of st
 - Shifts 2 to 3: chemistry and the first fight. Shifts 4 to 6: overlapping, clustered calls, radio checks, recruiting. Late shifts: shorter windows, injuries that bite, crisis calls that need three heroes, a rival that poaches missed calls, a boss finale. Then an endless mode.
 - Target about an hour for the story campaign.
 
-### Presentation
-- A committed art direction (comic / cel-shaded) with a consistent palette. Draw characters procedurally in code with distinct silhouettes, portraits with expressions and idle animation.
+### Presentation and art direction
+- **Characters: flat-vector superheroes.** Think clean vector super-hero sheets: heroic proportions (small head, broad shoulders, V-torso), flat colour blocks with simple two-tone shading, soft ground shadows, capes, masks, boots and gloves. Then add a bit more detail than a bare flat sheet: costume trim and piping, belts and pouches, shoulder pads, bracers, boot cuffs, muscle shading, hair highlights and readable faces with expressions. Thin tinted edges, never thick cartoon outlines. Every hero and enemy needs a distinct silhouette. Draw them procedurally in code, with portraits and idle animation.
+- **Battle scenes must look like real places, not abstract boards.** Give each fight its own painted location in the same flat-vector style, matched to the story (a downtown street, a harbor pier at sunset, a sewer outfall, an old-town square at night, a neon rooftop, a corporate plaza, a power station). Layer sky, skyline, buildings with windows and signs, props, light glows, and a floor with perspective detail. The floor under the grid must match the location (asphalt, planks, cobblestones, marble, metal grating).
+- **Battle grid in perspective, like Fractured But Whole.** Lay the grid on the floor as glowing, translucent tiles with white borders, drawn as a trapezoid (back row narrower than the front). Units and props scale with depth and stand on their tiles. Movement, attack and threat ranges are coloured tile overlays in perspective. HP bars sit above heads. Keep enough backdrop visible above the grid so the location reads.
+- A committed palette and consistent lighting across characters, backdrops and UI.
 - UI hierarchy rules: the success chance and the Dispatch button are always visible, never scrolled or covered. Typography with real fallback stacks. Responsive for desktop and phone, with mouse, keyboard and touch. Honor `prefers-reduced-motion`.
 - Synthesized audio (WebAudio): sound effects plus two music loops, started only after a user gesture, with a mute toggle. Settings for relaxed mode (no timers), animation speed, screenshake.
 
