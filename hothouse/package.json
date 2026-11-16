@@ -10,13 +10,14 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "npm run typecheck && vite build && vite build --mode singlefile",
+    "build": "tsc --noEmit && vite build && vite build --mode singlefile",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run && node tools/project-lint.mjs",
     "test:watch": "vitest",
-    "lint:project": "node tools/project-lint.mjs",
+    "lint": "node tools/project-lint.mjs",
     "qa": "node qa/run.mjs",
+    "qa:pipeline": "node qa/pipeline.mjs",
     "sim": "vitest run --config vitest.sim.config.ts"
   },
   "dependencies": {

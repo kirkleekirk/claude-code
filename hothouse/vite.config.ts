@@ -39,6 +39,7 @@ export default defineConfig(({ mode }) => {
   return {
     base: './',
     resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
+    oxc: { jsx: { runtime: 'automatic', importSource: 'preact' } },
     define: {
       __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
     },
@@ -51,7 +52,7 @@ export default defineConfig(({ mode }) => {
       assetsInlineLimit: single ? Number.MAX_SAFE_INTEGER : 4096,
       cssCodeSplit: false,
       chunkSizeWarningLimit: 6000,
-      rollupOptions: single ? { output: { inlineDynamicImports: true } } : {},
+      rollupOptions: single ? { output: { codeSplitting: false } } : {},
     },
     plugins: single ? [singleFile('hothouse.html')] : [],
   };

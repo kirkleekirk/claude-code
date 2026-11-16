@@ -1,0 +1,90 @@
+import { EventBus } from '@/core/events';
+import { flags } from '@/core/flags';
+import { GameLoop } from '@/core/loop';
+import { log } from '@/core/log';
+import { PipelineStage } from '@/debug/PipelineStage';
+import { installHarness } from '@/debug/harness';
+import { Input } from '@/input';
+import { PhysicsWorld } from '@/physics';
+import { Gfx, GfxUnsupportedError, MaterialKit, isQualityTier, profileForTier, profileFromSettings, webgl2Supported } from '@/render';
+import { LocalStore, SaveManager, Settings } from '@/save';
+import { showFallback } from './fallback';
+import { Game } from './Game';
+
+const isDev = import.meta.env.DEV;
+
+/** Route uncaught errors into the log (QA reads it) instead of the console. */
+function installErrorHandlers(): void {
+  addEventListener('error', (e) => {
+    log.error('uncaught', e.message || 'error', e.error);
+    if (!isDev && !flags.debug) e.preventDefault();
+  });
+  addEventListener('unhandledrejection', (e) => {
+    log.error('uncaught', 'unhandled rejection', e.reason);
+    if (!isDev && !flags.debug) e.preventDefault();
+  });
+}
+
+export async function boot(): Promise<void> {
+  log.setEcho(isDev || flags.debug);
+  installErrorHandlers();
+
+  const canvas = document.getElementById('game') as HTMLCanvasElement | null;
+  if (!canvas || !webgl2Supported()) {
+    showFallback('webgl');
+    return;
+  }
+
+  const store = new LocalStore();
+  const settings = new Settings(store);
+  const saves = new SaveManager(store);
+  const input = new Input();
+  input.attach(canvas);
+  const bus = new EventBus();
+
+  const quality = isQualityTier(flags.gfx) ? profileForTier(flags.gfx) : profileFromSettings(settings);
+  let gfx: Gfx;
+  try {
+    gfx = new Gfx(canvas, quality);
+  } catch (err) {
+    if (!(err instanceof GfxUnsupportedError)) log.error('boot', 'renderer creation failed', err);
+    showFallback('webgl');
+    return;
+  }
+  const physics = await PhysicsWorld.create();
+  const kit = new MaterialKit(gfx.shared);
+  const game = new Game({ gfx, kit, physics, input, settings, saves, bus, flags });
+
+  const harness = flags.test || flags.debug || isDev ? installHarness(game) : null;
+  if (flags.debug || isDev) {
+    const { mountTuningPanel } = await import('@/debug/TuningPanel');
+    mountTuningPanel(game);
+  }
+
+  game.setStage(new PipelineStage(game.ctx));
+
+  const loop = new GameLoop(game);
+  game.loop = loop;
+  loop.onFatal = () => showFallback('crash');
+  gfx.onContextLost = () => loop.stop();
+  gfx.onContextRestored = () => {
+    loop.resetTiming();
+    loop.start();
+  };
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      loop.stop();
+      input.releaseAll();
+      settings.flush();
+    } else {
+      loop.resetTiming();
+      loop.start();
+    }
+  });
+  addEventListener('pagehide', () => settings.flush());
+
+  await gfx.prewarm();
+  loop.start();
+  if (harness) harness.ready = true;
+}

@@ -47,7 +47,7 @@ export const ACTIONS = {
   pause: { group: 'system', kbm: btn(key('Escape')), pad: btn(pad(Pad.Menu)) },
   quickWheel: { group: 'system', kbm: btn(key('KeyQ')), pad: btn(pad(Pad.LB)) },
   photoMode: { group: 'system', kbm: btn(key('F2')), pad: none },
-  // ── phone (also live while the phone is open, so the same key closes it) ──
+  // ── phone (opening; inside the phone the ui group's uiPhone / uiMap / uiBack take over) ──
   phone: { group: 'phone', kbm: btn(key('Tab')), pad: btn(pad(Pad.Up)) },
   map: { group: 'phone', kbm: btn(key('KeyM')), pad: btn(pad(Pad.View)) },
   // ── on foot ───────────────────────────────────────────────────────────────
@@ -100,6 +100,9 @@ export const ACTIONS = {
   uiTabNext: { group: 'ui', fixed: true, kbm: btn(key('KeyE')), pad: btn(pad(Pad.RB)) },
   uiDetails: { group: 'ui', fixed: true, kbm: btn(key('KeyI')), pad: btn(pad(Pad.Y)) },
   uiSecondary: { group: 'ui', fixed: true, kbm: btn(key('KeyR')), pad: btn(pad(Pad.X)) },
+  /** Close the phone from inside it (keyboard). On a pad, Back at the phone's home closes it. */
+  uiPhone: { group: 'ui', fixed: true, kbm: btn(key('Tab')), pad: none },
+  uiMap: { group: 'ui', fixed: true, kbm: btn(key('KeyM')), pad: btn(pad(Pad.View)) },
   uiScroll: {
     group: 'ui', fixed: true,
     kbm: ax([key('PageDown')], [key('PageUp')]),
@@ -146,7 +149,7 @@ export const CONTEXTS = {
   foot: ['system', 'phone', 'foot', 'look'],
   vehicle: ['system', 'phone', 'vehicle', 'look'],
   menu: ['ui'],
-  phone: ['ui', 'phone'],
+  phone: ['ui'],
   minigame: ['mg'],
   build: ['build', 'look'],
   photo: ['photo', 'look'],
