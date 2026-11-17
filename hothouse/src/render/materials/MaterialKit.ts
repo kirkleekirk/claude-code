@@ -1,9 +1,9 @@
 import {
   MeshPhysicalMaterial, MeshStandardMaterial,
-  type Material, type MeshPhysicalMaterialParameters, type MeshStandardMaterialParameters, type WebGLProgramParametersWithUniforms,
+  type IUniform, type Material, type MeshPhysicalMaterialParameters, type MeshStandardMaterialParameters, type WebGLProgramParametersWithUniforms,
 } from 'three';
 import { ATMOSPHERE_GLSL, SHARED_PARS, type SharedUniforms } from '../shared';
-import { FACADE_GLSL } from './facadeGlsl';
+import { FACADE_GLSL, GROUND_GLSL } from './facadeGlsl';
 
 /**
  * Every lit material in the game is created or patched here so they all share one fog model, one
@@ -38,12 +38,36 @@ export interface PatchOptions {
   facade?: boolean;
   /** Subtle stucco/grime breakup from the shared noise (world-scale surfaces). */
   weathering?: boolean;
+  /** Custom shader code for specialised surfaces (roads, sidewalks, foliage). */
+  extend?: ShaderExtension;
+}
+
+/**
+ * Extra GLSL spliced into a kit material. Every hook runs inside \`main()\`; fragment hooks may
+ * read \`hhBaseColor\`, \`vHHWorld\`, \`vHHWorldNormal\` and (with surfAttr) \`vUvM\`/\`vSurf\`.
+ */
+export interface ShaderExtension {
+  /** Unique id; part of the program cache key. */
+  readonly key: string;
+  readonly uniforms?: Record<string, IUniform>;
+  readonly vertexPars?: string;
+  /** After the world position varyings are written. */
+  readonly vertexMain?: string;
+  readonly fragmentPars?: string;
+  /** After the base colour is known (modify \`diffuseColor\`). */
+  readonly fragmentColor?: string;
+  /** After roughness/metalness are set (modify \`roughnessFactor\`, \`metalnessFactor\`). */
+  readonly fragmentSurface?: string;
+  /** After emissive (modify \`totalEmissiveRadiance\`, \`normal\`). */
+  readonly fragmentEmissive?: string;
+  /** After lighting, before fog (modify \`gl_FragColor\`). */
+  readonly fragmentFinal?: string;
 }
 
 export interface KitStandardParams extends MeshStandardMaterialParameters, PatchOptions {}
 export interface KitPhysicalParams extends MeshPhysicalMaterialParameters, PatchOptions {}
 
-const PATCH_KEYS: ReadonlyArray<keyof PatchOptions> = ['fogMode', 'wet', 'wind', 'rim', 'nightEmissive', 'surfAttr', 'facade', 'weathering'];
+const PATCH_KEYS: ReadonlyArray<keyof PatchOptions> = ['fogMode', 'wet', 'wind', 'rim', 'nightEmissive', 'surfAttr', 'facade', 'weathering', 'extend'];
 
 function split<T extends PatchOptions>(params: T): [Omit<T, keyof PatchOptions>, PatchOptions] {
   const p: Record<string, unknown> = { ...(params as Record<string, unknown>) };
@@ -130,7 +154,15 @@ const SURF_FRAGMENT = /* glsl */ `
 `;
 
 const FACADE_FRAGMENT = /* glsl */ `
-if (vWin.z > 0.5) {
+if (vWin.z > 19.5) {
+  float gTone, gSeam, gRough, gPaintMask;
+  vec3 gPaint;
+  hhGround(vUvM, vWin, gTone, gSeam, gRough, gPaint, gPaintMask);
+  diffuseColor.rgb *= gTone;
+  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.55, gSeam);
+  diffuseColor.rgb = mix(diffuseColor.rgb, gPaint, gPaintMask);
+  roughnessFactor = clamp(roughnessFactor + gRough + gSeam * 0.1, 0.03, 1.0);
+} else if (vWin.z > 0.5) {
   vec2 g = vUvM / max(vWin.xy, vec2(0.05));
   vec2 cellId = floor(g);
   vec2 f = fract(g);
@@ -227,22 +259,24 @@ export class MaterialKit {
     const facade = opts.facade ?? false;
     const surf = (opts.surfAttr ?? false) || facade;
     const weathering = (opts.weathering ?? false) && surf;
+    const ext = opts.extend;
     const shared = this.shared;
     material.fog = false; // our fog replaces Three's
-    const key = `hh|${fog}|${+wet}|${wind}|${rim}|${+nightEmissive}|${+surf}|${+facade}|${+weathering}`;
+    const key = `hh|${fog}|${+wet}|${wind}|${rim}|${+nightEmissive}|${+surf}|${+facade}|${+weathering}|${ext?.key ?? ''}`;
     const base = material.customProgramCacheKey.bind(material);
     material.customProgramCacheKey = () => `${base()}|${key}`;
 
     material.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
       shared.attach(shader.uniforms);
       shader.uniforms.uRim = { value: rim };
+      if (ext?.uniforms) Object.assign(shader.uniforms, ext.uniforms);
 
       // ── vertex ──────────────────────────────────────────────────────────
       let vs = shader.vertexShader;
       const swayAttr = wind === 'palm' || wind === 'foliage' || wind === 'grass';
       vs = vs.replace(
         '#include <common>',
-        `#include <common>\n${SHARED_PARS}\n${VERT_PARS}\n${wind !== 'none' ? WIND_VERTEX : ''}\n${swayAttr ? 'attribute float sway;' : ''}\n${surf ? SURF_VERT_PARS : ''}\n${facade ? WIN_VERT_PARS : ''}`,
+        `#include <common>\n${SHARED_PARS}\n${VERT_PARS}\n${wind !== 'none' ? WIND_VERTEX : ''}\n${swayAttr ? 'attribute float sway;' : ''}\n${surf ? SURF_VERT_PARS : ''}\n${facade ? WIN_VERT_PARS : ''}\n${ext?.vertexPars ?? ''}`,
       );
       if (wind !== 'none') {
         const stiffness = wind === 'palm' ? '1.25' : wind === 'grass' ? '0.35' : wind === 'cloth' ? '0.25' : '0.45';
@@ -286,7 +320,8 @@ export class MaterialKit {
           vHHWorldNormal = normalize(mat3(modelMatrix) * hhN);
           ${surf ? 'vSurf = surf; vUvM = uv;' : ''}
           ${facade ? 'vWin = win;' : ''}
-        }`,
+        }
+        ${ext?.vertexMain ?? ''}`,
       );
       shader.vertexShader = vs;
 
@@ -294,7 +329,7 @@ export class MaterialKit {
       let fs = shader.fragmentShader;
       fs = fs.replace(
         '#include <common>',
-        `#include <common>\n${SHARED_PARS}\n${FRAG_PARS}\nuniform float uRim;\n${ATMOSPHERE_GLSL}\n${surf ? SURF_FRAG_PARS : ''}\n${facade ? WIN_FRAG_PARS + FACADE_GLSL : ''}`,
+        `#include <common>\n${SHARED_PARS}\n${FRAG_PARS}\nuniform float uRim;\n${ATMOSPHERE_GLSL}\n${surf ? SURF_FRAG_PARS : ''}\n${facade ? WIN_FRAG_PARS + FACADE_GLSL + GROUND_GLSL : ''}\n${ext?.fragmentPars ?? ''}`,
       );
       // Base colour snapshot (emissive surfaces glow in their own colour).
       let colorChunk = '#include <color_fragment>\nvec3 hhBaseColor = diffuseColor.rgb;';
@@ -307,6 +342,7 @@ export class MaterialKit {
           diffuseColor.rgb *= 1.0 - uWeather.x * (0.38 * hhUp2 + 0.18);
         }`;
       }
+      if (ext?.fragmentColor) colorChunk += `\n{\n${ext.fragmentColor}\n}`;
       fs = fs.replace('#include <color_fragment>', colorChunk);
 
       let roughChunk = '#include <roughnessmap_fragment>';
@@ -321,12 +357,16 @@ export class MaterialKit {
           roughnessFactor = mix(roughnessFactor, 0.06 + 0.12 * (1.0 - hhPuddle), hhWet);`;
       }
       fs = fs.replace('#include <roughnessmap_fragment>', roughChunk);
-      if (surf) fs = fs.replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = vSurf.y;');
+      let metalChunk = '#include <metalnessmap_fragment>';
+      if (surf) metalChunk += '\nmetalnessFactor = vSurf.y;';
+      if (ext?.fragmentSurface) metalChunk += `\n{\n${ext.fragmentSurface}\n}`;
+      fs = fs.replace('#include <metalnessmap_fragment>', metalChunk);
 
       let emissiveChunk = '#include <emissivemap_fragment>';
       if (nightEmissive) emissiveChunk += '\n totalEmissiveRadiance *= smoothstep(0.05, 0.75, uWeather.z);';
       if (surf) emissiveChunk += `\n${SURF_FRAGMENT}`;
       if (facade) emissiveChunk += `\n${FACADE_FRAGMENT}`;
+      if (ext?.fragmentEmissive) emissiveChunk += `\n{\n${ext.fragmentEmissive}\n}`;
       fs = fs.replace('#include <emissivemap_fragment>', emissiveChunk);
 
       // Art-directed image-based lighting balance.
@@ -345,6 +385,7 @@ export class MaterialKit {
           }`,
         );
       }
+      if (ext?.fragmentFinal) fs = fs.replace('#include <fog_fragment>', `{\n${ext.fragmentFinal}\n}\n#include <fog_fragment>`);
       if (fog !== 'none') {
         const apply = fog === 'additive'
           ? 'gl_FragColor.rgb *= 1.0 - hhFog;'

@@ -88,6 +88,20 @@ export const WinStyle = {
   PORTHOLE: 7, // round (Deco accents)
   SHUTTERED: 8, // with louvered shutters (bungalows)
   CORRUGATED: 9, // no windows: corrugated metal ribs
+  // Ground and roof patterns (uber material, metre UVs).
+  CONCRETE: 20,
+  PAVERS: 21,
+  BRICK: 22,
+  DECK: 23,
+  PARKING: 24,
+  POOL: 25,
+  LAWN: 26,
+  PLAIN: 27,
+  BARREL_TILE: 28,
+  SHINGLE: 29,
+  GRAVEL: 30,
+  METAL_ROOF: 31,
+  STRIPES: 32,
 } as const;
 
 const _v = new Vector3();

@@ -179,3 +179,92 @@ vec3 hhInterior(vec2 uv, vec3 rayT, float seed, vec2 cellId, float lightOn, out 
   return mix(dark, lit, lightOn);
 }
 `;
+
+/**
+ * Ground and roof patterns (style ids ≥ 20 in `win.z`), drawn from metre UVs with analytic
+ * antialiasing. Returns a tone multiplier, writes a grout/seam mask and a roughness offset.
+ *   20 concrete slabs · 21 square pavers · 22 brick running bond · 23 deck planks
+ *   24 parking stalls · 25 pool tiles · 26 lawn stripes · 27 plain/noise
+ *   28 barrel roof tiles · 29 shingles · 30 gravel roof · 31 standing-seam metal
+ */
+export const GROUND_GLSL = /* glsl */ `
+float hhGrout(vec2 f, vec2 aa, float w) {
+  vec2 d = min(f, 1.0 - f);
+  vec2 l = 1.0 - smoothstep(vec2(w) - aa, vec2(w) + aa, d);
+  return max(l.x, l.y);
+}
+
+void hhGround(vec2 uvm, vec4 win, out float tone, out float seam, out float roughAdd, out vec3 paint, out float paintMask) {
+  float style = floor(win.z + 0.5);
+  vec2 cell = max(win.xy, vec2(0.05));
+  tone = 1.0; seam = 0.0; roughAdd = 0.0; paint = vec3(0.0); paintMask = 0.0;
+  vec2 g = uvm / cell;
+  vec2 id = floor(g);
+  vec2 f = fract(g);
+  vec2 fw = max(fwidth(g), vec2(1e-4));
+  float detail = 1.0 - smoothstep(0.15, 0.5, max(fw.x, fw.y));
+  float h = hhHash12(id + win.w);
+  if (style == 20.0) {
+    seam = hhGrout(f, fw, 0.012) * detail;
+    tone = 0.95 + 0.1 * h;
+  } else if (style == 21.0) {
+    seam = hhGrout(f, fw, 0.035) * detail;
+    tone = 0.88 + 0.2 * h;
+    if (win.w > 500.0) tone *= mod(id.x + id.y, 2.0) > 0.5 ? 0.82 : 1.0;
+  } else if (style == 22.0) {
+    vec2 b = vec2(g.x + 0.5 * mod(id.y, 2.0), g.y);
+    vec2 bf = fract(b);
+    seam = hhGrout(bf, fw, 0.05) * detail;
+    tone = 0.84 + 0.26 * hhHash12(floor(b) + win.w);
+  } else if (style == 23.0) {
+    // Planks run along u; staggered butt joints; nail dots.
+    vec2 p = vec2(g.x + hhHash12(vec2(id.y, win.w)) * 3.0, g.y);
+    float plankId = floor(p.y);
+    float seg = floor(p.x / 3.0);
+    seam = max(hhGrout(vec2(0.5, fract(p.y)), fw, 0.06), (1.0 - smoothstep(0.0, fw.x * 2.0, abs(fract(p.x / 3.0)) * 3.0)) * 0.7) * detail;
+    tone = 0.8 + 0.3 * hhHash12(vec2(plankId, seg) + win.w);
+    float nail = (1.0 - smoothstep(0.02, 0.05, length(vec2(fract(p.x / 3.0) * 3.0 - 0.15, fract(p.y) - 0.5)))) * detail;
+    tone *= 1.0 - nail * 0.5;
+    roughAdd = 0.05;
+  } else if (style == 24.0) {
+    // Parking stalls: lines across u every cell.x, a back line at v = 0.
+    float sx = 1.0 - smoothstep(0.06 - fw.x * cell.x, 0.06 + fw.x * cell.x, min(f.x, 1.0 - f.x) * cell.x);
+    float sy = (1.0 - smoothstep(0.06, 0.06 + fw.y * cell.y, abs(uvm.y))) ;
+    paintMask = max(sx * step(0.0, uvm.y) * step(uvm.y, cell.y), sy) * detail;
+    paint = vec3(0.93, 0.9, 0.82);
+    tone = 0.9 + 0.12 * h;
+  } else if (style == 25.0) {
+    seam = hhGrout(f, fw, 0.06) * detail;
+    tone = 0.92 + 0.12 * h;
+    roughAdd = -0.3;
+  } else if (style == 26.0) {
+    tone = 0.92 + 0.12 * step(0.5, fract(uvm.x / (cell.x * 2.0)));
+  } else if (style == 28.0) {
+    // Barrel tiles: rounded rows along u, courses along v.
+    float across = fract(g.x);
+    float round = sin(across * 3.14159);
+    tone = 0.62 + 0.45 * round * (0.9 + 0.2 * h);
+    seam = (1.0 - smoothstep(0.0, fw.y * 3.0, fract(g.y))) * 0.6 * detail;
+    tone = mix(1.0, tone, detail);
+  } else if (style == 29.0) {
+    vec2 b = vec2(g.x + 0.5 * mod(id.y, 2.0), g.y);
+    seam = hhGrout(fract(b), fw, 0.03) * 0.8 * detail;
+    tone = 0.82 + 0.3 * hhHash12(floor(b) + win.w);
+  } else if (style == 30.0) {
+    tone = 0.85 + 0.3 * texture2D(uNoise, uvm * 0.9).a;
+    roughAdd = 0.05;
+  } else if (style == 31.0) {
+    float s = 1.0 - smoothstep(0.02, 0.02 + fw.x, min(f.x, 1.0 - f.x));
+    seam = s * 0.5 * detail;
+    tone = 1.0 + s * 0.3 * detail;
+    roughAdd = -0.25;
+  } else if (style == 32.0) {
+    // Awning stripes: base colour and cream, crisp edges, faded with distance.
+    float st = smoothstep(0.5 - fw.x, 0.5 + fw.x, fract(g.x));
+    paintMask = st * detail + 0.5 * (1.0 - detail);
+    paint = vec3(0.95, 0.92, 0.86);
+  } else {
+    tone = 0.9 + 0.2 * texture2D(uNoise, uvm * 0.07).g;
+  }
+}
+`;
