@@ -75,6 +75,30 @@ export type Difficulty = 'chill' | 'classic' | 'sweaty';
 /** Weather as the sim understands it (matches the renderer's preset ids). */
 export type WeatherKind = 'clear' | 'hazy' | 'overcast' | 'rain' | 'storm' | 'hurricane';
 
+/** Build Mode placeables (see `placeables.ts` for footprints, costs and effects). */
+export const PLACEABLE_IDS = [
+  // grow
+  'planterBox', 'planterTrough', 'hydroTower', 'growLamp', 'sunLampRig', 'feedStation', 'trellis', 'dryingRack',
+  // craft and work stations
+  'workbench', 'coldStill', 'sunPress', 'packingTable', 'breedingCabinet', 'desk', 'lookoutPerch', 'guardPost',
+  // storage
+  'shelf', 'safe', 'fridge', 'lockers',
+  // climate
+  'boxFan', 'acUnit', 'dehumidifier', 'ceilingFan',
+  // security
+  'blackoutCurtains', 'camera', 'alarm', 'reinforcedDoor',
+  // comfort
+  'couch', 'coffeeMachine', 'jukebox', 'breakTable', 'hammock', 'arcadeCabinet', 'snackBar', 'massageChair',
+  // decor
+  'neonSign', 'lawnFlamingo', 'monstera', 'bostonFern', 'shagRug', 'lavaLamp', 'tikiTorch', 'mirrorBall',
+  'aquarium', 'gatorStatue', 'stringLights', 'abuelaPortrait',
+] as const;
+export type PlaceableId = (typeof PLACEABLE_IDS)[number];
+
+/** Stations crew and players work at; provided by placeables. */
+export const STATION_KINDS = ['workbench', 'coldStill', 'sunPress', 'packing', 'feed', 'breeding', 'desk', 'lookout', 'guard'] as const;
+export type StationKind = (typeof STATION_KINDS)[number];
+
 export function isCustomerId(v: unknown): v is CustomerId {
   return typeof v === 'string' && (CUSTOMER_IDS as readonly string[]).includes(v);
 }
