@@ -176,6 +176,8 @@ export interface DealState {
   tolerance: number;
   /** Visible fuzz of the mood meter (narrows with relationship). */
   fuzz: number;
+  /** 0–1: where the true walk-away point sits inside the visible band (fixed when the deal opens). */
+  bandOffset: number;
   /** Counter-offer per unit after an over-reach, if any. */
   counterUnit: number | null;
   attempts: number;
@@ -473,9 +475,11 @@ export interface MissionProgress {
 }
 
 export type StoryBeat =
-  | 'firstHarvest' | 'kikiText' | 'kikiDelivered' | 'gardenStore' | 'firstPlant' | 'firstTend' | 'firstMix'
-  | 'brandNamed' | 'duskFalls' | 'secondCustomer' | 'secondDelivered' | 'rank2' | 'dripPitch' | 'valeText'
-  | 'prologueDone' | 'hurricaneWatch' | 'endingChosen';
+  | 'firstHarvest' | 'kikiText' | 'kikiAccepted' | 'kikiDelivered' | 'gardenStore' | 'firstPlant' | 'firstTend' | 'firstMix'
+  | 'brandNamed' | 'duskFalls' | 'secondCustomer' | 'secondAccepted' | 'secondDelivered' | 'rank2' | 'dripPitch' | 'dripBought'
+  | 'valeText' | 'prologueDone' | 'hurricaneWatch' | 'endingChosen'
+  // observed by the world and reported with `cmd.worldBeat`
+  | 'firstDrift' | 'policeNearMiss' | 'boardwalkArrived' | 'storeEntered';
 
 export interface StoryState {
   beats: Partial<Record<StoryBeat, number>>;

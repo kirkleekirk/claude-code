@@ -110,6 +110,11 @@ export interface SimCommands {
   /** World-observed beats the sim cannot see (e.g. the first drift). */
   worldBeat(beat: 'firstDrift' | 'policeNearMiss' | 'boardwalkArrived' | 'storeEntered'): SimResult;
   setDifficulty(difficulty: Difficulty): SimResult;
+  /**
+   * Pay for something sold by a world-side shop the sim does not model (cars, paint jobs, outfits,
+   * phone skins). `currency: 'any'` spends dirty cash first.
+   */
+  purchase(item: { id: string; label: string; price: number; currency: 'any' | 'dirty' | 'clean' }): SimResult<PurchaseResult>;
 }
 
 /** Test-harness only. */

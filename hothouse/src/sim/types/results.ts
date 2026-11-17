@@ -117,7 +117,8 @@ export interface SampleResult {
 }
 
 export interface PurchaseResult {
-  item: SupplyId | UpgradeId | PropertyId | FrontId | PlaceableId;
+  /** A `SupplyId`, `UpgradeId`, `PropertyId`, `FrontId`, `PlaceableId`, track or world-shop item id. */
+  item: SupplyId | UpgradeId | PropertyId | FrontId | PlaceableId | (string & {});
   qty: number;
   cost: number;
   paidWith: 'dirty' | 'clean' | 'mixed';
