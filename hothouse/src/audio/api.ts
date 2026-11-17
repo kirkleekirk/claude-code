@@ -136,6 +136,8 @@ export interface RadioApi {
   prev(): void;
   /** Radio is audible only in vehicles (and softly at menus); the score takes over otherwise. */
   setAudible(level: number, interior: boolean): void;
+  /** Air a headline as a news flash on every station after its current segment (dynamic news). */
+  pushNews(text: string): void;
 }
 
 export type ScoreMood = 'menu' | 'explore' | 'tension' | 'chase' | 'raid' | 'setpiece' | 'calm' | 'silent';
@@ -178,6 +180,17 @@ export interface VoiceProfile {
   expressiveness: number;
 }
 
+/** Diagnostics for the harness and perf overlay. */
+export interface AudioStats {
+  state: 'muted' | 'locked' | 'running' | 'suspended' | 'closed' | 'unavailable';
+  /** Active one-shot voices. */
+  voices: number;
+  loops: number;
+  engines: number;
+  /** Seconds of output latency reported by the context, if known. */
+  latency: number;
+}
+
 export interface AudioApi {
   /** True once the context is running (after the first user gesture). */
   readonly unlocked: ReadonlySignal<boolean>;
@@ -209,4 +222,5 @@ export interface AudioApi {
   suspend(): void;
   resume(): void;
   dispose(): void;
+  stats(): AudioStats;
 }
