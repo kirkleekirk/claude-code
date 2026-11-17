@@ -26,6 +26,8 @@ export class SharedUniforms {
   readonly uWind: IUniform<Vector4> = { value: new Vector4(1, 0, 0.5, 0) };
   /** Tileable RGBA noise (R low, G mid, B high frequency fbm, A white). */
   readonly uNoise: IUniform<Texture | null> = { value: null };
+  /** Image-based lighting scales: x diffuse (sky irradiance), y specular (reflections). */
+  readonly uIbl: IUniform<Vector4> = { value: new Vector4(0.35, 1, 0, 0) };
 
   /** Attach all shared uniforms to a shader's uniform table (inside `onBeforeCompile`). */
   attach(uniforms: Record<string, IUniform>): void {
@@ -41,6 +43,7 @@ export class SharedUniforms {
     uniforms.uWeather = this.uWeather;
     uniforms.uWind = this.uWind;
     uniforms.uNoise = this.uNoise;
+    uniforms.uIbl = this.uIbl;
   }
 }
 
@@ -58,6 +61,7 @@ uniform vec4 uFog;
 uniform vec4 uWeather;
 uniform vec4 uWind;
 uniform sampler2D uNoise;
+uniform vec4 uIbl;
 `;
 
 /**

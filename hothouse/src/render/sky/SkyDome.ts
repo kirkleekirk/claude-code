@@ -34,6 +34,7 @@ uniform vec4 uCloud;      // x cover, y scroll, z cirrus, w scale
 uniform vec4 uBodies;     // x cos(sun radius), y sun brightness, z cos(moon radius), w moon brightness
 uniform vec3 uSunColor;
 uniform float uStars;
+uniform float uSunScale;
 ${ATMOSPHERE_GLSL}
 
 float hash13(vec3 p) {
@@ -83,7 +84,7 @@ void main() {
   // Sun: an exaggerated, bloom-hot disc that dims and reddens as it meets the horizon.
   float sunDisc = smoothstep(uBodies.x - 0.0004, uBodies.x + 0.0004, cosS);
   float sunLow = smoothstep(0.0, 0.22, uSunDir.y);
-  vec3 sunCol = uSunColor * mix(0.34, 1.0, sunLow) * uBodies.y;
+  vec3 sunCol = uSunColor * mix(0.34, 1.0, sunLow) * uBodies.y * uSunScale;
   col = mix(col, sunCol, sunDisc * smoothstep(-0.045, 0.0, dir.y));
 
   // Clouds: a noise layer projected on a plane overhead, lit from the sun's side.
@@ -121,7 +122,9 @@ void main() {
 /** The sky: gradient, sun, moon, stars and a lit cloud layer, drawn on the far plane. */
 export class SkyDome {
   readonly mesh: Mesh;
-  private readonly material: ShaderMaterial;
+  readonly material: ShaderMaterial;
+  /** Scales the sun disc (the reflection probe uses a dimmer sun to avoid doubled highlights). */
+  readonly uSunScale: IUniform<number> = { value: 1 };
   private readonly uCloud: IUniform<Vector4> = { value: new Vector4(0.3, 0, 0.4, 1) };
   private readonly uBodies: IUniform<Vector4> = { value: new Vector4() };
   private readonly uCloudLit: IUniform<Color> = { value: new Color() };
@@ -133,7 +136,7 @@ export class SkyDome {
   constructor(shared: SharedUniforms) {
     const uniforms: Record<string, IUniform> = {
       uCloud: this.uCloud, uBodies: this.uBodies, uCloudLit: this.uCloudLit, uCloudDark: this.uCloudDark,
-      uSunColor: this.uSunColor, uStars: this.uStars,
+      uSunColor: this.uSunColor, uStars: this.uStars, uSunScale: this.uSunScale,
     };
     shared.attach(uniforms);
     this.material = new ShaderMaterial({

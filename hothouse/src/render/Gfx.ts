@@ -2,14 +2,15 @@ import { AgXToneMapping, NoToneMapping, PCFShadowMap, PerspectiveCamera, Scene, 
 import { log } from '@/core/log';
 import type { EnvState, QualityProfile, RenderStats } from './api';
 import { Environment } from './env/Environment';
+import { SkyProbe } from './env/SkyProbe';
+import { LAYER_MAIN_ONLY } from './layers';
 import { PostStack } from './post/PostStack';
+import { PlanarReflection } from './reflection/PlanarReflection';
 import { SharedUniforms } from './shared';
 import { SkyDome } from './sky/SkyDome';
 import { createNoiseTexture } from './tex/noiseTex';
 
-/** Layer 0 appears in planar reflections; layer 1 is drawn in the main view only. */
-export const LAYER_REFLECTED = 0;
-export const LAYER_MAIN_ONLY = 1;
+export { LAYER_MAIN_ONLY, LAYER_REFLECTED } from './layers';
 
 export class GfxUnsupportedError extends Error {}
 
@@ -34,6 +35,8 @@ export class Gfx {
   readonly shared = new SharedUniforms();
   readonly environment: Environment;
   readonly sky: SkyDome;
+  readonly probe: SkyProbe;
+  readonly reflection: PlanarReflection;
   readonly post: PostStack;
   quality: QualityProfile;
   /** Seconds of render time (drives shader animation). */
@@ -60,6 +63,8 @@ export class Gfx {
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = PCFShadowMap;
+    // Shadows render once per frame in the main pass, never again for reflections or probes.
+    this.renderer.shadowMap.autoUpdate = false;
     this.renderer.info.autoReset = false;
     this.renderer.toneMapping = quality.post ? NoToneMapping : AgXToneMapping;
 
@@ -72,6 +77,9 @@ export class Gfx {
     this.environment.applyQuality(quality);
     this.sky = new SkyDome(this.shared);
     this.scene.add(this.sky.mesh);
+    this.probe = new SkyProbe(this.renderer, this.sky);
+    this.reflection = new PlanarReflection(this.renderer);
+    this.reflection.setScale(quality.reflectionScale);
     this.post = new PostStack(this.renderer, this.scene, this.camera, quality);
 
     canvas.addEventListener('webglcontextlost', this.handleLost);
@@ -98,6 +106,8 @@ export class Gfx {
     this.quality = q;
     this.renderer.toneMapping = q.post ? NoToneMapping : AgXToneMapping;
     this.environment.applyQuality(q);
+    this.reflection.setScale(q.reflectionScale);
+    this.reflection.everyOther = q.tier === 'low' || q.tier === 'medium';
     this.post.applyQuality(q);
     if (postChanged) this.scene.traverse((o) => {
       const m = (o as { material?: { needsUpdate: boolean } | Array<{ needsUpdate: boolean }> }).material;
@@ -128,6 +138,7 @@ export class Gfx {
     this.renderer.setPixelRatio(ratio);
     this.renderer.setSize(w, h, false);
     this.post.setSize(w, h);
+    this.reflection.setSize(Math.round(w * ratio), Math.round(h * ratio));
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }
@@ -145,6 +156,9 @@ export class Gfx {
   render(dtReal: number): void {
     if (this.contextLost) return;
     this.renderer.info.reset();
+    if (this.probe.update(this.environment.state, dtReal)) this.scene.environment = this.probe.texture;
+    this.renderer.shadowMap.needsUpdate = true;
+    this.reflection.render(this.scene, this.camera);
     if (this.quality.post) this.post.render(dtReal);
     else this.renderer.render(this.scene, this.camera);
   }
@@ -188,6 +202,8 @@ export class Gfx {
     this.canvas.removeEventListener('webglcontextlost', this.handleLost);
     this.canvas.removeEventListener('webglcontextrestored', this.handleRestored);
     this.sky.dispose();
+    this.probe.dispose();
+    this.reflection.dispose();
     this.post.dispose();
     this.shared.uNoise.value?.dispose();
     this.renderer.dispose();
