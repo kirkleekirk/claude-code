@@ -41,6 +41,13 @@ const MAX_TOASTS = 3;
 const TOAST_EXIT = 0.24;
 const WHEEL_HOLD = 0.16;
 const HINT_KEY = 'hints';
+const HINT_TEXT_KEY = 'hintTexts';
+
+export interface SeenHint {
+  id: string;
+  text: string;
+  action?: string;
+}
 
 export class UiRuntime implements UiApi {
   readonly hud: HudModel = createHudModel();
@@ -52,7 +59,7 @@ export class UiRuntime implements UiApi {
   readonly started = signal(false);
   readonly layers = signal<readonly LayerEntry[]>([]);
   readonly toasts = signal<readonly ToastEntry[]>([]);
-  readonly hint = signal<HintRequest | null>(null);
+  readonly currentHint = signal<HintRequest | null>(null);
   readonly phoneOpen = signal(false);
   readonly phoneRoute = signal<{ app: string; params: Record<string, unknown> }>({ app: 'home', params: {} });
   readonly apps = signal<readonly PhoneAppDef[]>([]);
@@ -70,6 +77,7 @@ export class UiRuntime implements UiApi {
   readonly pausesWorld: ReadonlySignal<boolean>;
 
   private readonly hintBook: HintBook;
+  private readonly hintTexts: Map<string, SeenHint>;
   private seq = 0;
   private startWaiters: Array<() => void> = [];
   private phoneHistory: Array<{ app: string; params: Record<string, unknown> }> = [];
@@ -79,6 +87,8 @@ export class UiRuntime implements UiApi {
 
   constructor(readonly deps: UiDeps, readonly focus: FocusManager) {
     this.hintBook = new HintBook(deps.settings.blob<HintRecord>(HINT_KEY));
+    const texts = deps.settings.blob<Record<string, SeenHint>>(HINT_TEXT_KEY);
+    this.hintTexts = new Map(texts && typeof texts === 'object' ? Object.entries(texts).filter(([, v]) => v && typeof v.text === 'string') : []);
     this.wantsInput = computed(() => {
       void this.focus.version.value;
       return this.focus.capturing || this.wheelOpen.value || this.frontend.value !== 'none';
@@ -279,6 +289,10 @@ export class UiRuntime implements UiApi {
   }
 
   hint(spec: HintSpec): void {
+    if (this.hintTexts.get(spec.id)?.text !== spec.text) {
+      this.hintTexts.set(spec.id, spec.action ? { id: spec.id, text: spec.text, action: spec.action } : { id: spec.id, text: spec.text });
+      this.deps.settings.setBlob(HINT_TEXT_KEY, Object.fromEntries(this.hintTexts));
+    }
     this.hintBook.request({
       id: spec.id, text: spec.text, action: spec.action, priority: spec.priority ?? 0, duration: spec.duration ?? 14,
     });
@@ -286,16 +300,17 @@ export class UiRuntime implements UiApi {
 
   learnHint(id: string): void {
     if (this.hintBook.learn(id)) this.persistHints();
-    if (this.hint.peek()?.id === id) this.hint.value = null;
+    if (this.currentHint.peek()?.id === id) this.currentHint.value = null;
   }
 
   dismissHint(): void {
     if (this.hintBook.dismiss()) this.persistHints();
-    this.hint.value = null;
+    this.currentHint.value = null;
   }
 
-  learnedHints(): string[] {
-    return this.hintBook.learnedIds();
+  /** Learned hints whose text is known, for Help → replay. */
+  learnedHints(): SeenHint[] {
+    return this.hintBook.learnedIds().map((id) => this.hintTexts.get(id)).filter((h): h is SeenHint => !!h);
   }
 
   /** Help → replay: forget and show again now. */
@@ -360,7 +375,7 @@ export class UiRuntime implements UiApi {
     this.ticker.tick(dt);
     this.updateToasts(dt);
     if (this.hintBook.tick(dt, settings.get('game.hints') && this.hud.visible.peek() && this.frontend.peek() === 'none')) {
-      this.hint.value = this.hintBook.current;
+      this.currentHint.value = this.hintBook.current;
     }
     this.fpsAcc += dtReal;
     this.fpsFrames++;

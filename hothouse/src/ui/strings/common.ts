@@ -93,3 +93,23 @@ export const tActions = defineStrings('ui.actions', {
   photoCapture: 'Take photo',
   photoHideUi: 'Hide interface',
 });
+
+export const tBind = defineStrings('ui.bindings', {
+  title: 'Key bindings',
+  device: 'Device',
+  deviceDesc: 'Which bindings to show and change.',
+  kbm: 'Keyboard & mouse',
+  pad: 'Controller',
+  set: 'Set',
+  add: 'Add',
+  clearHint: 'Right-click to clear',
+  resetAll: 'Reset all controls',
+  pressKey: 'Press a key for “{action}”',
+  pressButton: 'Press a button for “{action}”',
+  keyHelp: 'Any key or mouse button. Esc cancels.',
+  padHelp: 'Any button, trigger or stick direction.',
+  cancelsIn: 'Cancels in {n} s.',
+  takenTitle: '{key} is taken',
+  takenBody: 'It’s already used for “{action}”. Swap the two?',
+  swap: 'Swap them',
+});

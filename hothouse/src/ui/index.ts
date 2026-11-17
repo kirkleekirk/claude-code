@@ -5,6 +5,7 @@ import type { UiApi, UiDeps } from './api';
 import { App } from './App';
 import { BINDINGS_KEY, saveBindings } from './core/bindings';
 import { FocusManager } from './core/focus';
+import { registerBuiltinApps } from './phone/apps';
 import { applyTheme } from './core/theme';
 import { UiRuntime } from './runtime';
 import { installFonts } from './styles/fonts';
@@ -47,6 +48,7 @@ export function createUi(root: HTMLElement, deps: UiDeps): UiApi {
 
   const focus = new FocusManager(deps.input, root, deps.sound ?? null);
   const runtime = new UiRuntime(deps, focus);
+  registerBuiltinApps(runtime);
   const env = { deps, focus, ticker: runtime.ticker, layers: { modal, tooltip }, tips: runtime.tips, ui: runtime };
   render(h(App, { env }), app);
 
