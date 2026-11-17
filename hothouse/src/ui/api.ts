@@ -313,6 +313,12 @@ export interface UiApi {
   setMinimap(source: MinimapSource | null): void;
   /** Re-show the current Now Playing card (radio changed, entering a vehicle). */
   showNowPlaying(info: NowPlaying | null): void;
+  /**
+   * The UI opens the pause menu, phone, map and quick wheel itself from the `pause`, `phone`, `map`
+   * and `quickWheel` actions while the HUD is visible and nothing else is open. Turn that off for
+   * cutscenes and scripted moments.
+   */
+  setHotkeysEnabled(on: boolean): void;
 
   /** Per-frame: navigation, typewriters, count-ups, HUD animation, minimap. `dtReal` in seconds. */
   update(dtReal: number): void;

@@ -4,6 +4,7 @@ import type { UiSound } from '@/audio/api';
 import type { UiDeps } from '../api';
 import type { FocusHandlers, FocusManager, Scope, ScopeOptions } from './focus';
 import type { TipController } from './tips';
+import type { UiRuntime } from '../runtime';
 
 /** Per-frame callbacks driven by `ui.update(dt)`. */
 export class Ticker {
@@ -36,6 +37,7 @@ export interface UiEnv {
   readonly ticker: Ticker;
   readonly layers: UiLayers;
   readonly tips: TipController;
+  readonly ui: UiRuntime;
 }
 
 export const UiContext = createContext<UiEnv | null>(null);
