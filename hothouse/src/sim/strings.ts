@@ -96,4 +96,10 @@ export const t = defineStrings('sim', {
   anythingGood: 'something good',
   byTime: 'by {time}',
   anyTime: 'whenever',
+  yourStuff: 'your stuff',
+  or: '{a} or {b}',
+  referralIntro: 'Hey, {name} gave me this number. Said you’re the real deal.',
+  vipIntro: 'One hears good things. One would like to be a customer.',
+  passerbyShrug: 'They pocket it, nod politely, and wander off toward the beach.',
+  noSamplesYet: 'Free samples unlock at Rank 3',
 });
