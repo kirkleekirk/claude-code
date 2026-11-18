@@ -14,6 +14,10 @@ import type { RoadGraph } from './roads/RoadGraph';
 import { meshBlocks, meshRoads, ROAD_Y, type Block, type MedianLine } from './roads/RoadMesher';
 import { createRoadMaterial } from './roads/roadMaterial';
 import { Heightfield } from './terrain/Heightfield';
+import { placePalms, Vegetation } from './vegetation/Vegetation';
+import { Signs } from './signs/Signs';
+import { buildLightPools, buildSignalLenses } from './props/LightCards';
+import { placeStreetProps } from './props/streetProps';
 import { buildTerrain, rapierHeights } from './terrain/TerrainMesh';
 import { Water } from './water/Water';
 
@@ -27,6 +31,7 @@ export interface WorldBuildDeps {
 }
 
 export interface WorldStats {
+  palms: number;
   buildings: number;
   blocks: number;
   lots: number;
@@ -52,8 +57,12 @@ export class World {
   medians: MedianLine[] = [];
   signs: SignRequest[] = [];
   water!: Water;
+  vegetation!: Vegetation;
+  signage!: Signs;
   stats!: WorldStats;
   private readonly materials: Material[] = [];
+  /** Materials not owned by the kit (custom shaders), disposed directly. */
+  private readonly ownMaterials: Material[] = [];
   private mirrorY = ROAD_Y;
 
   private constructor(private readonly deps: Omit<WorldBuildDeps, 'progress' | 'slicer'>) {
@@ -85,7 +94,14 @@ export class World {
     w.medians = await meshRoads(w.graph, grid, col, slicer);
     progress(0.5, 'Painting the lanes');
     w.blocks = await meshBlocks(w.graph, grid, col, slicer);
-    progress(0.58, 'Laying the sidewalks');
+    progress(0.56, 'Laying the sidewalks');
+    const beach: Array<[[number, number], [number, number]]> = [[[-850, -312], [-850, -24]], [[-850, 24], [-850, 432]]];
+    const palms = placePalms(w.medians, w.blocks, grid, beach, 0x50414c4d);
+    w.vegetation = new Vegetation(kit, palms);
+    w.materials.push(w.vegetation.material);
+    w.root.add(w.vegetation.group);
+    progress(0.58, 'Planting the palms');
+    const props = placeStreetProps(w.graph, w.blocks, grid, 0x50524f50);
 
     // Buildings.
     const { specs, lots } = planBuildings(w.blocks, 0x48414c43);
@@ -117,13 +133,22 @@ export class World {
     if (col.triangleCount > 0) {
       physics.addStaticTrimesh(new Float32Array(col.vertices), new Uint32Array(col.indices), Collide.static);
     }
-    progress(0.92, 'Filling the bay');
+    for (const mesh of [buildLightPools(props.glows, gfx.shared), buildSignalLenses(props.lenses, gfx.shared)]) {
+      if (!mesh) continue;
+      w.root.add(mesh);
+      w.ownMaterials.push(mesh.material as Material);
+    }
+    progress(0.9, 'Bending the neon');
+    w.signage = await Signs.build(w.signs, kit, gfx.shared, slicer);
+    w.root.add(w.signage.group);
+    progress(0.94, 'Filling the bay');
 
     w.water = new Water(w.hf, gfx.shared, gfx.reflection);
     w.root.add(w.water.mesh);
     gfx.scene.add(w.root);
     progress(1, 'Ready');
     w.stats = {
+      palms: w.vegetation.instances.length,
       buildings: built, blocks: w.blocks.length, lots: lots.length, signs: w.signs.length, chunks: gstats.chunks,
       vertices: gstats.vertices, triangles: gstats.triangles, colliders: physics.world.colliders.len(),
       buildMs: Math.round(performance.now() - t0),
@@ -142,6 +167,7 @@ export class World {
     const gfx = this.deps.gfx;
     const cam = gfx.camera.position;
     this.water.update(gfx.env, gfx.camera);
+    this.vegetation.update(gfx.camera, dt);
     // The mirror sits at street level over land and at sea level over water.
     const overLand = this.hf.heightAt(cam.x, cam.z) > 0.25;
     const target = overLand ? ROAD_Y : 0;
@@ -156,6 +182,9 @@ export class World {
       g?.dispose();
     });
     this.water.dispose();
+    this.vegetation.dispose();
+    this.signage.dispose(this.deps.kit);
+    for (const m of this.ownMaterials) m.dispose();
     for (const m of this.materials) this.deps.kit.release(m);
   }
 }

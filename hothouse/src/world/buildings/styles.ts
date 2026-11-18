@@ -517,7 +517,7 @@ function tower(ctx: Ctx): void {
   // A billboard on some podiums.
   if (rng.chance(0.45)) {
     const ad = rng.pick(BILLBOARDS);
-    sign(ctx, { text: ad.text, kind: 'billboard', font: 'block', color: ad.fg, accent: ad.bg, x: 0, y: podiumTop + 4.5, z: inset - 0.4, width: Math.min(tw * 0.9, 16), height: 6 });
+    sign(ctx, { text: `${ad.text}|${ad.sub}`, kind: 'billboard', font: 'block', color: ad.fg, accent: ad.bg, x: 0, y: podiumTop + 4.5, z: inset - 0.4, width: Math.min(tw * 0.9, 16), height: 6 });
     b.surface('#2B2F3A', 0.6, 0.5, 0, SurfFlag.WET);
     b.box(0, podiumTop + 1.0, inset - 0.6, 0.3, 2.2, 0.3);
   }

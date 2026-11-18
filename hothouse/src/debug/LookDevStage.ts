@@ -11,10 +11,11 @@ export const LOOKDEV_SHOTS: Record<string, { pos: [number, number, number]; look
   strand: { pos: [-768, 3.2, 150], look: [-772, 6, -60], fov: 62 },
   bayshoreSunset: { pos: [-760, 2.4, -60], look: [-940, 6, -110], fov: 60 },
   deco: { pos: [-454, 2.8, 70], look: [-446, 10, -150], fov: 64 },
+  halcyon: { pos: [-200, 2.6, 6], look: [-700, 9, -2], fov: 58 },
   beach: { pos: [-868, 1.9, -40], look: [-835, 9, -330], fov: 58 },
   bayfront: { pos: [-520, 3.6, -342], look: [-420, 8, -820], fov: 60 },
   skyline: { pos: [-735, 14, -810], look: [0, 30, -480], fov: 48 },
-  crown: { pos: [-60, 3, -300], look: [120, 45, -560], fov: 66 },
+  crown: { pos: [-112, 2.6, -336], look: [160, 40, -470], fov: 64 },
   aerial: { pos: [-1050, 160, 260], look: [-450, 0, -300], fov: 50 },
 };
 

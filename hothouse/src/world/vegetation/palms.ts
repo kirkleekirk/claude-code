@@ -31,16 +31,16 @@ interface Shape {
 const SHAPES: Record<PalmSpecies, Shape> = {
   coconut: {
     height: [7.5, 11.5], lean: 1.6, trunkR: [0.24, 0.15], trunk: '#8C7B68', pattern: WinStyle.SHINGLE, cell: [0.9, 0.3],
-    fronds: 13, frondLen: [3.6, 4.6], rise: 0.55, droop: 1.75, width: 0.95, leaf: '#3F8640', tip: '#B9C25A', coconuts: true,
+    fronds: 13, frondLen: [3.6, 4.6], rise: 0.42, droop: 2.25, width: 0.95, leaf: '#3F8C3E', tip: '#B8C25C', coconuts: true,
   },
   royal: {
-    height: [12, 17], lean: 0.12, trunkR: [0.36, 0.26], trunk: '#C9C3B8', pattern: WinStyle.PLAIN, cell: [1, 1],
+    height: [12, 17], lean: 0.12, trunkR: [0.3, 0.22], trunk: '#A39D90', pattern: WinStyle.PLAIN, cell: [1, 1],
     shaft: { len: 2.4, color: '#5E9A48', r: 0.27 },
-    fronds: 12, frondLen: [3.8, 4.8], rise: 0.95, droop: 2.0, width: 0.9, leaf: '#3C7F3C', tip: '#A6C060',
+    fronds: 12, frondLen: [3.8, 4.8], rise: 0.85, droop: 2.4, width: 0.9, leaf: '#3E8A3E', tip: '#A9BD5E',
   },
   sabal: {
     height: [6, 9.5], lean: 0.2, trunkR: [0.25, 0.22], trunk: '#6B5845', pattern: WinStyle.BRICK, cell: [0.22, 0.18],
-    fronds: 26, frondLen: [1.1, 1.5], rise: 0.4, droop: 0.9, width: 1.25, leaf: '#4C7F3F', tip: '#9CB860', fan: true,
+    fronds: 26, frondLen: [1.1, 1.5], rise: 0.4, droop: 0.9, width: 1.25, leaf: '#4C8442', tip: '#A2B65C', fan: true,
   },
   date: {
     height: [5, 8.5], lean: 0.25, trunkR: [0.42, 0.36], trunk: '#9A6A44', pattern: WinStyle.BRICK, cell: [0.32, 0.26],
@@ -49,7 +49,7 @@ const SHAPES: Record<PalmSpecies, Shape> = {
   foxtail: {
     height: [7, 10], lean: 0.18, trunkR: [0.28, 0.2], trunk: '#BDB6AA', pattern: WinStyle.SHINGLE, cell: [1, 0.55],
     shaft: { len: 1.4, color: '#6FA250', r: 0.2 },
-    fronds: 11, frondLen: [3.0, 3.7], rise: 0.75, droop: 1.6, width: 1.25, leaf: '#4E8F3E', tip: '#B5CC62',
+    fronds: 11, frondLen: [3.0, 3.7], rise: 0.75, droop: 1.6, width: 1.25, leaf: '#479640', tip: '#B2C661',
   },
   areca: {
     height: [3.2, 5], lean: 0.5, trunkR: [0.08, 0.06], trunk: '#9FA35C', pattern: WinStyle.SHINGLE, cell: [0.4, 0.25],
@@ -122,7 +122,7 @@ function crown(b: MeshBuilder, s: Shape, rng: Rng, top: Vector3, lod: number, he
     const tier = (f % 3) / 2;
     const len = rng.range(s.frondLen[0], s.frondLen[1]) * (0.85 + 0.15 * tier) * (height < 6 ? 0.85 : 1);
     const rise = s.rise * (0.55 + 0.6 * tier) + rng.range(-0.1, 0.1);
-    if (s.fan) fan(b, top, az, rise, len, s, rng, lod);
+    if (s.fan) fan(b, top, az, rise, len, rng, lod);
     else feather(b, top, az, rise, len, s, lod);
   }
 }
@@ -174,7 +174,7 @@ function feather(b: MeshBuilder, top: Vector3, az: number, rise: number, len: nu
 }
 
 /** A palmate fan leaf on a short stalk (sabal). */
-function fan(b: MeshBuilder, top: Vector3, az: number, rise: number, len: number, s: Shape, rng: Rng, lod: number): void {
+function fan(b: MeshBuilder, top: Vector3, az: number, rise: number, len: number, rng: Rng, lod: number): void {
   const el = rise + rng.range(-0.6, 0.9);
   const dir = new Vector3(Math.cos(az) * Math.cos(el), Math.sin(el), Math.sin(az) * Math.cos(el));
   const stalkEnd = top.clone().addScaledVector(dir, len * 0.55);
@@ -193,8 +193,6 @@ function fan(b: MeshBuilder, top: Vector3, az: number, rise: number, len: number
   const nrm = new Vector3().crossVectors(right, up).normalize();
   if (nrm.dot(dir) < 0) nrm.negate();
   const centre = b.vertex(stalkEnd.x, stalkEnd.y, stalkEnd.z, nrm.x, nrm.y, nrm.z, 0, 0);
-  const first = b.vertex(stalkEnd.x, stalkEnd.y, stalkEnd.z, nrm.x, nrm.y, nrm.z, 0, 0);
-  void first;
   for (let i = 0; i <= pleats; i++) {
     const a = -spread / 2 + (i / pleats) * spread;
     const rr = r * (i % 2 === 0 ? 1 : 0.86);
