@@ -482,6 +482,8 @@ export interface MissionProgress {
   startedAt: number;
   completedAt: number;
   choice: string | null;
+  /** Progress inside the current objective (units delivered, plants harvested). */
+  counter: number;
 }
 
 export type StoryBeat =

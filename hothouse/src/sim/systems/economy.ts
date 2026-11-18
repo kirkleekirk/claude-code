@@ -312,6 +312,7 @@ export function payDebt(ctx: SimCtx, amount: number, from: 'dirty' | 'clean'): S
   const paid = ctx.pay(n, from, 'debt');
   if (!paid.ok) return paid;
   d.paid += n;
+  ctx.onAction('debtPayment', n);
   if (d.nextCheckDay > 0 && d.paid >= d.expectedByCheck * 1.25) d.respect = Math.min(100, d.respect + 3);
   if (remainingDebt(ctx) <= 0) {
     d.settled = 'paid';

@@ -206,6 +206,7 @@ export function harvestPlant(ctx: SimCtx, plantId: PlantId, grades: readonly Sni
   delete ctx.state.plants[plantId];
   const res: HarvestResult = { product: product.id, stack, units, stars, timing, grade: snips.grade, streak: prog.snipStreak, xp, to };
   ctx.emit('sim:harvest', { ...res, plant: plantId, property: p.property, by });
+  ctx.onAction('harvest', res);
   ctx.bump('plants', 'inventory');
   if (by === 'player') ctx.beat('firstHarvest');
   return ok(res);

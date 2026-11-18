@@ -76,7 +76,7 @@ export function createInitialState(seed: number, difficulty: Difficulty): SimSta
   const missions = Object.fromEntries(
     MISSION_IDS.map((id): [string, MissionProgress] => [id, {
       status: id === 'inheritance' ? 'active' : 'locked', objective: 0, checkpoint: 0, attempts: id === 'inheritance' ? 1 : 0,
-      startedAt: 0, completedAt: 0, choice: null,
+      startedAt: 0, completedAt: 0, choice: null, counter: 0,
     }]),
   ) as SimState['missions']['progress'];
 
