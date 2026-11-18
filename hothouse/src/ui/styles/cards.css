@@ -547,12 +547,12 @@
 
 .hh-ui .hh-hint-close {
   position: absolute;
-  top: 0.35rem;
-  right: 0.35rem;
+  top: 0.2rem;
+  right: 0.2rem;
   display: grid;
   place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
+  width: var(--hit-sm);
+  height: var(--hit-sm);
   border-radius: 50%;
   color: rgba(46, 26, 18, 0.6);
 }

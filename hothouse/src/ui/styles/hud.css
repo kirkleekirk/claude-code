@@ -83,8 +83,10 @@
   gap: 0.6rem;
   padding: 0.3rem 0.75rem 0.3rem 0.4rem;
   border-radius: 999px;
-  background: rgba(11, 7, 32, 0.5);
-  box-shadow: inset 0 0 0 1px rgba(255, 244, 227, 0.1);
+  background: rgba(20, 11, 51, 0.84);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: inset 0 0 0 1px rgba(255, 244, 227, 0.12), 0 6px 18px rgba(8, 4, 30, 0.35);
   animation: hh-rise-in var(--t-slow) var(--spring) both;
   transition: opacity 1.2s var(--ease);
 }
@@ -330,7 +332,7 @@
 }
 
 .hh-ui .hh-nowplaying-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
-.hh-ui .hh-nowplaying-label { font-size: var(--fs-xs); font-weight: 800; color: var(--st); text-transform: uppercase; letter-spacing: 0.06em; }
+.hh-ui .hh-nowplaying-label { font-size: var(--fs-xs); font-weight: 800; color: color-mix(in srgb, var(--st) 62%, #FFF4E3); text-transform: uppercase; letter-spacing: 0.06em; }
 .hh-ui .hh-nowplaying-title { font-weight: 750; color: var(--cream); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hh-ui .hh-nowplaying-artist { font-size: var(--fs-sm); color: var(--cream-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 

@@ -276,6 +276,7 @@
 /* ── credits ────────────────────────────────────────────────────────────── */
 
 .hh-ui .hh-credits { place-items: stretch; padding: 0; }
+.hh-ui .hh-credits .hh-scrim { background: rgba(7, 4, 20, 0.86); }
 
 .hh-ui .hh-credits-roll {
   position: absolute;

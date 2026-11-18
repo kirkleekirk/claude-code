@@ -173,9 +173,11 @@
 .hh-ui .hh-phone-hints {
   display: flex;
   gap: 1rem;
+  padding: 0.3rem 0.8rem;
+  border-radius: 999px;
   font-size: var(--fs-xs);
   color: var(--cream);
-  text-shadow: var(--shadow-text);
+  background: rgba(20, 11, 51, 0.8);
 }
 
 /* ── home ───────────────────────────────────────────────────────────────── */

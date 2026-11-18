@@ -54,7 +54,7 @@ export function QuickWheel() {
   const sel = selected >= 0 ? slots[selected] : undefined;
   return (
     <div class="hh-wheel" role="menu" aria-label={tActions('quickWheel')}>
-      <div class="hh-wheel-ring" />
+      <div class="hh-wheel-ring" data-backdrop="" />
       {slots.map((s, i) => {
         const a = (i / slots.length) * Math.PI * 2;
         const x = Math.sin(a) * RADIUS;

@@ -221,6 +221,9 @@
 .hh-ui .hh-btn-primary .hh-glyph { color: var(--on-lime); }
 .hh-ui .hh-btn-primary .hh-key { background: rgba(20, 11, 51, 0.12); border-color: rgba(20, 11, 51, 0.35); box-shadow: none; }
 .hh-ui .hh-btn-primary .hh-pad { background: rgba(20, 11, 51, 0.12); box-shadow: inset 0 0 0 2px rgba(20, 11, 51, 0.5); color: var(--on-lime); }
+.hh-ui .hh-btn-danger .hh-glyph { color: var(--ink-900); }
+.hh-ui .hh-btn-danger .hh-key { background: rgba(20, 11, 51, 0.1); border-color: rgba(20, 11, 51, 0.4); box-shadow: none; }
+.hh-ui .hh-btn-danger .hh-pad { background: rgba(20, 11, 51, 0.1); box-shadow: inset 0 0 0 2px rgba(20, 11, 51, 0.5); color: var(--ink-900); }
 
 .hh-ui .hh-iconbtn {
   position: relative;
@@ -389,8 +392,9 @@
   font-weight: 800;
   line-height: 1;
   color: #fff;
-  background: var(--sunset-pink);
-  box-shadow: 0 2px 8px rgba(255, 61, 139, 0.45);
+  /* Deeper than the brand pink so white numerals stay above 4.5:1. */
+  background: #D81B6A;
+  box-shadow: 0 2px 8px rgba(255, 61, 139, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.18);
   font-variant-numeric: tabular-nums;
 }
 
@@ -718,11 +722,11 @@
 
 .hh-ui .hh-search-clear {
   position: absolute;
-  right: 0.35rem;
+  right: 0.1rem;
   display: grid;
   place-items: center;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: var(--hit-sm);
+  height: var(--hit-sm);
   border-radius: 50%;
   color: var(--cream-dim);
 }
