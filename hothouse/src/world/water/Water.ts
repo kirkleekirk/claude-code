@@ -76,9 +76,9 @@ ${SHARED_PARS}
 ${ATMOSPHERE_GLSL}
 ${FOG_APPLY_GLSL}
 ${REFLECTION_GLSL}
-uniform vec3 uShallow;
-uniform vec3 uMid;
-uniform vec3 uDeep;
+uniform vec3 uWaterShallow;
+uniform vec3 uWaterMid;
+uniform vec3 uWaterDeep;
 uniform vec3 uKeyColor;    // colour × intensity of the key light
 uniform vec3 uKeyDir;
 uniform vec4 uLook;        // detail, distortion, glitter, foam
@@ -129,14 +129,14 @@ void main() {
 
   // Water body colour by depth, lit by sky and sun.
   float d = vDepth;
-  vec3 body = mix(uShallow, uMid, smoothstep(0.3, 3.5, d));
-  body = mix(body, uDeep, smoothstep(3.0, 11.0, d));
+  vec3 body = mix(uWaterShallow, uWaterMid, smoothstep(0.3, 3.5, d));
+  body = mix(body, uWaterDeep, smoothstep(3.0, 11.0, d));
   vec3 ambient = mix(uHorizon, uZenith, 0.5) * 0.55;
   float sunUp = clamp(uKeyDir.y * 4.0, 0.0, 1.0);
   vec3 lit = body * (ambient + uKeyColor * 0.22 * sunUp);
   // Light through wave crests at low sun: the turquoise glow of golden hour.
   float through = pow(clamp(dot(V, -uKeyDir) * 0.5 + 0.5, 0.0, 1.0), 3.0) * clamp(vCrest * 0.5 + 0.5, 0.0, 1.0);
-  lit += uShallow * uKeyColor * through * 0.14 * sunUp;
+  lit += uWaterShallow * uKeyColor * through * 0.14 * sunUp;
 
   // Reflection: planar mirror where available, sky otherwise.
   vec3 R = reflect(-V, N);
@@ -203,7 +203,7 @@ export class Water {
       uDepth: { value: this.depthTex },
       uWorldRect: { value: new Vector4(hf.origin, hf.origin, hf.size, 0) },
       uSea: this.uSea, uLook: this.uLook, uKeyColor: this.uKeyColor, uKeyDir: this.uKeyDir,
-      uShallow: this.uShallow, uMid: this.uMid, uDeep: this.uDeep, uReflectivity: this.uReflectivity,
+      uWaterShallow: this.uShallow, uWaterMid: this.uMid, uWaterDeep: this.uDeep, uReflectivity: this.uReflectivity,
       uReflection: reflection.uReflection, uReflectionMatrix: reflection.uReflectionMatrix, uReflectionInfo: reflection.uReflectionInfo,
     };
     shared.attach(uniforms);

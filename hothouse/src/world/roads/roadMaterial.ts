@@ -42,11 +42,14 @@ float n3 = texture2D(uNoise, wp * 0.37).b;
 vec3 asphalt = diffuseColor.rgb * (0.82 + 0.26 * n1) * (0.93 + 0.12 * n3);
 // Repair patches: slightly darker rectangles.
 vec2 pc = floor(wp / vec2(7.0, 5.0));
-float patchMask = step(0.86, hh2Hash(pc)) * step(0.15, fract(wp.x / 7.0)) * step(fract(wp.x / 7.0), 0.85) * step(0.2, fract(wp.y / 5.0)) * step(fract(wp.y / 5.0), 0.8);
+float patchMask = step(0.93, hh2Hash(pc)) * step(0.15, fract(wp.x / 7.0)) * step(fract(wp.x / 7.0), 0.85) * step(0.2, fract(wp.y / 5.0)) * step(fract(wp.y / 5.0), 0.8);
 asphalt *= 1.0 - patchMask * 0.18;
-// Cracks: thin ridges of the fine noise.
-float crack = smoothstep(0.92, 0.985, 1.0 - abs(texture2D(uNoise, wp * 0.09).b * 2.0 - 1.0)) * 0.35;
+// Cracks: sparse hairlines, only in older stretches of road.
+float crackZone = smoothstep(0.62, 0.8, texture2D(uNoise, wp * 0.004).r);
+float crack = smoothstep(0.975, 0.997, 1.0 - abs(texture2D(uNoise, wp * 0.09).b * 2.0 - 1.0)) * 0.22 * crackZone;
 asphalt *= 1.0 - crack;
+// Oil drips down the middle of each lane.
+asphalt *= 1.0 - smoothstep(0.72, 0.9, n2) * 0.08;
 rdPaint = 0.0;
 vec3 paintCol = PAINT_WHITE;
 rdRough = 0.0;
@@ -143,7 +146,7 @@ export function createRoadMaterial(kit: MaterialKit, reflection: PlanarReflectio
     fragmentSurface: SURFACE,
     fragmentFinal: FINAL,
   };
-  const m = kit.standard({ color: '#3D3742', roughness: 0.86, metalness: 0, wet: true, extend: ext });
+  const m = kit.standard({ color: '#3E3A3D', roughness: 0.86, metalness: 0, wet: true, extend: ext });
   m.polygonOffset = true;
   m.polygonOffsetFactor = -1;
   m.polygonOffsetUnits = -2;

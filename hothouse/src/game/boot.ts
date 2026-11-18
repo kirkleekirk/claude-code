@@ -2,14 +2,18 @@ import { EventBus } from '@/core/events';
 import { flags } from '@/core/flags';
 import { GameLoop } from '@/core/loop';
 import { log } from '@/core/log';
+import { LookDevStage } from '@/debug/LookDevStage';
 import { PipelineStage } from '@/debug/PipelineStage';
 import { installHarness } from '@/debug/harness';
+import { TimeSlicer } from '@/core/slicer';
+import { World } from '@/world/World';
 import { Input } from '@/input';
 import { PhysicsWorld } from '@/physics';
 import { Gfx, GfxUnsupportedError, MaterialKit, isQualityTier, profileForTier, profileFromSettings, webgl2Supported } from '@/render';
 import { LocalStore, SaveManager, Settings } from '@/save';
 import { showFallback } from './fallback';
 import { Game } from './Game';
+import { showSplash } from './splash';
 
 const isDev = import.meta.env.DEV;
 
@@ -34,6 +38,7 @@ export async function boot(): Promise<void> {
     showFallback('webgl');
     return;
   }
+  const splash = showSplash();
 
   const store = new LocalStore();
   const settings = new Settings(store);
@@ -61,7 +66,13 @@ export async function boot(): Promise<void> {
     mountTuningPanel(game);
   }
 
-  game.setStage(new PipelineStage(game.ctx));
+  if (flags.sandbox === 'pipeline') {
+    game.setStage(new PipelineStage(game.ctx));
+  } else {
+    const slicer = new TimeSlicer(14);
+    const world = await World.build({ gfx, kit, physics, slicer, progress: (f, label) => splash.set(f * 0.92, label) });
+    game.setStage(new LookDevStage(game.ctx, world));
+  }
 
   const loop = new GameLoop(game);
   game.loop = loop;
@@ -84,7 +95,10 @@ export async function boot(): Promise<void> {
   });
   addEventListener('pagehide', () => settings.flush());
 
+  splash.set(0.96, 'Warming up the neon');
   await gfx.prewarm();
   loop.start();
+  splash.set(1, 'Ready');
+  splash.remove();
   if (harness) harness.ready = true;
 }

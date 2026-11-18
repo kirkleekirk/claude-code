@@ -95,7 +95,8 @@ export function meshRibbon(graph: RoadGraph, e: RoadEdge, grid: ChunkGrid, y: nu
     const l = left[i]!, r = right[i]!;
     const il = b.vertex(l[0], yy, l[1], 0, 1, 0, -hw, s);
     const ir = b.vertex(r[0], yy, r[1], 0, 1, 0, hw, s);
-    if (i > 0) b.quadIdx(prevL, il, ir, prevR);
+    // Ribbons face up (+Y): left is the −hw side, so wind left→right→next right→next left.
+    if (i > 0) b.quadIdx(prevL, prevR, ir, il);
     prevL = il;
     prevR = ir;
   }
