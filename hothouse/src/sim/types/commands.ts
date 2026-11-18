@@ -83,6 +83,8 @@ export interface SimCommands {
   praise(crew: CrewId): SimResult;
   bonus(crew: CrewId, amount: number): SimResult;
   winBack(crew: CrewId): SimResult;
+  /** Hand an accepted request to a driver; they deliver from a property stash at auto-price. */
+  delegateRequest(request: RequestId, crew: CrewId): SimResult;
   // money
   payDebt(amount: number, from: 'dirty' | 'clean'): SimResult<DebtState>;
   buyFront(front: FrontId): SimResult<PurchaseResult>;

@@ -255,6 +255,14 @@ export interface CrewState {
   winBackUntil: number | null;
   /** Running timer used for production cadence. */
   timer: number;
+  /** Last praise (respect decays over time). */
+  praisedAt: number;
+  /** When morale first dropped below the quitting line, if it has. */
+  lowSince: number | null;
+  /** Consecutive in-game days without pay. */
+  unpaid: number;
+  /** Delegated request a driver is delivering, with its arrival time. */
+  delivery: { request: RequestId; stack: StackId; qty: number; at: number } | null;
 }
 
 export interface CandidateState {
