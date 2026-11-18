@@ -118,7 +118,9 @@ export class Score implements ScoreApi {
     }
     const now = g.ctx.currentTime;
     this.running?.player.scheduleUntil(now + LOOKAHEAD);
-    if (this.fading.length) this.fading = this.fading.filter((p) => !p.isStopped);
+    for (let i = this.fading.length - 1; i >= 0; i--) {
+      if (this.fading[i]!.isStopped) this.fading.splice(i, 1);
+    }
   }
 
   dispose(): void {

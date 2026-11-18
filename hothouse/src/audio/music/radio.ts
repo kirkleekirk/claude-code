@@ -121,7 +121,7 @@ export class Radio implements RadioApi {
     if (!g || id === null || this.audible <= 0.001) return;
     const now = this.clock();
     const ctxNow = g.ctx.currentTime;
-    const toCtx = (wall: number) => ctxNow + (wall - now);
+    // Wall time → context time is ctxNow + (wall − now); computed inline to stay allocation-free.
     const tl = this.timelines[id];
     const seg = tl.at(now);
     if (!this.current || this.current.seg !== seg) {
@@ -131,13 +131,13 @@ export class Radio implements RadioApi {
         this.upcoming = null;
       } else {
         this.current?.player.stop(ctxNow, 0.15);
-        this.current = this.start(seg, toCtx(seg.start), id);
+        this.current = this.start(seg, ctxNow + (seg.start - now), id);
       }
     }
     const end = seg.start + seg.dur;
     if (!this.upcoming && end - now < PRESTART) {
       const next = tl.after(seg);
-      this.upcoming = this.start(next, toCtx(next.start), id);
+      this.upcoming = this.start(next, ctxNow + (next.start - now), id);
     }
     this.current.player.scheduleUntil(ctxNow + LOOKAHEAD);
     this.upcoming?.player.scheduleUntil(ctxNow + LOOKAHEAD);
@@ -176,9 +176,14 @@ export class Radio implements RadioApi {
   }
 
   private tuneStatic(): void {
-    const g = this.graph!;
-    const d = makeDest(g.ctx, this.input!);
-    noise(d, { t: g.ctx.currentTime + 0.01, attack: 0.02, decay: 0.22, gain: 0.12, filter: { type: 'bandpass', freq: 3200, to: 900, sweep: 0.22, q: 1.4 } });
+    const g = this.graph;
+    if (!g || !this.input) return;
+    try {
+      const d = makeDest(g.ctx, this.input);
+      noise(d, { t: g.ctx.currentTime + 0.01, attack: 0.02, decay: 0.22, gain: 0.12, filter: { type: 'bandpass', freq: 3200, to: 900, sweep: 0.22, q: 1.4 } });
+    } catch {
+      // A closed context cannot make static; switching stations still works.
+    }
   }
 
   private refreshNowPlaying(): void {

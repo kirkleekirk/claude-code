@@ -44,8 +44,9 @@ export class AudioEngine implements AudioApi, HandleHost {
   private mixer: Mixer | null = null;
   private readonly ambience = new Ambience();
   private readonly voices = new VoiceManager();
-  private readonly loops = new Set<LazyLoop>();
-  private readonly engines = new Set<LazyEngine>();
+  /** Arrays rather than sets so the per-frame walk allocates no iterators. */
+  private readonly loops: LazyLoop[] = [];
+  private readonly engines: LazyEngine[] = [];
   private readonly volumes: Record<BusId, number> = { master: 0.8, music: 0.7, sfx: 0.85, ambience: 0.7, ui: 0.7, barks: 0.8 };
   private readonly muted: boolean;
   private timeScale = 1;
@@ -127,13 +128,20 @@ export class AudioEngine implements AudioApi, HandleHost {
       this.radio.update();
       return;
     }
-    const now = ctx.currentTime;
-    mixer.update(now);
-    this.voices.prune(now);
-    this.schedule();
-    this.ambience.update(fin(dt, 0));
-    for (const l of this.loops) l.tick();
-    for (const e of this.engines) e.tick();
+    try {
+      const now = ctx.currentTime;
+      mixer.update(now);
+      this.voices.prune(now);
+      this.schedule();
+      this.ambience.update(fin(dt, 0));
+      const loops = this.loops;
+      for (let i = loops.length - 1; i >= 0; i--) loops[i]!.tick();
+      const engines = this.engines;
+      for (let i = engines.length - 1; i >= 0; i--) engines[i]!.tick();
+    } catch (err) {
+      // Audio must never take the game loop down; the log is read by QA.
+      log.warn('audio', `update failed: ${String(err)}`);
+    }
   }
 
   suspend(): void {
@@ -155,6 +163,8 @@ export class AudioEngine implements AudioApi, HandleHost {
     this.disarmGesture();
     for (const l of [...this.loops]) l.stop(0.01);
     for (const e of [...this.engines]) e.dispose();
+    this.loops.length = 0;
+    this.engines.length = 0;
     const ctx = this._ctx;
     if (ctx) this.voices.stopAll(ctx.currentTime);
     this.radio.dispose();
@@ -185,8 +195,8 @@ export class AudioEngine implements AudioApi, HandleHost {
     return {
       state,
       voices: this.voices.active,
-      loops: this.loops.size,
-      engines: this.engines.size,
+      loops: this.loops.length,
+      engines: this.engines.length,
       latency: real ? fin((real.outputLatency ?? 0) + (real.baseLatency ?? 0), 0) : 0,
     };
   }
@@ -202,6 +212,15 @@ export class AudioEngine implements AudioApi, HandleHost {
     if (len > 1e-4) this.fwd = { x: fx / len, y: fy / len, z: fz / len };
     const ctx = this._ctx;
     if (!ctx) return;
+    try {
+      this.applyListener(ctx);
+    } catch (err) {
+      log.warn('audio', `listener update failed: ${String(err)}`);
+    }
+  }
+
+  private applyListener(ctx: BaseAudioContext): void {
+    const l = this.listener;
     const L = ctx.listener;
     const t = ctx.currentTime;
     if (L.positionX) {
@@ -309,13 +328,13 @@ export class AudioEngine implements AudioApi, HandleHost {
     const bus = opts.bus === 'ambience' || opts.bus === 'music' || opts.bus === 'ui' || opts.bus === 'barks' ? opts.bus : 'sfx';
     const h = new LazyLoop(this, sound, bus, clampf(opts.volume ?? 1, 0, 4, 1));
     if (opts.x !== undefined && opts.z !== undefined) h.setPosition(opts.x, opts.y ?? 0, opts.z);
-    if (!this.disposed) this.loops.add(h);
+    if (!this.disposed) this.loops.push(h);
     return h;
   }
 
   engine(profile: EngineProfile): EngineVoice {
     const h = new LazyEngine(this, profile);
-    if (!this.disposed) this.engines.add(h);
+    if (!this.disposed) this.engines.push(h);
     return h;
   }
 
@@ -340,8 +359,11 @@ export class AudioEngine implements AudioApi, HandleHost {
   }
 
   release(handle: LazyLoop | LazyEngine): void {
-    if (handle instanceof LazyLoop) this.loops.delete(handle);
-    else this.engines.delete(handle);
+    const list: Array<LazyLoop | LazyEngine> = handle instanceof LazyLoop ? this.loops : this.engines;
+    const i = list.indexOf(handle);
+    if (i < 0) return;
+    list[i] = list[list.length - 1]!;
+    list.pop();
   }
 
   // ── internals ──────────────────────────────────────────────────────────────
