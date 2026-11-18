@@ -214,7 +214,7 @@ export function escaped(ctx: SimCtx, level: number): SimResult {
   stat(ctx, 'escapes');
   addNotoriety(ctx, n * 1.5);
   addXp(ctx, XP.escape * n, 'escape');
-  ctx.state.today.closeCalls += 1;
+  ctx.ledger('closeCalls', 1);
   ctx.bump('heat');
   return ok(undefined);
 }

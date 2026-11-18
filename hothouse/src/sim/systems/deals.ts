@@ -170,15 +170,15 @@ function completeSale(
   stat(ctx, 'unitsSold', qty);
   if (perfect) stat(ctx, 'perfectDeals');
   if (flow >= 0.25) stat(ctx, 'flowTips');
-  const today = ctx.state.today;
-  today.deals += 1;
-  today.units += qty;
-  if (perfect) today.perfect += 1;
+
+  ctx.ledger('deals', 1);
+  ctx.ledger('units', qty);
+  if (perfect) ctx.ledger('perfect', 1);
 
   let streetHeat = 0;
   if (extras.witnessed) {
     streetHeat = 1;
-    today.closeCalls += 1;
+    ctx.ledger('closeCalls', 1);
     addNotoriety(ctx, 1.5);
   } else {
     addNotoriety(ctx, 0.12 * (p.tier === 'bloom' ? 1 : 1.5));

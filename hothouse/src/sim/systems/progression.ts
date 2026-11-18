@@ -13,7 +13,7 @@ export function addXp(ctx: SimCtx, amount: number, reason: string): void {
   if (n <= 0) return;
   const p = ctx.state.progression;
   p.xp += n;
-  ctx.state.today.xp += n;
+  ctx.ledger('xp', n);
   ctx.emit('sim:xp', { amount: n, total: p.xp, reason });
   const target = rankForXp(p.xp);
   while (p.rank < target && p.rank < MAX_RANK) {

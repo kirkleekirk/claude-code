@@ -141,7 +141,7 @@ function recordDiscoveries(
     ctx.state.notebook.push(page);
     product.page = page.index;
     stat(ctx, 'discoveries');
-    ctx.state.today.discoveries += 1;
+    ctx.ledger('discoveries', 1);
     ctx.earn(MIX.pageCash, 'dirty', 'reward');
     if (ctx.state.brand) ctx.state.brand.hype = Math.min(100, ctx.state.brand.hype + BRAND.perDiscovery);
     ctx.bump('notebook', 'brand');
@@ -196,7 +196,7 @@ export function mix(ctx: SimCtx, prop: PropertyId, base: StackId, additives: rea
   product.made += n;
   const out = stackId(product.id, st.stars);
   ctx.add(by === 'player' ? 'bag' : prop, out, n);
-  ctx.state.today.made += n;
+  ctx.ledger('made', n);
   stat(ctx, 'mixes');
   const rec = recordDiscoveries(ctx, product, isNew, run.tried, run.fired, st.stars, null);
   const xp = (by === 'player' ? 4 : 0) + rec.xp;
@@ -232,7 +232,7 @@ export function refine(ctx: SimCtx, prop: PropertyId, base: StackId, qty: number
   product.made += units;
   const out = stackId(product.id, st.stars);
   ctx.add(by === 'player' ? 'bag' : prop, out, units);
-  ctx.state.today.made += units;
+  ctx.ledger('made', units);
   stat(ctx, 'mixes');
   const rec = recordDiscoveries(ctx, product, isNew, [], [], st.stars, tier);
   const xp = Math.min(30, units * 3) + rec.xp;
@@ -403,7 +403,7 @@ function finishUnit(ctx: SimCtx, job: JobState): void {
   const { product, isNew } = ensureProduct(ctx, tier, base.strain, effects, job.recipe.base, job.station === 'workbench' ? job.recipe.additives : []);
   product.made += units;
   ctx.add(job.property, stackId(product.id, stars), units);
-  ctx.state.today.made += units;
+  ctx.ledger('made', units);
   if (isNew || tried.length) {
     const rec = recordDiscoveries(ctx, product, isNew, tried, fired, stars, tier === 'bloom' ? null : tier);
     if (rec.xp) addXp(ctx, rec.xp, 'job');

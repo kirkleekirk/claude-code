@@ -12,7 +12,7 @@ import { CONTENT, type Content } from '@/content/registry';
 import type { StrainDef, StrainId } from '@/content/strains';
 import type { UpgradeEffects } from '@/content/upgrades';
 import {
-  REV_CHANNELS, type CashReason, type Chip, type Message, type MessageKind, type RequestId, type RevChannel, type SimResult,
+  REV_CHANNELS, type CashReason, type Chip, type DayLedger, type Message, type MessageKind, type RequestId, type RevChannel, type SimResult,
   type SimState, type SimWorldInput, type StackId, type StoryBeat, type SupplyId,
 } from './api';
 import { DIFFICULTY } from './balance';
@@ -107,6 +107,12 @@ export class SimCtx {
     return `${prefix}${this.state.seq}`;
   }
 
+  /** Add to today's ledger and the running totals (Shift Reports diff the totals). */
+  ledger(key: Exclude<keyof DayLedger, 'day'>, n: number): void {
+    this.state.today[key] += n;
+    this.state.totals[key] += n;
+  }
+
   beat(beat: StoryBeat): void {
     const beats = this.state.story.beats;
     if (beats[beat] !== undefined) return;
@@ -123,10 +129,12 @@ export class SimCtx {
     if (n <= 0) return;
     const m = this.state.money;
     m[kind] += n;
-    m.lifetimeEarned += n;
-    if (kind === 'dirty') this.state.today.earnedDirty += n;
-    else this.state.today.earnedClean += n;
-    if (reason !== 'launder' && reason !== 'refund') this.state.progression.stats.earned += n;
+    // Laundering converts money and refunds return it; neither is income.
+    if (reason !== 'launder' && reason !== 'refund') {
+      m.lifetimeEarned += n;
+      this.ledger(kind === 'dirty' ? 'earnedDirty' : 'earnedClean', n);
+      this.state.progression.stats.earned += n;
+    }
     this.emit('sim:cash', { dirty: m.dirty, clean: m.clean, delta: n, kind, reason });
     this.bump('cash');
   }
@@ -161,7 +169,7 @@ export class SimCtx {
       paidWith = fromDirty === n ? 'dirty' : fromDirty === 0 ? 'clean' : 'mixed';
     }
     m.lifetimeSpent += n;
-    this.state.today.spent += n;
+    this.ledger('spent', n);
     this.state.progression.stats.spent += n;
     this.emit('sim:cash', { dirty: m.dirty, clean: m.clean, delta: -n, kind: paidWith === 'clean' ? 'clean' : 'dirty', reason });
     this.bump('cash');

@@ -98,7 +98,7 @@ export function tickFronts(ctx: SimCtx, dt: number): void {
     st.launderedToday += n;
     const clean = Math.round(n * (1 - FRONTS[id].fee));
     ctx.earn(clean, 'clean', 'launder');
-    ctx.state.today.laundered += n;
+    ctx.ledger('laundered', n);
     stat(ctx, 'laundered', n);
     changed = true;
   }

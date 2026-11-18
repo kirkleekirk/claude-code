@@ -125,7 +125,8 @@ export function createInitialState(seed: number, difficulty: Difficulty): SimSta
     story: { beats: {}, prologue: 0, prologueStepAt: 0, ending: null, flags: {} },
     news: [],
     today: zeroLedger(1),
-    lastReport: zeroLedger(1),
+    totals: zeroLedger(0),
+    lastReport: zeroLedger(0),
     seq: 10,
   };
 }

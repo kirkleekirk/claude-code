@@ -187,7 +187,7 @@ export function harvestPlant(ctx: SimCtx, plantId: PlantId, grades: readonly Sni
     if (snips.perfect > 0) stat(ctx, 'perfectSnips', snips.perfect);
   }
   stat(ctx, 'harvests');
-  ctx.state.today.harvested += units;
+  ctx.ledger('harvested', units);
 
   const firstOfStrain = !ctx.state.strains.grown.includes(p.strain);
   if (firstOfStrain) {

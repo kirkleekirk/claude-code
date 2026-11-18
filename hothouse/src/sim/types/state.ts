@@ -593,7 +593,9 @@ export interface SimState {
   story: StoryState;
   news: NewsItem[];
   today: DayLedger;
-  /** Ledger snapshot at the last Shift Report, for "since you were gone" digests. */
+  /** Running totals since the start of the game (same shape as a day's ledger). */
+  totals: DayLedger;
+  /** Snapshot of `totals` at the last Shift Report, for "since you were gone" digests. */
   lastReport: DayLedger;
   /** Monotonic counters for id generation. */
   seq: number;

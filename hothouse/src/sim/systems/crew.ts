@@ -421,8 +421,8 @@ function dealerStep(ctx: SimCtx, c: CrewState, dt: number): void {
     turf.sales += 1;
     turf.influence.player = Math.min(100, turf.influence.player + 0.8);
     for (const r of ['vale', 'mudflaps', 'zenith'] as const) turf.influence[r] = Math.max(0, turf.influence[r] - 0.3);
-    ctx.state.today.crewDeals += 1;
-    ctx.state.today.units += units;
+    ctx.ledger('crewDeals', 1);
+    ctx.ledger('units', units);
     stat(ctx, 'unitsSold', units);
     addNotoriety(ctx, 0.05);
     const regulars = ctx.content.customerList.filter((cd) => cd.district === def.district && ctx.state.customers[cd.id].unlocked);
@@ -479,7 +479,7 @@ function driverStep(ctx: SimCtx, c: CrewState): void {
   ctx.world = { ...ctx.world, place: saved };
   if (res.ok) {
     c.output += 1;
-    ctx.state.today.crewDeals += 1;
+    ctx.ledger('crewDeals', 1);
   }
 }
 
