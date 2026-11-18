@@ -9,7 +9,8 @@ export function Hud() {
   const { ui } = useUi();
   const hud = ui.hud;
   const visible = hud.visible.value && !hud.clean.value && ui.frontend.value === 'none';
-  const covered = ui.layers.value.some((l) => l.kind !== 'dialogue' && l.kind !== 'photoMode');
+  // Menus and blocking dialogue dim the HUD; subtitles and Photo Mode leave it alone.
+  const covered = ui.layers.value.some((l) => l.kind !== 'photoMode' && !(l.kind === 'dialogue' && l.script.blocking === false));
   const phone = ui.phoneOpen.value;
   if (!visible) return null;
   return (

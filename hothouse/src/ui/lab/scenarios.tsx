@@ -107,6 +107,7 @@ function reset(c: LabContext): void {
   ui.currentHint.value = null;
   ui.nowPlaying.value = null;
   c.showcase.value = null;
+  input.clearInjected();
   input.setBaseContext('none');
 }
 
@@ -284,8 +285,9 @@ export async function openScreen(c: LabContext, id: ScreenId): Promise<void> {
         { id: 'photo', label: 'Photo', icon: 'camera', run: () => undefined },
         { id: 'map', label: 'Map', icon: 'map', disabledReason: 'Not during a chase', run: () => undefined },
       ]);
-      ui.wheelOpen.value = true;
-      ui.wheelSelected.value = 1;
+      // Hold the wheel button like a player would; the runtime opens it after a short hold.
+      c.input.inject('quickWheel', 1);
+      c.input.inject('lookX', 1);
       break;
     case 'phone':
     case 'phone-settings':

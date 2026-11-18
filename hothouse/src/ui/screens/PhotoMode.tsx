@@ -82,7 +82,7 @@ export function PhotoModePanel({ entry }: { entry: Entry }) {
   });
 
   return (
-    <div class={`hh-photo hh-photo-${mode}`}>
+    <div class={`hh-photo hh-photo-mode-${mode}`}>
       {flash > 0 && <div key={flash} class="hh-photo-flash" aria-hidden="true" />}
       {mode === 'camera' ? (
         <div class={`hh-photo-bar hh-chip-glass${barVisible ? '' : ' is-faded'}`}>
