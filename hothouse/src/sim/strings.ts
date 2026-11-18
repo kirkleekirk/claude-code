@@ -102,4 +102,7 @@ export const t = defineStrings('sim', {
   vipIntro: 'One hears good things. One would like to be a customer.',
   passerbyShrug: 'They pocket it, nod politely, and wander off toward the beach.',
   noSamplesYet: 'Free samples unlock at Rank 3',
+  clearPlantsFirst: 'Harvest or clear the plants first',
+  finishJobsFirst: 'Finish or cancel the jobs at this station first',
+  flowHint: 'Move the {a} closer to the {b} (+{n} Flow)',
 });
