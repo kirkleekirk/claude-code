@@ -4,16 +4,21 @@ import {
   type LogoPalette, type LogoShape, type LogoType, type PackagingDef, type StuntDef, type StuntId,
 } from './brand';
 import { CONTACTS, type ContactDef } from './contacts';
+import { CREW, CREW_BY_ID, ROLES, type CrewDef, type RoleDef } from './crew';
 import { CUSTOMERS, CUSTOMER_LIST, type CustomerDef } from './customers';
 import { EFFECTS, EFFECT_IDS, type EffectDef, type EffectId } from './effects';
+import { EVENTS, type EventDef } from './events';
+import { FRONTS, type FrontDef } from './fronts';
 import { GOALS, type GoalDef } from './goals';
-import type { CustomerId, PlaceableId, PropertyId, ShopId, StoryContactId, TrackId, UpgradeId } from './ids';
+import type { CrewRole, CustomerId, EventId, FrontId, MissionId, PlaceableId, PropertyId, RivalId, ShopId, StoryContactId, TrackId, UpgradeId } from './ids';
+import { MISSIONS, type MissionDef } from './missions';
 import { HARMONIES, HARMONY_IDS, MIX_RULES, type HarmonyDef, type HarmonyId, type MixRule } from './mixRules';
 import { PLACEABLES, PLACEABLE_ORDER, type PlaceableDef } from './placeables';
 import { DISTRICTS, PLACES, type DistrictDef, type DistrictId, type PlaceDef, type PlaceId } from './places';
 import { PROLOGUE, type PrologueStepDef } from './prologue';
 import { PROPERTIES, TRACKS, TRACK_PRICES, type PropertyDef, type TrackDef } from './properties';
 import { RANKS, type RankDef } from './ranks';
+import { RIVALS, RIVAL_ACTIONS, type RivalActionDef, type RivalActionId, type RivalDef } from './rivals';
 import { SHOPS, type ShopDef } from './shops';
 import { STRAINS, STRAIN_IDS, type BaseStrainId, type StrainDef } from './strains';
 import { TURFS, TURF_IDS, type TurfDef, type TurfId } from './turfs';
@@ -62,6 +67,14 @@ export interface Content {
   };
   readonly prologue: readonly PrologueStepDef[];
   readonly goals: readonly GoalDef[];
+  readonly crew: Readonly<Record<string, CrewDef>>;
+  readonly crewList: readonly CrewDef[];
+  readonly roles: Readonly<Record<CrewRole, RoleDef>>;
+  readonly fronts: Readonly<Record<FrontId, FrontDef>>;
+  readonly rivals: Readonly<Record<RivalId, RivalDef>>;
+  readonly rivalActions: Readonly<Record<RivalActionId, RivalActionDef>>;
+  readonly events: Readonly<Record<EventId, EventDef>>;
+  readonly missions: Readonly<Record<MissionId, MissionDef>>;
 }
 
 export const CONTENT: Content = {
@@ -103,4 +116,12 @@ export const CONTENT: Content = {
   },
   prologue: PROLOGUE,
   goals: GOALS,
+  crew: CREW_BY_ID,
+  crewList: CREW,
+  roles: ROLES,
+  fronts: FRONTS,
+  rivals: RIVALS,
+  rivalActions: RIVAL_ACTIONS,
+  events: EVENTS,
+  missions: MISSIONS,
 };
