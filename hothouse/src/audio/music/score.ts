@@ -11,6 +11,8 @@ import { beatSec, type Layer, type Section, type Track } from './types';
  */
 
 const LOOKAHEAD = 0.35;
+/** Stingers sit a little above the music they punctuate (-9 dB calibration). */
+export const STINGER_GAIN = 0.355;
 const LAYERS: readonly Layer[] = ['drums', 'perc', 'bass', 'comp', 'pad', 'arp', 'lead', 'fx'];
 
 interface Running {
@@ -76,7 +78,7 @@ export class Score implements ScoreApi {
     const player = new TrackPlayer(g.ctx, { station: def.kit, output: g.music, hall: g.hall, loop: true, allow: (l) => enabled.has(l) });
     player.out.gain.setValueAtTime(0, now);
     player.out.gain.setValueAtTime(0, at);
-    player.out.gain.linearRampToValueAtTime(1, at + fade);
+    player.out.gain.linearRampToValueAtTime(player.baseGain, at + fade);
     this.running = { mood, def, track, player, t0: at, enabled };
     this.applyIntensity(true);
     player.play(track, at);
@@ -95,7 +97,12 @@ export class Score implements ScoreApi {
       if (this.pendingStingers.length < 2) this.pendingStingers.push(kind);
       return;
     }
-    const len = playStinger(g.ctx, g.music, g.hall, kind, g.ctx.currentTime + 0.02);
+    const trim = g.ctx.createGain();
+    trim.gain.value = STINGER_GAIN;
+    trim.connect(g.music);
+    const len = playStinger(g.ctx, trim, g.hall, kind, g.ctx.currentTime + 0.02);
+    const offline = typeof OfflineAudioContext !== 'undefined' && g.ctx instanceof OfflineAudioContext;
+    if (!offline && typeof setTimeout !== 'undefined') setTimeout(() => trim.disconnect(), (len + 4) * 1000);
     g.duck(kind === 'busted' || kind === 'missionFailed' ? 0.6 : 0.35, len);
   }
 

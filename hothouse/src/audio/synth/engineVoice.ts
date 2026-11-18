@@ -272,9 +272,10 @@ export class SynthEngineVoice {
     glide(this.sub.frequency, base * ((p.flavor ?? 'piston') === 'bigBlock' ? 0.5 : 1), t, 0.03);
     const bright = 280 + rpmN * 2600 * (0.45 + throttle * 0.8) + clamp01f(p.rasp) * 1400;
     glide(this.lp.frequency, Math.min(9000, bright), t, 0.04);
-    const level = 0.07 + load * 0.11 + throttle * 0.04 + rpmN * 0.03;
+    // Calibrated (offline QA) so a cruising player car sits under the in-car radio.
+    const level = (0.07 + load * 0.11 + throttle * 0.04 + rpmN * 0.03) * 0.55;
     glide(this.mainGain.gain, level * (this.isPlayer ? 1 : 0.85), t, 0.04);
-    glide(this.subGain.gain, (0.05 + clamp01f(p.bass) * 0.1) * (0.6 + load * 0.4), t, 0.05);
+    glide(this.subGain.gain, (0.05 + clamp01f(p.bass) * 0.1) * (0.6 + load * 0.4) * 0.55, t, 0.05);
     glide(this.cabin.frequency, f.interior && this.isPlayer ? 2400 : 14000, t, 0.15);
 
     if (this.detail) this.updateDetail(f, rpm, rpmN, throttle, load, speed, t);

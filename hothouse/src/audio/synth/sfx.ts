@@ -14,6 +14,18 @@ export interface SfxInfo {
 
 const I = (limit: number, ref: number, room = 0.08): SfxInfo => ({ limit, ref, room });
 
+/**
+ * Loudness calibration (dB) from the offline QA report: core-loop juice (snips, deals) is lifted,
+ * guns and big world events are tamed so the limiter never slams.
+ */
+export const SFX_TRIM_DB: Readonly<Partial<Record<Sfx, number>>> = {
+  snip: 7, leafPerk: 6, needPop: 6, plantSeed: 5, bagIt: 8, dropAdditive: 5, shake: 4, handoff: 9, cashFlick: 12, haggleTick: 10,
+  footstep: 3, jump: 7, vault: 7, cloth: 5, doorOpen: 11, gearShift: 7, cameraShutter: 13, crowdGasp: 7, buildRemove: 6,
+  reload: 6, dryFire: 16, hitMarker: 28, radioSquelch: 12, ricochet: 3,
+  gunPistol: -6, gunSmg: -6, gunShotgun: -6, gunRifle: -6, thunder: -5, firework: -4, bell: -6, gatorHiss: -6, horn: -3,
+  doorShop: -4, cookDone: -5, impactHeavy: -2, tirePop: -2, pressStamp: -3, reveal: -2,
+};
+
 /** Per-sound mixing and voice data. Exhaustive over `Sfx`. */
 export const SFX_INFO: Readonly<Record<Sfx, SfxInfo>> = {
   snip: I(4, 2), snipPerfect: I(3, 2), water: I(2, 3), leafPerk: I(4, 2), needPop: I(6, 2), plantSeed: I(3, 2), bagIt: I(2, 2),

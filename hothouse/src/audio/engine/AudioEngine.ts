@@ -8,10 +8,10 @@ import { Radio } from '../music/radio';
 import { Score } from '../music/score';
 import { playBlip } from '../synth/blip';
 import { makeDest, withOut } from '../synth/kit';
-import { playSfxRecipe, SFX_FLAT, SFX_INFO } from '../synth/sfx';
-import { playUi } from '../synth/ui';
+import { playSfxRecipe, SFX_FLAT, SFX_INFO, SFX_TRIM_DB } from '../synth/sfx';
+import { playUi, UI_TRIM_DB } from '../synth/ui';
 import type { ListenerState } from '../synth/engineVoice';
-import { clamp01f, clampf, fin } from '../util/params';
+import { clamp01f, clampf, dbToGain, fin } from '../util/params';
 import { LazyEngine, LazyLoop, makePanner, type HandleHost } from './handles';
 import { Mixer } from './mixer';
 import { VoiceManager } from './voices';
@@ -57,6 +57,8 @@ export class AudioEngine implements AudioApi, HandleHost {
   private fwd = { x: 0, y: 0, z: -1 };
   private detuneSeed = 1;
   private failed = false;
+  /** Rendering into an OfflineAudioContext (QA): no wall-clock timers. */
+  private offline = false;
 
   constructor(options: AudioOptions = {}) {
     this.muted = !!options.muted;
@@ -105,6 +107,7 @@ export class AudioEngine implements AudioApi, HandleHost {
    */
   build(ctx: BaseAudioContext, destination: AudioNode): void {
     this._ctx = ctx;
+    this.offline = typeof OfflineAudioContext !== 'undefined' && ctx instanceof OfflineAudioContext;
     const mixer = new Mixer(ctx, destination);
     this.mixer = mixer;
     for (const bus of Object.keys(this.volumes) as BusId[]) mixer.setVolume(bus, this.volumes[bus]);
@@ -246,9 +249,14 @@ export class AudioEngine implements AudioApi, HandleHost {
     if (!this.voices.admit(`ui:${sound}`, t, 3)) return;
     try {
       const vg = ctx.createGain();
+      vg.gain.value = dbToGain(UI_TRIM_DB[sound] ?? 0);
       vg.connect(mixer.input.ui);
-      const end = playUi(makeDest(ctx, vg, mixer.hallSend), sound, t);
-      this.track(`ui:${sound}`, vg, t, end);
+      // Reverb sends tap the recipe before the voice gain, so they get the same trim.
+      const send = ctx.createGain();
+      send.gain.value = vg.gain.value;
+      send.connect(mixer.hallSend);
+      const end = playUi(makeDest(ctx, vg, send), sound, t);
+      this.track(`ui:${sound}`, vg, t, end, send);
     } catch (err) {
       log.warn('audio', `ui sound ${sound} failed: ${String(err)}`);
     }
@@ -264,7 +272,7 @@ export class AudioEngine implements AudioApi, HandleHost {
     if (!this.voices.admit(sound, t, info.limit)) return;
     try {
       const vg = ctx.createGain();
-      vg.gain.value = clampf(opts.volume ?? 1, 0, 4, 1);
+      vg.gain.value = clampf(opts.volume ?? 1, 0, 4, 1) * dbToGain(SFX_TRIM_DB[sound] ?? 0);
       const bus = opts.bus && opts.bus !== 'master' ? mixer.input[opts.bus] : mixer.input.sfx;
       let room = info.room;
       let panner: PannerNode | null = null;
@@ -360,14 +368,15 @@ export class AudioEngine implements AudioApi, HandleHost {
       extra?.disconnect();
       extra2?.disconnect();
     };
+    const timers = !this.offline && typeof setTimeout !== 'undefined';
     this.voices.add({
       id, start: t, end: stopAt,
       stop: (at) => {
         vg.gain.setTargetAtTime(0, at, 0.015);
-        if (typeof setTimeout !== 'undefined') setTimeout(release, 200);
+        if (timers) setTimeout(release, 200);
       },
     });
-    if (typeof setTimeout !== 'undefined') setTimeout(release, Math.max(0, (stopAt - ctx.currentTime) * 1000) + 600);
+    if (timers) setTimeout(release, Math.max(0, (stopAt - ctx.currentTime) * 1000) + 600);
   }
 
   private async resumeContext(): Promise<void> {

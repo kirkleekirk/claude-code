@@ -43,6 +43,7 @@ export class SpotPlayer {
 
   constructor(private readonly ctx: BaseAudioContext, output: AudioNode, hall: AudioNode, readonly seg: Segment, station: StationId, t0: number) {
     this.out = ctx.createGain();
+    this.out.gain.value = seg.kind === 'ad' ? 0.74 : seg.kind === 'ident' ? 0.56 : 1.07;
     this.out.connect(output);
     // Radio voice: band-limited, lightly crushed, compressed.
     this.voiceIn = ctx.createGain();

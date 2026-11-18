@@ -61,8 +61,13 @@ export interface PlayerOptions {
   allow?: (layer: Layer) => boolean;
 }
 
+/** Calibrated so stations and score sit near -17 LUFS through the default mix (offline QA). */
+export const MUSIC_TRIM_DB = -12;
+
 export class TrackPlayer {
   readonly out: GainNode;
+  /** Output gain the player runs at (station trim + music calibration). */
+  readonly baseGain: number;
   private readonly mix: GainNode;
   private readonly hallIn: GainNode;
   private readonly delayIn: GainNode;
@@ -80,7 +85,8 @@ export class TrackPlayer {
 
   constructor(private readonly ctx: BaseAudioContext, private readonly opts: PlayerOptions) {
     const style = STYLES[opts.station];
-    this.out = this.gain(dbToGain(style.trimDb));
+    this.baseGain = dbToGain(style.trimDb + MUSIC_TRIM_DB);
+    this.out = this.gain(this.baseGain);
     this.mix = this.gain(1);
     this.mix.connect(this.out).connect(opts.output);
     this.hallIn = this.gain(1);

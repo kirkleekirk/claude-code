@@ -13,14 +13,14 @@ interface Duck {
   until: number;
 }
 
-/** Output safety: linear to 0.8, then a soft knee that never exceeds ±0.98. */
+/** Output safety: linear to 0.8, then a soft knee that never exceeds ±0.97. */
 function safetyCurve(): Float32Array<ArrayBuffer> {
   const n = 4096;
   const c = new Float32Array(new ArrayBuffer(n * 4));
   for (let i = 0; i < n; i++) {
     const x = (i / (n - 1)) * 2 - 1;
     const a = Math.abs(x);
-    const y = a < 0.8 ? a : 0.8 + 0.18 * Math.tanh((a - 0.8) / 0.18);
+    const y = a < 0.8 ? a : 0.8 + 0.17 * Math.tanh((a - 0.8) / 0.17);
     c[i] = Math.sign(x) * y;
   }
   return c;
@@ -80,7 +80,8 @@ export class Mixer {
     limiter.release.value = 0.09;
     const safety = ctx.createWaveShaper();
     safety.curve = safetyCurve();
-    safety.oversample = '2x';
+    // No oversampling: resampling filters would overshoot the ceiling.
+    safety.oversample = 'none';
     this.output = g(1);
     this.master.connect(glue).connect(limiter).connect(safety).connect(this.output).connect(destination);
     this.nodes.push(glue, limiter, safety);

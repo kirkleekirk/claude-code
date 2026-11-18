@@ -68,7 +68,7 @@ export function playBlip(ctx: BaseAudioContext, out: AudioNode, voice: VoiceProf
   soft.type = 'lowpass';
   soft.frequency.value = 3600 + bright * 1800;
   const env = ctx.createGain();
-  const peak = 0.36 * (0.7 + emph * 0.4);
+  const peak = 0.57 * (0.7 + emph * 0.4);
   env.gain.setValueAtTime(0, t);
   env.gain.linearRampToValueAtTime(peak, t + 0.008);
   env.gain.setValueAtTime(peak, t + len * 0.6);

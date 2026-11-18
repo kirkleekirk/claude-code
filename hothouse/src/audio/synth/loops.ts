@@ -128,7 +128,7 @@ const skid: Builder = (ctx, buf) => {
   o2.connect(toneGain);
   toneGain.connect(out);
   return p.voice(out, (level, slip, t) => {
-    glide(out.gain, level * 0.32, t, TAU);
+    glide(out.gain, level * 0.5, t, TAU);
     glide(bp.frequency, 1050 + slip * 700, t, TAU);
     glide(o1.frequency, 900 + slip * 260, t, TAU);
     glide(o2.frequency, 1360 + slip * 380, t, TAU);
@@ -335,7 +335,7 @@ const searchTension: Builder = (ctx, buf) => {
   p.lfo(sh.gain, 5.5, 0.008);
   shimmer.connect(sh).connect(out);
   return p.voice(out, (level, intensity, t) => {
-    glide(out.gain, level * 0.3, t, 0.4);
+    glide(out.gain, level * 0.17, t, 0.4);
     glide(lp.frequency, 260 + intensity * 900, t, 0.4);
     glide(throb.osc.frequency, 1.5 + intensity * 2.5, t, 0.4);
   }, ctx.currentTime);

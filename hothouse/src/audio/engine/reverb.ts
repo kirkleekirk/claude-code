@@ -49,16 +49,17 @@ export function buildImpulse(ctx: BaseAudioContext, spec: IrSpec): AudioBuffer {
       d[at] = d[at]! + amp;
     }
   }
-  // Normalize energy so different IRs sit at similar wet levels.
+  // Normalize to unit energy per channel: convolving broadband sound then keeps its level, so the
+  // wet level is set by the send and return gains alone.
   let energy = 0;
   for (let ch = 0; ch < 2; ch++) {
     const d = buf.getChannelData(ch);
     for (let i = 0; i < len; i++) energy += d[i]! * d[i]!;
   }
-  const norm = 1 / Math.sqrt(Math.max(1e-9, energy / 2) / (sr * 0.25));
+  const norm = 0.8 / Math.sqrt(Math.max(1e-9, energy / 2));
   for (let ch = 0; ch < 2; ch++) {
     const d = buf.getChannelData(ch);
-    for (let i = 0; i < len; i++) d[i] = d[i]! * norm * 0.5;
+    for (let i = 0; i < len; i++) d[i] = d[i]! * norm;
   }
   return buf;
 }
