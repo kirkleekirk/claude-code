@@ -180,6 +180,8 @@ export interface DealState {
   bandOffset: number;
   /** Counter-offer per unit after an over-reach, if any. */
   counterUnit: number | null;
+  /** The stack and quantity of the last offer, so a counter can be accepted in one tap. */
+  lastOffer: { stack: StackId; qty: number } | null;
   attempts: number;
   status: 'open' | 'closed' | 'walked';
 }
