@@ -208,6 +208,8 @@ requestAnimationFrame(loop);
 
 (globalThis as unknown as { __AUDIO_LAB__: unknown }).__AUDIO_LAB__ = {
   ready: true,
+  /** The live engine, for the real-time soak (qa/audio-live.mjs). */
+  audio,
   runReport: (withWavs = true) => runReport(() => undefined, withWavs),
   get last() {
     return last;
