@@ -153,12 +153,15 @@ export function playUi(d: Dest, sound: UiSound, t: number): number {
 }
 
 /**
- * Loudness calibration (dB) applied on top of each recipe, measured with the offline QA report:
- * ticks sit around -30 dBFS peak, everyday sounds -22, celebrations -6 to -10.
+ * Loudness calibration, measured with the offline QA report (qa/audio-render.mjs). Every UI voice
+ * gets UI_BASE_DB plus its own trim so ticks sit near −40 LUFS, everyday sounds −27, and
+ * celebrations −21, all under the music.
  */
+export const UI_BASE_DB = 17;
 export const UI_TRIM_DB: Readonly<Partial<Record<UiSound, number>>> = {
-  focus: 19, slider: 19, type: 26, wheelTick: 25, tab: 7, toggleOn: 17, toggleOff: 19, error: 15, locked: 15, stamp: 13,
-  hold: 12, photo: 18, close: 8, open: 6, back: 2, phoneClose: 3, buy: 2, cashBig: -2, rankUp: -3, discover: -4, perfect: -4,
+  focus: 11, back: 3, tab: 13, toggleOn: 8, toggleOff: 10, slider: 12, error: 6, locked: 5, open: 7, close: 22, phoneClose: 7,
+  toast: 9, type: 21, message: -1, cash: 0, cashBig: -1, buy: 3, rankUp: -2, discover: 1, stamp: 3, perfect: 2, hold: -6, holdDone: -2,
+  photo: 17, hint: -1, objective: -3, wheelTick: 29,
 };
 
 export const UI_SOUNDS: readonly UiSound[] = [

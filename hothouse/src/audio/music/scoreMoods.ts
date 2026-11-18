@@ -16,6 +16,8 @@ export interface MoodDef {
   readonly layers: Partial<Record<Layer, number>>;
   /** Default intensity when the mood starts. */
   readonly intensity: number;
+  /** Loudness calibration (dB) from the offline QA report. */
+  readonly trimDb: number;
 }
 
 function loopTrack(p: Omit<Track, 'index' | 'seed' | 'motifs' | 'sections' | 'bars' | 'title' | 'artist' | 'leadCenter'> & {
@@ -41,7 +43,7 @@ function loopTrack(p: Omit<Track, 'index' | 'seed' | 'motifs' | 'sections' | 'ba
 export const MOODS: Readonly<Record<Exclude<ScoreMood, 'silent'>, MoodDef>> = {
   // The main-menu groove: lazy synthwave in D minor, sevenths, soft arps and a hook.
   menu: {
-    kit: 'sunset', intensity: 0.6,
+    kit: 'sunset', intensity: 0.6, trimDb: 0,
     layers: { pad: 0, bass: 0.1, arp: 0.25, drums: 0.35, lead: 0.5 },
     track: loopTrack({
       station: 'sunset', seed: 0x6d656e75, bars: 16, bpm: 92, swing: 0.04, tonic: 50, scale: 'minor', progression: [0, 5, 2, 6],
@@ -51,7 +53,7 @@ export const MOODS: Readonly<Record<Exclude<ScoreMood, 'silent'>, MoodDef>> = {
     }),
   },
   explore: {
-    kit: 'haze', intensity: 0.4,
+    kit: 'haze', intensity: 0.4, trimDb: -3.3,
     layers: { comp: 0, pad: 0, arp: 0.3, bass: 0.4, drums: 0.55, lead: 0.75 },
     track: loopTrack({
       station: 'haze', seed: 0x6578706c, bars: 16, bpm: 80, swing: 0.18, tonic: 53, scale: 'major', progression: [0, 3, 1, 4],
@@ -61,7 +63,7 @@ export const MOODS: Readonly<Record<Exclude<ScoreMood, 'silent'>, MoodDef>> = {
     }),
   },
   calm: {
-    kit: 'haze', intensity: 0.3,
+    kit: 'haze', intensity: 0.3, trimDb: -0.8,
     layers: { pad: 0, comp: 0.2, arp: 0.45, bass: 0.6 },
     track: loopTrack({
       station: 'haze', seed: 0x63616c6d, bars: 8, bpm: 70, swing: 0.1, tonic: 52, scale: 'lydian', progression: [0, 1, 0, 4],
@@ -71,7 +73,7 @@ export const MOODS: Readonly<Record<Exclude<ScoreMood, 'silent'>, MoodDef>> = {
     }),
   },
   tension: {
-    kit: 'bass', intensity: 0.4,
+    kit: 'bass', intensity: 0.4, trimDb: 1.8,
     layers: { pad: 0, bass: 0, drums: 0.3, arp: 0.55, comp: 0.75 },
     track: loopTrack({
       station: 'bass', seed: 0x74656e73, bars: 8, bpm: 100, swing: 0, tonic: 52, scale: 'phrygian', progression: [0, 1, 0, 6],
@@ -81,7 +83,7 @@ export const MOODS: Readonly<Record<Exclude<ScoreMood, 'silent'>, MoodDef>> = {
     }),
   },
   chase: {
-    kit: 'sunset', intensity: 0.6,
+    kit: 'sunset', intensity: 0.6, trimDb: 2.5,
     layers: { drums: 0, bass: 0, comp: 0.3, arp: 0.45, pad: 0.55, lead: 0.75, fx: 0.9 },
     track: loopTrack({
       station: 'sunset', seed: 0x63686173, bars: 8, bpm: 136, swing: 0, tonic: 52, scale: 'minor', progression: [0, 5, 6, 4],
@@ -91,7 +93,7 @@ export const MOODS: Readonly<Record<Exclude<ScoreMood, 'silent'>, MoodDef>> = {
     }),
   },
   raid: {
-    kit: 'bass', intensity: 0.6,
+    kit: 'bass', intensity: 0.6, trimDb: 0,
     layers: { pad: 0, drums: 0, bass: 0.2, comp: 0.5, lead: 0.7 },
     track: loopTrack({
       station: 'bass', seed: 0x72616964, bars: 8, bpm: 96, swing: 0, tonic: 50, scale: 'phrygian', progression: [0, 0, 1, 6],
@@ -101,7 +103,7 @@ export const MOODS: Readonly<Record<Exclude<ScoreMood, 'silent'>, MoodDef>> = {
     }),
   },
   setpiece: {
-    kit: 'sunset', intensity: 0.8,
+    kit: 'sunset', intensity: 0.8, trimDb: 1.7,
     layers: { pad: 0, drums: 0, bass: 0, arp: 0.3, lead: 0.55, fx: 0.8 },
     track: loopTrack({
       station: 'sunset', seed: 0x73657470, bars: 16, bpm: 118, swing: 0, tonic: 53, scale: 'minor', progression: [5, 6, 0, 0],

@@ -1,5 +1,5 @@
 import type { ScoreApi, ScoreMood } from '../api';
-import { clamp01f } from '../util/params';
+import { clamp01f, dbToGain } from '../util/params';
 import { TrackPlayer } from './player';
 import { energyFor, MOODS, type MoodDef } from './scoreMoods';
 import { playStinger, type StingerKind } from './stingers';
@@ -11,8 +11,11 @@ import { beatSec, type Layer, type Section, type Track } from './types';
  */
 
 const LOOKAHEAD = 0.35;
-/** Stingers sit a little above the music they punctuate (-9 dB calibration). */
-export const STINGER_GAIN = 0.355;
+/** Stingers sit a little above the music they punctuate (calibrated, offline QA report). */
+export const STINGER_BASE_DB = 8.5;
+export const STINGER_TRIM_DB: Readonly<Record<StingerKind, number>> = {
+  logo: -1.3, title: -1.5, rankUp: -0.4, discovery: 5.6, busted: -0.4, escaped: -0.6, missionPassed: -2.4, missionFailed: 0.6, perfect: 5.6,
+};
 const LAYERS: readonly Layer[] = ['drums', 'perc', 'bass', 'comp', 'pad', 'arp', 'lead', 'fx'];
 
 interface Running {
@@ -78,7 +81,7 @@ export class Score implements ScoreApi {
     const player = new TrackPlayer(g.ctx, { station: def.kit, output: g.music, hall: g.hall, loop: true, allow: (l) => enabled.has(l) });
     player.out.gain.setValueAtTime(0, now);
     player.out.gain.setValueAtTime(0, at);
-    player.out.gain.linearRampToValueAtTime(player.baseGain, at + fade);
+    player.out.gain.linearRampToValueAtTime(player.baseGain * dbToGain(def.trimDb), at + fade);
     this.running = { mood, def, track, player, t0: at, enabled };
     this.applyIntensity(true);
     player.play(track, at);
@@ -98,7 +101,7 @@ export class Score implements ScoreApi {
       return;
     }
     const trim = g.ctx.createGain();
-    trim.gain.value = STINGER_GAIN;
+    trim.gain.value = dbToGain(STINGER_BASE_DB + STINGER_TRIM_DB[kind]);
     trim.connect(g.music);
     const len = playStinger(g.ctx, trim, g.hall, kind, g.ctx.currentTime + 0.02);
     const offline = typeof OfflineAudioContext !== 'undefined' && g.ctx instanceof OfflineAudioContext;

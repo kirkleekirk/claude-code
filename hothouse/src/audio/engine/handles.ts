@@ -1,8 +1,8 @@
 import type { EngineFrame, EngineProfile, EngineVoice, LoopHandle, LoopSound } from '../api';
-import { LOOP_BUILDERS, LOOP_REF, type LoopVoice } from '../synth/loops';
+import { LOOP_BUILDERS, LOOP_REF, LOOP_TRIM_DB, type LoopVoice } from '../synth/loops';
 import { SynthEngineVoice, type ListenerState } from '../synth/engineVoice';
 import { buffers } from './buffers';
-import { clamp01f, clampf, fin, glide } from '../util/params';
+import { clamp01f, clampf, dbToGain, fin, glide } from '../util/params';
 
 /**
  * Handles the game holds for sustained sounds. They are valid before the audio context exists:
@@ -28,6 +28,8 @@ export class LazyLoop implements LoopHandle {
   private positioned = false;
   private stopped = false;
   private voice: LoopVoice | null = null;
+  /** Calibration and per-handle volume, after the voice (its own level is clamped to 0–1). */
+  private trim: GainNode | null = null;
   private panner: PannerNode | null = null;
   private lastDist = -1;
   private lastT = 0;
@@ -48,7 +50,7 @@ export class LazyLoop implements LoopHandle {
     this.level = clamp01f(level);
     if (param !== undefined) this.param = clamp01f(param);
     const ctx = this.host.ctx;
-    if (this.voice && ctx) this.voice.set(this.level * this.volume, this.param, ctx.currentTime);
+    if (this.voice && ctx) this.voice.set(this.level, this.param, ctx.currentTime);
   }
 
   setPosition(x: number, y: number, z: number): void {
@@ -70,7 +72,13 @@ export class LazyLoop implements LoopHandle {
       glide(this.voice.output.gain, 0, t, fade / 4);
       this.voice.stop(t + fade + 0.05);
       const panner = this.panner;
-      if (panner && typeof setTimeout !== 'undefined') setTimeout(() => panner.disconnect(), (fade + 0.5) * 1000);
+      const trim = this.trim;
+      if (typeof setTimeout !== 'undefined') {
+        setTimeout(() => {
+          panner?.disconnect();
+          trim?.disconnect();
+        }, (fade + 0.5) * 1000);
+      }
     }
     this.voice = null;
     this.host.release(this);
@@ -85,14 +93,17 @@ export class LazyLoop implements LoopHandle {
       const out = this.host.busFor(this.bus);
       if (!out) return;
       this.voice = LOOP_BUILDERS[this.sound](ctx, buffers(ctx));
+      this.trim = ctx.createGain();
+      this.trim.gain.value = this.volume * dbToGain(LOOP_TRIM_DB[this.sound] ?? 0);
+      this.voice.output.connect(this.trim);
       if (this.positioned) {
         this.panner = makePanner(ctx, LOOP_REF[this.sound], true);
         setPannerPosition(this.panner, this.x, this.y, this.z, ctx.currentTime);
-        this.voice.output.connect(this.panner).connect(out);
+        this.trim.connect(this.panner).connect(out);
       } else {
-        this.voice.output.connect(out);
+        this.trim.connect(out);
       }
-      this.voice.set(this.level * this.volume, this.param, ctx.currentTime);
+      this.voice.set(this.level, this.param, ctx.currentTime);
     }
     if (this.positioned && DOPPLER.has(this.sound)) {
       const l = this.host.listener;

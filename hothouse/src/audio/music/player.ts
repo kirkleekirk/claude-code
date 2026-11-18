@@ -62,7 +62,7 @@ export interface PlayerOptions {
 }
 
 /** Calibrated so stations and score sit near -17 LUFS through the default mix (offline QA). */
-export const MUSIC_TRIM_DB = -12;
+export const MUSIC_TRIM_DB = -9;
 
 export class TrackPlayer {
   readonly out: GainNode;

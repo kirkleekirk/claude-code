@@ -10,6 +10,8 @@ import { Score } from '../music/score';
 import { MOODS } from '../music/scoreMoods';
 import { DJ_VOICE, SpotPlayer } from '../music/spots';
 import { playStinger, type StingerKind } from '../music/stingers';
+import { STINGER_BASE_DB, STINGER_TRIM_DB } from '../music/score';
+import { dbToGain } from '../util/params';
 import type { Segment } from '../music/station';
 import { beatSec } from '../music/types';
 import { SynthEngineVoice } from '../synth/engineVoice';
@@ -239,7 +241,10 @@ export async function runReport(progress: (label: string) => void = () => undefi
   progress('Stingers');
   for (const kind of ['logo', 'title', 'rankUp', 'discovery', 'busted', 'escaped', 'missionPassed', 'missionFailed', 'perfect'] as StingerKind[]) {
     r.stingers[kind] = analyze(await render(3.5, (ctx, mixer) => {
-      playStinger(ctx, mixer.input.music, mixer.hallSend, kind, 0.05);
+      const trim = ctx.createGain();
+      trim.gain.value = dbToGain(STINGER_BASE_DB + STINGER_TRIM_DB[kind]);
+      trim.connect(mixer.input.music);
+      playStinger(ctx, trim, mixer.hallSend, kind, 0.05);
     }));
   }
 
@@ -307,8 +312,16 @@ function evaluate(r: Report): Check[] {
   const uiL = Object.entries(r.ui).map(([k, s]) => [k, s.lufs] as const);
   const uiMax = Math.max(...uiL.map(([, l]) => l));
   const uiMin = Math.min(...uiL.map(([, l]) => l));
-  checks.push({ name: 'UI family never loud (≤ −14 LUFS)', ok: uiMax <= -14, detail: `loudest ${uiL.find(([, l]) => l === uiMax)![0]} ${uiMax}` });
-  checks.push({ name: 'UI family within 22 LU', ok: uiMax - uiMin <= 22, detail: `spread ${(uiMax - uiMin).toFixed(1)} LU (${uiMin} … ${uiMax})` });
+  checks.push({ name: 'UI family never louder than the music (≤ −18 LUFS)', ok: uiMax <= -18, detail: `loudest ${uiL.find(([, l]) => l === uiMax)![0]} ${uiMax}` });
+  checks.push({ name: 'UI ticks to fanfares within 24 LU', ok: uiMax - uiMin <= 24, detail: `spread ${(uiMax - uiMin).toFixed(1)} LU (${uiMin} … ${uiMax})` });
+  const everyday = ['confirm', 'back', 'open', 'close', 'toast', 'message', 'buy', 'cash', 'phoneOpen', 'phoneClose'].map((k) => r.ui[k]!.lufs);
+  const evSpread = Math.max(...everyday) - Math.min(...everyday);
+  checks.push({ name: 'everyday UI sounds within 6 LU of each other', ok: evSpread <= 6, detail: `spread ${evSpread.toFixed(1)} LU` });
+  const juice = ['snip', 'cashFlick', 'handoff', 'haggleWin', 'perfectDeal'].map((k) => [k, r.sfx[k]!.lufs] as const);
+  checks.push({
+    name: 'core-loop juice is audible next to music (≥ −30 LUFS)', ok: juice.every(([, l]) => l >= -30),
+    detail: juice.map(([k, l]) => `${k} ${l}`).join(' · '),
+  });
 
   const stationMeans = Object.entries(r.stations).map(([st, rows]) => [st, rows.reduce((a, x) => a + x.stats.lufs, 0) / rows.length] as const);
   const sMax = Math.max(...stationMeans.map(([, l]) => l));
@@ -336,6 +349,21 @@ function evaluate(r: Report): Check[] {
   checks.push({
     name: 'score: chase louder than menu, intensity adds energy', ok: tr.chase.lufs > tr.menu.lufs - 1 && tr.chaseIntense.lufs > tr.chase.lufs,
     detail: `menu ${tr.menu.lufs} · chase@0.3 ${tr.chase.lufs} · chase@1 ${tr.chaseIntense.lufs}`,
+  });
+  const st = Object.entries(r.stingers).map(([k, s]) => [k, s.lufs] as const);
+  checks.push({
+    name: 'stingers punctuate the music (−21 … −14 LUFS)', ok: st.every(([, l]) => l >= -21 && l <= -14),
+    detail: st.map(([k, l]) => `${k} ${l}`).join(' · '),
+  });
+  const sp = Object.entries(r.spots).map(([k, s]) => [k, s.lufs] as const);
+  checks.push({
+    name: 'ads, idents and news match the music (±2.5 LU of −19)', ok: sp.every(([, l]) => Math.abs(l + 19) <= 2.5),
+    detail: sp.map(([k, l]) => `${k} ${l}`).join(' · '),
+  });
+  const lp = Object.entries(r.loops).map(([k, s]) => [k, s.lufs] as const);
+  checks.push({
+    name: 'loops sit under the music (−42 … −18 LUFS)', ok: lp.every(([, l]) => l >= -42 && l <= -18),
+    detail: lp.map(([k, l]) => `${k} ${l}`).join(' · '),
   });
   checks.push({ name: 'radio plays through its real-time path', ok: r.radio.stats.peakDb > -40 && r.radio.nowPlaying.length > 0, detail: r.radio.nowPlaying });
   return checks;

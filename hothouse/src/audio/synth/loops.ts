@@ -347,6 +347,11 @@ export const LOOP_BUILDERS: Readonly<Record<LoopSound, Builder>> = {
 
 export const LOOP_IDS = Object.keys(LOOP_BUILDERS) as LoopSound[];
 
+/** Loudness calibration per loop (dB), from the offline QA report. */
+export const LOOP_TRIM_DB: Readonly<Partial<Record<LoopSound, number>>> = {
+  skid: 4, rain: 2, wind: -2, siren: -2, helicopter: 1, sprinkler: -3, boatWake: -4, airboatFan: -2, neonHum: 6, alarm: 1, searchTension: -2,
+};
+
 /** Default panner size per loop (metres). */
 export const LOOP_REF: Readonly<Record<LoopSound, number>> = {
   skid: 8, rain: 6, wind: 10, siren: 45, helicopter: 90, sprinkler: 4, growHum: 3, boatWake: 10, airboatFan: 25,

@@ -37,7 +37,7 @@ const BED_IDS: readonly BedId[] = ['surf', 'lap', 'city', 'traffic', 'insects', 
 const EVENT_IDS: readonly EventId[] = ['gull', 'crash', 'clank', 'horn', 'bird', 'dawnBird', 'dog', 'heron', 'frog', 'thunder', 'siren', 'chime', 'buoy', 'mower'];
 const BED_SCALE: Record<BedId, number> = {
   surf: 0.36, lap: 0.35, city: 0.4, traffic: 0.32, insects: 0.11, cicadas: 0.07, crickets: 0.07, wind: 0.32,
-  rain: 0.5, rumble: 0.4, crowd: 0.3, room: 0.22, music: 0.3,
+  rain: 0.42, rumble: 0.32, crowd: 0.3, room: 0.22, music: 0.3,
 };
 
 const bump = (x: number, a: number, b: number, c: number, d: number): number =>

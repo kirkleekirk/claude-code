@@ -70,7 +70,7 @@ export const STYLES: Readonly<Record<StationId, StyleDef>> = {
     chorusStabs: false,
     vinyl: false,
     pump: 0.35,
-    trimDb: 0,
+    trimDb: -1.4,
   },
   calle: {
     station: 'calle',
@@ -98,7 +98,7 @@ export const STYLES: Readonly<Record<StationId, StyleDef>> = {
     chorusStabs: true,
     vinyl: false,
     pump: 0,
-    trimDb: -0.5,
+    trimDb: 1,
   },
   haze: {
     station: 'haze',
@@ -126,7 +126,7 @@ export const STYLES: Readonly<Record<StationId, StyleDef>> = {
     chorusStabs: false,
     vinyl: true,
     pump: 0,
-    trimDb: 1.5,
+    trimDb: 1,
   },
   bass: {
     station: 'bass',
@@ -154,6 +154,6 @@ export const STYLES: Readonly<Record<StationId, StyleDef>> = {
     chorusStabs: false,
     vinyl: false,
     pump: 0.25,
-    trimDb: -1.5,
+    trimDb: -1.4,
   },
 };

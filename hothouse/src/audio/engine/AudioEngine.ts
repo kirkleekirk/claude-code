@@ -8,8 +8,8 @@ import { Radio } from '../music/radio';
 import { Score } from '../music/score';
 import { playBlip } from '../synth/blip';
 import { makeDest, withOut } from '../synth/kit';
-import { playSfxRecipe, SFX_FLAT, SFX_INFO, SFX_TRIM_DB } from '../synth/sfx';
-import { playUi, UI_TRIM_DB } from '../synth/ui';
+import { playSfxRecipe, SFX_BASE_DB, SFX_FLAT, SFX_INFO, SFX_TRIM_DB } from '../synth/sfx';
+import { playUi, UI_BASE_DB, UI_TRIM_DB } from '../synth/ui';
 import type { ListenerState } from '../synth/engineVoice';
 import { clamp01f, clampf, dbToGain, fin } from '../util/params';
 import { LazyEngine, LazyLoop, makePanner, type HandleHost } from './handles';
@@ -249,7 +249,7 @@ export class AudioEngine implements AudioApi, HandleHost {
     if (!this.voices.admit(`ui:${sound}`, t, 3)) return;
     try {
       const vg = ctx.createGain();
-      vg.gain.value = dbToGain(UI_TRIM_DB[sound] ?? 0);
+      vg.gain.value = dbToGain(UI_BASE_DB + (UI_TRIM_DB[sound] ?? 0));
       vg.connect(mixer.input.ui);
       // Reverb sends tap the recipe before the voice gain, so they get the same trim.
       const send = ctx.createGain();
@@ -272,7 +272,7 @@ export class AudioEngine implements AudioApi, HandleHost {
     if (!this.voices.admit(sound, t, info.limit)) return;
     try {
       const vg = ctx.createGain();
-      vg.gain.value = clampf(opts.volume ?? 1, 0, 4, 1) * dbToGain(SFX_TRIM_DB[sound] ?? 0);
+      vg.gain.value = clampf(opts.volume ?? 1, 0, 4, 1) * dbToGain(SFX_BASE_DB + (SFX_TRIM_DB[sound] ?? 0));
       const bus = opts.bus && opts.bus !== 'master' ? mixer.input[opts.bus] : mixer.input.sfx;
       let room = info.room;
       let panner: PannerNode | null = null;

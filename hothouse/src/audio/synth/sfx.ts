@@ -15,15 +15,19 @@ export interface SfxInfo {
 const I = (limit: number, ref: number, room = 0.08): SfxInfo => ({ limit, ref, room });
 
 /**
- * Loudness calibration (dB) from the offline QA report: core-loop juice (snips, deals) is lifted,
- * guns and big world events are tamed so the limiter never slams.
+ * Loudness calibration from the offline QA report: SFX_BASE_DB plus a per-sound trim puts guns
+ * and heavy impacts near −20 LUFS, everyday actions −24 to −28, footsteps −31, ticks −32.
  */
+export const SFX_BASE_DB = 14;
 export const SFX_TRIM_DB: Readonly<Partial<Record<Sfx, number>>> = {
-  snip: 7, leafPerk: 6, needPop: 6, plantSeed: 5, bagIt: 8, dropAdditive: 5, shake: 4, handoff: 9, cashFlick: 12, haggleTick: 10,
-  footstep: 3, jump: 7, vault: 7, cloth: 5, doorOpen: 11, gearShift: 7, cameraShutter: 13, crowdGasp: 7, buildRemove: 6,
-  reload: 6, dryFire: 16, hitMarker: 28, radioSquelch: 12, ricochet: 3,
-  gunPistol: -6, gunSmg: -6, gunShotgun: -6, gunRifle: -6, thunder: -5, firework: -4, bell: -6, gatorHiss: -6, horn: -3,
-  doorShop: -4, cookDone: -5, impactHeavy: -2, tirePop: -2, pressStamp: -3, reveal: -2,
+  snip: 8, snipPerfect: -2, water: -4, leafPerk: 9, needPop: 17, plantSeed: 5, bagIt: 3, dropAdditive: 7, shake: -1, reveal: -8,
+  cookDone: -7, pressStamp: -8, handoff: 8, cashFlick: 13, haggleTick: 19, haggleWin: -3, haggleMiss: 1, perfectDeal: -6,
+  footstep: 10, jump: 14, vault: 10, cloth: 8, punch: -1, bodyFall: -8, doorOpen: 12, doorClose: -2, ignition: -3, horn: -4,
+  backfire: 6, turboBlow: -2, gearShift: 17, impactLight: 1, impactHeavy: -8, scrape: -5, glassBreak: -2, hydraulic: -10,
+  boost: -3, flowFull: -4, splash: -4, boatSlap: -1, doorShop: -8, bell: -6, vending: -10, neonBuzz: 2, thunder: -3,
+  firework: -10, cameraShutter: 16, crowdCheer: 2, crowdGasp: 5, gull: 4, gatorHiss: -15, pickup: 2, buildPlace: 5,
+  buildRemove: 4, buildInvalid: 8, sirenChirp: 4, radioSquelch: 16, heatUp: -5, heatDown: -1, busted: -13, escaped: -5,
+  gunPistol: -1, gunSmg: 4, gunShotgun: -5, gunRifle: -3, reload: 6, dryFire: 30, ricochet: 13, hitMarker: 16,
 };
 
 /** Per-sound mixing and voice data. Exhaustive over `Sfx`. */
