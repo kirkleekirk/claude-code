@@ -9,6 +9,9 @@
 }
 
 .hh-ui .hh-hud.is-covered { opacity: calc(var(--hud-opacity) * 0.22); }
+.hh-ui .hh-hud.is-phone .hh-hud-tr,
+.hh-ui .hh-hud.is-phone .hh-hud-br,
+.hh-ui .hh-hud.is-phone .hh-hud-bottom { opacity: 0; transition: opacity var(--t-med) var(--ease); }
 
 .hh-ui .hh-hud-corner {
   position: absolute;
@@ -87,8 +90,8 @@
 }
 
 .hh-ui .hh-heat.is-cooling { opacity: 0; }
-.hh-ui .hh-heat-dial { width: 5.4rem; height: 3rem; overflow: visible; }
-.hh-ui .hh-heat-ray-bg { fill: rgba(255, 244, 227, 0.12); }
+.hh-ui .hh-heat-dial { width: 6.6rem; height: 3.65rem; overflow: visible; }
+.hh-ui .hh-heat-ray-bg { fill: rgba(255, 244, 227, 0.16); }
 .hh-ui .hh-heat-ray { transition: opacity var(--t-slow) var(--ease); }
 .hh-ui .hh-heat-ray-1 { fill: var(--heat-1); }
 .hh-ui .hh-heat-ray-2 { fill: var(--heat-2); }

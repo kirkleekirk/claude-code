@@ -63,7 +63,10 @@ export function HeatGauge() {
   const { ui } = useUi();
   const heat = Math.max(0, Math.min(5, ui.hud.heat.value));
   const searching = ui.hud.heatSearching.value;
-  const level = Math.ceil(heat - 0.001);
+  const live = Math.ceil(heat - 0.001);
+  const lastLevel = useRef(live);
+  if (live > 0) lastLevel.current = live;
+  const level = live > 0 ? live : lastLevel.current;
   const [shown, setShown] = useState(heat > 0);
   useEffect(() => {
     if (heat > 0) setShown(true);
@@ -82,8 +85,8 @@ export function HeatGauge() {
           const a = Math.PI * (1 - (i + 0.5) / 5);
           const fill = Math.max(0, Math.min(1, heat - i));
           const r0 = 22;
-          const r1 = 40 + i * 3.5;
-          const w = 0.17;
+          const r1 = 41 + i * 3.5;
+          const w = 0.24;
           const p = (r: number, aa: number) => `${(60 + Math.cos(aa) * r).toFixed(2)} ${(62 - Math.sin(aa) * r).toFixed(2)}`;
           const d = `M${p(r0, a - w * 0.55)}L${p(r1, a - w * 0.28)}L${p(r1 + 3, a)}L${p(r1, a + w * 0.28)}L${p(r0, a + w * 0.55)}Z`;
           return (
@@ -251,7 +254,10 @@ export function AreaBanner() {
   const area = ui.hud.area.value;
   const [shown, setShown] = useState<string | null>(null);
   useEffect(() => {
-    if (!area) return;
+    if (!area) {
+      setShown(null);
+      return;
+    }
     setShown(area);
     const t = setTimeout(() => setShown(null), 3200);
     return () => clearTimeout(t);

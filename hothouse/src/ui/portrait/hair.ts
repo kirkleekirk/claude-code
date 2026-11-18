@@ -173,14 +173,16 @@ function addExtra(L: HairLayers, f: FaceShape, b: number, r: Recipe): void {
       for (let y = 110; y < 236; y += 12) L.detail.push(`M${100 - f.cheek * b - 14} ${y}h${(f.cheek * b + 14) * 2}`);
       break;
     case 'cornrows':
-      for (let i = -3; i <= 3; i++) L.detail.push(smoothOpen([[100 + i * 9, r.line + 2], [100 + i * 11, top + 6], [100 + i * 13, top - 4]]));
+      for (let i = -3; i <= 3; i++) L.detail.push(smoothOpen([[100 + i * 8.5, r.line + 1], [100 + i * 8, top + 12], [100 + i * 6.5, top + 2]]));
       break;
-    case 'waves':
-      for (let y = 130; y < 220; y += 22) {
-        L.detail.push(smoothOpen([[100 + f.cheek * b + 2, y], [100 + f.cheek * b + 12, y + 8], [100 + f.cheek * b + 4, y + 16]]));
-        L.detail.push(smoothOpen([[100 - f.cheek * b - 2, y], [100 - f.cheek * b - 12, y + 8], [100 - f.cheek * b - 4, y + 16]]));
+    case 'waves': {
+      const x = f.cheek * b + 9;
+      for (let y = 132; y < 214; y += 24) {
+        L.detail.push(smoothOpen([[100 + x - 3, y], [100 + x + 4, y + 8], [100 + x - 2, y + 16]]));
+        L.detail.push(smoothOpen([[100 - x + 3, y], [100 - x - 4, y + 8], [100 - x + 2, y + 16]]));
       }
       break;
+    }
     case 'pony':
       L.back.push(smoothClosed([[100 + T * 0.5, top + 4], [100 + T + 26, top + 2], [100 + T + 34, 120], [100 + T + 22, 168], [100 + T + 8, 120], [100 + T * 0.7, top + 30]], 1));
       L.front.push(circle(100 + T * 0.62, top + 8, 7));

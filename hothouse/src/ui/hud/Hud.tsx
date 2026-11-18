@@ -10,9 +10,10 @@ export function Hud() {
   const hud = ui.hud;
   const visible = hud.visible.value && !hud.clean.value && ui.frontend.value === 'none';
   const covered = ui.layers.value.some((l) => l.kind !== 'dialogue' && l.kind !== 'photoMode');
+  const phone = ui.phoneOpen.value;
   if (!visible) return null;
   return (
-    <div class={`hh-hud${covered ? ' is-covered' : ''}`}>
+    <div class={`hh-hud${covered ? ' is-covered' : ''}${phone ? ' is-phone' : ''}`}>
       <div class="hh-hud-corner hh-hud-tl">
         <ObjectiveBanner />
       </div>

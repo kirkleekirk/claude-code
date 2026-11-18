@@ -205,11 +205,17 @@
   margin-right: -0.4rem;
 }
 
-.hh-ui .hh-btn-glyph .hh-holdring {
-  position: absolute;
-  width: 2.05rem;
-  height: 2.05rem;
-  color: currentColor;
+.hh-ui .hh-btn-glyph {
+  grid-auto-flow: column;
+  gap: 0.35rem;
+}
+
+.hh-ui .hh-btn-holdword {
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.85;
 }
 
 .hh-ui .hh-btn-primary .hh-glyph { color: var(--on-lime); }

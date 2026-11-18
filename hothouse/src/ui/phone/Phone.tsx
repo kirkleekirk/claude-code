@@ -98,7 +98,7 @@ function Home() {
       <div class="hh-phone-greeting">
         <span class="hh-label">{greeting(hours)}</span>
       </div>
-      <SearchField value={query} onInput={setQuery} />
+      <SearchField value={query} onInput={setQuery} placeholder={tc('search')} />
       {query.trim() ? (
         <div class="hh-phone-results">
           <div class="hh-label">{tPhone('results')}</div>

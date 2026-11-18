@@ -6,6 +6,7 @@ import { useFocusable, useSound, useTick, useUi } from '../core/context';
 import { HOLD_SECONDS } from '../core/focus';
 import { Icon } from '../icons/Icon';
 import type { IconName } from '../icons/names';
+import { tc } from '../strings/common';
 import { Glyph } from './Glyph';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -135,11 +136,12 @@ export function Button(props: ButtonProps) {
       {loading ? <span class="hh-spinner" aria-hidden="true" /> : icon && <Icon name={icon} class="hh-btn-icon" />}
       {children !== undefined && <span class="hh-btn-label">{children}</span>}
       {iconRight && <Icon name={iconRight} class="hh-btn-icon" />}
-      {glyph && (hold && !holdToToggle ? (
-        <span class="hh-btn-glyph"><HoldRing progress={progress} size={22} /><Glyph action={glyph} size="sm" /></span>
-      ) : (
-        <span class="hh-btn-glyph"><Glyph action={glyph} size="sm" /></span>
-      ))}
+      {glyph && (
+        <span class="hh-btn-glyph">
+          {hold && !holdToToggle && <span class="hh-btn-holdword">{tc('hold')}</span>}
+          <Glyph action={glyph} size="sm" />
+        </span>
+      )}
     </button>
   );
 }

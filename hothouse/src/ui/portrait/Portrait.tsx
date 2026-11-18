@@ -119,7 +119,7 @@ function mouth(expr: Expression, lip: string, line: string) {
 function facialHair(kind: number, f: FaceShape, b: number, color: string, pid: string) {
   if (kind === 0) return null;
   const moustache = <path d="M86 140Q93 133 100 137Q107 133 114 140Q107 139 100 141Q93 139 86 140Z" fill={color} />;
-  if (kind === 1) return <path d={jawOutline(f, b, 0.2)} fill={`url(#${pid}-stubble)`} opacity=".9" />;
+  if (kind === 1) return <path d={jawOutline(f, b, 0.2)} fill={`url(#${pid}-stubble)`} opacity=".8" />;
   if (kind === 2) return moustache;
   if (kind === 3) return (
     <g>
@@ -371,9 +371,10 @@ export function Portrait({ appearance: a, expression = 'neutral', size = '6rem',
             <stop offset="0.5" stop-color="#3A2A7A" />
             <stop offset="1" stop-color="#FF3D8B" />
           </linearGradient>
-          <pattern id={`${pid}-stubble`} width="4" height="4" patternUnits="userSpaceOnUse">
-            <circle cx="1" cy="1" r=".75" fill={hairShade} opacity=".75" />
-            <circle cx="3" cy="3" r=".7" fill={hairShade} opacity=".6" />
+          <pattern id={`${pid}-stubble`} width="3" height="3" patternUnits="userSpaceOnUse">
+            <rect width="3" height="3" fill={hairShade} opacity=".16" />
+            <circle cx=".8" cy=".8" r=".45" fill={hairShade} opacity=".45" />
+            <circle cx="2.3" cy="2.1" r=".4" fill={hairShade} opacity=".35" />
           </pattern>
           {printPattern(outfit, pid)}
           <clipPath id={`${pid}-head`}><path d={head} /></clipPath>
