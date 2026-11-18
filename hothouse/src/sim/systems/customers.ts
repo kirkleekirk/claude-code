@@ -221,7 +221,14 @@ export function replyRequest(ctx: SimCtx, id: string, reply: 'accept' | 'counter
     r.status = 'accepted';
     ctx.text(r.customer, 'player', t('chipAccept'));
   } else if (reply === 'counter') {
-    if (r.counter !== null || r.story) {
+    if (r.story && r.counter === null) {
+      // Scripted requests always say yes to a cheeky counter, for a small bump.
+      ctx.text(r.customer, 'player', t('chipCounter'));
+      r.offer += 10;
+      r.counter = r.offer;
+      r.status = 'accepted';
+      ctx.text(r.customer, r.customer, t('counterYes', { amount: fmt.money(r.offer) }));
+    } else if (r.counter !== null) {
       r.status = 'accepted';
       ctx.text(r.customer, 'player', t('chipAccept'));
     } else {
