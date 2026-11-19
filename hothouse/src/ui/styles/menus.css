@@ -166,7 +166,7 @@
   flex: 1;
 }
 
-.hh-ui .hh-settings-body { flex: 1; min-height: 0; margin: 0 -0.5rem; padding: 0 0.5rem; }
+.hh-ui .hh-settings-body { flex: 1; min-height: 0; margin: -6px calc(-1 * max(6px, 0.5rem)); padding: 6px max(6px, 0.5rem); }
 .hh-ui .hh-settings-rows { display: flex; flex-direction: column; gap: 0.1rem; padding: 3px 2px; }
 
 .hh-ui .hh-settings-content.is-compact .hh-tabs-list { overflow-x: auto; scrollbar-width: none; }

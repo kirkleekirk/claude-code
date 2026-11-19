@@ -538,7 +538,8 @@
 
 /* ── scroll area ────────────────────────────────────────────────────────── */
 
-.hh-ui .hh-scrollarea { min-height: 0; }
+/* Ring room: the viewport reaches 6px past its content so focus rings on edge items are not clipped. */
+.hh-ui .hh-scrollarea { min-height: 0; margin: -6px; padding: 6px; }
 
 .hh-ui .hh-scrollarea.fade-top { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 2rem); mask-image: linear-gradient(to bottom, transparent 0, #000 2rem); }
 .hh-ui .hh-scrollarea.fade-bottom { -webkit-mask-image: linear-gradient(to top, transparent 0, #000 2rem); mask-image: linear-gradient(to top, transparent 0, #000 2rem); }
