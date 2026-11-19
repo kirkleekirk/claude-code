@@ -22,7 +22,6 @@ let failed = 0;
 let shot = 0;
 const lab = (fn, arg) => page.evaluate(fn, arg);
 const press = (action, value = 1) => lab(([a, v]) => globalThis.__UILAB__.press(a, v), [action, value]);
-const hold = (action, ms) => lab(([a, m]) => globalThis.__UILAB__.hold(a, m), [action, ms]);
 const open = (id) => lab((s) => globalThis.__UILAB__.open(s), id);
 const focused = () => lab(() => globalThis.__UILAB__.focusedText());
 const state = () => lab(() => {
@@ -199,9 +198,15 @@ await press('uiX', 1);
 await press('uiConfirm');
 await wait(150);
 check('a tap does not confirm a hold action', (await lab(() => globalThis.__conf)) === null);
-await hold('uiConfirm', 850);
-await wait(150);
-check('holding A confirms', (await lab(() => globalThis.__conf)) === true);
+// Hold until it confirms (up to 4 s): the UI counts frame time, so a slow machine takes longer.
+await lab(() => globalThis.__UILAB__.input.inject('uiConfirm', 1));
+const holdStart = Date.now();
+let confirmed = false;
+while (Date.now() - holdStart < 4000 && !(confirmed = await lab(() => globalThis.__conf === true))) await wait(50);
+const heldMs = Date.now() - holdStart;
+await lab(() => globalThis.__UILAB__.input.inject('uiConfirm', null));
+check('holding A confirms', confirmed, `${heldMs} ms`);
+check('the hold is not instant', heldMs >= 450, `${heldMs} ms`);
 
 // 10. Quick wheel: hold LB, push right, release to choose.
 await open('hud');

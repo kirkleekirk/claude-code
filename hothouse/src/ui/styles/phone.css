@@ -1,6 +1,8 @@
 /* The phone: a sun-faded burner with a cracked corner. */
 
 .hh-ui .hh-phone {
+  --phone-h: min(46rem, calc(100vh - 2 * var(--safe)));
+  --phone-hints-h: 2.25rem;
   position: absolute;
   right: calc(var(--safe) + 1rem);
   bottom: var(--safe);
@@ -8,7 +10,7 @@
   flex-direction: column;
   align-items: center;
   gap: 0.5rem;
-  height: min(46rem, calc(100vh - 2 * var(--safe)));
+  height: var(--phone-h);
   animation: hh-phone-in 360ms var(--spring) both;
 }
 
@@ -24,16 +26,19 @@
 }
 
 .hh-ui .hh-phone.is-landscape {
+  --phone-h: min(40rem, calc(100vh - 2 * var(--safe) - 2rem));
   right: 50%;
   bottom: 50%;
-  height: min(40rem, calc(100vh - 2 * var(--safe) - 2rem));
+  height: var(--phone-h);
   transform: translate(50%, 50%);
   animation: hh-fade-in var(--t-slow) var(--ease) both;
 }
 
 .hh-ui .hh-phone-device {
   position: relative;
-  flex: 1;
+  /* A definite height lets the aspect ratio set the width, so long app text never widens the phone. */
+  flex: none;
+  height: calc(var(--phone-h) - var(--phone-hints-h) - 0.5rem);
   min-height: 0;
   min-width: 0;
   max-width: calc(100vw - 2 * var(--safe));
@@ -175,6 +180,8 @@
 
 .hh-ui .hh-phone-hints {
   display: flex;
+  align-items: center;
+  height: var(--phone-hints-h);
   gap: 1rem;
   padding: 0.3rem 0.8rem;
   border-radius: 999px;
