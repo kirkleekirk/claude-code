@@ -35,6 +35,13 @@ export class FaceState {
     this.nextBlink = 1 + rng.next() * 3;
   }
 
+  /** Open the eyes and hold off the next blink (stills and close-ups). */
+  deferBlink(seconds: number): void {
+    this.blinkT = 0;
+    this.nextBlink = seconds;
+    this.double = false;
+  }
+
   set(e: FaceExpression, hold?: number): void {
     this.expr = e;
     this.hold = hold ?? 0;

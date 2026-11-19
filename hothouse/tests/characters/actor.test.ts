@@ -107,6 +107,37 @@ describe('actors', () => {
     }
   });
 
+  it('keeps planted feet from sliding while walking and running', () => {
+    const f = createCharacters(kit());
+    for (const speed of [1.4, 3.4, 5.6]) {
+      const a = f.create(person(`slide${speed}`));
+      a.loco.speed = speed;
+      const foot = a.bones[Bone.footL]!;
+      const cur = new Vector3();
+      const start = new Vector3();
+      let z = 0;
+      let inContact = false, contacts = 0, worst = 0;
+      const ground = (0.085 + 0.0008) * a.prop.scale + a.prop.lift * a.prop.scale;
+      for (let k = 0; k < 480; k++) {
+        z -= speed * DT;
+        a.root.position.set(0, 0, z);
+        a.update(DT, 4);
+        a.root.updateMatrixWorld(true);
+        foot.getWorldPosition(cur);
+        // Flat-footed spans only: rolling on the heel or the ball pivots the ankle on purpose.
+        const flat = k > 120 && cur.y < ground;
+        if (flat && !inContact) {
+          start.copy(cur);
+          contacts++;
+        }
+        if (flat) worst = Math.max(worst, Math.hypot(cur.x - start.x, cur.z - start.z));
+        inContact = flat;
+      }
+      expect(contacts).toBeGreaterThan(2);
+      expect(worst).toBeLessThan(0.02);
+    }
+  });
+
   it('raises footsteps, landing, contact and seating events', () => {
     const f = createCharacters(kit());
     const a = f.create(person('events'));

@@ -45,9 +45,9 @@ const TORSO: ReadonlyArray<readonly [number, number, number, number]> = [
   [1.22, 0.151, 0.106, -0.014],
   [1.28, 0.157, 0.109, -0.012],
   [1.34, 0.162, 0.105, -0.007],
-  [1.39, 0.167, 0.097, -0.001],
-  [1.43, 0.165, 0.088, 0.004],
-  [1.46, 0.142, 0.077, 0.006],
+  [1.39, 0.172, 0.097, -0.001],
+  [1.425, 0.174, 0.089, 0.004],
+  [1.455, 0.152, 0.078, 0.006],
   [1.485, 0.098, 0.065, 0.008],
   [1.505, 0.06, 0.055, 0.009],
 ];
@@ -107,7 +107,7 @@ function torsoRegion(ctx: BodyCtx, y: number): number {
 function torsoInflate(ctx: BodyCtx, y: number): number {
   const c = ctx.c;
   const midriff = c.midriff && y > c.midriff[0] && y < c.midriff[1];
-  if (y >= c.topHem && !midriff) return c.topLoose;
+  if (y >= c.topHem && !midriff) return c.topLoose + (y < 1.0 ? 0.014 + (1.0 - y) * 0.16 : 0);
   if (midriff) return 0;
   if (c.pantsEnd >= 0) return y < 1.005 ? 0.006 : 0;
   return 0.002;
@@ -349,7 +349,7 @@ export function buildHead(ctx: BodyCtx, face: number): void {
 
 /** Arm radius profile: distance below the shoulder joint → radius (neutral limbs). */
 const ARM_R: ReadonlyArray<readonly [number, number]> = [
-  [-0.022, 0.02], [-0.014, 0.034], [-0.002, 0.044], [0.018, 0.049], [0.05, 0.048], [0.1, 0.046], [0.16, 0.044], [0.22, 0.042],
+  [-0.022, 0.02], [-0.014, 0.033], [-0.002, 0.042], [0.018, 0.046], [0.05, 0.046], [0.1, 0.045], [0.16, 0.043], [0.22, 0.041],
   [0.27, 0.0395], [0.29, 0.039], [0.31, 0.0395], [0.35, 0.042], [0.4, 0.041], [0.45, 0.036], [0.5, 0.031], [0.537, 0.0285],
 ];
 

@@ -211,7 +211,7 @@ export function buildLapels(ctx: BodyCtx): void {
       o.w1 = w;
     };
     const front = 0.11 * (0.55 + 0.45 * p.chest) + 0.016;
-    b.tube([[sx * 0.052, 1.452, -0.07], [sx * 0.072, 1.37, -front + 0.004], [sx * 0.05, 1.27, -front - 0.002], [sx * 0.012, 1.14, -front + 0.004]], (t) => 0.006 * (1 - 0.4 * t), 6, paint, 4.5);
+    b.tube([[sx * 0.075, 1.47, -0.064], [sx * 0.098, 1.39, -front + 0.006], [sx * 0.06, 1.28, -front - 0.002], [sx * 0.012, 1.15, -front + 0.004]], (t) => 0.006 * (1 - 0.4 * t), 6, paint, 4.5);
     b.end();
   }
 }

@@ -10,6 +10,33 @@ export const LocoEvent = { FOOT_L: 1, FOOT_R: 2, LAND: 4 } as const;
 
 const TAU = Math.PI * 2;
 const LEG_REACH = (SEG.thigh + SEG.shin) * 0.992;
+/** Ball of the foot ahead of the ankle, and the ankle's height above the ball (rig rest pose). */
+const FOOT_BALL = 0.118;
+const FOOT_RISE = SEG.ankleY - 0.028;
+/** Heel contact behind and below the ankle. */
+const HEEL_BACK = 0.055;
+const HEEL_RISE = SEG.ankleY;
+/** Share of the stance spent rolling from heel strike to a flat foot. */
+const HEEL_ROLL = 0.14;
+
+/**
+ * Ankle (along, up, pitch) for a foot pivoting on its heel. `a` is where the ankle would be
+ * with the foot flat; `pitch` > 0 lifts the toes.
+ */
+function rollHeel(a: number, pitch: number, out: Float32Array): void {
+  const c = Math.cos(pitch), s = Math.sin(pitch);
+  out[0] = a - HEEL_BACK + HEEL_BACK * c - HEEL_RISE * s;
+  out[1] = HEEL_BACK * s + HEEL_RISE * c - HEEL_RISE;
+  out[2] = pitch;
+}
+
+/** Ankle (along, up, pitch) for a foot rolling over its planted ball; `lift` raises the heel. */
+function rollBall(a: number, lift: number, out: Float32Array): void {
+  const c = Math.cos(lift), s = Math.sin(lift);
+  out[0] = a + FOOT_BALL - FOOT_BALL * c + FOOT_RISE * s;
+  out[1] = FOOT_BALL * s + FOOT_RISE * c - FOOT_RISE;
+  out[2] = -lift;
+}
 
 /** Idle variants: [duration (s), weight in the random pick]. */
 const IDLES: ReadonlyArray<readonly [number, number]> = [
@@ -54,6 +81,8 @@ export class Locomotor {
   private readonly fy = new Float32Array(2);
   private readonly fz = new Float32Array(2);
   private readonly fp = new Float32Array(2);
+  private readonly out = new Float32Array(3);
+  private drop = 0;
 
   constructor(private readonly rng: Rng) {
     this.time = rng.next() * 100;
@@ -90,11 +119,19 @@ export class Locomotor {
     this.landT += dt;
 
     // Cadence (steps per second) rises with speed; one cycle is two steps.
-    const cadence = s < 2 ? 1.15 + 0.5 * s : 2.15 + 0.16 * (s - 2);
+    // Stylized quick steps: running shortens ground contact and quickens the cadence so the
+    // stance sweep stays inside the leg's reach; walking keeps a double-supported stance.
+    const cadence = s < 2 ? 1.2 + 0.58 * s : 2.36 + 0.3 * (s - 2);
     const freq = cadence * 0.5;
     this.phase = fract(this.phase + dt * freq * (0.25 + 0.75 * this.move));
-    const duty = lerp(lerp(0.64, 0.58, smoothstep(0.3, 1.8, s)), lerp(0.42, 0.32, smoothstep(3.5, 7.5, s)), this.gait);
-    const half = (s * duty) / freq * 0.5;
+    const duty = lerp(lerp(0.64, 0.6, smoothstep(0.3, 1.8, s)), lerp(0.36, 0.24, smoothstep(3, 8, s)), this.gait);
+    // The body travels `sweep` (body-space metres) over one stance; the planted part of the
+    // foot moves back exactly that far, rolling heel → flat → ball so the ankle needs less reach.
+    const sweep = (s * duty) / freq / p.scale;
+    const aStart = sweep * 0.4, aEnd = -sweep * 0.6;
+    const heelOff = lerp(0.55, 0.45, this.gait);
+    const heelMax = lerp(0.8, 1.05, this.gait) * this.move;
+    const toeUp = 0.22 * this.move * (1 - this.gait * 0.6);
     const lift = lerp(0.07 + 0.025 * Math.min(s, 2), 0.13 + 0.035 * Math.min(s, 8), this.gait) * this.move * (1 - 0.4 * this.crouch);
     const dx = -Math.sin(this.angle), dz = -Math.cos(this.angle);
     const backpedal = smoothstep(1.9, 2.6, Math.abs(this.angle));
@@ -142,15 +179,28 @@ export class Locomotor {
       let along: number, up: number, pitch: number;
       if (pi < duty) {
         const u = pi / duty;
-        along = lerp(half, -half, u);
-        up = smoothstep(0.72, 1, u) * 0.035 * this.move;
-        pitch = (u < 0.14 ? (1 - u / 0.14) * 0.2 : 0) * this.move - smoothstep(0.6, 1, u) * 0.42 * this.move;
+        const a = lerp(aStart, aEnd, u);
+        if (u < HEEL_ROLL) {
+          // Heel strike: the heel is planted and the toes come down.
+          const ph2 = toeUp * (1 - smoothstep(0, HEEL_ROLL, u));
+          rollHeel(a, ph2, this.out);
+        } else {
+          // Flat, then the heel peels off and the foot rolls over the planted ball.
+          rollBall(a, heelMax * smoothstep(heelOff, 1, u), this.out);
+        }
+        along = this.out[0]!;
+        up = this.out[1]!;
+        pitch = this.out[2]!;
       } else {
+        // Swing: from toe-off to the next heel strike along a lifted arc.
         const u = (pi - duty) / (1 - duty);
         const e = u * u * (3 - 2 * u);
-        along = lerp(-half, half, e);
-        up = lift * Math.sin(Math.PI * Math.min(1, u * (1 + 0.25 * this.gait))) ** 0.85;
-        pitch = lerp(-0.45, 0.22, u) * this.move;
+        rollBall(aEnd, heelMax, this.out);
+        const a0 = this.out[0]!, y0 = this.out[1]!, p0 = this.out[2]!;
+        rollHeel(aStart, toeUp, this.out);
+        along = lerp(a0, this.out[0]!, e);
+        up = lerp(y0, this.out[1]!, u) + lift * Math.sin(Math.PI * Math.min(1, u * (1 + 0.3 * this.gait))) ** 0.85;
+        pitch = lerp(p0, this.out[2]!, smoothstep(0, 0.85, u));
       }
       // Footstep at heel strike (the stance begins as the phase wraps).
       if (this.prevPh[i]! > 0.75 && pi < 0.25 && this.move > 0.35 && loco.grounded) events |= i === 0 ? LocoEvent.FOOT_L : LocoEvent.FOOT_R;
@@ -181,13 +231,16 @@ export class Locomotor {
       fy[i] = y;
       fz[i] = z;
       fp[i] = pitch;
-      // Lowest pelvis height the leg allows (hip joint ≈ 0.055 below the hips bone).
+      // Lowest pelvis height a planted, flat foot allows (hip joint ≈ 0.055 below the hips bone);
+      // rolling and swinging feet may fall a little short instead of pulling the body down.
       const hx = sx * p.hipX - x, hz = -z;
       const reachY = y + Math.sqrt(Math.max(0, LEG_REACH * LEG_REACH - hx * hx - hz * hz)) + 0.055 - SEG.hipY;
       lowest = Math.min(lowest, reachY);
     }
     if (air > 0.001) hipsY = lerp(hipsY, 0.02, air);
-    pose.hips[1] = Math.min(hipsY, lowest);
+    // Drop the pelvis as far as both feet need, smoothed so it never pops.
+    this.drop = damp(this.drop, Math.max(0, hipsY - lowest), 30, dt);
+    pose.hips[1] = hipsY - this.drop;
     pose.set(Bone.hips, hipsPitch, hipsYaw, hipsRoll);
     // ── spine, chest, head ───────────────────────────────────────────────
     const lookAround = this.idle === 1 ? Math.sin(Math.min(1, this.idleT / 3.2) * TAU) * 0.65 * idleK : 0;

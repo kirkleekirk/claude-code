@@ -15,14 +15,15 @@ async function server() {
 }
 
 const GAITS = ['idle', 'walk', 'jog', 'run', 'sprint', 'crouch', 'strafe', 'jump'];
-const CARS = ['palmera', 'palmeraOutside', 'gator', 'hammerhead', 'brisa', 'marshal'];
+const CARS = ['palmera', 'palmeraOutside', 'palmeraClose', 'gator', 'hammerhead', 'brisa', 'marshal'];
+const CLIP_PAGES = [0, 1, 2, 3, 4, 5].map(String);
 const DEFAULT = [
   ['lineup', '', 17.9],
   ...[0, 1, 2, 3].map((p) => ['hair', String(p), 17.9]),
   ['outfits', '0', 17.9], ['outfits', '1', 17.9],
   ['faces', '0', 17.75], ['faces', '1', 17.75],
   ...GAITS.map((g) => ['loco', g, 17.75]),
-  ['clips', '0', 17.75], ['clips', '1', 17.75],
+  ...CLIP_PAGES.map((p) => ['clips', p, 17.75]),
   ...CARS.map((c) => ['drivers', c, 17.9]),
   ['player', '', 18.2],
   ['crowd', '', 18.55],
@@ -39,7 +40,7 @@ const SHEETS = {
   'sheet-outfits': { files: ['outfits-0', 'outfits-1'], cols: 1 },
   'sheet-faces': { files: ['faces-0', 'faces-1'], cols: 1 },
   'sheet-loco': { files: GAITS.map((g) => `loco-${g}`), cols: 2 },
-  'sheet-clips': { files: ['clips-0', 'clips-1'], cols: 1 },
+  'sheet-clips': { files: CLIP_PAGES.map((p) => `clips-${p}`), cols: 2 },
   'sheet-drivers': { files: CARS.map((c) => `drivers-${c}`), cols: 2 },
 };
 
@@ -56,8 +57,8 @@ try {
     await hh(page, 'setWeather', 'clear');
     await hh(page, 'setTime', hour);
     const res = await hh(page, 'people', scene, opt || undefined);
-    await hh(page, 'advance', 1.2, false);
-    await hh(page, 'advance', 0.25, true);
+    // Physics-only stepping; the capture below does the one render.
+    await hh(page, 'advance', 1.45, false);
     const name = opt ? `${scene}-${opt}` : scene;
     const file = await canvasShot(page, out('people', `${name}.png`));
     shots[name] = file;
@@ -69,7 +70,7 @@ try {
     await hh(page, 'setTime', 17.9);
     await hh(page, 'people', 'lineup');
     const n = await hh(page, 'peopleDebug', 'winding');
-    await hh(page, 'advance', 0.5, true);
+    await hh(page, 'advance', 0.5, false);
     await canvasShot(page, out('people', 'winding.png'));
     console.log(`winding overlay on ${n} actors → ${out('people', 'winding.png')}`);
     await hh(page, 'peopleDebug', 'off');

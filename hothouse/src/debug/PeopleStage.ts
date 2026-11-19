@@ -139,7 +139,7 @@ export class PeopleStage implements Stage {
           const a = this.person(`hair${style}`, { hair: style, hairColor: (style * 5) % 14, facialHair: style % 7 === 3 ? 3 : 0, glasses: 0, height: 0.5 });
           this.place(a, S.x + row * 1.05, S.y, S.z + (col - 2) * 0.82 + row * 0.41, FACE_WEST - 0.25 + col * 0.12);
         }
-        this.look(S.x - 3.7, S.y + 1.85, S.z + 0.2, S.x + 0.4, S.y + 1.5, S.z + 0.2, 40);
+        this.look(S.x - 2.75, S.y + 1.82, S.z + 0.2, S.x + 0.5, S.y + 1.48, S.z + 0.2, 42);
         break;
       }
       case 'outfits': {
@@ -151,7 +151,7 @@ export class PeopleStage implements Stage {
           const a = this.person(`outfit${nm}`, { outfit: Math.min(OUTFITS.length - 1, outfit), build: (i * 5) % 12, hair: (i * 3) % 30 });
           this.place(a, S.x, S.y, S.z + (i - (list.length - 1) / 2) * 0.82, FACE_WEST);
         });
-        this.look(S.x - 9.2, S.y + 1.2, S.z, S.x, S.y + 0.95, S.z, 46);
+        this.look(S.x - 6.9, S.y + 1.2, S.z, S.x, S.y + 0.95, S.z, 46);
         break;
       }
       case 'faces': {
@@ -163,6 +163,10 @@ export class PeopleStage implements Stage {
         });
         this.look(S.x - 1.95, S.y + 1.62, S.z, S.x, S.y + 1.58, S.z, 36);
         this.settle(1.2);
+        for (const actor of this.actors) {
+          actor.deferBlink(60);
+          actor.update(1 / 60, 3);
+        }
         this.frozen = true;
         break;
       }
@@ -202,11 +206,10 @@ export class PeopleStage implements Stage {
       case 'clips': {
         const ids = Object.keys(CLIPS) as ClipId[];
         const page = Number(opt ?? 0);
-        const list = ids.slice(page * 18, page * 18 + 18);
+        const list = ids.slice(page * 6, page * 6 + 6);
         list.forEach((id, i) => {
-          const row = Math.floor(i / 6), col = i % 6;
-          const a = this.person(`clip${id}`, { hair: (i * 7) % 30, outfit: (i * 13) % OUTFITS.length });
-          const actor = this.place(a, S.x + row * 2.1, S.y, S.z + (col - 2.5) * 1.35, FACE_WEST - 0.35);
+          const a = this.person(`clip${id}`, { hair: (i * 7 + page * 5) % 30, outfit: (i * 13 + page * 7) % OUTFITS.length });
+          const actor = this.place(a, S.x, S.y, S.z + (i - 2.5) * 1.3, FACE_WEST - 0.3);
           actor.play(id, { loop: true });
         });
         // Advance each clip to its most telling moment.
@@ -217,13 +220,13 @@ export class PeopleStage implements Stage {
           for (let k = 0; k < Math.round(t * 60); k++) actor.update(1 / 60, 6);
         });
         this.frozen = true;
-        this.look(S.x - 7.5, S.y + 3.3, S.z, S.x + 1.5, S.y + 0.8, S.z, 50);
+        this.look(S.x - 5.4, S.y + 1.55, S.z, S.x + 0.3, S.y + 0.85, S.z, 48);
         break;
       }
       case 'drivers': {
         const id = (opt ?? 'palmera') as VehicleId;
-        const cutaway = id !== 'palmeraOutside';
-        const vid = (cutaway ? id : 'palmera') as VehicleId;
+        const cutaway = id !== 'palmeraOutside' && id !== 'palmeraClose';
+        const vid = (id === 'palmeraOutside' || id === 'palmeraClose' ? 'palmera' : id) as VehicleId;
         const car = this.car(vid, cutaway, S.x, S.y, S.z, FACE_WEST - 0.5);
         const drv = this.person(`driver${vid}`, { outfit: 4, hair: 3, glasses: 1 });
         const pas = this.person(`pass${vid}`, { outfit: 40, hair: 13, build: 3 });
@@ -238,9 +241,16 @@ export class PeopleStage implements Stage {
         }
         this.settle(1.2);
         this.frozen = true;
-        // Three-quarter view from the driver's side.
+        // Three-quarter view from the driver's side, or a close look at the hands on the wheel.
         const len = VEHICLES[vid]!.body.length;
-        this.look(S.x - 3.4 - len * 0.35, S.y + 1.9, S.z + 2.6 + len * 0.2, S.x, S.y + 0.85, S.z, 42);
+        if (id === 'palmeraClose') {
+          car.updateMatrixWorld(true);
+          const eye = car.localToWorld(new Vector3(-1.45, 1.5, -1.25));
+          const at = car.localToWorld(new Vector3(-0.3, 1.0, 0.45));
+          this.look(eye.x, eye.y, eye.z, at.x, at.y, at.z, 40);
+        } else {
+          this.look(S.x - 3.4 - len * 0.35, S.y + 1.9, S.z + 2.6 + len * 0.2, S.x, S.y + 0.85, S.z, 42);
+        }
         break;
       }
       case 'crowd':
@@ -254,8 +264,9 @@ export class PeopleStage implements Stage {
           this.ctx.gfx.scene.add(actor.root);
           this.actors.push(actor);
           const role = i % 9;
-          const x = STRAND.boardwalkX + (this.rng.next() - 0.5) * 9;
-          const z = zc + (this.rng.next() - 0.5) * 70;
+          // On the deck: between the sand-side rail and the promenade.
+          const x = STRAND.boardwalkX + 2.2 + this.rng.next() * 13;
+          const z = zc - 26 + this.rng.next() * 56;
           if (role < 5) {
             const dir = this.rng.chance(0.5) ? 1 : -1;
             this.walkers.push({ actor, x, z, dir, speed: role === 4 ? 2.8 + this.rng.next() * 1.5 : 1.0 + this.rng.next() * 0.7, z0: zc - 45, z1: zc + 45, turning: 0, yaw: dir > 0 ? Math.PI : 0, y });

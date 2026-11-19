@@ -257,7 +257,7 @@ if (rg <= 1) {
   if (part == 1) {
     float ax = abs(vBind.x);
     bool front = vBind.z < -0.005;
-    if (ppBit(uCloth.y, 2.0) > 0.5 && front) col = mix(col, uPal[20], ppAA((ax - (vBind.y - 1.12) * 0.62)) * step(1.13, vBind.y));
+    if (ppBit(uCloth.y, 2.0) > 0.5 && front) col = mix(col, uPal[20], ppAA(ax - (vBind.y - 1.13) * 0.36) * step(1.13, vBind.y));
     if (uCloth.z > 0.0 && front) col = mix(col, uPal[3], ppAA(ax - 0.008) * smoothstep(uCloth.z - 0.002, uCloth.z + 0.002, vBind.y));
     if (ppBit(uCloth.y, 4.0) > 0.5) col = mix(col, uPal[3], ppAA(abs(vBind.z) - 0.022) * smoothstep(0.11, 0.125, ax) * step(1.0, vBind.y));
     col = mix(col, uPal[0], ppAA(-ppOpening(vBind)));
