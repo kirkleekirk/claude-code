@@ -126,6 +126,7 @@ async function course(page, id) {
     if (s.speed > 24) break;
   }
   const entry = s.ground;
+  const flow0 = s.flow;
   await set(page, { steer: 1, handbrake: 1, throttle: 0.8 });
   await step(page, 0.3);
   await set(page, { handbrake: 0, steer: 0.55, throttle: 1 });
@@ -142,7 +143,9 @@ async function course(page, id) {
     minSpeed = Math.min(minSpeed, s.ground);
   }
   const kept = r2(minSpeed / entry);
-  report.heldDrift = { entryMph: Math.round(entry * 2.237), meanDeg: deg(sum / n), peakDeg: deg(hpeak), kept, up: r2(s.up), maxImpact };
+  report.heldDrift = { entryMph: Math.round(entry * 2.237), meanDeg: deg(sum / n), peakDeg: deg(hpeak), kept, up: r2(s.up), maxImpact, flowGain: r2(s.flow - flow0) };
+  // The front-drive Brisa earns Flow from near misses, air and flat-out runs rather than drifts.
+  if (id !== 'brisa') gate(s.flow - flow0 > 0.08, `flow: a held drift only filled ${r2(s.flow - flow0)}`);
   if (process.env.DRIVE_TRACE) report.heldDrift.trace = trace;
   // Front-drive cars pull straight after a flick by nature; they only need to rotate visibly.
   const minMean = id === 'brisa' ? 5 : 12;

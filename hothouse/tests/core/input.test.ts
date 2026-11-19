@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ACTIONS, ACTION_IDS, CONTEXTS, type ActionGroup, type Source } from '@/input';
+import { ACTIONS, ACTION_IDS, CONTEXTS, Input, type ActionGroup, type Source } from '@/input';
 
 const sourceKey = (s: Source): string => {
   switch (s.k) {
@@ -49,5 +49,42 @@ describe('action map', () => {
       }
     }
     expect(problems).toEqual([]);
+  });
+});
+
+describe('Input taps', () => {
+  type KeyHandler = (e: { code: string; repeat: boolean; target: null; preventDefault(): void }) => void;
+  const key = (input: Input, type: 'onKeyDown' | 'onKeyUp', code: string) =>
+    (input as unknown as Record<string, KeyHandler>)[type]!({ code, repeat: false, target: null, preventDefault() {} });
+
+  it('a press and release between two frames still registers as one press', () => {
+    const input = new Input();
+    input.setBaseContext('foot');
+    input.beginFrame(1 / 60);
+    input.endFixedStep();
+    key(input, 'onKeyDown', 'KeyE');
+    key(input, 'onKeyUp', 'KeyE');
+    input.beginFrame(1 / 60);
+    expect(input.pressed('interact')).toBe(true);
+    expect(input.pressedFixed('interact')).toBe(true);
+    input.endFixedStep();
+    input.beginFrame(1 / 60);
+    expect(input.pressed('interact')).toBe(false);
+    expect(input.down('interact')).toBe(false);
+    expect(input.released('interact')).toBe(true);
+  });
+
+  it('a held key stays down across frames and presses only once', () => {
+    const input = new Input();
+    input.setBaseContext('foot');
+    key(input, 'onKeyDown', 'KeyW');
+    input.beginFrame(1 / 60);
+    expect(input.pressed('moveY')).toBe(true);
+    input.beginFrame(1 / 60);
+    expect(input.pressed('moveY')).toBe(false);
+    expect(input.value('moveY')).toBe(1);
+    key(input, 'onKeyUp', 'KeyW');
+    input.beginFrame(1 / 60);
+    expect(input.value('moveY')).toBe(0);
   });
 });

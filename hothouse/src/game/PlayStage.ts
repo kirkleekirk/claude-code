@@ -8,6 +8,7 @@ import { clamp, smoothstep } from '@/core/math';
 import { extendHarness } from '@/debug/harness';
 import { Query } from '@/physics';
 import { ChaseCamera } from '@/vehicles/ChaseCamera';
+import { FlowMeter, type FlowEvent } from '@/vehicles/FlowMeter';
 import { VEHICLES, type VehicleDef, type VehicleId } from '@/vehicles/defs';
 import { Vehicle } from '@/vehicles/Vehicle';
 import { districtAt } from '@/world/plan/districts';
@@ -59,6 +60,11 @@ export class PlayStage implements Stage {
   /** The car the player is in (or getting into / out of). */
   vehicle: Vehicle | null = null;
   readonly interactions = new Interactions();
+  readonly flow: FlowMeter;
+  /** Flow events raised during fixed steps, handed to audio and the HUD once per frame. */
+  private readonly flowEvents: FlowEvent[] = [];
+  /** Called once per frame for each flow event (the HUD shows callouts). */
+  onFlowEvent: ((e: FlowEvent) => void) | null = null;
   readonly footCam: ThirdPersonCamera;
   readonly chase: ChaseCamera;
   private readonly parked = new Map<Vehicle, Parked>();
@@ -81,6 +87,7 @@ export class PlayStage implements Stage {
 
   constructor(private readonly ctx: GameContext, private readonly world: World, private readonly characters: CharacterFactory | null = null) {
     this.footCam = new ThirdPersonCamera(ctx.physics);
+    this.flow = new FlowMeter(ctx.physics);
     this.chase = new ChaseCamera(ctx.physics);
     const hf = world.hf;
     this.player = new PlayerController(ctx.physics, (x, z) => hf.depthAt(x, z), -768, ROAD_Y + 0.2, 214, 0);
@@ -289,12 +296,16 @@ export class PlayStage implements Stage {
         c.brake = clamp(input.value('brake'), 0, 1);
         c.steer = clamp(input.value('steer'), -1, 1);
         c.handbrake = input.down('handbrake');
-        c.boost = input.down('boost');
+        c.boost = this.flow.canBoost(input.down('boost'));
         v.assists.traction = s.peek('game.assistTraction');
         v.assists.steering = s.peek('game.assistSteering');
         v.assists.countersteer = s.peek('game.assistCountersteer');
       }
       v.fixed(dt);
+      if (v === this.vehicle && this.mode === 'vehicle') {
+        this.flow.fixed(dt, v, input.down('boost'));
+        for (const e of this.flow.events) this.flowEvents.push(e);
+      }
     }
 
     if (this.mode === 'vehicle') {
@@ -369,6 +380,8 @@ export class PlayStage implements Stage {
       this.actor.update(dt, this.actor.root.getWorldPosition(_v).distanceTo(cam.position));
     }
     this.updateAudio();
+    for (const e of this.flowEvents) this.onFlowEvent?.(e);
+    this.flowEvents.length = 0;
   }
 
   private animateEnter(): void {
@@ -423,6 +436,12 @@ export class PlayStage implements Stage {
     } else {
       this.skid?.set(0, 0);
     }
+    for (const e of this.flowEvents) {
+      const p = listener;
+      if (e === 'boostStart') audio.sfx('boost', { x: p.x, y: p.y, z: p.z });
+      else if (e === 'full') audio.sfx('flowFull');
+      else if (e === 'nearMiss') audio.sfx('crowdGasp', { x: p.x, y: p.y, z: p.z, intensity: 0.25 });
+    }
     if (this.player.landing > 0) {
       const p = this.player.position;
       audio.sfx('land', { x: p.x, y: p.y, z: p.z, intensity: clamp(this.player.landing / 12, 0.2, 1) });
@@ -452,7 +471,7 @@ export class PlayStage implements Stage {
         const r = v.rb.rotation();
         return {
           id: v.def.id, speed: v.speed, ground: Math.hypot(lv.x, lv.z), rpm: Math.round(v.rpm), gear: v.gear, drift: v.driftAngle, slip: v.slip,
-          airborne: v.airborne, drifting: v.drifting, impact: Math.round(v.impact), x: p.x, y: p.y, z: p.z, yaw: v.yaw,
+          airborne: v.airborne, drifting: v.drifting, impact: Math.round(v.impact), flow: this.flow.value, boosting: this.flow.boosting, x: p.x, y: p.y, z: p.z, yaw: v.yaw,
           up: 1 - 2 * (r.x * r.x + r.z * r.z),
           wheels: v.wheels.map((w) => ({ contact: w.contact, comp: Math.round(w.compression * 1000) / 1000, load: Math.round(w.load) })),
         };

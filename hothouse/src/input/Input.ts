@@ -55,6 +55,9 @@ export class Input {
   padStyleOverride: PadStyle | null = null;
 
   private readonly keys = new Set<string>();
+  /** Keys and buttons that went down since the last sample: a tap shorter than a frame still counts. */
+  private readonly tappedKeys = new Set<string>();
+  private tappedMouse = 0;
   private mouseMask = 0;
   private readonly padButtons = new Float32Array(18);
   private readonly padAxes = new Float32Array(4);
@@ -144,6 +147,8 @@ export class Input {
       if (!isDown && wasDown) this.releaseLatch[i] = 1;
       this.held[i] = isDown ? this.held[i]! + dtReal : 0;
     }
+    this.tappedKeys.clear();
+    this.tappedMouse = 0;
     this.updateNav(dtReal);
     if (dev === 'kbm' && this.padActive()) this.device.value = 'gamepad';
   }
@@ -390,6 +395,8 @@ export class Input {
   /** Drop every held key and button (window blur, tab hide, context switch). */
   readonly releaseAll = (): void => {
     this.keys.clear();
+    this.tappedKeys.clear();
+    this.tappedMouse = 0;
     this.mouseMask = 0;
     this.padButtons.fill(0);
     this.padAxes.fill(0);
@@ -415,9 +422,9 @@ export class Input {
   private read(s: Source): number {
     switch (s.k) {
       case 'key':
-        return this.keys.has(s.code) ? 1 : 0;
+        return this.keys.has(s.code) || this.tappedKeys.has(s.code) ? 1 : 0;
       case 'mouse':
-        return this.mouseMask & (1 << s.button) ? 1 : 0;
+        return (this.mouseMask | this.tappedMouse) & (1 << s.button) ? 1 : 0;
       case 'pad':
         return this.padButtons[s.button] ?? 0;
       case 'axis':
@@ -516,6 +523,7 @@ export class Input {
     }
     if (e.repeat) return;
     this.keys.add(e.code);
+    this.tappedKeys.add(e.code);
     if (this.device.value !== 'kbm') this.device.value = 'kbm';
   };
 
@@ -530,7 +538,10 @@ export class Input {
       return;
     }
     // Clicks on UI controls are theirs alone; only the game surface feeds gameplay buttons.
-    if (e.target === this.target || this.pointerLocked.value) this.mouseMask |= 1 << e.button;
+    if (e.target === this.target || this.pointerLocked.value) {
+      this.mouseMask |= 1 << e.button;
+      this.tappedMouse |= 1 << e.button;
+    }
     if (this.device.value !== 'kbm') this.device.value = 'kbm';
   };
 
