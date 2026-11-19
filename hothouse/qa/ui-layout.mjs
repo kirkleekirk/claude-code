@@ -4,17 +4,27 @@
 // 40 px, and text under 14 px at 1920×1080 / 100 %. Writes qa/out/ui/layout-report.json and
 // screenshots of any screen with problems. Exit code 1 when anything fails.
 //
-// Usage: node qa/ui-layout.mjs [--quick] [--screens a,b,c]
+// Usage: node qa/ui-layout.mjs [--quick] [--screens a,b,c] [--sizes 1280x720,1920x1080] [--scales 100,150]
+//        [--set a11y.dyslexiaFont=true …]   (settings runs write layout-report-<settings>.json)
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { launchBrowser, OUT, startServer } from './lib.mjs';
 
 const args = process.argv.slice(2);
 const quick = args.includes('--quick');
-const si = args.indexOf('--screens');
-const onlyScreens = si >= 0 ? args[si + 1].split(',') : null;
-const RES = quick ? [[1280, 720], [1920, 1080]] : [[1280, 720], [1920, 1080], [2560, 1440], [3440, 1440]];
-const SCALES = quick ? [100] : [80, 100, 150];
+const listArg = (name) => {
+  const i = args.indexOf(`--${name}`);
+  return i >= 0 ? args[i + 1].split(',') : null;
+};
+const onlyScreens = listArg('screens');
+const sets = args.flatMap((a, i) => (a === '--set' ? [args[i + 1]] : []));
+const setQuery = sets.map((kv) => {
+  const [k, v = 'true'] = kv.split('=');
+  return `&set.${k}=${encodeURIComponent(v)}`;
+}).join('');
+const setSuffix = sets.map((kv) => `-${kv.replace(/[^a-z0-9]+/gi, '_')}`).join('');
+const RES = listArg('sizes')?.map((s) => s.split('x').map(Number)) ?? (quick ? [[1280, 720], [1920, 1080]] : [[1280, 720], [1920, 1080], [2560, 1440], [3440, 1440]]);
+const SCALES = listArg('scales')?.map(Number) ?? (quick ? [100] : [80, 100, 150]);
 const dir = resolve(OUT, 'ui', 'layout');
 mkdirSync(dir, { recursive: true });
 
@@ -183,7 +193,7 @@ try {
       const consoleProblems = [];
       page.on('console', (m) => (m.type() === 'error' || m.type() === 'warning') && consoleProblems.push(m.text()));
       page.on('pageerror', (e) => consoleProblems.push(e.message));
-      await page.goto(`${server.url}ui-lab.html?qa=1&scale=${scale}&input=keyboard&set.a11y.reducedMotion=true&screen=components`);
+      await page.goto(`${server.url}ui-lab.html?qa=1&scale=${scale}&input=keyboard&set.a11y.reducedMotion=true${setQuery}&screen=components`);
       await page.waitForFunction(() => globalThis.__UILAB__?.ready === true, null, { timeout: 120000 });
       const screens = onlyScreens ?? (await page.evaluate(() => [...globalThis.__UILAB__.screens]));
       report[key] = {};
@@ -195,7 +205,7 @@ try {
         report[key][s] = r;
         if (bad) {
           failures += bad;
-          await page.screenshot({ path: resolve(dir, `${s}-${w}x${h}-${scale}.png`) });
+          await page.screenshot({ path: resolve(dir, `${s}-${w}x${h}-${scale}${setSuffix}.png`) });
           console.log(`✗ ${key} ${s}: ${[...r.overflow.map((x) => `overflow ${x}`), ...r.clipped.map((x) => `clipped ${x}`), ...r.contrast.map((x) => `contrast ${x}`), ...r.targets.map((x) => `target ${x}`), ...r.fonts.map((x) => `font ${x}`)].join('\n    ')}`);
         }
       }
@@ -210,7 +220,7 @@ try {
     }
   }
 } finally {
-  writeFileSync(resolve(dir, 'layout-report.json'), JSON.stringify(report, null, 1));
+  writeFileSync(resolve(dir, `layout-report${setSuffix}.json`), JSON.stringify(report, null, 1));
   await browser.close();
   await server.close();
 }
