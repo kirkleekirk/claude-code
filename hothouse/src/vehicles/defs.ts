@@ -122,7 +122,7 @@ export const VEHICLES: Record<string, VehicleDef> = {
     },
     handling: {
       mass: 1550, drive: 13800, topSpeed: 66, brake: 15500, frontDrive: 0, steerLock: 0.6, steerLockFast: 0.11,
-      gripFront: 1.25, gripRear: 0.98, handbrakeGrip: 0.3, spring: 40000, damper: 3800, rest: 0.33, travel: 0.18, antiRoll: 10000,
+      gripFront: 1.25, gripRear: 1.04, handbrakeGrip: 0.3, spring: 40000, damper: 3800, rest: 0.33, travel: 0.18, antiRoll: 10000,
       comY: -0.14, yawInertia: 1.05,
     },
     engine: { cylinders: 8, idleRpm: 800, redlineRpm: 6500, rasp: 0.75, bass: 0.9, turbo: 0, pops: 0.6, flavor: 'bigBlock' },
@@ -137,7 +137,7 @@ export const VEHICLES: Record<string, VehicleDef> = {
     },
     handling: {
       mass: 1250, drive: 7200, topSpeed: 50, brake: 13000, frontDrive: 1, steerLock: 0.62, steerLockFast: 0.14,
-      gripFront: 1.15, gripRear: 1.15, handbrakeGrip: 0.4, spring: 32000, damper: 3200, rest: 0.33, travel: 0.18, antiRoll: 8000,
+      gripFront: 1.15, gripRear: 1.15, handbrakeGrip: 0.3, spring: 32000, damper: 3200, rest: 0.33, travel: 0.18, antiRoll: 8000,
       comY: -0.1, yawInertia: 1.1,
     },
     engine: { cylinders: 4, idleRpm: 800, redlineRpm: 6800, rasp: 0.3, bass: 0.3, turbo: 0, pops: 0, flavor: 'piston' },

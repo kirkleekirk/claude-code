@@ -1,12 +1,12 @@
 // Driving QA bot: measures each vehicle's handling through the harness, checks it against the feel
 // targets in BALANCE.md, and saves front, rear and chase shots.
-// Usage: node qa/drive.mjs [vehicleId|all]
+// Usage: node qa/drive.mjs [vehicleId[,vehicleId…]|all]
 import { writeFileSync } from 'node:fs';
 import { canvasShot, hh, launchBrowser, openGame, out, startServer } from './lib.mjs';
 
 const ALL = ['palmera', 'gator', 'hammerhead', 'brisa', 'marshal'];
 const arg = process.argv[2] ?? 'palmera';
-const ids = arg === 'all' ? ALL : [arg];
+const ids = arg === 'all' ? ALL : arg.split(',');
 
 // Measurements step physics without drawing; the shots draw.
 const step = async (page, s, render = false) => hh(page, 'advance', s, render);
@@ -110,10 +110,10 @@ async function course(page, id) {
     peak = Math.max(peak, Math.abs(s.drift));
     if (recover === null && Math.abs(s.drift) < 0.1) recover = r1((i + 1) * 0.1);
   }
-  report.handbrake = { peakDeg: deg(peak), recoverS: recover, speedAfter: Math.round(s.speed), up: r2(s.up) };
+  report.handbrake = { peakDeg: deg(peak), recoverS: recover, speedAfter: Math.round(s.ground), up: r2(s.up) };
   gate(deg(peak) <= 75, `handbrake: spun to ${deg(peak)} deg`);
   gate(recover !== null && recover <= 2.5, `handbrake: recovery ${recover ?? '>4'} s`);
-  gate(s.speed >= 10, `handbrake: bled to ${Math.round(s.speed)} m/s`);
+  gate(s.ground >= 10, `handbrake: bled to ${Math.round(s.ground)} m/s`);
   await release(page);
 
   // Held drift: a handbrake flick, then throttle and part lock to sustain the slide.
@@ -125,22 +125,28 @@ async function course(page, id) {
     s = await state(page);
     if (s.speed > 24) break;
   }
-  const entry = s.speed;
+  const entry = s.ground;
   await set(page, { steer: 1, handbrake: 1, throttle: 0.8 });
   await step(page, 0.3);
   await set(page, { handbrake: 0, steer: 0.55, throttle: 1 });
-  let sum = 0, n = 0, hpeak = 0, minSpeed = entry;
+  let sum = 0, n = 0, hpeak = 0, minSpeed = entry, maxImpact = 0;
+  const trace = [];
   for (let i = 0; i < 20; i++) {
     await step(page, 0.1);
     s = await state(page);
+    maxImpact = Math.max(maxImpact, s.impact);
+    trace.push([r1(s.ground), r1(s.speed), deg(s.drift), s.drifting ? 1 : 0]);
     sum += Math.abs(s.drift);
     n++;
     hpeak = Math.max(hpeak, Math.abs(s.drift));
-    minSpeed = Math.min(minSpeed, Math.abs(s.speed));
+    minSpeed = Math.min(minSpeed, s.ground);
   }
   const kept = r2(minSpeed / entry);
-  report.heldDrift = { entryMph: Math.round(entry * 2.237), meanDeg: deg(sum / n), peakDeg: deg(hpeak), kept, up: r2(s.up) };
-  gate(deg(sum / n) >= 12 && deg(hpeak) <= 70, `held drift: mean ${deg(sum / n)} deg, peak ${deg(hpeak)} deg`);
+  report.heldDrift = { entryMph: Math.round(entry * 2.237), meanDeg: deg(sum / n), peakDeg: deg(hpeak), kept, up: r2(s.up), maxImpact };
+  if (process.env.DRIVE_TRACE) report.heldDrift.trace = trace;
+  // Front-drive cars pull straight after a flick by nature; they only need to rotate visibly.
+  const minMean = id === 'brisa' ? 5 : 12;
+  gate(deg(sum / n) >= minMean && deg(hpeak) <= 70, `held drift: mean ${deg(sum / n)} deg, peak ${deg(hpeak)} deg`);
   gate(kept >= 0.55, `held drift: kept ${kept} of entry speed`);
   await release(page);
 

@@ -26,8 +26,11 @@ export function groups(member: number, filter: number): number {
 /** Ready-made interaction groups for the common collider roles. */
 export const Collide = {
   static: groups(Layer.STATIC, Layer.ALL),
-  vehicle: groups(Layer.VEHICLE, Layer.STATIC | Layer.VEHICLE | Layer.PROP | Layer.PLAYER | Layer.NPC),
-  player: groups(Layer.PLAYER, Layer.STATIC | Layer.VEHICLE | Layer.PROP),
+  // People are kinematic: cars never collide with them in the solver (an immovable capsule would
+  // stop a car dead). The character controller still treats cars as obstacles through its query,
+  // and stages resolve car-versus-person hits as knockdowns.
+  vehicle: groups(Layer.VEHICLE, Layer.STATIC | Layer.VEHICLE | Layer.PROP),
+  player: groups(Layer.PLAYER, Layer.STATIC | Layer.PROP),
   prop: groups(Layer.PROP, Layer.STATIC | Layer.VEHICLE | Layer.PROP | Layer.PLAYER),
   npc: groups(Layer.NPC, Layer.VEHICLE),
   debris: groups(Layer.DEBRIS, Layer.STATIC),
@@ -43,6 +46,9 @@ export const Query = {
   camera: groups(Layer.ALL, Layer.STATIC),
   water: groups(Layer.ALL, Layer.WATER),
 } as const;
+
+const RAY_NUDGE_X = 1.37e-4;
+const RAY_NUDGE_Z = 0.71e-4;
 
 export interface RayHit {
   hit: boolean;
@@ -195,7 +201,9 @@ export class PhysicsWorld {
     filter: number = Query.ground, excludeBody?: RAPIER.RigidBody,
   ): RayHit {
     const ray = this.ray;
-    ray.origin.x = ox; ray.origin.y = oy; ray.origin.z = oz;
+    // A ray running exactly along a heightfield grid line can slip between its triangles; a
+    // sub-millimetre nudge keeps every query off the lines.
+    ray.origin.x = ox + RAY_NUDGE_X; ray.origin.y = oy; ray.origin.z = oz + RAY_NUDGE_Z;
     ray.dir.x = dx; ray.dir.y = dy; ray.dir.z = dz;
     const res = this.world.castRayAndGetNormal(ray, maxDistance, true, undefined, filter, undefined, excludeBody);
     const hit = this.hit;
@@ -220,7 +228,7 @@ export class PhysicsWorld {
     const len = Math.hypot(dx, dy, dz);
     if (len < 1e-4) return true;
     const ray = this.ray;
-    ray.origin.x = ax; ray.origin.y = ay; ray.origin.z = az;
+    ray.origin.x = ax + RAY_NUDGE_X; ray.origin.y = ay; ray.origin.z = az + RAY_NUDGE_Z;
     ray.dir.x = dx / len; ray.dir.y = dy / len; ray.dir.z = dz / len;
     return this.world.castRay(ray, len, true, undefined, filter) === null;
   }

@@ -55,8 +55,9 @@ const cfg = tunables.group('vehicle.common', {
   engineBrake: { value: 90, min: 0, max: 600, step: 5 },
   handbrakeBrake: { value: 0.14, min: 0, max: 0.6, step: 0.01, label: 'handbrake braking' },
   driftMax: { value: 0.85, min: 0.3, max: 1.4, step: 0.01, label: 'drift angle limit (rad)' },
-  driftLimit: { value: 9, min: 0, max: 40, step: 0.5, label: 'drift limiter strength' },
-  driftKeep: { value: 0.8, min: 0, max: 1, step: 0.01, label: 'drift momentum kept' },
+  driftLimit: { value: 13, min: 0, max: 40, step: 0.5, label: 'drift limiter strength' },
+  driftKeep: { value: 0.92, min: 0, max: 1, step: 0.01, label: 'drift momentum kept' },
+  powerOversteer: { value: 0.75, min: 0, max: 0.95, step: 0.01, label: 'drive force eating lateral grip' },
   roofDrag: { value: 1.6, min: 0, max: 6, step: 0.1, label: 'upside-down scrape drag (1/s)' },
 });
 
@@ -77,6 +78,8 @@ const _tmp = new Vector3();
 const _origin = new Vector3();
 const _hitP = new Vector3();
 const _vh = new Vector3();
+const _qw = new Quaternion();
+const _tw = new Vector3();
 const DOWN_FORCE_CURVE: ReadonlyArray<readonly [number, number]> = [[0, 1], [0.25, 0.97], [0.55, 0.82], [0.8, 0.55], [0.95, 0.22], [1.05, 0]];
 
 /**
@@ -107,6 +110,12 @@ export class Vehicle {
   impact = 0;
   /** Times the car has auto-righted (events and the drive bot read it). */
   righted = 0;
+  /**
+   * Drift latch: a handbrake pull at speed commits the car to a drift (low yaw damping, steerable
+   * rotation, carried momentum) until it straightens out. Outside it the car grips and stability
+   * control trims power oversteer, so a fast corner never turns into a surprise slide.
+   */
+  drifting = false;
 
   private readonly interp = new TransformInterp();
   private readonly mounts: Array<[number, number, number]>;
@@ -115,6 +124,7 @@ export class Vehicle {
   private steerAngle = 0;
   private upsideDown = 0;
   private stuck = 0;
+  private driftCalm = 0;
   private shiftTimer = 0;
   private readonly massPerWheel: number;
   private readonly staticComp: number;
@@ -217,6 +227,13 @@ export class Vehicle {
     return Math.atan2(-_fwd.x, -_fwd.z);
   }
 
+  /** Car space → world space with the physics pose (valid inside fixed steps, unlike `group`). */
+  toWorld(local: Vector3, out: Vector3): Vector3 {
+    const t = this.rb.translation(), r = this.rb.rotation();
+    _qw.set(r.x, r.y, r.z, r.w);
+    return out.copy(local).applyQuaternion(_qw).add(_tw.set(t.x, t.y, t.z));
+  }
+
   teleport(pose: Pose): void {
     this.rb.setTranslation({ x: pose.x, y: pose.y, z: pose.z }, true);
     this.rb.setRotation({ x: 0, y: Math.sin(pose.yaw / 2), z: 0, w: Math.cos(pose.yaw / 2) }, true);
@@ -267,6 +284,14 @@ export class Vehicle {
     if (c.boost && !reversing && throttle > 0.1) driveTotal += cfg.boostForce;
     const braking = !reversing && c.brake > 0.05 && vf > 0.5 ? c.brake : 0;
     this.updateGearbox(vf, throttle, dt);
+
+    const angle = Math.abs(this.driftAngle);
+    if (c.handbrake && speed > 8) this.drifting = true;
+    if (this.drifting) {
+      this.driftCalm = angle < 0.12 ? this.driftCalm + dt : 0;
+      if (this.driftCalm > 0.35 || speed < 5) this.drifting = false;
+    }
+    const committed = this.drifting || c.handbrake;
 
     let grounded = 0;
     let rearSlip = 0;
@@ -320,7 +345,10 @@ export class Vehicle {
       // Longitudinal: drive, brakes, rolling and engine drag.
       const driveShare = front ? h.frontDrive / 2 : (1 - h.frontDrive) / 2;
       let fx = driveTotal * driveShare;
-      if (this.assists.traction && Math.abs(fx) > 0) fx *= 1 - smoothstep(4, 9, Math.abs(ws)) * 0.5;
+      if (this.assists.traction && Math.abs(fx) > 0) {
+        fx *= 1 - smoothstep(4, 9, Math.abs(ws)) * 0.5;
+        if (!committed) fx *= 1 - smoothstep(0.1, 0.35, angle) * 0.65;
+      }
       if (braking > 0) fx -= Math.sign(wf) * h.brake * 0.25 * braking * (front ? 1.15 : 0.85);
       if (c.handbrake && !front) fx -= Math.sign(wf) * Math.min(h.brake * cfg.handbrakeBrake, Math.abs(wf) * this.massPerWheel / dt);
       fx -= wf * cfg.rollingResist * (throttle > 0.05 ? 0.4 : 1);
@@ -333,7 +361,7 @@ export class Vehicle {
       // Friction circle: drive force eats into lateral capacity (power oversteer on RWD).
       const cap = mu * load;
       const lonUse = clamp(Math.abs(fx) / Math.max(cap, 1), 0, 1);
-      const latCap = cap * Math.sqrt(Math.max(0.05, 1 - lonUse * lonUse * 0.85));
+      const latCap = cap * Math.sqrt(1 - lonUse * lonUse * cfg.powerOversteer);
       const fy = clamp(want, -latCap, latCap);
       scrub += fy * _s.dot(_vh);
       fx = clamp(fx, -cap * 1.1, cap * 1.1);
@@ -370,20 +398,19 @@ export class Vehicle {
     if (grounded > 0) {
       // Downforce keeps fast cars planted.
       this.rb.addForce(_force.copy(_up).multiplyScalar(-cfg.downforce * speed * speed), true);
-      // Yaw stability: damp spins unless the driver is deliberately sliding; past the drift limit
+      // Yaw stability: damp spins unless the driver has committed to a drift; past the drift limit
       // the damping returns and a restoring torque swings the nose back toward the travel line.
-      const sliding = c.handbrake || rearSlip > 0.6;
       const yawRate = _w.dot(_up);
-      const over = speed > 6 ? Math.abs(this.driftAngle) - cfg.driftMax : -1;
+      const over = speed > 6 ? angle - cfg.driftMax : -1;
       const limit = smoothstep(-0.15, 0.2, over);
-      const damping = cfg.yawDamp * (sliding ? 0.15 + 0.85 * limit : 1);
+      const damping = cfg.yawDamp * (committed ? 0.15 + 0.85 * limit : 1);
       this.rb.addTorque(_force.copy(_up).multiplyScalar(-yawRate * damping), true);
       if (limit > 0) this.rb.addTorque(_force.copy(_up).multiplyScalar(-Math.sign(this.driftAngle) * limit * h.mass * cfg.driftLimit), true);
       // Slides carry their speed: hand back part of what sideways scrub takes, so drifts flow.
-      const slide = smoothstep(0.15, 0.4, Math.abs(this.driftAngle)) * smoothstep(5, 9, speed);
-      if (slide > 0 && scrub < 0) this.rb.addForce(_force.copy(_vh).multiplyScalar(-scrub * cfg.driftKeep * slide), true);
-      // Drift assist: steer input adds rotation while sliding so a drift can be held and placed.
-      if (sliding && speed > 7) this.rb.addTorque(_force.copy(_up).multiplyScalar(-c.steer * h.mass * cfg.driftAssist * 2.2), true);
+      const slide = smoothstep(0.15, 0.4, angle) * smoothstep(5, 9, speed);
+      if (slide > 0 && scrub < 0) this.rb.addForce(_force.copy(_vh).multiplyScalar(-scrub * cfg.driftKeep * slide * (committed ? 1 : 0.4)), true);
+      // Drift assist: in a committed drift, steering places the angle.
+      if (committed && speed > 7) this.rb.addTorque(_force.copy(_up).multiplyScalar(-c.steer * h.mass * cfg.driftAssist * 2.2), true);
     } else {
       // Airborne: gently level the car so landings stay on four wheels.
       _tmp.copy(_up).cross(_r.set(0, 1, 0));

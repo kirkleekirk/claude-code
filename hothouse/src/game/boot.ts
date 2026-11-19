@@ -16,7 +16,7 @@ import { Game } from './Game';
 import { showSplash } from './splash';
 import { createAudio } from '@/audio';
 import type { BusId } from '@/audio/api';
-import { DriveStage } from './DriveStage';
+import { PlayStage } from './PlayStage';
 
 const isDev = import.meta.env.DEV;
 
@@ -83,7 +83,7 @@ export async function boot(): Promise<void> {
   } else {
     const slicer = new TimeSlicer(14);
     const world = await World.build({ gfx, kit, physics, slicer, progress: (f, label) => splash.set(f * 0.92, label) });
-    game.setStage(flags.sandbox === 'lookdev' ? new LookDevStage(game.ctx, world) : new DriveStage(game.ctx, world));
+    game.setStage(flags.sandbox === 'lookdev' ? new LookDevStage(game.ctx, world) : new PlayStage(game.ctx, world));
   }
 
   const loop = new GameLoop(game);
