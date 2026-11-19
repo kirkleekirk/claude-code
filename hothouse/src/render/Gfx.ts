@@ -183,6 +183,28 @@ export class Gfx {
     return this.canvas.toDataURL(type, quality);
   }
 
+  /**
+   * A small JPEG of the current view for save slots: renders one frame and scales it down in the
+   * same task (the drawing buffer is only readable before the browser composites it).
+   */
+  thumbnail(width: number, height: number, quality = 0.72): string | null {
+    if (this.contextLost) return null;
+    this.render(0);
+    const c = (this.thumbCanvas ??= document.createElement('canvas'));
+    c.width = width;
+    c.height = height;
+    const g = c.getContext('2d');
+    if (!g) return null;
+    // Cover-fit the canvas aspect into the thumbnail.
+    const sw = this.canvas.width, sh = this.canvas.height;
+    const scale = Math.max(width / sw, height / sh);
+    const w = width / scale, h = height / scale;
+    g.drawImage(this.canvas, (sw - w) / 2, (sh - h) / 2, w, h, 0, 0, width, height);
+    return c.toDataURL('image/jpeg', quality);
+  }
+
+  private thumbCanvas: HTMLCanvasElement | null = null;
+
   /** Compile every material in the scene ahead of time so first use never hitches. */
   async prewarm(): Promise<void> {
     try {

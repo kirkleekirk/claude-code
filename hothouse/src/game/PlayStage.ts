@@ -3,7 +3,7 @@ import type { EngineFrame, EngineVoice, LoopHandle, StationId } from '@/audio/ap
 import type { Actor, CharacterFactory } from '@/characters/api';
 import { PlayerController, type FootIntent } from '@/characters/PlayerController';
 import { ThirdPersonCamera } from '@/characters/ThirdPersonCamera';
-import { appearanceFromSeed } from '@/content/appearance';
+import { appearanceFromSeed, type Appearance } from '@/content/appearance';
 import { clamp, smoothstep } from '@/core/math';
 import { extendHarness } from '@/debug/harness';
 import { Query } from '@/physics';
@@ -85,7 +85,12 @@ export class PlayStage implements Stage {
   private readonly exitFrom = new Vector3();
   private readonly exitTo = new Vector3();
 
-  constructor(private readonly ctx: GameContext, private readonly world: World, private readonly characters: CharacterFactory | null = null) {
+  constructor(
+    private readonly ctx: GameContext,
+    private readonly world: World,
+    characters: CharacterFactory | null = null,
+    readonly appearance: Appearance = appearanceFromSeed('player'),
+  ) {
     this.footCam = new ThirdPersonCamera(ctx.physics);
     this.flow = new FlowMeter(ctx.physics);
     this.chase = new ChaseCamera(ctx.physics);
@@ -93,7 +98,7 @@ export class PlayStage implements Stage {
     this.player = new PlayerController(ctx.physics, (x, z) => hf.depthAt(x, z), -768, ROAD_Y + 0.2, 214, 0);
     this.player.setEnabled(false);
     if (characters) {
-      this.actor = characters.create(appearanceFromSeed('player'), { name: 'player', castShadow: true });
+      this.actor = characters.create(appearance, { name: 'player', castShadow: true });
       ctx.gfx.scene.add(this.actor.root);
     }
     const station = ctx.settings.peek('audio.defaultStation');
@@ -254,6 +259,44 @@ export class PlayStage implements Stage {
     this.addParked(v);
     if (this.bail) v.controls.handbrake = false;
     this.vehicle = null;
+    this.mode = 'foot';
+    this.ctx.input.setBaseContext('foot');
+    this.footCam.snap(yaw);
+  }
+
+  /**
+   * Put the player back where a save left them: at the wheel of the car they were driving, or on
+   * foot. `flow` restores the banked Flow.
+   */
+  restore(player: { x: number; y: number; z: number; yaw: number }, vehicle: { id: VehicleId; x: number; z: number; yaw: number } | null, flow: number): void {
+    if (this.vehicle) this.disposeVehicle(this.vehicle);
+    this.vehicle = null;
+    this.flow.value = Math.min(1, Math.max(0, flow));
+    if (vehicle && VEHICLES[vehicle.id]) {
+      this.takeWheel(this.spawnCar(vehicle.id, vehicle.x, vehicle.z, vehicle.yaw), -1);
+      return;
+    }
+    this.putOnFoot(player.x, player.y, player.z, player.yaw);
+  }
+
+  /** After a bust or a fall: back on foot beside the last car, or where the player stands. */
+  respawn(): void {
+    const v = this.vehicle;
+    if (this.mode === 'vehicle' && v) return;
+    const p = this.player.position;
+    this.putOnFoot(p.x, this.ctx.physics.groundHeight(p.x, p.z, p.y + 30, p.y) + 0.05, p.z, this.player.yaw);
+  }
+
+  private putOnFoot(x: number, y: number, z: number, yaw: number): void {
+    this.engine?.dispose();
+    this.engine = null;
+    this.ctx.audio.radio.setAudible(0, false);
+    if (this.actor) {
+      this.ctx.gfx.scene.add(this.actor.root);
+      this.actor.posture = 'stand';
+    }
+    this.player.teleport(x, y, z, yaw);
+    this.player.setEnabled(true);
     this.mode = 'foot';
     this.ctx.input.setBaseContext('foot');
     this.footCam.snap(yaw);
@@ -503,15 +546,8 @@ export class PlayStage implements Stage {
           this.addParked(this.vehicle);
           this.vehicle = null;
         }
-        this.engine?.dispose();
-        this.engine = null;
-        if (this.actor) this.ctx.gfx.scene.add(this.actor.root);
         const y = this.ctx.physics.groundHeight(x, z, 60, ROAD_Y) + 0.05;
-        this.player.teleport(x, y, z, yaw);
-        this.player.setEnabled(true);
-        this.mode = 'foot';
-        this.ctx.input.setBaseContext('foot');
-        this.footCam.snap(yaw);
+        this.putOnFoot(x, y, z, yaw);
         return { x, y, z };
       },
       footState: () => {
@@ -555,7 +591,5 @@ export class PlayStage implements Stage {
     for (const v of [...this.allVehicles()]) this.disposeVehicle(v);
     this.player.dispose();
     this.actor?.dispose();
-    this.characters?.dispose();
-    this.world.dispose();
   }
 }

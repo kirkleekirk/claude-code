@@ -36,6 +36,14 @@ export interface Stage {
   dispose(): void;
 }
 
+/** A long-lived system ticked alongside the stage (the session, the sim bridge, the HUD bridge). */
+export interface GameSystem {
+  /** After the stage's fixed step and the physics step. */
+  fixed?(dt: number): void;
+  /** After the stage's update, before rendering. */
+  update?(dt: number, alpha: number, dtReal: number): void;
+}
+
 export interface CameraPin {
   position: Vector3;
   target: Vector3;
@@ -55,6 +63,7 @@ export class Game implements LoopCallbacks {
   cameraPin: CameraPin | null = null;
   loop: GameLoop | null = null;
   weather: WeatherId = 'clear';
+  readonly systems: GameSystem[] = [];
 
   constructor(readonly ctx: GameContext) {
     this.clock = createClock(ctx.flags.time ?? 18 + 40 / 60);
@@ -87,6 +96,7 @@ export class Game implements LoopCallbacks {
     this.stage?.fixed(dt);
     this.ctx.physics.step(dt);
     this.stage?.postFixed?.(dt);
+    for (const s of this.systems) s.fixed?.(dt);
     if (this.clockRunning) advanceClock(this.clock, dt);
     this.ctx.input.endFixedStep();
   }
@@ -95,6 +105,7 @@ export class Game implements LoopCallbacks {
     const gfx = this.ctx.gfx;
     gfx.environment.setTime(clockHours(this.clock));
     this.stage?.update(dt, alpha, dtReal);
+    for (const s of this.systems) s.update?.(dt, alpha, dtReal);
     const pin = this.cameraPin;
     if (pin) {
       const cam = gfx.camera;

@@ -4,6 +4,7 @@ import { log } from '@/core/log';
 import type { ActionId } from '@/input';
 import { isWeatherId, WEATHER_IDS, type WeatherId } from '@/render/env/weatherPresets';
 import type { Game } from '@/game/Game';
+import { SETTINGS, type SettingId } from '@/save';
 
 /**
  * The QA and automation surface, installed as `window.__HOTHOUSE__` in dev builds and with
@@ -18,6 +19,8 @@ export interface Harness {
   setWeather(id: WeatherId): void;
   setCamera(pos: [number, number, number], look: [number, number, number], fov?: number): void;
   releaseCamera(): void;
+  /** Change a setting as the Settings screen would (QA turns off costly effects, tests options). */
+  setSetting(id: string, value: unknown): void;
   /**
    * Switch to deterministic stepping and advance the simulation by `seconds`. With `render` false the
    * frame is updated but not drawn (physics-only measurements); `screenshot` always draws.
@@ -80,6 +83,10 @@ export function installHarness(game: Game): Harness {
         loop.advance(chunk, render && left - chunk <= 0);
         left -= chunk;
       }
+    },
+    setSetting(id, value) {
+      if (!(id in SETTINGS)) throw new Error(`unknown setting "${id}"`);
+      game.ctx.settings.set(id as SettingId, value as never);
     },
     realtime() {
       if (game.loop) {

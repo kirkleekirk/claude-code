@@ -79,6 +79,6 @@ export class LookDevStage implements Stage {
   }
 
   dispose(): void {
-    this.world.dispose();
+    // The world belongs to boot and outlives stages.
   }
 }
