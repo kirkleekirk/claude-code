@@ -5,6 +5,7 @@ import type { StrainId } from '@/content/strains';
 import { CREW_LINES } from '@/content/texts';
 import { TURFS, type TurfId } from '@/content/turfs';
 import type { CrewAssignment, CrewId, CrewState, PlantState, Recipe, RequestId, SimResult, StackId } from '../api';
+import { DEALS } from '../balance';
 import type { SimCtx } from '../ctx';
 import { parseProduct, parseStack, stackValue } from '../products';
 import { t } from '../strings';
@@ -14,8 +15,7 @@ import { harvestPlant, plantSeed, tendPlant } from './growing';
 import { crewSlots, emptyPots, moraleBonus, plantsAt, stationPlacement } from './layout';
 import { queueJob } from './mixing';
 import { addNotoriety } from './notoriety';
-import { stat } from './progression';
-import { unlockLock } from './progression';
+import { addXp, stat, unlockLock } from './progression';
 
 /** Crew: hiring, assignments, the work each role does, morale, wages, quitting and win-backs. */
 
@@ -420,6 +420,7 @@ function dealerStep(ctx: SimCtx, c: CrewState, dt: number): void {
     const packer = crewOf(ctx, 'packer').length > 0 ? 1.1 : 1;
     const price = Math.round(bestValue * sense * 0.85 * packer * ctx.mods.prices * units);
     ctx.earn(price, 'dirty', 'crewDeal');
+    addXp(ctx, Math.round(DEALS.crewXpBase + price * DEALS.crewXpPerDollar), 'crewDeal');
     c.output += 1;
     turf.sales += 1;
     turf.influence.player = Math.min(100, turf.influence.player + 0.8);

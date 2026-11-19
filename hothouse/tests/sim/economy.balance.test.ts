@@ -32,6 +32,7 @@ type Row = Record<string, number | null>;
 
 function row(rs: BotReport[]): Row {
   const r: Row = {};
+  r.firstSale = median(rs.map((x) => minutes(x.firstSale)));
   r.firstPurchase = median(rs.map((x) => minutes(x.firstPurchase)));
   for (let rank = 2; rank <= 10; rank++) r[`rank${rank}`] = median(rs.map((x) => minutes(x.rankAt[rank])));
   r.finaleReady = median(rs.map((x) => minutes(x.finaleReady)));
@@ -63,6 +64,7 @@ describe('economy simulator', () => {
 
   it('hits the pacing targets for a typical player (median of all runs)', () => {
     const at = (rank: number) => median(all().map((r) => minutes(r.rankAt[rank])));
+    expect(median(all().map((r) => minutes(r.firstSale)))!).toBeLessThanOrEqual(4);
     expect(median(all().map((r) => minutes(r.firstPurchase)))!).toBeLessThanOrEqual(4);
     expect(at(2)).not.toBeNull();
     expect(at(2)!).toBeGreaterThanOrEqual(7);

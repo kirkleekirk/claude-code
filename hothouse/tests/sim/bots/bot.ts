@@ -55,15 +55,15 @@ export interface BotProfile {
 
 export const PROFILES: Readonly<Record<BotKind, BotProfile>> = {
   casual: {
-    think: 6, drive: 1.25, ui: 1.3, haggle: 'auto', flow: 0.15, explore: 0.3, idle: 0.1, witnessed: 0.03, missionTime: 150, missionChance: 0.6, restForMissions: 0.5,
+    think: 5, drive: 1.25, ui: 1.3, haggle: 'auto', flow: 0.15, explore: 0.3, idle: 0.08, witnessed: 0.03, missionTime: 150, missionChance: 0.6, restForMissions: 0.5,
     market: false, feed: 'balanced', lights: 'standard', buffer: 400, samples: false, crew: 0.7, juggle: 2,
   },
   optimizer: {
-    think: 2.5, drive: 0.9, ui: 0.8, haggle: 'read', flow: 0.6, explore: 0.4, idle: 0, witnessed: 0.02, missionTime: 90, missionChance: 0.9, restForMissions: 0.8,
+    think: 2.5, drive: 0.9, ui: 0.8, haggle: 'read', flow: 0.6, explore: 0.4, idle: 0, witnessed: 0.02, missionTime: 90, missionChance: 0.95, restForMissions: 0.8,
     market: true, feed: 'quality', lights: 'blaze', buffer: 250, samples: true, crew: 1, juggle: 3,
   },
   riskTaker: {
-    think: 4, drive: 0.85, ui: 1, haggle: 'push', flow: 0.45, explore: 0.2, idle: 0.05, witnessed: 0.22, missionTime: 110, missionChance: 0.6, restForMissions: 0.6,
+    think: 4, drive: 0.85, ui: 1, haggle: 'push', flow: 0.45, explore: 0.2, idle: 0.05, witnessed: 0.22, missionTime: 110, missionChance: 0.75, restForMissions: 0.6,
     market: true, feed: 'yield', lights: 'blaze', buffer: 150, samples: true, crew: 0.9, juggle: 3,
   },
 };
@@ -72,11 +72,13 @@ export interface BotReport {
   kind: BotKind;
   seed: number;
   firstPurchase: number | null;
+  firstSale: number | null;
   rankAt: Record<number, number>;
   finaleReady: number | null;
   debtSettled: number | null;
   cash: Array<[number, number]>;
   earnedPerMinute: Array<[number, number]>;
+  xpCurve: Array<[number, number]>;
   xpBy: Record<string, number>;
   earnedBy: Record<string, number>;
   spentBy: Record<string, number>;
@@ -136,7 +138,7 @@ export class Bot {
     this.rng = new Rng(seed * 31 + 7);
     this.sim = createSim({ seed, difficulty, bus: this.bus });
     this.report = {
-      kind, seed, firstPurchase: null, rankAt: { 1: 0 }, finaleReady: null, debtSettled: null, cash: [], earnedPerMinute: [], xpBy: {},
+      kind, seed, firstPurchase: null, firstSale: null, rankAt: { 1: 0 }, finaleReady: null, debtSettled: null, cash: [], earnedPerMinute: [], xpCurve: [], xpBy: {},
       earnedBy: {}, spentBy: {}, busts: 0, raids: 0, deals: 0, walkUps: 0, crewDeals: 0, discoveries: 0, apex: 0, missions: [],
       maxNotoriety: 0, products: 0, crewSize: 0, properties: 1,
     };
@@ -151,6 +153,7 @@ export class Bot {
       if (e.fused) this.report.apex++;
     });
     this.bus.on('sim:mission', (e) => e.status === 'done' && !this.report.missions.includes(e.mission) && this.report.missions.push(e.mission));
+    this.bus.on('sim:deal', (e) => e.kind === 'sale' && this.report.firstSale === null && (this.report.firstSale = Math.round(this.t)));
     this.bus.on('sim:supplies', (e) => e.source === 'purchase' && this.report.firstPurchase === null && (this.report.firstPurchase = Math.round(this.t)));
   }
 
@@ -268,6 +271,7 @@ export class Bot {
     this.lastSample = this.t;
     const minute = Math.round(this.t / 60);
     this.report.cash.push([minute, s.money.dirty + s.money.clean]);
+    this.report.xpCurve.push([minute, s.progression.xp]);
     this.report.earnedPerMinute.push([minute, s.money.lifetimeEarned]);
     this.report.maxNotoriety = Math.max(this.report.maxNotoriety, s.heat.notoriety);
     if (this.report.finaleReady === null && s.missions.progress.hurricaneNight.status !== 'locked') this.report.finaleReady = Math.round(this.t);
@@ -530,7 +534,10 @@ export class Bot {
     return this.sim.content.additives[a].price;
   }
 
-  /** Pick the best known mix (or explore) among the stacks on hand and run one batch. */
+  /**
+   * One batch at the workbench: usually the most valuable known mix for what is on hand; sometimes
+   * (by temperament) a pair of additives nobody has tried on this stack yet, to see what happens.
+   */
   private mixAt(prop: PropertyId): void {
     const sim = this.sim;
     const cap = sim.query.mixCap(prop);
@@ -544,35 +551,57 @@ export class Bot {
       })
       .sort((a, b) => have(b) - have(a))
       .slice(0, 3);
+    if (!stacks.length) return;
     const pool = sim.content.additiveIds.filter((a) => sim.content.additives[a].rank <= sim.state.progression.rank && this.supplyShop(`add:${a}`));
-    const explore = this.rng.chance(this.profile.explore);
-    let best: { stack: StackId; adds: AdditiveId[]; gain: number } | null = null;
-    const score = (stack: StackId, adds: AdditiveId[]) => {
-      const pv = sim.query.mixPreview(stack, adds, prop);
-      const value = pv.exact ? pv.value : explore ? pv.value * 1.2 + 12 : -Infinity;
-      return value - sim.query.unitValue(stack) - adds.reduce((s, a) => s + this.additivePrice(a), 0);
-    };
-    for (const stack of stacks) {
-      const singles = pool.map((a) => ({ a, g: score(stack, [a]) })).sort((x, y) => y.g - x.g);
-      const top = singles.slice(0, 5).map((s) => s.a);
-      const options: AdditiveId[][] = [...singles.slice(0, 5).map((s) => [s.a])];
-      for (const a of top) for (const b of top) if (a !== b) options.push([a, b]);
-      for (const adds of options) {
-        const gain = score(stack, adds);
-        if (gain > 3 && (!best || gain > best.gain)) best = { stack, adds, gain };
+    const cost = (adds: AdditiveId[]) => adds.reduce((s, a) => s + this.additivePrice(a), 0);
+    let pick: { stack: StackId; adds: AdditiveId[] } | null = null;
+    let qty = batch;
+    if (this.rng.chance(this.profile.explore)) {
+      // A small test batch with additives already on the shelf; keep a few new ones coming.
+      const stack = stacks[0]!;
+      const shelf = pool.filter((a) => (sim.state.supplies[`add:${a}`] ?? 0) >= 3);
+      const untried: AdditiveId[][] = [];
+      for (const a of shelf) for (const b of shelf) if (a !== b && !sim.query.mixPreview(stack, [a, b], prop).exact) untried.push([a, b]);
+      if (untried.length) {
+        pick = { stack, adds: this.rng.pick(untried) };
+        qty = 3;
+      }
+      const missing = pool.filter((a) => !shelf.includes(a));
+      if (untried.length < 4 && missing.length) this.purchase(`add:${this.rng.pick(missing)}`, 10);
+    }
+    if (!pick) {
+      let gain = 3;
+      for (const stack of stacks) {
+        const base = sim.query.unitValue(stack);
+        const value = (adds: AdditiveId[]) => {
+          const pv = sim.query.mixPreview(stack, adds, prop);
+          return pv.exact ? pv.value - base - cost(adds) : -Infinity;
+        };
+        const singles = pool.map((a) => ({ a, g: value([a]) })).sort((x, y) => y.g - x.g);
+        const top = singles.slice(0, 5).map((x) => x.a);
+        const options: AdditiveId[][] = [...top.map((a) => [a])];
+        for (const a of top) for (const b of pool) if (a !== b) options.push([a, b]);
+        for (const adds of options) {
+          const g = value(adds);
+          if (g > gain) {
+            gain = g;
+            pick = { stack, adds };
+          }
+        }
       }
     }
-    if (!best) return;
-    const qty = Math.min(have(best.stack), batch);
-    for (const a of best.adds) {
+    if (!pick) return;
+    qty = Math.min(have(pick.stack), qty);
+    for (const a of pick.adds) {
       const owned = sim.state.supplies[`add:${a}`] ?? 0;
       if (owned >= qty) continue;
       if (!this.purchase(`add:${a}`, Math.max(qty - owned, 20)) || (sim.state.supplies[`add:${a}`] ?? 0) < qty) return;
     }
     this.go(prop);
     this.ui(7);
-    sim.cmd.mix(prop, best.stack, best.adds, qty);
+    sim.cmd.mix(prop, pick.stack, pick.adds, qty);
   }
+
 
   private refineAt(prop: PropertyId): void {
     const sim = this.sim;
@@ -769,18 +798,23 @@ export class Bot {
 
   // ── main loop ────────────────────────────────────────────────────────────
 
+  /** The HUD objective nags: a story mission gets picked up when it is ready (by most players). */
+  private storyCheck(): void {
+    if (this.sim.state.missions.active || this.rng.chance(this.profile.missionChance)) playMission(this);
+  }
+
   private step(): void {
-    const sim = this.sim;
     this.wait(this.profile.think);
     this.handleMoney();
     this.handleRequests();
     this.handleWalkUps();
     this.restock();
+    this.storyCheck();
     this.homeRounds();
     this.handleRequests();
     this.expand();
     this.handleSamples();
-    if (sim.state.missions.active || this.rng.chance(this.profile.missionChance)) playMission(this);
+    this.storyCheck();
     this.hangOut();
     if (this.rng.chance(this.profile.idle)) this.wait(this.rng.range(20, 60), true);
   }
@@ -795,7 +829,11 @@ export class Bot {
     return this.report;
   }
 
-  /** The first ten minutes, at the pace of someone meeting the game for the first time. */
+  /**
+   * The first ten minutes, at the pace of someone meeting the game for the first time (brief §3:
+   * harvest by 0:45, Kiki on the boardwalk by 3:00, the garden store by 4:00, home by 6:00, the
+   * brand by 7:00, dusk at 8:00, Marisol and Rank 2 at about 10:00).
+   */
   private playPrologue(): void {
     const sim = this.sim;
     this.ui(38); // cold open, Sy's text, walking into the greenhouse
@@ -808,36 +846,37 @@ export class Bot {
     this.ui(20); // read Kiki's text, answer
     const kiki = sim.state.requests.find((r) => r.customer === 'kiki');
     if (kiki?.message) sim.cmd.replyChip(kiki.message, 'accept');
-    this.ui(12); // walk out to the Gator
+    this.ui(8); // out to the Gator; the drive itself is the first sunset drive
     this.go('boardwalk');
-    this.ui(18); // find Kiki among the skaters
+    this.ui(10); // find Kiki among the skaters
     if (kiki) {
       const deal = sim.cmd.openDeal({ request: kiki.id });
       if (deal.ok) this.sell(deal.value.id);
     }
-    this.ui(15); // the first-haggle explainer
+    this.ui(8); // the first-haggle explainer
     this.go('sodAlmighty');
-    this.ui(30); // browse the counter, meet Wade
+    this.ui(8);
     sim.cmd.buy('sodAlmighty', 'seed:abuelasBlush', 3);
     sim.cmd.buy('sodAlmighty', 'add:honey', 4);
-    this.ui(10);
+    this.ui(25); // Wade's sales pitch, a look around the shelves
     this.go('ofelias');
-    this.ui(15);
+    this.ui(30); // the shop, the back room, Gerald the monstera
     this.tendGarden('ofelias');
-    this.ui(10);
+    this.ui(15);
     const raw = Object.keys(sim.state.bag).find((k) => k.startsWith('b.abuelasBlush.sunkissed*'));
     if (raw) {
-      this.ui(35); // Ofelia's Notebook, the mixing tutorial
+      this.ui(45); // Ofelia's Notebook, the mixing tutorial
       sim.cmd.mix('ofelias', raw, ['honey'], Math.min(3, sim.state.bag[raw] ?? 0));
     }
-    this.ui(55); // the brand creator
+    this.ui(60); // the brand creator
     sim.cmd.createBrand('Bot Botanicals', { shape: 1, icon: 2, palette: 3, type: 1 }, 1);
+    this.ui(35); // dusk falls: the city lights come on, a look around
     for (let i = 0; i < 30 && !sim.state.requests.some((r) => r.customer === 'marisol'); i++) this.wait(1);
     this.ui(15);
     const marisol = sim.state.requests.find((r) => r.customer === 'marisol');
     if (marisol?.message) sim.cmd.replyChip(marisol.message, 'accept');
     this.go('palmettoPlaza');
-    this.ui(15);
+    this.ui(20); // find her car in the lot
     if (marisol) {
       const deal = sim.cmd.openDeal({ request: marisol.id });
       if (deal.ok) this.sell(deal.value.id);

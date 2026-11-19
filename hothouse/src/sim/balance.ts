@@ -77,6 +77,9 @@ export const DEALS = {
   satiationDecay: 1 / 300,
   xpBase: 10,
   xpPerDollar: 1 / 14,
+  /** A dealer's sale: a little XP that grows with the empire. */
+  crewXpBase: 1,
+  crewXpPerDollar: 1 / 60,
   xpFirstDeal: 15,
   xpPerfect: 10,
 } as const;
