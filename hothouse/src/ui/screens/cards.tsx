@@ -53,7 +53,7 @@ export function RankUpCard({ entry }: { entry: RankEntry }) {
     <div class="hh-overlay hh-rankup hh-interactive">
       <div class="hh-scrim" />
       <div class="hh-rankup-rays" aria-hidden="true" />
-      <div ref={ref} class="hh-rankup-card hh-glass" role="dialog" aria-modal="true" aria-label={tCards('rank', { n: s.rank })}>
+      <div ref={ref} class="hh-rankup-card hh-scroll hh-glass" role="dialog" aria-modal="true" aria-label={tCards('rank', { n: s.rank })}>
         <div class="hh-rankup-eyebrow hh-label">{tCards('rankUp')}</div>
         <div class="hh-rankup-badge">
           <Icon name="crown" size="1.6rem" />
@@ -89,7 +89,7 @@ export function ShiftReportCard({ entry }: { entry: ShiftEntry }) {
   return (
     <div class="hh-overlay hh-shift hh-interactive">
       <div class="hh-scrim" />
-      <div ref={ref} class="hh-shift-card hh-glass hh-enter" role="dialog" aria-modal="true" aria-label={s.title}>
+      <div ref={ref} class="hh-shift-card hh-scroll hh-glass hh-enter" role="dialog" aria-modal="true" aria-label={s.title}>
         <header>
           <div class="hh-label">{s.span}</div>
           <h1 class="hh-title">{s.title}</h1>
@@ -136,7 +136,7 @@ export function BustedScreen({ entry }: { entry: BustedEntry }) {
   return (
     <div ref={ref} class={`hh-overlay hh-busted hh-busted-${s.kind} hh-interactive`} role="alertdialog" aria-modal="true" aria-label={tCards(s.kind)}>
       <div class="hh-busted-wash" aria-hidden="true" />
-      <div class="hh-busted-content">
+      <div class="hh-busted-content hh-scroll">
         <h1 class="hh-busted-word hh-wordmark">{tCards(s.kind)}</h1>
         <p class="hh-busted-sub">{s.kind === 'busted' ? tCards('bustedSub') : tCards('wastedSub')}</p>
         <blockquote class="hh-busted-quip">“{s.quip}”<cite>— Sy Pinkerton, Esq.</cite></blockquote>

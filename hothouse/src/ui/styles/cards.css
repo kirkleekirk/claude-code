@@ -21,6 +21,10 @@
   align-items: center;
   gap: 0.9rem;
   width: min(32rem, 100%);
+  max-height: calc(100vh - 2 * var(--safe));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
   padding: 2rem 2rem 1.6rem;
   text-align: center;
   animation: hh-pop-in 420ms var(--spring) both;
@@ -97,6 +101,9 @@
   flex-direction: column;
   gap: 1.1rem;
   width: min(30rem, 100%);
+  max-height: calc(100vh - 2 * var(--safe));
+  overflow-y: auto;
+  scrollbar-width: thin;
   padding: 1.6rem 1.75rem;
 }
 
@@ -163,6 +170,9 @@
   align-items: center;
   gap: 0.85rem;
   width: min(30rem, 100%);
+  max-height: calc(100vh - 2 * var(--safe));
+  overflow-y: auto;
+  scrollbar-width: thin;
   text-align: center;
   animation: hh-pop-in 380ms var(--spring) both;
 }

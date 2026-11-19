@@ -132,6 +132,7 @@
   transition: transform var(--t-fast) var(--ease), background-color var(--t-fast) var(--ease), box-shadow var(--t-med) var(--ease), color var(--t-fast) var(--ease), filter var(--t-fast) var(--ease);
 }
 
+.hh-ui .hh-btn { max-width: 100%; }
 .hh-ui .hh-btn-sm { min-height: var(--hit-sm); padding: 0 0.95rem; font-size: var(--fs-sm); border-radius: 12px; }
 .hh-ui .hh-btn-lg { min-height: max(48px, 3.25rem); padding: 0 1.6rem; font-size: var(--fs-lg); border-radius: 16px; }
 .hh-ui .hh-btn-wide { width: 100%; }
