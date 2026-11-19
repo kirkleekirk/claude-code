@@ -3,6 +3,7 @@ import { advanceClock, clockHours, createClock, dayTFromHours, type ClockState }
 import type { EventBus } from '@/core/events';
 import type { Flags } from '@/core/flags';
 import type { GameLoop, LoopCallbacks } from '@/core/loop';
+import type { AudioApi } from '@/audio/api';
 import type { Input } from '@/input';
 import type { PhysicsWorld } from '@/physics';
 import type { Gfx, MaterialKit } from '@/render';
@@ -19,12 +20,15 @@ export interface GameContext {
   readonly saves: SaveManager;
   readonly bus: EventBus;
   readonly flags: Flags;
+  readonly audio: AudioApi;
 }
 
 /** A self-contained slice of runtime behaviour (the world in play, a sandbox, the front end). */
 export interface Stage {
-  /** Fixed 60 Hz step: physics-driven movement and gameplay logic. */
+  /** Fixed 60 Hz step: physics-driven movement and gameplay logic (before the physics step). */
   fixed(dt: number): void;
+  /** After the physics step: capture transforms for interpolation, read contacts. */
+  postFixed?(dt: number): void;
   /** Once per frame: interpolation, animation, cameras, effects. `dt` is scaled game time. */
   update(dt: number, alpha: number, dtReal: number): void;
   /** Serializable snapshot for the test harness. */
@@ -82,6 +86,7 @@ export class Game implements LoopCallbacks {
   fixed(dt: number): void {
     this.stage?.fixed(dt);
     this.ctx.physics.step(dt);
+    this.stage?.postFixed?.(dt);
     if (this.clockRunning) advanceClock(this.clock, dt);
     this.ctx.input.endFixedStep();
   }
@@ -102,6 +107,10 @@ export class Game implements LoopCallbacks {
     }
     gfx.camera.updateMatrixWorld();
     gfx.update(dt);
+    const cam = gfx.camera;
+    const e = cam.matrixWorld.elements;
+    this.ctx.audio.setListener(cam.position.x, cam.position.y, cam.position.z, -e[8]!, -e[9]!, -e[10]!);
+    this.ctx.audio.update(dtReal);
   }
 
   render(): void {

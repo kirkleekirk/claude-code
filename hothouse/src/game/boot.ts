@@ -14,6 +14,9 @@ import { LocalStore, SaveManager, Settings } from '@/save';
 import { showFallback } from './fallback';
 import { Game } from './Game';
 import { showSplash } from './splash';
+import { createAudio } from '@/audio';
+import type { BusId } from '@/audio/api';
+import { DriveStage } from './DriveStage';
 
 const isDev = import.meta.env.DEV;
 
@@ -58,7 +61,16 @@ export async function boot(): Promise<void> {
   }
   const physics = await PhysicsWorld.create();
   const kit = new MaterialKit(gfx.shared);
-  const game = new Game({ gfx, kit, physics, input, settings, saves, bus, flags });
+  const audio = createAudio({ muted: flags.mute });
+  // The browser lets audio start only after a gesture; the first click or key unlocks it.
+  const unlock = () => void audio.unlock();
+  addEventListener('pointerdown', unlock, { once: true });
+  addEventListener('keydown', unlock, { once: true });
+  const buses: Array<[BusId, 'audio.master' | 'audio.music' | 'audio.sfx' | 'audio.ambience' | 'audio.ui' | 'audio.barks']> = [
+    ['master', 'audio.master'], ['music', 'audio.music'], ['sfx', 'audio.sfx'], ['ambience', 'audio.ambience'], ['ui', 'audio.ui'], ['barks', 'audio.barks'],
+  ];
+  for (const [bus, id] of buses) settings.watch(id, (v) => audio.setVolume(bus, v / 100));
+  const game = new Game({ gfx, kit, physics, input, settings, saves, bus, flags, audio });
 
   const harness = flags.test || flags.debug || isDev ? installHarness(game) : null;
   if (flags.debug || isDev) {
@@ -71,7 +83,7 @@ export async function boot(): Promise<void> {
   } else {
     const slicer = new TimeSlicer(14);
     const world = await World.build({ gfx, kit, physics, slicer, progress: (f, label) => splash.set(f * 0.92, label) });
-    game.setStage(new LookDevStage(game.ctx, world));
+    game.setStage(flags.sandbox === 'lookdev' ? new LookDevStage(game.ctx, world) : new DriveStage(game.ctx, world));
   }
 
   const loop = new GameLoop(game);
@@ -88,9 +100,11 @@ export async function boot(): Promise<void> {
       loop.stop();
       input.releaseAll();
       settings.flush();
+      if (settings.peek('audio.muteOnBlur')) audio.suspend();
     } else {
       loop.resetTiming();
       loop.start();
+      audio.resume();
     }
   });
   addEventListener('pagehide', () => settings.flush());

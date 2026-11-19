@@ -16,7 +16,7 @@ const browser = await launchBrowser();
 let failed = false;
 try {
   const t0 = Date.now();
-  const { page, logs } = await openGame(browser, server.url, `test=1&${process.env.QA_QUERY ?? ''}`, { width, height });
+  const { page, logs } = await openGame(browser, server.url, `test=1&sandbox=lookdev&${process.env.QA_QUERY ?? ''}`, { width, height });
   console.log(`boot ${(Date.now() - t0) / 1000}s`, JSON.stringify(await hh(page, 'worldStats')));
   const report = {};
   for (const c of cases) {

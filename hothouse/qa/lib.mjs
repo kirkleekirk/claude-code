@@ -17,7 +17,8 @@ export async function startServer(mode = process.env.QA_SERVER ?? 'dev') {
     const url = server.resolvedUrls?.local?.[0] ?? 'http://127.0.0.1:4317/';
     return { url, close: () => new Promise((r) => server.httpServer.close(() => r())) };
   }
-  const server = await createServer({ root: ROOT, server: { port: 5317, host: '127.0.0.1', strictPort: false }, logLevel: 'silent' });
+  // No watcher and no HMR: edits made while a QA run is in flight must never reload the page.
+  const server = await createServer({ root: ROOT, server: { port: 5317, host: '127.0.0.1', strictPort: false, hmr: false, watch: null }, logLevel: 'silent' });
   await server.listen();
   const url = server.resolvedUrls?.local?.[0] ?? 'http://127.0.0.1:5317/';
   return { url, close: () => server.close() };

@@ -62,6 +62,8 @@ export interface ShaderExtension {
   readonly fragmentEmissive?: string;
   /** After lighting, before fog (modify \`gl_FragColor\`). */
   readonly fragmentFinal?: string;
+  /** Literal [search, replacement] edits on the fragment shader, applied last. */
+  readonly fragmentReplace?: ReadonlyArray<readonly [string, string]>;
 }
 
 export interface KitStandardParams extends MeshStandardMaterialParameters, PatchOptions {}
@@ -396,6 +398,7 @@ export class MaterialKit {
         );
       }
       if (ext?.fragmentFinal) fs = fs.replace('#include <fog_fragment>', `{\n${ext.fragmentFinal}\n}\n#include <fog_fragment>`);
+      for (const [from, to] of ext?.fragmentReplace ?? []) fs = fs.replace(from, to);
       if (fog !== 'none') {
         const apply = fog === 'additive'
           ? 'gl_FragColor.rgb *= 1.0 - hhFog;'

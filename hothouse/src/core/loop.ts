@@ -123,6 +123,12 @@ export class GameLoop {
   private readonly onFrame = (now: number): void => {
     if (!this.running) return;
     this.raf = requestAnimationFrame(this.onFrame);
+    // Harness-driven runs own the clock and the renderer (`advance` and `capture` render on demand);
+    // idle frames would only compete with them for the main thread.
+    if (this.manual) {
+      this.last = null;
+      return;
+    }
     const dtReal = this.last === null ? this.fixedDt : Math.min((now - this.last) / 1000, 0.25);
     if (this.last !== null) {
       this.history[this.historyIndex] = now - this.last;
@@ -136,21 +142,18 @@ export class GameLoop {
       this.cb.beginFrame(dtReal);
       let steps = 0;
       const t0 = performance.now();
-      if (!this.manual) {
-        this.accumulator += dtReal * this.timeScale;
-        while (this.accumulator >= this.fixedDt && steps < this.maxSteps) {
-          this.step();
-          this.accumulator -= this.fixedDt;
-          steps++;
-        }
-        if (this.accumulator >= this.fixedDt) {
-          this.dropped += this.accumulator;
-          this.accumulator = 0;
-        }
+      this.accumulator += dtReal * this.timeScale;
+      while (this.accumulator >= this.fixedDt && steps < this.maxSteps) {
+        this.step();
+        this.accumulator -= this.fixedDt;
+        steps++;
+      }
+      if (this.accumulator >= this.fixedDt) {
+        this.dropped += this.accumulator;
+        this.accumulator = 0;
       }
       const t1 = performance.now();
-      const alpha = this.manual ? 1 : this.accumulator / this.fixedDt;
-      this.cb.update(this.manual ? 0 : dtReal * this.timeScale, alpha, dtReal);
+      this.cb.update(dtReal * this.timeScale, this.accumulator / this.fixedDt, dtReal);
       const t2 = performance.now();
       this.cb.render(dtReal);
       const t3 = performance.now();

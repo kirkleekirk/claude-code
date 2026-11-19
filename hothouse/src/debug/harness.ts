@@ -18,8 +18,11 @@ export interface Harness {
   setWeather(id: WeatherId): void;
   setCamera(pos: [number, number, number], look: [number, number, number], fov?: number): void;
   releaseCamera(): void;
-  /** Switch to deterministic stepping and advance the simulation by `seconds`. */
-  advance(seconds: number): void;
+  /**
+   * Switch to deterministic stepping and advance the simulation by `seconds`. With `render` false the
+   * frame is updated but not drawn (physics-only measurements); `screenshot` always draws.
+   */
+  advance(seconds: number, render?: boolean): void;
   /** Return to real-time running. */
   realtime(): void;
   /** Force an action value (null releases it). */
@@ -66,7 +69,7 @@ export function installHarness(game: Game): Harness {
     releaseCamera() {
       game.cameraPin = null;
     },
-    advance(seconds) {
+    advance(seconds, render = true) {
       const loop = game.loop;
       if (!loop) throw new Error('loop not started');
       loop.manual = true;
@@ -74,7 +77,7 @@ export function installHarness(game: Game): Harness {
       let left = Math.max(0, seconds);
       while (left > 0) {
         const chunk = Math.min(1, left);
-        loop.advance(chunk, left - chunk <= 0);
+        loop.advance(chunk, render && left - chunk <= 0);
         left -= chunk;
       }
     },
