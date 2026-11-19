@@ -3,6 +3,7 @@ import { flags } from '@/core/flags';
 import { GameLoop } from '@/core/loop';
 import { log } from '@/core/log';
 import { LookDevStage } from '@/debug/LookDevStage';
+import { PeopleStage } from '@/debug/PeopleStage';
 import { PipelineStage } from '@/debug/PipelineStage';
 import { installHarness } from '@/debug/harness';
 import { TimeSlicer } from '@/core/slicer';
@@ -83,7 +84,7 @@ export async function boot(): Promise<void> {
   } else {
     const slicer = new TimeSlicer(14);
     const world = await World.build({ gfx, kit, physics, slicer, progress: (f, label) => splash.set(f * 0.92, label) });
-    game.setStage(flags.sandbox === 'lookdev' ? new LookDevStage(game.ctx, world) : new DriveStage(game.ctx, world));
+    game.setStage(flags.sandbox === 'lookdev' ? new LookDevStage(game.ctx, world) : flags.sandbox === 'people' ? new PeopleStage(game.ctx, world) : new DriveStage(game.ctx, world));
   }
 
   const loop = new GameLoop(game);

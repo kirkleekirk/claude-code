@@ -35,6 +35,9 @@ export const Region = {
 
 export const REGION_COUNT = 21;
 
+/** Height of a crew neckline (body space); the shader cuts the neck opening here. */
+export const CREW_NECK = 1.49;
+
 export type Neckline = 'crew' | 'v' | 'collar' | 'scoop' | 'high' | 'open' | 'strap';
 
 /** How an outfit covers the body, in neutral-height metres. */
@@ -77,7 +80,7 @@ const LONG: ReadonlySet<TopStyle> = new Set(['tracksuit', 'blazer', 'hoodie', 'b
 export function clothSpec(o: Outfit): ClothSpec {
   const t = o.top;
   const sleeve = LONG.has(t) ? 1 : t === 'linenShirt' ? 0.72 : t === 'tank' || t === 'sundress' ? 0 : t === 'crop' ? 0.32 : 0.42;
-  const sleeveLoose = t === 'aloha' || t === 'guayabera' || t === 'jersey' ? 0.016 : t === 'linenShirt' || t === 'windbreaker' || t === 'hoodie' ? 0.012 : t === 'blazer' ? 0.01 : 0.006;
+  const sleeveLoose = t === 'aloha' || t === 'guayabera' || t === 'jersey' ? 0.011 : t === 'linenShirt' || t === 'windbreaker' || t === 'hoodie' ? 0.009 : t === 'blazer' ? 0.008 : 0.004;
   const topLoose = t === 'windbreaker' || t === 'hoodie' ? 0.016 : t === 'aloha' || t === 'jersey' || t === 'linenShirt' || t === 'guayabera' ? 0.012 : t === 'blazer' ? 0.014 : t === 'tank' || t === 'crop' ? 0.004 : 0.008;
   const topHem = t === 'blazer' ? 0.86 : t === 'crop' ? 1.17 : t === 'aloha' || t === 'guayabera' || t === 'linenShirt' || t === 'hoodie' || t === 'jersey' ? 0.9 : t === 'sundress' ? 0.98 : 0.94;
   const neckline: Neckline = t === 'tracksuit' || t === 'windbreaker' ? 'high'

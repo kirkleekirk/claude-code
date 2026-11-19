@@ -1,9 +1,9 @@
 import { Color, Vector4, type MeshStandardMaterial } from 'three';
-import { HAIR_COLORS, HAIR_STYLES, OUTFITS, SKIN_TONES, type Appearance } from '@/content/appearance';
+import { BUILDS, HAIR_COLORS, HAIR_STYLES, OUTFITS, SKIN_TONES, type Appearance } from '@/content/appearance';
 import { hash2 } from '@/core/rng';
 import type { MaterialKit } from '@/render/materials/MaterialKit';
-import { HEAD } from './geometry/body';
-import { printId, Region, REGION_COUNT } from './geometry/cloth';
+import { HEAD, soleHeight } from './geometry/body';
+import { CREW_NECK, clothSpec, printId, Region, REGION_COUNT, type Neckline } from './geometry/cloth';
 import { PEOPLE_FRAGMENT_COLOR, PEOPLE_FRAGMENT_EMISSIVE, PEOPLE_FRAGMENT_PARS, PEOPLE_FRAGMENT_SURFACE, PEOPLE_VERTEX_MAIN, PEOPLE_VERTEX_PARS } from './shader';
 
 /** Iris colours, shared with the dialogue portraits. */
@@ -17,7 +17,13 @@ export interface PeopleUniforms {
   readonly face: [Vector4, Vector4, Vector4, Vector4];
   readonly head: Vector4;
   readonly print: Vector4;
+  /** neckline id, flags (1 bare shoulders, 2 lapels, 4 side stripes), placket y, crew neckline y */
+  readonly cloth: Vector4;
+  /** armhole |x|, sole height */
+  readonly cloth2: Vector4;
 }
+
+const NECKLINES: readonly Neckline[] = ['crew', 'v', 'collar', 'scoop', 'high', 'open', 'strap'];
 
 export function createUniforms(): PeopleUniforms {
   const pal: Color[] = [];
@@ -27,6 +33,8 @@ export function createUniforms(): PeopleUniforms {
     face: [new Vector4(0, 0, 0, 1), new Vector4(0.2, 0, 0, 0), new Vector4(0, 0, 0.33, 0.5), new Vector4(0.2, 0.12, 0.08, 0)],
     head: new Vector4(HEAD.x, HEAD.y, HEAD.z, HEAD.r),
     print: new Vector4(),
+    cloth: new Vector4(),
+    cloth2: new Vector4(),
   };
 }
 
@@ -71,6 +79,9 @@ export function applyAppearance(u: PeopleUniforms, a: Appearance): void {
   u.face[2].w = a.brow;
   u.face[3].set(iris.r, iris.g, iris.b, a.facialHair === 1 ? 1 : a.facialHair >= 3 ? 0.45 : 0);
   u.print.x = printId(o);
+  const c = clothSpec(o);
+  u.cloth.set(NECKLINES.indexOf(c.neckline), (c.bareShoulders ? 1 : 0) + (c.lapels ? 2 : 0) + (c.sideStripes ? 4 : 0), c.placket, CREW_NECK);
+  u.cloth2.set(0.112 * (BUILDS[a.build]?.shoulders ?? 1), soleHeight(o.shoes), 0, 0);
 }
 
 /** A MaterialKit material wired to the people shader and the given uniform values. */
@@ -82,7 +93,7 @@ export function createPeopleMaterial(kit: MaterialKit, u: PeopleUniforms): MeshS
     wet: true,
     extend: {
       key: 'people-v1',
-      uniforms: { uPal: { value: u.pal }, uFace: { value: u.face }, uHeadC: { value: u.head }, uPrint: { value: u.print } },
+      uniforms: { uPal: { value: u.pal }, uFace: { value: u.face }, uHeadC: { value: u.head }, uPrint: { value: u.print }, uCloth: { value: u.cloth }, uCloth2: { value: u.cloth2 } },
       vertexPars: PEOPLE_VERTEX_PARS,
       vertexMain: PEOPLE_VERTEX_MAIN,
       fragmentPars: PEOPLE_FRAGMENT_PARS,

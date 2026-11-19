@@ -35,7 +35,11 @@ const _p = { x: 0, y: 0, z: 0 };
 function hairline(s: ShellSpec, t: number): number {
   const fz = Math.sin(t);
   const k = Math.abs(fz) ** 1.4;
-  return fz < 0 ? lerp(s.side, s.front, k) : lerp(s.side, s.back, k);
+  const base = fz < 0 ? lerp(s.side, s.front, k) : lerp(s.side, s.back, k);
+  // Hair (not hats) gets a softer, slightly uneven front: temples recede, a little dip at the centre.
+  if (s.region !== undefined || fz > -0.2) return base;
+  const fx = Math.cos(t);
+  return base + 0.05 * Math.abs(fx) * (1 - Math.abs(fx)) * 2 - 0.025 * Math.exp(-(fx * fx) / 0.02);
 }
 
 /** A shell over the scalp down to a hairline, closed with a rim tucked under the edge. */
@@ -69,7 +73,9 @@ function shell(ctx: BodyCtx, h: HeadShape, s: ShellSpec, bone: number = Bone.hea
       const dy = 1 - (1 - e) * (r / rows) ** 0.95;
       const hr = Math.sqrt(Math.max(0, 1 - dy * dy));
       const dx = Math.cos(t) * hr, dz = Math.sin(t) * hr;
-      point(dx, dy, dz, s.thick(dx, dy, dz) + 0.002);
+      // Thin out toward the hairline so the edge reads as hair, not a helmet rim.
+      const taper = 0.3 + 0.7 * smoothstep(e, e + 0.3, dy);
+      point(dx, dy, dz, s.thick(dx, dy, dz) * (s.region === undefined ? taper : 1) + 0.002);
       b.vertex(q.x, q.y, q.z, t, painter);
     }
     const ring = { start, count: cols, cx: HEAD.x, cy: HEAD.y, cz: HEAD.z };

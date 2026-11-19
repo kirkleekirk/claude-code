@@ -217,7 +217,7 @@ export function buildBag(ctx: BodyCtx, kind: number): void {
     }
   } else {
     b.set(Region.BAG, Bone.hips).begin();
-    roundBox(b, 0, 1.0, -0.1 - p.belly * 0.04 - 0.035, 0.1, 0.045, 0.03, bodyPaint);
+    roundBox(b, 0, 1.0, -0.1 - p.belly * 0.04 - 0.03, 0.082, 0.038, 0.026, bodyPaint);
     b.end();
     b.set(Region.STRAP, Bone.hips).begin();
     const pts: Array<[number, number, number]> = [];

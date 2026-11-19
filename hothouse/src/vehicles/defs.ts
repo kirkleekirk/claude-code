@@ -30,6 +30,21 @@ export interface BodyShape {
   rimStyle: 'spokes' | 'wire' | 'disc' | 'star' | 'steel';
   rimColor: string;
   headlights: 'round' | 'quad' | 'slim' | 'popup';
+  /**
+   * Driver's hip point (H-point) in the vehicle frame (forward −Z, metres, x < 0 = left-hand
+   * drive). The front passenger mirrors x. A seated character's root goes here.
+   */
+  seat?: { readonly x: number; readonly y: number; readonly z: number };
+}
+
+/** Hip point of the driver or front passenger, derived from the cabin when not authored. */
+export function seatPoint(body: BodyShape, side: 'driver' | 'passenger' = 'driver'): { x: number; y: number; z: number } {
+  const s = body.seat ?? {
+    x: -Math.min(0.4, body.width * 0.2),
+    y: body.clearance + 0.32,
+    z: -body.length / 2 + body.length * (body.cabin.start + (body.cabin.end - body.cabin.start) * 0.55),
+  };
+  return { x: side === 'driver' ? s.x : -s.x, y: s.y, z: s.z };
 }
 
 /** Arcade handling: every number here was tuned against the drive bot (see BALANCE.md / PROGRESS.md). */
@@ -87,6 +102,7 @@ export const VEHICLES: Record<string, VehicleDef> = {
       belt: [[0, 0.62], [0.05, 0.76], [0.2, 0.86], [0.42, 0.9], [0.8, 0.9], [0.97, 0.86], [1, 0.7]],
       roundness: 0.55, cabin: { start: 0.4, roofStart: 0.48, roofEnd: 0.5, end: 0.72, tumblehome: 0.06 }, convertible: true,
       fins: true, chrome: true, rimStyle: 'wire', rimColor: '#E8EBEF', headlights: 'round',
+      seat: { x: -0.38, y: 0.64, z: 0.66 },
     },
     handling: {
       mass: 1350, drive: 9200, topSpeed: 58, brake: 14000, frontDrive: 0, steerLock: 0.62, steerLockFast: 0.13,
@@ -103,6 +119,7 @@ export const VEHICLES: Record<string, VehicleDef> = {
       belt: [[0, 0.82], [0.04, 1.02], [0.3, 1.1], [1, 1.1]],
       roundness: 0.2, cabin: { start: 0.33, roofStart: 0.4, roofEnd: 0.53, end: 0.56, tumblehome: 0.08 },
       bed: { t0: 0.57, t1: 0.98, wall: 0.5 }, chrome: true, rimStyle: 'steel', rimColor: '#DADCE0', headlights: 'quad',
+      seat: { x: -0.4, y: 0.86, z: 0.06 },
     },
     handling: {
       mass: 1900, drive: 10500, topSpeed: 48, brake: 16000, frontDrive: 0.25, steerLock: 0.6, steerLockFast: 0.12,
@@ -119,6 +136,7 @@ export const VEHICLES: Record<string, VehicleDef> = {
       belt: [[0, 0.66], [0.05, 0.84], [0.35, 0.9], [0.8, 0.92], [1, 0.78]],
       roundness: 0.3, cabin: { start: 0.38, roofStart: 0.5, roofEnd: 0.64, end: 0.8, tumblehome: 0.1 }, spoiler: 0.12,
       chrome: false, rimStyle: 'star', rimColor: '#2A2D33', headlights: 'quad',
+      seat: { x: -0.39, y: 0.42, z: 0.4 },
     },
     handling: {
       mass: 1550, drive: 13800, topSpeed: 66, brake: 15500, frontDrive: 0, steerLock: 0.6, steerLockFast: 0.11,
@@ -134,6 +152,7 @@ export const VEHICLES: Record<string, VehicleDef> = {
       length: 4.5, width: 1.78, height: 1.46, wheelbase: 2.65, frontAxle: 0.2, track: 1.52, wheelR: 0.31, wheelW: 0.2, clearance: 0.15,
       belt: sedanBelt(0.9, 0.95), roundness: 0.55, cabin: { start: 0.3, roofStart: 0.42, roofEnd: 0.66, end: 0.82, tumblehome: 0.12 },
       chrome: false, rimStyle: 'disc', rimColor: '#B9BEC4', headlights: 'slim',
+      seat: { x: -0.37, y: 0.5, z: 0.16 },
     },
     handling: {
       mass: 1250, drive: 7200, topSpeed: 50, brake: 13000, frontDrive: 1, steerLock: 0.62, steerLockFast: 0.14,
@@ -149,6 +168,7 @@ export const VEHICLES: Record<string, VehicleDef> = {
       length: 5.0, width: 1.9, height: 1.5, wheelbase: 2.9, frontAxle: 0.2, track: 1.6, wheelR: 0.34, wheelW: 0.24, clearance: 0.16,
       belt: sedanBelt(0.92, 0.98), roundness: 0.35, cabin: { start: 0.31, roofStart: 0.43, roofEnd: 0.66, end: 0.8, tumblehome: 0.1 },
       chrome: false, rimStyle: 'steel', rimColor: '#2A2D33', headlights: 'slim',
+      seat: { x: -0.39, y: 0.52, z: 0.26 },
     },
     handling: {
       mass: 1650, drive: 13000, topSpeed: 64, brake: 16500, frontDrive: 0, steerLock: 0.6, steerLockFast: 0.12,

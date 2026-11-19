@@ -1,4 +1,5 @@
 import { Matrix4 } from 'three';
+import type { ShoeStyle } from '@/content/appearance';
 import { clamp, lerp, smoothstep } from '@/core/math';
 import { ARM, Bone, LEG, type Proportions } from '../rig';
 import { Region, type ClothSpec } from './cloth';
@@ -23,6 +24,11 @@ function soleWeights(foot: number, toe: number) {
   };
 }
 
+/** Height of the sole line on each shoe style (the shader draws it). */
+export function soleHeight(style: ShoeStyle): number {
+  return style === 'sandals' || style === 'flipflops' ? 0.012 : style === 'sneakers' || style === 'skates' || style === 'boots' ? 0.026 : 0.013;
+}
+
 const gauss = (x: number, mu: number, sigma: number) => Math.exp(-((x - mu) * (x - mu)) / (2 * sigma * sigma));
 const TAU = Math.PI * 2;
 
@@ -39,10 +45,11 @@ const TORSO: ReadonlyArray<readonly [number, number, number, number]> = [
   [1.22, 0.151, 0.106, -0.014],
   [1.28, 0.157, 0.109, -0.012],
   [1.34, 0.162, 0.105, -0.007],
-  [1.39, 0.165, 0.096, -0.001],
-  [1.43, 0.157, 0.083, 0.004],
-  [1.455, 0.118, 0.068, 0.007],
-  [1.475, 0.062, 0.054, 0.008],
+  [1.39, 0.167, 0.097, -0.001],
+  [1.43, 0.165, 0.088, 0.004],
+  [1.46, 0.142, 0.077, 0.006],
+  [1.485, 0.098, 0.065, 0.008],
+  [1.505, 0.06, 0.055, 0.009],
 ];
 
 interface Section {
@@ -83,44 +90,17 @@ export interface BodyCtx {
   readonly joints: Float32Array;
 }
 
-/** Region of the torso surface at (x, y, z) for this outfit. */
-function torsoRegion(ctx: BodyCtx, x: number, y: number, z: number, front: boolean): number {
+/**
+ * Region of the torso surface at height y. Necklines, armholes, plackets, track stripes and
+ * lapels are cut per pixel by the shader (anti-aliased), so the mesh only marks what is cloth.
+ */
+function torsoRegion(ctx: BodyCtx, y: number): number {
   const c = ctx.c;
-  const ax = Math.abs(x);
   if (c.skirt && y < c.skirt.top) return c.skirt.region === 2 ? Region.TOP : Region.BOTTOM;
   const midriff = c.midriff && y > c.midriff[0] && y < c.midriff[1];
-  const inTop = y >= c.topHem && !midriff;
-  if (!inTop) {
-    if (midriff) return Region.SKIN;
-    if (c.pantsEnd >= 0 || c.skirt) return c.sideStripes && ax > ctx.p.hipX + 0.07 && Math.abs(z) < 0.03 ? Region.BOTTOM_TRIM : Region.BOTTOM;
-    return Region.SKIN;
-  }
-  const topRegion = c.apron ? Region.UNDER : Region.TOP;
-  // Necklines.
-  const neckY = 1.462;
-  switch (c.neckline) {
-    case 'v':
-    case 'open': {
-      const depth = c.neckline === 'v' ? 1.37 : 1.385;
-      if (front && y > depth + ax * 1.7) return Region.SKIN;
-      break;
-    }
-    case 'scoop':
-      if (front && y > 1.405 + (ax * ax) * 2.6) return Region.SKIN;
-      if (!front && y > 1.44) return Region.SKIN;
-      break;
-    case 'strap':
-      if (y > 1.36 && Math.abs(ax - 0.088) > 0.016) return Region.SKIN;
-      break;
-    default:
-      if (y > neckY + (front ? 0 : 0.006)) return Region.SKIN;
-  }
-  if (c.bareShoulders && c.neckline !== 'strap' && ax > 0.118 && y > 1.33) return Region.SKIN;
-  // Lapels open over the shirt.
-  if (c.lapels && front && y > 1.13 && ax < (y - 1.12) * 0.62) return Region.UNDER;
-  if (c.placket > 0 && front && ax < 0.009 && y > c.placket) return Region.TRIM;
-  if (c.sideStripes && ax > 0.12 && Math.abs(z) < 0.025 && y > 1.0) return Region.TRIM;
-  return topRegion;
+  if (y >= c.topHem && !midriff) return c.apron ? Region.UNDER : Region.TOP;
+  if (midriff) return Region.SKIN;
+  return c.pantsEnd >= 0 || c.skirt ? Region.BOTTOM : Region.SKIN;
 }
 
 /** Extra torso radius from clothing at height y. */
@@ -138,34 +118,33 @@ const _sec: Section = { w: 0, front: 0, back: 0, zc: 0 };
 export function buildTorso(ctx: BodyCtx): void {
   const { b, p, c } = ctx;
   const heights = new Set<number>();
-  for (let y = 0.835; y <= 1.476; y += 0.026) heights.add(Math.round(y * 1000) / 1000);
-  heights.add(1.475);
+  for (let y = 0.835; y <= 1.506; y += 0.026) heights.add(Math.round(y * 1000) / 1000);
+  heights.add(1.505);
   const hem = (y: number) => {
     heights.add(y + 0.005);
     heights.add(y + 0.0012);
     heights.add(y - 0.0012);
   };
-  if (c.topHem > 0.84 && c.topHem < 1.46) hem(c.topHem);
+  if (c.topHem > 0.84 && c.topHem < 1.49) hem(c.topHem);
   if (c.midriff) {
     hem(c.midriff[0]);
     hem(c.midriff[1]);
   }
   if (c.pantsEnd >= 0 && c.topHem > 1.005) hem(1.005);
-  const ys = [...heights].filter((y) => y >= 0.835 && y <= 1.475).sort((a, b2) => a - b2);
+  const ys = [...heights].filter((y) => y >= 0.835 && y <= 1.505).sort((a, b2) => a - b2);
   const seg = 22;
   const e = 2 / p.exponent;
   b.set(Region.SKIN, Bone.hips).begin();
-  let ringZc = 0;
   const painter = (x: number, y: number, z: number, _t: number, o: Paint) => {
-    const front = z < ringZc;
-    o.region = torsoRegion(ctx, x, y, z, front);
+    o.region = torsoRegion(ctx, y);
+    o.extra2 = 1;
     // Weights: hips → spine → chest; legs pull the lowest rings, clavicles the shoulder tops.
     const wHips = 1 - smoothstep(0.96, 1.08, y);
     const wChest = smoothstep(1.17, 1.3, y);
     const wSpine = Math.max(0, 1 - wHips - wChest);
     const ax = Math.abs(x);
     const leg = (1 - smoothstep(0.85, 0.94, y)) * smoothstep(0.02, 0.07, ax) * 0.55;
-    const clav = smoothstep(1.37, 1.45, y) * smoothstep(0.08, 0.15, ax) * 0.45;
+    const clav = smoothstep(1.37, 1.46, y) * smoothstep(0.08, 0.15, ax) * 0.45;
     if (leg > 0.001) {
       o.b0 = Bone.hips;
       o.w0 = wHips * (1 - leg);
@@ -191,13 +170,12 @@ export function buildTorso(ctx: BodyCtx): void {
     // Occlusion: armpits, crotch, under the chin.
     const pit = gauss(y, 1.3, 0.06) * smoothstep(0.1, 0.15, ax) * (1 - Math.abs(z) * 8);
     const crotch = (1 - smoothstep(0.84, 0.9, y)) * (1 - smoothstep(0.02, 0.08, ax));
-    o.ao = clamp(1 - Math.max(0, pit) * 0.3 - crotch * 0.35 - smoothstep(1.455, 1.475, y) * 0.12, 0.4, 1);
+    o.ao = clamp(1 - Math.max(0, pit) * 0.3 - crotch * 0.35 - smoothstep(1.485, 1.505, y) * 0.12, 0.4, 1);
   };
   let prev: ReturnType<SkinBuilder['ring']> | null = null;
   let first: ReturnType<SkinBuilder['ring']> | null = null;
   for (const y of ys) {
     const s = torsoSection(y, p, _sec);
-    ringZc = s.zc;
     const add = torsoInflate(ctx, y) + (isLip(ctx, y) ? 0.004 : 0);
     const start = b.vertexCount;
     for (let i = 0; i < seg; i++) {
@@ -215,7 +193,7 @@ export function buildTorso(ctx: BodyCtx): void {
   }
   // Close the crotch and the neck base.
   if (first) b.cap(first, 0, 0.828, 0.004, true, painter);
-  if (prev) b.cap(prev, 0, 1.48, 0.008, false, painter);
+  if (prev) b.cap(prev, 0, 1.51, 0.009, false, painter);
   b.end();
 }
 
@@ -231,8 +209,8 @@ export function buildNeck(ctx: BodyCtx): void {
   b.set(Region.SKIN, Bone.neck).begin();
   const high = c.neckline === 'high';
   const painter = (_x: number, y: number, z: number, _t: number, o: Paint) => {
-    o.region = high && y < 1.53 ? Region.TRIM : Region.SKIN;
-    const wChest = 1 - smoothstep(1.44, 1.5, y);
+    o.region = high && y < 1.539 ? Region.TRIM : Region.SKIN;
+    const wChest = 1 - smoothstep(1.47, 1.52, y);
     const wHead = smoothstep(1.55, 1.6, y);
     o.b0 = Bone.chest;
     o.w0 = wChest;
@@ -243,8 +221,11 @@ export function buildNeck(ctx: BodyCtx): void {
     o.ao = z < 0 && y > 1.54 ? 0.72 : 0.92;
   };
   let prev = null;
-  for (const [y, r, z] of [[1.43, 0.06, 0.006], [1.47, 0.052, 0.007], [1.5, 0.048, 0.008], [1.53, 0.046, 0.01], [1.57, 0.045, 0.012], [1.61, 0.044, 0.016]] as const) {
-    const add = high && y < 1.535 ? 0.014 : 0;
+  const neckRings: ReadonlyArray<readonly [number, number, number]> = high
+    ? [[1.46, 0.058, 0.007], [1.49, 0.051, 0.008], [1.515, 0.048, 0.009], [1.538, 0.0465, 0.0105], [1.541, 0.0462, 0.0108], [1.575, 0.045, 0.013], [1.61, 0.044, 0.016]]
+    : [[1.46, 0.058, 0.007], [1.49, 0.051, 0.008], [1.515, 0.048, 0.009], [1.545, 0.046, 0.011], [1.575, 0.045, 0.013], [1.61, 0.044, 0.016]];
+  for (const [y, r, z] of neckRings) {
+    const add = high && y < 1.539 ? 0.014 : 0;
     const ring = b.hring(0, y, z, r + add, (r + add) * 0.94, 2, 16, painter);
     if (prev) b.bridge(prev, ring, false);
     prev = ring;
@@ -278,13 +259,13 @@ export interface HeadShape {
 
 export function headShape(face: number): HeadShape {
   const [jaw, cheek, chin, len] = FACES[face] ?? FACES[0]!;
-  return { rx: 0.084, ry: 0.118 * len, rzF: 0.092, rzB: 0.104, jaw, cheek, chin, len };
+  return { rx: 0.087, ry: 0.116 * len, rzF: 0.092, rzB: 0.104, jaw, cheek, chin, len };
 }
 
 /** Surface point of the head in the unit direction (dx, dy, dz), relative to `HEAD`. */
 export function headPoint(h: HeadShape, dx: number, dy: number, dz: number, out: { x: number; y: number; z: number }): void {
-  const lower = smoothstep(-0.05, -0.9, dy);
-  const wScale = lerp(1, h.jaw * 0.84, lower) * (1 + (h.cheek - 1) * gauss(dy, -0.2, 0.25));
+  const lower = smoothstep(-0.2, -0.95, dy);
+  const wScale = lerp(1, 0.6 + 0.32 * h.jaw, lower) * (1 + (h.cheek - 1) * gauss(dy, -0.2, 0.25));
   let x = dx * h.rx * wScale;
   let y = dy * h.ry;
   const front = dz < 0;
@@ -292,8 +273,8 @@ export function headPoint(h: HeadShape, dx: number, dy: number, dz: number, out:
   // Chin: the lower face reaches a little further down and forward.
   if (front && dy < -0.5) {
     const k = smoothstep(-0.5, -0.95, dy) * smoothstep(0.6, 0.0, Math.abs(dx));
-    y -= k * 0.012 * h.chin;
-    z -= k * 0.01 * h.chin;
+    y -= k * 0.005 * h.chin;
+    z -= k * 0.006 * h.chin;
   }
   // Flatter face plane for the painted features; fuller cranium at the back.
   if (front) z *= 1 - 0.12 * gauss(dy, 0.05, 0.4) * smoothstep(0.75, 0.2, Math.abs(dx));
@@ -307,8 +288,8 @@ export function headPoint(h: HeadShape, dx: number, dy: number, dz: number, out:
 /** Front surface z of the head at body-space (x, y) (for glasses and facial hair). */
 export function faceZ(h: HeadShape, x: number, y: number): number {
   const dy = clamp((y - HEAD.y) / h.ry, -0.99, 0.99);
-  const lower = smoothstep(-0.05, -0.9, dy);
-  const wScale = lerp(1, h.jaw * 0.84, lower) * (1 + (h.cheek - 1) * gauss(dy, -0.2, 0.25));
+  const lower = smoothstep(-0.2, -0.95, dy);
+  const wScale = lerp(1, 0.6 + 0.32 * h.jaw, lower) * (1 + (h.cheek - 1) * gauss(dy, -0.2, 0.25));
   const dx = clamp((x - HEAD.x) / (h.rx * wScale), -0.99, 0.99);
   const dz = -Math.sqrt(Math.max(0.0001, 1 - dx * dx - dy * dy));
   headPoint(h, dx, dy, dz, _hp);
@@ -353,9 +334,9 @@ export function buildHead(ctx: BodyCtx, face: number): void {
   // Nose: a soft wedge; `extra` = 1 keeps the face painter off it.
   b.set(Region.HEAD, Bone.head).begin();
   b.base.extra = 1;
-  const ny = HEAD.y - 0.022 * h.len;
-  const nz = faceZ(h, 0, ny) + 0.006;
-  b.ellipsoid(HEAD.x, ny, nz, 0.013, 0.024, 0.016, 10, 8, undefined, (_dx, dy, dz) => (dz < 0 ? 1 + 0.25 * (1 - Math.abs(dy)) : 0.7) * (dy < 0 ? 1.05 : 0.9));
+  const ny = HEAD.y - 0.02 * h.len;
+  const nz = faceZ(h, 0, ny) + 0.005;
+  b.ellipsoid(HEAD.x, ny, nz, 0.0115, 0.019, 0.0115, 10, 8, undefined, (_dx, dy, dz) => (dz < 0 ? 1 + 0.12 * (1 - Math.abs(dy)) : 0.75) * (dy < 0 ? 1.04 : 0.92));
   b.end();
   // Ears.
   for (const sx of [-1, 1]) {
@@ -368,7 +349,7 @@ export function buildHead(ctx: BodyCtx, face: number): void {
 
 /** Arm radius profile: distance below the shoulder joint → radius (neutral limbs). */
 const ARM_R: ReadonlyArray<readonly [number, number]> = [
-  [-0.044, 0.024], [-0.034, 0.038], [-0.016, 0.048], [0.01, 0.053], [0.05, 0.051], [0.1, 0.048], [0.16, 0.045], [0.22, 0.042],
+  [-0.022, 0.02], [-0.014, 0.034], [-0.002, 0.044], [0.018, 0.049], [0.05, 0.048], [0.1, 0.046], [0.16, 0.044], [0.22, 0.042],
   [0.27, 0.0395], [0.29, 0.039], [0.31, 0.0395], [0.35, 0.042], [0.4, 0.041], [0.45, 0.036], [0.5, 0.031], [0.537, 0.0285],
 ];
 
@@ -386,6 +367,10 @@ export function buildArm(ctx: BodyCtx, side: 0 | 1): void {
     ss.add(end - 0.0015);
     ss.add(end - 0.006);
   }
+  if (c.sleeve > 0 && cuff) {
+    ss.add(end - 0.034);
+    ss.add(end - 0.036);
+  }
   const list = [...ss].sort((a2, b2) => a2 - b2);
   const radius = (s: number) => {
     let i = 0;
@@ -399,8 +384,8 @@ export function buildArm(ctx: BodyCtx, side: 0 | 1): void {
     const sleeved = c.sleeve > 0 && s < end;
     o.region = sleeved ? sleeveRegion : Region.SKIN;
     if (sleeved && cuff && s > end - 0.035) o.region = Region.TRIM;
-    if (sleeved && c.sideStripes && Math.abs(Math.cos(t) - sx) < 0.08) o.region = Region.TRIM;
     if (c.bareShoulders && s < 0.0) o.region = Region.SKIN;
+    o.extra2 = 2;
     const wClav = (1 - smoothstep(-0.03, 0.03, s)) * 0.4;
     const wFore = smoothstep(0.255, 0.335, s);
     const wHand = smoothstep(0.49, 0.535, s) * 0.25;
@@ -425,14 +410,15 @@ export function buildArm(ctx: BodyCtx, side: 0 | 1): void {
   let first = null;
   for (const s of list) {
     const sleeved = c.sleeve > 0 && s < end;
-    const loose = sleeved ? c.sleeveLoose + (s > end - 0.007 && s < end ? 0.004 : 0) : 0;
+    // Loose sleeves hang from the shoulder: no extra width over the cap itself.
+    const loose = sleeved ? c.sleeveLoose * smoothstep(-0.01, 0.06, s) + (s > end - 0.007 && s < end ? 0.004 : 0) : 0;
     const r = radius(s) * (0.55 + 0.45 * p.limbs) + loose;
     const ring = b.hring(jx, jy - s, jz + (s > 0.3 ? 0.004 : 0), r, r * 0.95, 2, 14, painter);
     if (prev) b.bridge(prev, ring, true);
     else first = ring;
     prev = ring;
   }
-  if (first) b.cap(first, jx, jy + 0.05, jz, false, painter);
+  if (first) b.cap(first, jx, jy + 0.026, jz, false, painter);
   if (prev) b.cap(prev, jx, jy - 0.545, jz + 0.004, true, painter);
   b.end();
   buildHand(ctx, side);
@@ -508,7 +494,7 @@ export function buildLeg(ctx: BodyCtx, side: 0 | 1): void {
     const s = jy - y;
     const covered = pants && s < endS;
     o.region = covered ? Region.BOTTOM : Region.SKIN;
-    if (covered && c.sideStripes && Math.abs(Math.cos(t) - sx) < 0.07) o.region = Region.BOTTOM_TRIM;
+    o.extra2 = 3;
     const wHips = (1 - smoothstep(-0.06, 0.07, s)) * 0.5;
     const wShin = smoothstep(0.37, 0.46, s);
     const wFoot = smoothstep(0.79, 0.845, s) * 0.3;
@@ -562,11 +548,11 @@ export function buildShoe(ctx: BodyCtx, side: 0 | 1): void {
   const open = style === 'sandals' || style === 'flipflops';
   const chunky = style === 'sneakers' || style === 'skates' || style === 'boots';
   const slim = style === 'loafers' || style === 'heels';
-  const soleH = open ? 0.012 : chunky ? 0.026 : 0.013;
   const top = style === 'skates' ? 0.03 : 0;
   b.set(Region.SHOE, foot).begin();
   const painter = (_x: number, y: number, z: number, _t: number, o: Paint) => {
-    o.region = y < soleH ? Region.SOLE : open ? Region.SKIN : Region.SHOE;
+    o.region = open ? Region.SKIN : Region.SHOE;
+    o.extra2 = 4;
     const wt = smoothstep(-0.085, -0.13, z);
     o.b0 = foot;
     o.w0 = 1 - wt;

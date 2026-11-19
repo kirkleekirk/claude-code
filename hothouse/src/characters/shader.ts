@@ -12,12 +12,16 @@
 
 export const PEOPLE_VERTEX_PARS = /* glsl */ `
 attribute vec4 look;
+flat varying float vRegion;
+flat varying float vPart;
 varying vec4 vLook;
 varying vec3 vBind;
 varying vec3 vBindN;
 `;
 
 export const PEOPLE_VERTEX_MAIN = /* glsl */ `
+vRegion = look.x;
+vPart = look.w;
 vLook = look;
 vBind = position;
 vBindN = normal;
@@ -28,6 +32,10 @@ uniform vec3 uPal[21];
 uniform vec4 uFace[4];
 uniform vec4 uHeadC;
 uniform vec4 uPrint;
+uniform vec4 uCloth;
+uniform vec4 uCloth2;
+flat varying float vRegion;
+flat varying float vPart;
 varying vec4 vLook;
 varying vec3 vBind;
 varying vec3 vBindN;
@@ -121,6 +129,26 @@ float ppPrint(vec2 p, float id) {
   return ppAA(abs(s - 0.5) * 0.06 - 0.013);
 }
 
+float ppBit(float flags, float bit) { return mod(floor(flags / bit + 0.001), 2.0); }
+
+/** Skin showing through the top (necklines, armholes): > 0 inside the opening (metres). */
+float ppOpening(vec3 p) {
+  float nk = uCloth.x;
+  float ax = abs(p.x);
+  bool front = p.z < -0.005;
+  float crew = p.y - (uCloth.w + (front ? 0.0 : 0.01));
+  float d = crew;
+  if (abs(nk - 1.0) < 0.5 || abs(nk - 5.0) < 0.5) {
+    if (front) d = p.y - ((nk < 1.5 ? 1.375 : 1.39) + ax * 1.7);
+  } else if (abs(nk - 3.0) < 0.5) {
+    d = front ? p.y - (1.415 + ax * ax * 2.6) : p.y - 1.45;
+  } else if (abs(nk - 6.0) < 0.5) {
+    d = min(p.y - 1.37, abs(ax - 0.09) - 0.016);
+  }
+  if (ppBit(uCloth.y, 1.0) > 0.5 && abs(nk - 6.0) > 0.5) d = max(d, min(ax - uCloth2.x, p.y - 1.34));
+  return d;
+}
+
 // ── the face (q in head units, x = character's right, y up) ────────────────
 vec3 ppFace(vec3 skin, vec2 q) {
   vec3 col = skin;
@@ -157,22 +185,22 @@ vec3 ppFace(vec3 skin, vec2 q) {
   for (int s = 0; s < 2; s++) {
     float sx = s == 0 ? -1.0 : 1.0;
     vec2 c = vec2(sx * spread, 0.05);
-    float h = 0.072 * eyeOpen * (1.0 - blink);
+    float h = 0.078 * eyeOpen * (1.0 - blink);
     vec2 e = q - c;
     // Eye white: an almond, flatter on the bottom.
-    float d = ppEllipse(vec2(e.x, e.y > 0.0 ? e.y : e.y * 1.25), vec2(0.1, max(h, 0.0015)));
+    float d = ppEllipse(vec2(e.x, e.y > 0.0 ? e.y : e.y * 1.25), vec2(0.108, max(h, 0.0015)));
     float white = ppAA(d);
     vec2 ic = c + gaze * vec2(0.035, 0.022);
-    float irisD = length(q - ic) - 0.054;
-    float pupilD = length(q - ic) - 0.025;
-    float glint = ppAA(length(q - ic - vec2(-0.018, 0.022)) - 0.013);
+    float irisD = length(q - ic) - 0.06;
+    float pupilD = length(q - ic) - 0.028;
+    float glint = ppAA(length(q - ic - vec2(-0.02, 0.024)) - 0.014);
     vec3 eye = vec3(0.98, 0.95, 0.9);
     eye = mix(eye, iris, ppAA(irisD));
     eye = mix(eye, vec3(0.03, 0.02, 0.04), ppAA(pupilD));
     eye = mix(eye, vec3(1.0), glint * 0.9);
     col = mix(col, eye, white);
     // Upper lid line with a little wing; a closed lid is a soft curve.
-    float lidY = c.y + h - abs(e.x) * abs(e.x) * 1.4 * (h / 0.072);
+    float lidY = c.y + h - abs(e.x) * abs(e.x) * 1.4 * (h / 0.078);
     float lid = ppAA(abs(q.y - lidY) - 0.012 - 0.004 * step(0.0, e.x * sx)) * ppAA(abs(e.x) - 0.11 - 0.02 * step(0.0, e.x * sx));
     col = mix(col, line, lid * 0.92);
     // Brow.
@@ -202,8 +230,9 @@ vec3 ppFace(vec3 skin, vec2 q) {
 
 /** Region colour, prints, hair textures and the face; sets ppRough, ppMetal and ppEmit. */
 export const PEOPLE_FRAGMENT_COLOR = /* glsl */ `
-int rg = int(vLook.x + 0.5);
+int rg = int(vRegion + 0.5);
 vec3 col = uPal[rg];
+int part = int(vPart + 0.5);
 ppRough = 0.82;
 ppMetal = 0.0;
 ppEmit = vec3(0.0);
@@ -214,8 +243,8 @@ if (rg <= 1) {
     vec3 f = (vBind - uHeadC.xyz) / uHeadC.w;
     if (f.z < 0.0) col = mix(col, ppFace(col, f.xy), smoothstep(-0.05, -0.35, f.z));
   }
-} else if (rg == 2) {
-  if (uPrint.x > 0.5) {
+} else if (rg == 2 || rg == 20) {
+  if (rg == 2 && uPrint.x > 0.5) {
     vec3 n = abs(normalize(vBindN));
     vec3 w = pow(n, vec3(4.0));
     w /= (w.x + w.y + w.z);
@@ -225,9 +254,23 @@ if (rg <= 1) {
     if (c > 1.0) col = mix(col, accent * 0.45 + vec3(0.25, 0.2, 0.05), clamp(c - 1.0, 0.0, 1.0));
   }
   ppRough = 0.86;
+  if (part == 1) {
+    float ax = abs(vBind.x);
+    bool front = vBind.z < -0.005;
+    if (ppBit(uCloth.y, 2.0) > 0.5 && front) col = mix(col, uPal[20], ppAA((ax - (vBind.y - 1.12) * 0.62)) * step(1.13, vBind.y));
+    if (uCloth.z > 0.0 && front) col = mix(col, uPal[3], ppAA(ax - 0.008) * smoothstep(uCloth.z - 0.002, uCloth.z + 0.002, vBind.y));
+    if (ppBit(uCloth.y, 4.0) > 0.5) col = mix(col, uPal[3], ppAA(abs(vBind.z) - 0.022) * smoothstep(0.11, 0.125, ax) * step(1.0, vBind.y));
+    col = mix(col, uPal[0], ppAA(-ppOpening(vBind)));
+  } else if (part == 2 && ppBit(uCloth.y, 4.0) > 0.5) {
+    col = mix(col, uPal[3], smoothstep(0.86, 0.93, normalize(vBindN).x * sign(vBind.x)));
+  }
+} else if (rg == 4) {
+  if (part == 3 && ppBit(uCloth.y, 4.0) > 0.5) col = mix(col, uPal[5], smoothstep(0.86, 0.93, normalize(vBindN).x * sign(vBind.x)));
 } else if (rg == 8 || rg == 9 || rg == 10) {
   float n = texture2D(uNoise, vBind.xz * 3.1 + vBind.y * 1.7).b;
   ppRough = rg == 8 ? 0.48 : 0.8;
+  float crown = smoothstep(0.35, 0.95, normalize(vBindN).y);
+  col *= 1.0 + (rg == 8 ? 0.28 : 0.1) * crown;
   if (tex < 0.5) {
     col *= 0.9 + 0.2 * n;
   } else if (tex < 1.5) {
@@ -261,6 +304,12 @@ if (rg <= 1) {
   ppRough = 0.55;
 } else if (rg == 19) {
   ppRough = 0.45;
+}
+// Shoes: the sole line is cut per pixel so it stays straight on the curved upper.
+if (part == 4 && (rg == 6 || rg == 0 || rg == 7)) {
+  float sole = ppAA(vBind.y - uCloth2.y);
+  col = mix(rg == 7 ? uPal[6] : col, uPal[7], sole);
+  ppRough = mix(rg == 0 ? 0.58 : 0.55, 0.8, sole);
 }
 col *= mix(1.0, vLook.y, 0.85);
 diffuseColor.rgb = col;

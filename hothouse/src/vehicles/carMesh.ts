@@ -1,7 +1,8 @@
 import { BufferAttribute, BufferGeometry, Vector3 } from 'three';
 import { curve, smoothstep } from '@/core/math';
 import { MeshBuilder, SurfFlag } from '@/render/geo/MeshBuilder';
-import type { BodyShape, VehicleDef } from './defs';
+import { DRIVER_WHEEL, SEAT_CUSHION } from '@/characters/ergonomics';
+import { seatPoint, type BodyShape, type VehicleDef } from './defs';
 
 /** Extra surface flags understood by the vehicle material. */
 export const CarFlag = { PAINT: 16, HEADLIGHT: 32, TAILLIGHT: 64, SIREN: 128 } as const;
@@ -68,7 +69,7 @@ function section(s: BodyShape, f: Frame, t: number): Array<[number, number]> {
     return true;
   };
   let tub = false;
-  if (s.convertible) tub = tubFor(s.cabin.start + 0.02, s.cabin.end, 0.42, 0.06);
+  if (s.convertible) tub = tubFor(s.cabin.start + 0.02, s.cabin.end, 0.52, 0.06);
   if (!tub && s.bed) tub = tubFor(s.bed.t0, s.bed.t1, s.bed.wall, 0.04);
   if (!tub) pts.push([0, top + 0.01]);
   return pts;
@@ -174,7 +175,7 @@ function greenhouse(b: MeshBuilder, s: BodyShape, f: Frame, paint: boolean): voi
 
 function convertibleCockpit(b: MeshBuilder, s: BodyShape, f: Frame): void {
   const c = s.cabin;
-  const floorY = f.belt((c.start + c.end) / 2) - 0.42;
+  const floorY = f.belt((c.start + c.end) / 2) - 0.52;
   // Windshield with a chrome frame.
   const t0 = c.start, t1 = c.start + 0.07;
   const z0 = f.z(t0), z1 = f.z(t1);
@@ -185,25 +186,31 @@ function convertibleCockpit(b: MeshBuilder, s: BodyShape, f: Frame): void {
   b.quad([-w, yb, z0], [-w * 0.92, yt, z1], [w * 0.92, yt, z1], [w, yb, z0]);
   b.surface('#EEF1F4', 0.12, 1, 0, SurfFlag.WET);
   b.tube([new Vector3(w, yb, z0), new Vector3(w * 0.92, yt, z1), new Vector3(-w * 0.92, yt, z1), new Vector3(-w, yb, z0)], 0.025, 5);
-  // Dash, seats, headrests and the wheel.
+  // Dash, then seats under each hip point and the wheel where a driver's hands fall
+  // (characters/ergonomics), so seated people line up with the cockpit.
   b.surface('#6B3F2A', 0.45, 0, 0, 0);
-  b.box(0, yb - 0.08, z1 + 0.18, w * 1.85, 0.16, 0.34);
+  b.box(0, yb - 0.08, z1 + 0.13, w * 1.85, 0.16, 0.24);
   b.surface('#F2E6D6', 0.6, 0, 0, 0);
-  const seatZ = f.z(c.start + (c.end - c.start) * 0.55);
-  for (const sx of [-0.38, 0.38]) {
-    b.box(sx, floorY + 0.18, seatZ, 0.5, 0.16, 0.52);
-    b.pushTRS(sx, floorY + 0.55, seatZ + 0.27, 0, 1, 1, 1);
-    b.box(0, 0, 0, 0.5, 0.62, 0.14);
-    b.pop();
-    b.box(sx, floorY + 0.98, seatZ + 0.3, 0.26, 0.2, 0.1);
+  const hp = seatPoint(s);
+  for (const sx of [-1, 1]) {
+    const x = sx * Math.abs(hp.x);
+    const top = hp.y - SEAT_CUSHION.below;
+    const back = hp.z + SEAT_CUSHION.back + 0.07;
+    b.box(x, (top + floorY) / 2, hp.z - 0.07, 0.5, Math.max(0.04, top - floorY), 0.5);
+    b.box(x, top + 0.3, back, 0.5, 0.6, 0.12);
+    b.box(x, top + 0.68, back + 0.02, 0.26, 0.18, 0.1);
   }
   b.surface('#1A1C22', 0.5, 0.2, 0, 0);
+  const wx = hp.x, wy = hp.y + DRIVER_WHEEL.y, wz = hp.z + DRIVER_WHEEL.z;
+  const ct = Math.cos(DRIVER_WHEEL.tilt), st = Math.sin(DRIVER_WHEEL.tilt);
   const ring: Vector3[] = [];
   for (let i = 0; i <= 16; i++) {
     const a = (i / 16) * Math.PI * 2;
-    ring.push(new Vector3(0.38 + Math.cos(a) * 0.18, yb + 0.02 + Math.sin(a) * 0.18, z1 + 0.42 - Math.sin(a) * 0.06));
+    const gx = Math.cos(a) * DRIVER_WHEEL.radius, gy = Math.sin(a) * DRIVER_WHEEL.radius;
+    ring.push(new Vector3(wx + gx, wy + gy * ct, wz + gy * st));
   }
-  b.tube(ring, 0.018, 5);
+  b.tube(ring, 0.016, 5);
+  b.tube([new Vector3(wx, wy - 0.06, wz - 0.16), new Vector3(wx, wy, wz)], 0.022, 6);
 }
 
 function pickupBed(b: MeshBuilder, s: BodyShape, f: Frame): void {

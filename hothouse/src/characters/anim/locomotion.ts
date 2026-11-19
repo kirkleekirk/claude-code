@@ -90,7 +90,7 @@ export class Locomotor {
     this.landT += dt;
 
     // Cadence (steps per second) rises with speed; one cycle is two steps.
-    const cadence = s < 2 ? 1.0 + 0.55 * s : 2.1 + 0.16 * (s - 2);
+    const cadence = s < 2 ? 1.15 + 0.5 * s : 2.15 + 0.16 * (s - 2);
     const freq = cadence * 0.5;
     this.phase = fract(this.phase + dt * freq * (0.25 + 0.75 * this.move));
     const duty = lerp(lerp(0.64, 0.58, smoothstep(0.3, 1.8, s)), lerp(0.42, 0.32, smoothstep(3.5, 7.5, s)), this.gait);

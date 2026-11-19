@@ -2,6 +2,7 @@ import { Quaternion, Vector3 } from 'three';
 import type { Posture } from '../api';
 import { ARM, Bone, LEG, SEG } from '../rig';
 import { hand, type ClipCtx } from './clips';
+import { DRIVER_WHEEL, SIT_DROP } from '../ergonomics';
 import { boneTransform, solveArm, solveLeg } from './ik';
 import type { Pose } from './pose';
 
@@ -10,11 +11,7 @@ import type { Pose } from './pose';
  * vehicle or chair places the root there and the hip joints sit on it.
  */
 
-/** Steering wheel relative to the driver's hip point (world metres, facing −Z). */
-export const DRIVER_WHEEL = { y: 0.33, z: -0.43, radius: 0.18, tilt: 0.45 } as const;
-
-/** Chair or bench seat height used by the `sit` posture (world metres below the hip point). */
-export const SIT_DROP = 0.5;
+export { DRIVER_WHEEL, SIT_DROP } from '../ergonomics';
 
 const _p = new Vector3();
 const _q = new Quaternion();

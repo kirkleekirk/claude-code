@@ -181,6 +181,11 @@ export class ActorImpl implements Actor {
     return this.clips.isPlaying(clip);
   }
 
+  /** Showcases and tests: jump the gait cycle to a phase (0–1); the next update poses it. */
+  setCyclePhase(p: number): void {
+    this.loc.phase = p - Math.floor(p);
+  }
+
   lookAt(target: Vector3 | null): void {
     if (target) {
       this.lookAt0.copy(target);
