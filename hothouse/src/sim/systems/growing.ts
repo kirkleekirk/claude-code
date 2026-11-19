@@ -43,7 +43,9 @@ function ownedAndOpen(ctx: SimCtx, prop: PropertyId, allowLockdown = false): Sim
   return ok(undefined);
 }
 
-export function plantSeed(ctx: SimCtx, prop: PropertyId, pot: PotId, strain: StrainId, feed: FeedProfile = 'balanced'): SimResult<PlantId> {
+export function plantSeed(
+  ctx: SimCtx, prop: PropertyId, pot: PotId, strain: StrainId, feed: FeedProfile = 'balanced', by: 'player' | 'crew' = 'player',
+): SimResult<PlantId> {
   const open = ownedAndOpen(ctx, prop);
   if (!open.ok) return open;
   const s = ctx.strain(strain);
@@ -59,7 +61,7 @@ export function plantSeed(ctx: SimCtx, prop: PropertyId, pot: PotId, strain: Str
   };
   if (!ctx.state.strains.seen.includes(strain)) ctx.state.strains.seen.push(strain);
   stat(ctx, 'plantsPlanted');
-  addXp(ctx, XP.plant, 'plant');
+  if (by === 'player') addXp(ctx, XP.plant, 'plant');
   ctx.emit('sim:planted', { plant: id, property: prop, pot, strain });
   ctx.bump('plants');
   ctx.beat('firstPlant');
@@ -102,7 +104,7 @@ export function tendPlant(ctx: SimCtx, plantId: PlantId, by: 'player' | 'crew'):
   p.lastTendedAt = ctx.now;
   if (by === 'player') p.handTended = true;
   if (res.watered || res.fed || res.pruned) {
-    stat(ctx, 'tends');
+    if (by === 'player') stat(ctx, 'tends');
     if (res.cleared > 0 && by === 'player') addXp(ctx, XP.tend * Math.min(3, res.cleared), 'tend');
     ctx.bump('plants');
   }
@@ -185,8 +187,8 @@ export function harvestPlant(ctx: SimCtx, plantId: PlantId, grades: readonly Sni
   if (by === 'player') {
     for (const g of grades) prog.snipStreak = g === 'perfect' ? prog.snipStreak + 1 : 0;
     if (snips.perfect > 0) stat(ctx, 'perfectSnips', snips.perfect);
+    stat(ctx, 'harvests');
   }
-  stat(ctx, 'harvests');
   ctx.ledger('harvested', units);
 
   const firstOfStrain = !ctx.state.strains.grown.includes(p.strain);

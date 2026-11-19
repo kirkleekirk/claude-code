@@ -296,7 +296,10 @@ function setActivity(c: CrewState, kind: CrewState['activity']['kind'], prop: Pr
 function preferredStrain(ctx: SimCtx, prop: PropertyId): StrainId | null {
   const counts = new Map<string, number>();
   for (const p of plantsAt(ctx, prop)) counts.set(p.strain, (counts.get(p.strain) ?? 0) + 1);
-  const options = [...ctx.state.strains.seen].filter((s) => ctx.supply(`seed:${s}`) > 0);
+  // Any seed the player owns: keep the bed's current strain going, then whatever there is most of.
+  const options = Object.keys(ctx.state.supplies)
+    .filter((k) => k.startsWith('seed:') && ctx.supply(k as `seed:${string}`) > 0)
+    .map((k) => k.slice(5) as StrainId);
   if (options.length === 0) return null;
   options.sort((a, b) => (counts.get(b) ?? 0) - (counts.get(a) ?? 0) || ctx.supply(`seed:${b}`) - ctx.supply(`seed:${a}`));
   return options[0]!;
@@ -322,7 +325,7 @@ function growerStep(ctx: SimCtx, c: CrewState, prop: PropertyId): void {
     const strain = preferredStrain(ctx, prop);
     if (strain) {
       setActivity(c, 'plant', prop, pots[0]!.split(':')[0]!, 0);
-      plantSeed(ctx, prop, pots[0]!, strain);
+      plantSeed(ctx, prop, pots[0]!, strain, 'balanced', 'crew');
       return;
     }
     if (c.status !== 'needsSupplies') {
@@ -423,7 +426,6 @@ function dealerStep(ctx: SimCtx, c: CrewState, dt: number): void {
     for (const r of ['vale', 'mudflaps', 'zenith'] as const) turf.influence[r] = Math.max(0, turf.influence[r] - 0.3);
     ctx.ledger('crewDeals', 1);
     ctx.ledger('units', units);
-    stat(ctx, 'unitsSold', units);
     addNotoriety(ctx, 0.05);
     const regulars = ctx.content.customerList.filter((cd) => cd.district === def.district && ctx.state.customers[cd.id].unlocked);
     if (regulars.length) {
@@ -515,6 +517,8 @@ export function tickCrew(ctx: SimCtx, dt: number): void {
       c.timer = 0;
       if (c.role === 'grower') growerStep(ctx, c, prop);
       else cookStep(ctx, c, prop);
+      // Back to work as soon as supplies turn up.
+      if (c.status === 'needsSupplies' && c.activity.kind !== 'idle') c.status = 'working';
       continue;
     }
     const kind = c.role === 'guard' ? 'guard' : c.role === 'accountant' ? 'books' : c.role === 'lookout' ? 'watch' : 'pack';

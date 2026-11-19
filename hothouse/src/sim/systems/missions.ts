@@ -1,6 +1,6 @@
 import { fmt } from '@/core/i18n';
 import { fail, ok } from '@/core/types';
-import type { FrontId, MissionId } from '@/content/ids';
+import type { CustomerId, FrontId, MissionId, Tier } from '@/content/ids';
 import { MISSIONS, type MissionDef, type ObjectiveDef } from '@/content/missions';
 import { NEWS } from '@/content/texts';
 import type { DealOutcome, HarvestResult, MissionProgress, SimResult, StoryBeat } from '../api';
@@ -9,7 +9,7 @@ import { parseProduct, parseStack } from '../products';
 import { t } from '../strings';
 import { addHype } from './brand';
 import { join } from './crew';
-import { unlockCustomer } from './customers';
+import { createRequest, unlockCustomer } from './customers';
 import { payDebt, remainingDebt, startDebtSchedule } from './economy';
 import { addNotoriety } from './notoriety';
 import { addXp, stat } from './progression';
@@ -74,7 +74,67 @@ export function missionStart(ctx: SimCtx, id: MissionId): SimResult {
   ctx.state.missions.active = id;
   ctx.emit('sim:mission', { mission: id, status: 'active', objective: p.objective });
   ctx.bump('missions');
+  enterObjective(ctx, id);
   return ok(undefined);
+}
+
+/** The richest unlocked buyer for a tier (for deliveries with no named customer); anyone rich will do. */
+function buyerFor(ctx: SimCtx, tier: Tier): CustomerId | null {
+  let best: CustomerId | null = null;
+  let score = 0;
+  for (const d of ctx.content.customerList) {
+    if (!ctx.state.customers[d.id].unlocked) continue;
+    const s = d.budget * (d.tiers.includes(tier) ? 10 : 1);
+    if (s <= score) continue;
+    score = s;
+    best = d.id;
+  }
+  return best;
+}
+
+/** A delivery objective becomes an accepted request: the buyer waits at the set-piece, as long as it takes. */
+function openMissionRequest(ctx: SimCtx, id: MissionId): void {
+  // The prologue's scripted texts (Kiki, Marisol) are Inheritance's deliveries.
+  if (id === 'inheritance') return;
+  const def = MISSIONS[id];
+  const p = prog(ctx, id);
+  const obj = def.objectives[p.objective];
+  if (!obj || obj.kind !== 'deliver' || p.counter >= obj.qty) return;
+  if (ctx.state.requests.some((r) => r.mission === id && (r.status === 'pending' || r.status === 'accepted'))) return;
+  const tier = obj.tier ?? 'bloom';
+  const customer = obj.customer ?? buyerFor(ctx, tier);
+  if (!customer) return;
+  const next = def.objectives[p.objective + 1];
+  const place = next?.kind === 'setpiece' && next.place ? next.place : undefined;
+  const qty = obj.qty - p.counter;
+  const where = place ? ctx.content.places[place].name : t('anyTime');
+  const req = createRequest(ctx, customer, {
+    qty, tier, effects: [], place, life: null, kind: obj.customer ? 'houseParty' : 'yacht', chips: [],
+    text: t('missionRequest', { qty: String(qty), place: where }),
+  });
+  req.status = 'accepted';
+  req.mission = id;
+}
+
+/** Entering an objective: skip what is already true, and open deliveries as requests. */
+function enterObjective(ctx: SimCtx, id: MissionId): void {
+  const p = prog(ctx, id);
+  const obj = MISSIONS[id].objectives[p.objective];
+  if (!obj) return;
+  if ((obj.kind === 'buyFront' && ctx.state.fronts[obj.front]?.owned) || (obj.kind === 'pay' && ctx.state.money.debt.paid >= obj.amount)) {
+    advance(ctx, id);
+    return;
+  }
+  if (obj.kind === 'deliver') openMissionRequest(ctx, id);
+}
+
+function closeMissionRequests(ctx: SimCtx, id: MissionId): void {
+  for (const r of ctx.state.requests) {
+    if (r.mission !== id || (r.status !== 'pending' && r.status !== 'accepted')) continue;
+    r.status = 'expired';
+    ctx.emit('sim:request', { request: r.id, customer: r.customer, status: 'expired' });
+  }
+  ctx.bump('requests');
 }
 
 function advance(ctx: SimCtx, id: MissionId): void {
@@ -86,6 +146,7 @@ function advance(ctx: SimCtx, id: MissionId): void {
   ctx.emit('sim:mission', { mission: id, status: 'active', objective: p.objective });
   ctx.bump('missions');
   if (p.objective >= def.objectives.length) complete(ctx, id, null);
+  else enterObjective(ctx, id);
 }
 
 export function objectiveDone(ctx: SimCtx, id: MissionId, index: number): SimResult {
@@ -190,6 +251,7 @@ export function missionFail(ctx: SimCtx, id: MissionId, reason: string): SimResu
   p.status = 'failed';
   p.counter = 0;
   if (ctx.state.missions.active === id) ctx.state.missions.active = null;
+  closeMissionRequests(ctx, id);
   ctx.state.story.flags[`missionFail_${id}`] = reason.slice(0, 80);
   ctx.emit('sim:mission', { mission: id, status: 'failed', objective: p.objective });
   ctx.bump('missions');
@@ -219,7 +281,10 @@ export function onMissionAction(ctx: SimCtx, action: string, data: unknown): voi
     }
     p.counter += o.qty;
     ctx.bump('missions');
-    if (p.counter >= obj.qty) advance(ctx, id);
+    if (p.counter >= obj.qty) {
+      closeMissionRequests(ctx, id);
+      advance(ctx, id);
+    } else openMissionRequest(ctx, id);
   } else if (obj.kind === 'harvest' && action === 'harvest') {
     p.counter += 1;
     ctx.bump('missions');

@@ -197,7 +197,7 @@ export function mix(ctx: SimCtx, prop: PropertyId, base: StackId, additives: rea
   const out = stackId(product.id, st.stars);
   ctx.add(by === 'player' ? 'bag' : prop, out, n);
   ctx.ledger('made', n);
-  stat(ctx, 'mixes');
+  if (by === 'player') stat(ctx, 'mixes');
   const rec = recordDiscoveries(ctx, product, isNew, run.tried, run.fired, st.stars, null);
   const xp = (by === 'player' ? 4 : 0) + rec.xp;
   addXp(ctx, xp, 'mix');
@@ -233,7 +233,7 @@ export function refine(ctx: SimCtx, prop: PropertyId, base: StackId, qty: number
   const out = stackId(product.id, st.stars);
   ctx.add(by === 'player' ? 'bag' : prop, out, units);
   ctx.ledger('made', units);
-  stat(ctx, 'mixes');
+  if (by === 'player') stat(ctx, 'mixes');
   const rec = recordDiscoveries(ctx, product, isNew, [], [], st.stars, tier);
   const xp = Math.min(30, units * 3) + rec.xp;
   addXp(ctx, xp, 'refine');

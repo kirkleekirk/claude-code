@@ -3,9 +3,9 @@ import { fail, ok } from '@/core/types';
 import type { CustomerId } from '@/content/ids';
 import type { PlaceId } from '@/content/places';
 import type {
-  DealId, DealOutcome, DealState, HaggleInfo, OfferInput, RequestId, RequestWants, SimResult, StackId, StoryBeat,
+  DealId, DealKind, DealOutcome, DealState, HaggleInfo, OfferInput, RequestId, RequestWants, SimResult, StackId, StoryBeat,
 } from '../api';
-import { BRAND, DEALS } from '../balance';
+import { BRAND, DEALS, PACKAGE_KINDS } from '../balance';
 import type { SimCtx } from '../ctx';
 import { parseProduct, parseStack, productValue } from '../products';
 import { t } from '../strings';
@@ -29,7 +29,7 @@ function pickLine(lines: readonly string[], seed: string): string {
   return lines[hashString(seed) % lines.length]!;
 }
 
-export function fairFor(ctx: SimCtx, customer: CustomerId, stack: StackId, qty: number, wants: RequestWants): Fair | null {
+export function fairFor(ctx: SimCtx, customer: CustomerId, stack: StackId, qty: number, wants: RequestWants, kind: DealKind = 'street'): Fair | null {
   const st = parseStack(stack);
   const p = st ? parseProduct(st.product) : null;
   if (!st || !p) return null;
@@ -45,7 +45,7 @@ export function fairFor(ctx: SimCtx, customer: CustomerId, stack: StackId, qty: 
   if (!d.tiers.includes(p.tier)) mult *= 0.8;
   const demand = ctx.mods.demand[d.district] ?? 1;
   let fair = value * sense * Math.max(0.35, mult) * ctx.mods.prices * (0.9 + 0.1 * demand);
-  fair = Math.min(fair, maxSpend(ctx, customer) / Math.max(1, qty));
+  if (!PACKAGE_KINDS.has(kind)) fair = Math.min(fair, maxSpend(ctx, customer) / Math.max(1, qty));
   const match = Math.min(1, Math.max(0, (hitsWanted ? 0.5 : 0) + 0.2 * loved - 0.3 * disliked + (st.stars >= wants.minStars ? 0.2 : 0) + (p.effects.some((e) => ctx.content.effects[e].kind === 'apex') ? 0.1 : 0)));
   return { fair: Math.max(1, fair), match, loved, disliked, hitsWanted };
 }
@@ -103,7 +103,7 @@ export function haggleInfo(ctx: SimCtx, dealId: DealId, stack: StackId, qty: num
   const deal = ctx.state.deals.find((x) => x.id === dealId);
   if (!deal) return null;
   const n = Math.max(1, Math.floor(qty));
-  const f = fairFor(ctx, deal.customer, stack, n, deal.wants);
+  const f = fairFor(ctx, deal.customer, stack, n, deal.wants, deal.kind);
   if (!f) return null;
   const walk = f.fair * (1 + deal.tolerance);
   const width = f.fair * deal.fuzz * 2;
@@ -134,7 +134,7 @@ function completeSale(
   const c = ctx.state.customers[deal.customer];
   const st = parseStack(stack)!;
   const p = parseProduct(st.product)!;
-  const f = fairFor(ctx, deal.customer, stack, qty, deal.wants)!;
+  const f = fairFor(ctx, deal.customer, stack, qty, deal.wants, deal.kind)!;
   ctx.take('bag', stack, qty);
   const total = Math.round(unitPrice * qty);
   const flow = Math.min(1, Math.max(0, extras.flow ?? 0));
@@ -209,7 +209,7 @@ export function offer(ctx: SimCtx, dealId: DealId, input: OfferInput): SimResult
   if (!deal) return fail('expired', t('dealGone'));
   const n = checkSale(ctx, deal, input.stack, input.qty);
   if (!n.ok) return n;
-  const f = fairFor(ctx, deal.customer, input.stack, n.value, deal.wants);
+  const f = fairFor(ctx, deal.customer, input.stack, n.value, deal.wants, deal.kind);
   if (!f) return fail('notFound');
   const unit = Math.max(1, Math.round(input.unitPrice));
   const walk = f.fair * (1 + deal.tolerance);
@@ -239,7 +239,7 @@ export function autoPrice(ctx: SimCtx, dealId: DealId, stack: StackId, qty: numb
   if (!deal) return fail('expired', t('dealGone'));
   const n = checkSale(ctx, deal, stack, qty);
   if (!n.ok) return n;
-  const f = fairFor(ctx, deal.customer, stack, n.value, deal.wants);
+  const f = fairFor(ctx, deal.customer, stack, n.value, deal.wants, deal.kind);
   if (!f) return fail('notFound');
   deal.lastOffer = { stack, qty: n.value };
   return ok(completeSale(ctx, deal, stack, n.value, Math.round(f.fair * (1 + deal.tolerance * DEALS.safeShare)), false, extras));
@@ -276,13 +276,14 @@ export function bestStack(ctx: SimCtx, target: RequestId | DealId): StackId | nu
   const req = deal ? null : ctx.state.requests.find((r) => r.id === target);
   const wants = deal?.wants ?? req?.wants;
   const customer = deal?.customer ?? req?.customer;
+  const kind = deal?.kind ?? req?.kind ?? 'street';
   if (!wants || !customer) return null;
   let best: StackId | null = null;
   let bestScore = -Infinity;
   for (const stack in ctx.state.bag) {
     const units = ctx.state.bag[stack]!;
     if (units <= 0) continue;
-    const f = fairFor(ctx, customer, stack, Math.min(units, wants.qty), wants);
+    const f = fairFor(ctx, customer, stack, Math.min(units, wants.qty), wants, kind);
     const st = parseStack(stack);
     const p = st ? parseProduct(st.product) : null;
     if (!f || !st || !p) continue;

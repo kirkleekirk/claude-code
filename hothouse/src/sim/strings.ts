@@ -79,6 +79,7 @@ export const t = defineStrings('sim', {
   reportQuiet: 'A quiet stretch. The plants say hi.',
   stopRaid: 'Your phone buzzed you awake: a raid is coming.',
   stopPinned: 'Not now. The night is just getting started.',
+  stopRested: 'You are wide awake. Rest again in about {hours} hours.',
   // stations
   'station.workbench': 'Mixing Workbench',
   'station.coldStill': 'Cold Still',
@@ -110,6 +111,7 @@ export const t = defineStrings('sim', {
   needsReyes: 'You need Det. Reyes on speaking terms first',
   needsMoreRespect: 'Vale needs more respect before he takes that offer',
   missionWindow: 'Starts between {from} and {to}',
+  missionRequest: 'For the job: {qty}, {place}. Whenever you are ready.',
   missionBusy: 'Finish your current mission first',
   missionNotAvailable: 'Not available yet',
   needsChoice: 'Make a choice to finish this',

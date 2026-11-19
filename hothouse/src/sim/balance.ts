@@ -1,5 +1,5 @@
 import type { Difficulty, Tier } from '@/content/ids';
-import type { FeedProfile, LightLevel, RelationshipLevel } from './api';
+import type { DealKind, FeedProfile, LightLevel, RelationshipLevel } from './api';
 
 /**
  * Every tuning number of the empire simulation, in one place. BALANCE.md documents the reasoning
@@ -81,6 +81,9 @@ export const DEALS = {
   xpPerfect: 10,
 } as const;
 
+/** Several buyers, or one very rich one: a single customer's per-deal budget does not cap these. */
+export const PACKAGE_KINDS: ReadonlySet<DealKind> = new Set<DealKind>(['houseParty', 'yacht', 'wholesale']);
+
 export const REQUESTS = {
   /** Mean seconds between new texts. */
   interval: 58,
@@ -103,6 +106,17 @@ export const ECONOMY = {
   debtShare: 0.12,
   cashPremium: 0.1,
   orderMarkup: 1.2,
+} as const;
+
+/**
+ * Wait / Sleep. The empire runs while you rest, so a skip is capped and needs some time awake
+ * before the next one: resting is a breather, never a money printer.
+ */
+export const REST = {
+  /** Longest single skip in sim-seconds (12 in-game hours). */
+  maxSkip: 480,
+  /** Sim-seconds of play needed after a skip before the next (about 7 in-game hours). */
+  awake: 280,
 } as const;
 
 export const XP = {

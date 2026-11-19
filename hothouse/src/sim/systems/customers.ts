@@ -7,7 +7,7 @@ import type { DistrictId, PlaceId } from '@/content/places';
 import type {
   Chip, CustomerState, DealKind, RelationshipLevel, RequestState, RequestWants, SampleResult, SimResult, StackId, UnlockVia, WalkUpCandidate,
 } from '../api';
-import { DEALS, REQUESTS, XP } from '../balance';
+import { DEALS, PACKAGE_KINDS, REQUESTS, XP } from '../balance';
 import type { SimCtx } from '../ctx';
 import { parseProduct, parseStack, productValue } from '../products';
 import { t } from '../strings';
@@ -191,13 +191,15 @@ export function createRequest(ctx: SimCtx, id: CustomerId, opts: RequestOptions 
   const tier = opts.tier ?? bestTierFor(ctx, d);
   const wants: RequestWants = { effects, tier, qty, minStars: lvl >= 3 ? 3 : lvl >= 2 ? 2 : 1 };
   const place = opts.place ?? meetPlace(d, ctx.world.hours);
-  const offer = opts.offer ?? Math.round(Math.min(maxSpend(ctx, id), qty * referenceUnit(ctx, wants)) / 5) * 5;
+  const kind = opts.kind ?? 'street';
+  const budget = PACKAGE_KINDS.has(kind) ? Infinity : maxSpend(ctx, id);
+  const offer = opts.offer ?? Math.round(Math.min(budget, qty * referenceUnit(ctx, wants)) / 5) * 5;
   const lifeScale = d.haggle === 'easygoing' || d.haggle === 'generous' ? 1.2 : d.haggle === 'shrewd' ? 0.85 : 1;
   const life = opts.life === undefined ? ctx.rng.range(REQUESTS.minLife, REQUESTS.maxLife) * lifeScale : opts.life;
   const expiresAt = life === null ? null : ctx.now + life;
   const by = expiresAt === null ? null : ctx.clockIn(expiresAt - ctx.now);
   const req: RequestState = {
-    id: ctx.id('r'), customer: id, kind: opts.kind ?? 'street', place, wants, offer: Math.max(5, offer), createdAt: ctx.now,
+    id: ctx.id('r'), customer: id, kind, place, wants, offer: Math.max(5, offer), createdAt: ctx.now,
     expiresAt, byDay: by?.day ?? null, byHours: by?.hours ?? null, status: 'pending', counter: null,
     story: opts.story ?? null, mission: null, message: null,
   };
@@ -316,7 +318,7 @@ export function tickCustomers(ctx: SimCtx, dt: number): void {
     flags.nextRequestAt = next;
     return;
   }
-  const open = s.requests.filter((r) => r.status === 'pending' || r.status === 'accepted').length;
+  const open = s.requests.filter((r) => !r.mission && (r.status === 'pending' || r.status === 'accepted')).length;
   const interval = REQUESTS.interval / (ctx.upgradeMods().requestRate * ctx.mods.requestRate);
   flags.nextRequestAt = ctx.now + interval * ctx.rng.range(0.6, 1.4);
   if (open >= requestSlots(ctx) || ctx.world.streetHeat >= 3) return;

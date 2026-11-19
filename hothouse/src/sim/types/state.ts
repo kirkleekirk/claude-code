@@ -424,6 +424,10 @@ export interface GoalState {
   done: boolean;
 }
 
+/**
+ * Lifetime counters behind goals and the profile. Hands-on counters (deals, units sold, harvests,
+ * tends, mixes) count the player's own work; the crew's output lives in the ledger totals.
+ */
 export interface Stats {
   deals: number;
   perfectDeals: number;

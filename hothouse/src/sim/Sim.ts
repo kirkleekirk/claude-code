@@ -6,6 +6,7 @@ import { fail } from '@/core/types';
 import type {
   DayLedger, ShiftReport, Sim, SimCommands, SimDevCommands, SimQueries, SimResult, SimState, SimWorldInput,
 } from './api';
+import { REST } from './balance';
 import { SimCtx } from './ctx';
 import { buildQueries } from './queries';
 import { zeroLedger } from './state';
@@ -150,9 +151,14 @@ export class SimImpl implements Sim {
     const s = ctx.state;
     const from = { ...s.clock };
     const before = { ...s.totals };
-    const total = Math.max(0, Math.min(3 * 960, Number.isFinite(seconds) ? seconds : 0));
+    const total = Math.max(0, Math.min(REST.maxSkip, Number.isFinite(seconds) ? seconds : 0));
     const pinned = s.story.beats.prologueDone === undefined && s.story.beats.duskFalls === undefined;
     if (pinned || total <= 0) return this.report(from, before, 0, pinned ? t('stopPinned') : null);
+    const rested = typeof s.story.flags.restedAt === 'number' ? s.story.flags.restedAt : -Infinity;
+    if (ctx.now - rested < REST.awake) {
+      const hours = Math.max(1, Math.ceil(((REST.awake - (ctx.now - rested)) / 960) * 24));
+      return this.report(from, before, 0, t('stopRested', { hours }));
+    }
     // Open requests wait while you rest; open handoffs end.
     for (const r of s.requests) if (r.expiresAt !== null && (r.status === 'pending' || r.status === 'accepted')) r.expiresAt += total;
     for (const d of s.deals) if (d.status === 'open') d.status = 'walked';
@@ -174,6 +180,7 @@ export class SimImpl implements Sim {
       }
     }
     ctx.world = { ...world, busy: false };
+    s.story.flags.restedAt = ctx.now;
     return this.report(from, before, done, interrupted);
   }
 

@@ -95,7 +95,8 @@ function issueGoal(ctx: SimCtx): void {
   if (pool.length === 0) return;
   const def = ctx.rng.pick(pool);
   const target = def.targets[band];
-  const xp = Math.round(25 + 15 * (band + 1) + (def.stat === 'earned' ? 0 : target * 2));
+  const money = def.stat === 'earned' || def.stat === 'laundered';
+  const xp = Math.round(25 + 15 * (band + 1) + (money ? 0 : target * 2));
   const cash = Math.round((def.stat === 'earned' ? target * 0.1 : 60 * (band + 1) * (1 + band * 0.6)) / 5) * 5;
   const g: GoalState = {
     id: ctx.id('g'), def: def.id, target, progress: 0, base: statValue(ctx, def.stat), reward: { cash, xp }, done: false,
