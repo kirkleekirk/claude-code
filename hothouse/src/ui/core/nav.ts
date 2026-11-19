@@ -70,13 +70,15 @@ export function score(from: Rect, to: Rect, dir: Dir): number {
   return primary + lateralCost;
 }
 
+const same = (a: Rect, b: Rect) => a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
+
 /** Index of the best candidate, or -1. `wrap` jumps to the far side when nothing lies ahead. */
 export function pickNext(from: Rect, candidates: readonly Rect[], dir: Dir, wrap = false): number {
   let best = -1;
   let bestScore = Infinity;
   for (let i = 0; i < candidates.length; i++) {
     const c = candidates[i]!;
-    if (c.x === from.x && c.y === from.y && c.w === from.w && c.h === from.h) continue;
+    if (same(c, from)) continue;
     const s = score(from, c, dir);
     if (s < bestScore) {
       bestScore = s;
@@ -89,6 +91,7 @@ export function pickNext(from: Rect, candidates: readonly Rect[], dir: Dir, wrap
   let farScore = -Infinity;
   for (let i = 0; i < candidates.length; i++) {
     const c = candidates[i]!;
+    if (same(c, from)) continue;
     const horizontal = dir === 'left' || dir === 'right';
     const shares = horizontal
       ? overlap(from.y, from.y + from.h, c.y, c.y + c.h) > 0
@@ -104,17 +107,21 @@ export function pickNext(from: Rect, candidates: readonly Rect[], dir: Dir, wrap
   return far;
 }
 
-/** The candidate nearest the top-left reading position: the default when nothing is focused. */
+/**
+ * The candidate at the top-left reading position: the default when nothing is focused. The first
+ * row is everything whose top edge sits above the middle of the top-most candidate, so items a few
+ * pixels lower (different heights, baseline nudges) still count as the same row; the left-most wins.
+ */
 export function pickFirst(candidates: readonly Rect[]): number {
-  let best = -1;
-  let bestKey = Infinity;
+  let top = -1;
+  for (let i = 0; i < candidates.length; i++) if (top < 0 || candidates[i]!.y < candidates[top]!.y) top = i;
+  if (top < 0) return -1;
+  const rowEnd = candidates[top]!.y + candidates[top]!.h / 2;
+  let best = top;
   for (let i = 0; i < candidates.length; i++) {
     const c = candidates[i]!;
-    const key = Math.round(c.y / 8) * 100000 + c.x;
-    if (key < bestKey) {
-      bestKey = key;
-      best = i;
-    }
+    const b = candidates[best]!;
+    if (c.y < rowEnd && (c.x < b.x || (c.x === b.x && c.y < b.y))) best = i;
   }
   return best;
 }

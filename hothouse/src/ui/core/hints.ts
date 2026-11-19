@@ -74,15 +74,18 @@ export class HintBook {
 
   /**
    * Advance time. Promotes the next queued hint when none is showing (and hints are enabled), and
-   * retires the current one after its duration. Returns true if `current` changed.
+   * retires the current one after its duration. A hint cut short by a menu or the phone (disabled
+   * before half its time) goes back to the front of the queue instead of resting.
+   * Returns true if `current` changed.
    */
   tick(dt: number, enabled: boolean): boolean {
     this.clock += dt;
     let changed = false;
     if (this.current) {
-      this.shownFor += dt;
+      if (enabled) this.shownFor += dt;
       if (!enabled || this.shownFor >= this.current.duration) {
-        this.restingUntil.set(this.current.id, this.clock + HINT_COOLDOWN);
+        if (!enabled && this.shownFor < this.current.duration * 0.5) this.queue = [this.current, ...this.queue].slice(0, MAX_QUEUE);
+        else this.restingUntil.set(this.current.id, this.clock + HINT_COOLDOWN);
         this.current = null;
         this.shownFor = 0;
         changed = true;

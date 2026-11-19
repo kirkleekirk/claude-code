@@ -374,7 +374,8 @@ export class UiRuntime implements UiApi {
 
     this.ticker.tick(dt);
     this.updateToasts(dt);
-    if (this.hintBook.tick(dt, settings.get('game.hints') && this.hud.visible.peek() && this.frontend.peek() === 'none')) {
+    // Hints are for play: they wait while anything sits on top (menus, phone, wheel, dialogue, front end).
+    if (this.hintBook.tick(dt, settings.get('game.hints') && this.hud.visible.peek() && this.top.peek() === null)) {
       this.currentHint.value = this.hintBook.current;
     }
     this.fpsAcc += dtReal;
