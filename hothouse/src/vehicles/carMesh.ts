@@ -1,6 +1,7 @@
-import { BufferAttribute, BufferGeometry, Vector3 } from 'three';
+import { BufferAttribute, BufferGeometry, Matrix4, Vector3 } from 'three';
 import { curve, smoothstep } from '@/core/math';
 import { MeshBuilder, SurfFlag } from '@/render/geo/MeshBuilder';
+import { roundedRect, slab } from '@/world/buildings/kit';
 import type { BodyShape, VehicleDef } from './defs';
 
 /** Extra surface flags understood by the vehicle material. */
@@ -185,26 +186,66 @@ function convertibleCockpit(b: MeshBuilder, s: BodyShape, f: Frame): void {
   b.quad([-w, yb, z0], [-w * 0.92, yt, z1], [w * 0.92, yt, z1], [w, yb, z0]);
   b.surface('#EEF1F4', 0.12, 1, 0, SurfFlag.WET);
   b.tube([new Vector3(w, yb, z0), new Vector3(w * 0.92, yt, z1), new Vector3(-w * 0.92, yt, z1), new Vector3(-w, yb, z0)], 0.025, 5);
-  // Dash, seats, headrests and the wheel.
+  // Dash with a padded top and a gauge hood on the driver's side.
   b.surface('#6B3F2A', 0.45, 0, 0, 0);
-  b.box(0, yb - 0.08, z1 + 0.18, w * 1.85, 0.16, 0.34);
-  b.surface('#F2E6D6', 0.6, 0, 0, 0);
+  cushion(b, 0, yb - 0.06, z1 + 0.2, w * 1.85, 0.36, 0.14, 0.06, 0);
+  b.surface('#2A1C16', 0.6, 0, 0, 0);
+  cushion(b, -0.38, yb + 0.03, z1 + 0.25, 0.36, 0.16, 0.08, 0.06, 0);
+  // Two bucket seats in cream leather: bolstered cushion, reclined back, padded headrest.
   const seatZ = f.z(c.start + (c.end - c.start) * 0.55);
+  const recline = 0.24;
   for (const sx of [-0.38, 0.38]) {
-    b.box(sx, floorY + 0.18, seatZ, 0.5, 0.16, 0.52);
-    b.pushTRS(sx, floorY + 0.55, seatZ + 0.27, 0, 1, 1, 1);
-    b.box(0, 0, 0, 0.5, 0.62, 0.14);
-    b.pop();
-    b.box(sx, floorY + 0.98, seatZ + 0.3, 0.26, 0.2, 0.1);
+    b.surface('#F2E6D6', 0.62, 0, 0, 0);
+    cushion(b, sx, floorY + 0.2, seatZ - 0.02, 0.5, 0.5, 0.13, 0.08, 0);
+    const backH = 0.56;
+    const by = floorY + 0.27 + (backH / 2) * Math.cos(recline);
+    const bz = seatZ + 0.25 + (backH / 2) * Math.sin(recline);
+    cushion(b, sx, by, bz, 0.5, backH, 0.13, [0.13, 0.13, 0.04, 0.04], Math.PI / 2 + recline);
+    // Piping: a slightly darker inset panel on the back's front face.
+    b.surface('#E0CFB8', 0.7, 0, 0, 0);
+    const n = 0.07;
+    cushion(b, sx, by + Math.sin(recline) * 0, bz - n * Math.cos(recline), 0.36, backH * 0.7, 0.02, 0.06, Math.PI / 2 + recline);
+    // Headrest on two chrome posts.
+    const topY = floorY + 0.27 + backH * Math.cos(recline), topZ = seatZ + 0.25 + backH * Math.sin(recline);
+    b.surface('#EEF1F4', 0.15, 1, 0, SurfFlag.WET);
+    for (const px of [-0.06, 0.06]) b.tube([new Vector3(sx + px, topY - 0.02, topZ), new Vector3(sx + px, topY + 0.07, topZ + 0.015)], 0.009, 4);
+    b.surface('#F2E6D6', 0.62, 0, 0, 0);
+    cushion(b, sx, topY + 0.14, topZ + 0.03, 0.27, 0.16, 0.1, 0.07, Math.PI / 2 + recline * 0.6);
   }
+  // Centre console and the folded top under a fabric boot behind the seats.
+  b.surface('#3A2A24', 0.7, 0, 0, 0);
+  cushion(b, 0, floorY + 0.24, seatZ - 0.1, 0.16, 0.62, 0.2, 0.05, 0);
+  b.surface('#2B2650', 0.95, 0, 0, 0);
+  const bootZ = seatZ + 0.62;
+  cushion(b, 0, f.belt(c.end) - 0.02, bootZ, (f.hw(c.end) - 0.1) * 2, 0.42, 0.16, 0.12, 0);
   b.surface('#1A1C22', 0.5, 0.2, 0, 0);
+  // Steering wheel on the driver's (left) side, on a short column from the dash.
   const ring: Vector3[] = [];
+  const wx = -0.38, wy = yb + 0.02, wz = z1 + 0.42;
   for (let i = 0; i <= 16; i++) {
     const a = (i / 16) * Math.PI * 2;
-    ring.push(new Vector3(0.38 + Math.cos(a) * 0.18, yb + 0.02 + Math.sin(a) * 0.18, z1 + 0.42 - Math.sin(a) * 0.06));
+    ring.push(new Vector3(wx + Math.cos(a) * 0.18, wy + Math.sin(a) * 0.18, wz - Math.sin(a) * 0.06));
   }
   b.tube(ring, 0.018, 5);
+  b.tube([new Vector3(wx, wy, wz), new Vector3(wx, wy - 0.06, wz - 0.26)], 0.03, 6);
+  for (const a of [Math.PI * 0.15, Math.PI * 0.85, Math.PI * 1.5]) {
+    b.tube([new Vector3(wx, wy, wz), new Vector3(wx + Math.cos(a) * 0.17, wy + Math.sin(a) * 0.17, wz - Math.sin(a) * 0.057)], 0.011, 4);
+  }
 }
+
+/**
+ * A rounded slab: `w` wide, `d` deep and `thick` thick, centred at (cx, cy, cz) and pitched about X.
+ * Pitch π/2 stands it up with its depth running down (seat backs, headrests). `r` is one radius or
+ * per-corner radii (front-right, front-left, back-left, back-right; front = the top when standing).
+ */
+function cushion(b: MeshBuilder, cx: number, cy: number, cz: number, w: number, d: number, thick: number, r: number | readonly [number, number, number, number], pitch: number): void {
+  const radii = typeof r === 'number' ? ([r, r, r, r] as const) : r;
+  b.push(_m.makeRotationX(pitch).setPosition(cx, cy, cz));
+  slab(b, roundedRect(w, d, radii, 4, -d / 2), -thick / 2, thick / 2, true);
+  b.pop();
+}
+
+const _m = new Matrix4();
 
 function pickupBed(b: MeshBuilder, s: BodyShape, f: Frame): void {
   const bed = s.bed!;
@@ -270,21 +311,39 @@ function trim(b: MeshBuilder, s: BodyShape, f: Frame, paint: boolean): void {
   else b.surface('#2A2D33', 0.5, 0.2, 0, SurfFlag.WET);
   b.box(0, yB, zF - 0.05, hwF * 2 + 0.04, 0.16, 0.14);
   b.box(0, yB, zR + 0.05, hwR * 2 + 0.04, 0.16, 0.14);
-  // Mirrors.
-  if (paint) b.surface('#FFFFFF', 0.3, 0.35, 0, PAINT);
+  // Mirrors: a rounded housing on a stalk from the door, glass facing back.
   const tm = s.cabin.start + 0.03;
-  for (const sx of [1, -1]) b.box(sx * (f.hw(tm) + 0.08), f.belt(tm) + 0.12, f.z(tm), 0.12, 0.1, 0.16);
+  for (const sx of [1, -1]) {
+    const hx = f.hw(tm), my = f.belt(tm) + 0.12, mz = f.z(tm);
+    if (paint) b.surface('#FFFFFF', 0.3, 0.35, 0, PAINT);
+    else b.surface('#2A2D33', 0.5, 0.2, 0, SurfFlag.WET);
+    b.tube([new Vector3(sx * (hx - 0.04), my - 0.08, mz + 0.02), new Vector3(sx * (hx + 0.1), my - 0.01, mz + 0.03)], 0.02, 5);
+    cushion(b, sx * (hx + 0.13), my, mz, 0.17, 0.13, 0.11, 0.045, Math.PI / 2);
+    b.surface('#B8C4CC', 0.05, 1, 0, SurfFlag.GLASS);
+    cushion(b, sx * (hx + 0.13), my, mz + 0.056, 0.14, 0.1, 0.004, 0.035, Math.PI / 2);
+  }
   // Exhausts.
   b.surface('#D8DCE0', 0.2, 1, 0, 0);
   const pipes = s.spoiler || s.fins ? [0.42, -0.42] : [0.42];
   for (const px of pipes) b.tube([new Vector3(px, s.clearance + 0.1, zR - 0.2), new Vector3(px, s.clearance + 0.1, zR + 0.1)], 0.045, 8);
   if (s.fins) {
+    // Tail fins: tapered wedges rising along the rear fenders, chrome-tipped.
     if (paint) b.surface('#FFFFFF', 0.3, 0.35, 0, PAINT);
     for (const sx of [1, -1]) {
-      const x = sx * (hwR - 0.1);
-      const y0 = f.belt(0.8), z0 = f.z(0.8), z1 = f.z(1);
-      b.quad([x, y0, z0], [x, y0, z1], [x, y0 + 0.16, z1], [x, y0 + 0.02, z0]);
-      b.quad([x, y0, z1], [x, y0, z0], [x, y0 + 0.02, z0], [x, y0 + 0.16, z1]);
+      const x = sx * (f.hw(0.93) - 0.07);
+      // Short wedges that sit on the fender line at both ends.
+      const ya = f.belt(0.86) - 0.015, yb = f.belt(0.99) - 0.015, z0 = f.z(0.86), z1 = f.z(0.99);
+      const t = 0.03;
+      const A: [number, number, number] = [x - t, ya, z0], B: [number, number, number] = [x + t, ya, z0];
+      const C: [number, number, number] = [x - t, yb, z1], D: [number, number, number] = [x + t, yb, z1];
+      const E: [number, number, number] = [x - t * 0.4, yb + 0.1, z1], F: [number, number, number] = [x + t * 0.4, yb + 0.1, z1];
+      // Two flanks, the sloped top and the back face.
+      b.quad(A, C, E, E);
+      b.quad(D, B, F, F);
+      b.quad(B, A, E, F);
+      b.quad(C, D, F, E);
+      b.surface('#EEF1F4', 0.12, 1, 0, SurfFlag.WET);
+      b.tube([new Vector3(x, yb + 0.04, z1 - 0.2), new Vector3(x, yb + 0.1, z1 + 0.005)], 0.01, 4);
     }
   }
   if (s.spoiler) {
