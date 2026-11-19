@@ -69,12 +69,12 @@ const _m = new Matrix4();
 const _v = new Vector3();
 
 export class SkinBuilder {
-  private readonly pos = new Grow(12000);
-  private readonly nrm = new Grow(12000);
-  private readonly look = new Grow(16000);
-  private readonly bi = new Grow(16000);
-  private readonly bw = new Grow(16000);
-  private readonly idx = new GrowU32(24000);
+  private readonly pos = new Grow(18000);
+  private readonly nrm = new Grow(18000);
+  private readonly look = new Grow(24000);
+  private readonly bi = new Grow(24000);
+  private readonly bw = new Grow(24000);
+  private readonly idx = new GrowU32(40000);
   private readonly paint: Paint = { region: 0, ao: 1, extra: 0, extra2: 0, b0: 0, w0: 1, b1: 0, w1: 0, b2: 0, w2: 0 };
   /** Defaults copied into `paint` before each painter call. */
   readonly base: Paint = { region: 0, ao: 1, extra: 0, extra2: 0, b0: 0, w0: 1, b1: 0, w1: 0, b2: 0, w2: 0 };
@@ -359,11 +359,15 @@ export class SkinBuilder {
       const e1x = P[b * 3]! - ax, e1y = P[b * 3 + 1]! - ay, e1z = P[b * 3 + 2]! - az;
       const e2x = P[c * 3]! - ax, e2y = P[c * 3 + 1]! - ay, e2z = P[c * 3 + 2]! - az;
       const nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z, nz = e1x * e2y - e1y * e2x;
-      for (const k of [a, b, c]) {
-        N[k * 3] += nx;
-        N[k * 3 + 1] += ny;
-        N[k * 3 + 2] += nz;
-      }
+      N[a * 3] += nx;
+      N[a * 3 + 1] += ny;
+      N[a * 3 + 2] += nz;
+      N[b * 3] += nx;
+      N[b * 3 + 1] += ny;
+      N[b * 3 + 2] += nz;
+      N[c * 3] += nx;
+      N[c * 3 + 1] += ny;
+      N[c * 3 + 2] += nz;
     }
     for (let k = v0; k < vEnd; k++) {
       const x = N[k * 3]!, y = N[k * 3 + 1]!, z = N[k * 3 + 2]!;

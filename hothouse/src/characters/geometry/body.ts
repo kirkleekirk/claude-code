@@ -155,8 +155,9 @@ export function buildTorso(ctx: BodyCtx): void {
   const seg = 22;
   const e = 2 / p.exponent;
   b.set(Region.SKIN, Bone.hips).begin();
+  let ringZc = 0;
   const painter = (x: number, y: number, z: number, _t: number, o: Paint) => {
-    const front = z < torsoSection(y, p, _sec).zc;
+    const front = z < ringZc;
     o.region = torsoRegion(ctx, x, y, z, front);
     // Weights: hips → spine → chest; legs pull the lowest rings, clavicles the shoulder tops.
     const wHips = 1 - smoothstep(0.96, 1.08, y);
@@ -196,7 +197,8 @@ export function buildTorso(ctx: BodyCtx): void {
   let first: ReturnType<SkinBuilder['ring']> | null = null;
   for (const y of ys) {
     const s = torsoSection(y, p, _sec);
-    const add = torsoInflate(ctx, y) + (heights.has(y) && ys.includes(y) && isLip(ctx, y) ? 0.004 : 0);
+    ringZc = s.zc;
+    const add = torsoInflate(ctx, y) + (isLip(ctx, y) ? 0.004 : 0);
     const start = b.vertexCount;
     for (let i = 0; i < seg; i++) {
       const t = (i / seg) * TAU;

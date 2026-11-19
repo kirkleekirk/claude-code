@@ -47,14 +47,18 @@ function shell(ctx: BodyCtx, h: HeadShape, s: ShellSpec, bone: number = Bone.hea
   const painter = (_x: number, y: number, _z: number, _t: number, o: Paint) => {
     o.ao = clamp(0.62 + (y - HEAD.y + 0.06) * 3.2, 0.62, 1);
   };
+  const q = { x: 0, y: 0, z: 0 };
   const point = (dx: number, dy: number, dz: number, off: number) => {
     headPoint(h, dx, dy, dz, _p);
     const len = Math.hypot(_p.x, _p.y, _p.z) || 1;
     const k = 1 + off / len;
-    return [HEAD.x + _p.x * k, HEAD.y + _p.y * k * (s.stretch && dy > 0 ? 1 + (s.stretch - 1) * dy : 1), HEAD.z + _p.z * k] as const;
+    q.x = HEAD.x + _p.x * k;
+    q.y = HEAD.y + _p.y * k * (s.stretch && dy > 0 ? 1 + (s.stretch - 1) * dy : 1);
+    q.z = HEAD.z + _p.z * k;
+    return q;
   };
-  const top = point(0, 1, 0, s.thick(0, 1, 0) + 0.002);
-  const crown = b.vertex(top[0], top[1], top[2], 0, painter);
+  point(0, 1, 0, s.thick(0, 1, 0) + 0.002);
+  const tx = q.x, ty = q.y, tz = q.z;
   let prev: Ring | null = null;
   let last: Ring | null = null;
   for (let r = 1; r <= rows; r++) {
@@ -65,12 +69,12 @@ function shell(ctx: BodyCtx, h: HeadShape, s: ShellSpec, bone: number = Bone.hea
       const dy = 1 - (1 - e) * (r / rows) ** 0.95;
       const hr = Math.sqrt(Math.max(0, 1 - dy * dy));
       const dx = Math.cos(t) * hr, dz = Math.sin(t) * hr;
-      const q = point(dx, dy, dz, s.thick(dx, dy, dz) + 0.002);
-      b.vertex(q[0], q[1], q[2], t, painter);
+      point(dx, dy, dz, s.thick(dx, dy, dz) + 0.002);
+      b.vertex(q.x, q.y, q.z, t, painter);
     }
     const ring = { start, count: cols, cx: HEAD.x, cy: HEAD.y, cz: HEAD.z };
     if (prev) b.bridge(prev, ring, true);
-    else b.cap(ring, top[0], top[1], top[2], false);
+    else b.cap(ring, tx, ty, tz, false, painter);
     prev = ring;
     last = ring;
   }
@@ -80,14 +84,13 @@ function shell(ctx: BodyCtx, h: HeadShape, s: ShellSpec, bone: number = Bone.hea
     const t = (i / cols) * TAU;
     const e = hairline(s, t) + 0.035;
     const hr = Math.sqrt(Math.max(0, 1 - e * e));
-    const q = point(Math.cos(t) * hr, e, Math.sin(t) * hr, -0.003);
-    b.vertex(q[0], q[1], q[2], t, painter);
+    point(Math.cos(t) * hr, e, Math.sin(t) * hr, -0.003);
+    b.vertex(q.x, q.y, q.z, t, painter);
   }
   const rim = { start, count: cols, cx: HEAD.x, cy: HEAD.y, cz: HEAD.z };
   if (last) b.bridge(last, rim, false);
   b.end();
   b.base.extra = 0;
-  void crown;
   return last!;
 }
 
