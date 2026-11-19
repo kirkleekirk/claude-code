@@ -79,7 +79,7 @@ The HUD is `ui.hud`, a `HudModel` of signals the game writes: `visible`, `clean`
 open ui-lab.html?screen=mainMenu&scale=100&input=gamepad&bg=bright&set.a11y.highContrast=true
 node qa/ui-shots.mjs --size 1920x1080 --scale 150 --input gamepad [--set a11y.dyslexiaFont=true] [screens…]
 node qa/ui-layout.mjs [--quick] [--screens a,b] [--sizes 1280x720] [--scales 80,150] [--set k=v]
-node qa/ui-gamepad.mjs                      # controller-only walkthrough, 47 checks
+node qa/ui-gamepad.mjs                      # controller-only walkthrough, 48 checks
 node qa/ui-icons.mjs                        # icon contact sheet
 npx vitest run tests/ui
 ```
