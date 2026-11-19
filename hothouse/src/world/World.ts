@@ -18,6 +18,9 @@ import { placePalms, Vegetation } from './vegetation/Vegetation';
 import { Signs } from './signs/Signs';
 import { buildLightPools, buildSignalLenses } from './props/LightCards';
 import { placeStreetProps } from './props/streetProps';
+import { buildBeachfront } from './landmarks/Beachfront';
+import { buildPier, FerrisWheel } from './landmarks/Pier';
+import { buildCauseway } from './landmarks/Causeway';
 import { buildTerrain, rapierHeights } from './terrain/TerrainMesh';
 import { Water } from './water/Water';
 
@@ -59,6 +62,7 @@ export class World {
   water!: Water;
   vegetation!: Vegetation;
   signage!: Signs;
+  wheel!: FerrisWheel;
   stats!: WorldStats;
   private readonly materials: Material[] = [];
   /** Materials not owned by the kit (custom shaders), disposed directly. */
@@ -102,6 +106,14 @@ export class World {
     w.root.add(w.vegetation.group);
     progress(0.58, 'Planting the palms');
     const props = placeStreetProps(w.graph, w.blocks, grid, 0x50524f50);
+    const beachfront = buildBeachfront(grid, col, w.hf, 0x42454143);
+    const pier = buildPier(grid, col, 0x50494552);
+    const causeway = buildCauseway(w.graph, grid, col);
+    w.signs.push(...beachfront.signs, ...pier.signs);
+    props.glows.push(...beachfront.glows, ...pier.glows, ...causeway.glows);
+    w.wheel = new FerrisWheel(kit, gfx.shared, grid);
+    w.root.add(w.wheel.group);
+    progress(0.6, 'Building the pier');
 
     // Buildings.
     const { specs, lots } = planBuildings(w.blocks, 0x48414c43);
@@ -168,6 +180,7 @@ export class World {
     const cam = gfx.camera.position;
     this.water.update(gfx.env, gfx.camera);
     this.vegetation.update(gfx.camera, dt);
+    this.wheel.update(dt);
     // The mirror sits at street level over land and at sea level over water.
     const overLand = this.hf.heightAt(cam.x, cam.z) > 0.25;
     const target = overLand ? ROAD_Y : 0;
@@ -184,6 +197,7 @@ export class World {
     this.water.dispose();
     this.vegetation.dispose();
     this.signage.dispose(this.deps.kit);
+    this.wheel.dispose(this.deps.kit);
     for (const m of this.ownMaterials) m.dispose();
     for (const m of this.materials) this.deps.kit.release(m);
   }

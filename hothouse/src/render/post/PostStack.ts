@@ -6,7 +6,7 @@ import { GradeEffect } from './GradeEffect';
 
 const cfg = tunables.group('post.look', {
   baseContrast: { value: 1.28, min: 0.6, max: 2, step: 0.01 },
-  baseSaturation: { value: 1.3, min: 0, max: 2.5, step: 0.01 },
+  baseSaturation: { value: 1.16, min: 0, max: 2.5, step: 0.01 },
   vignette: { value: 0.36, min: 0, max: 1, step: 0.01 },
   grain: { value: 0.045, min: 0, max: 0.3, step: 0.005 },
   bloomIntensity: { value: 0.85, min: 0, max: 4, step: 0.01 },

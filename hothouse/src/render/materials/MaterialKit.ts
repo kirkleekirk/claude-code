@@ -185,20 +185,30 @@ if (vWin.z > 19.5) {
     frame *= detail;
     sill *= detail;
     shutter *= detail;
-    float hsh = hhHash12(cellId + vWin.w * 17.0);
-    float slow = floor(uTime / 40.0 + hsh * 7.0);
-    float flick = hhHash12(cellId + slow * 1.7 + vWin.w);
     float officeLike = step(3.5, vWin.z) * step(vWin.z, 4.5);
-    float litChance = uWeather.z * mix(0.34 + 0.3 * hhHash12(vec2(vWin.w, 3.3)), 0.62, officeLike);
+    // Offices light in runs along a floor; homes and hotels room by room.
+    vec2 litId = officeLike > 0.5 ? vec2(floor(cellId.x / 6.0), cellId.y) : cellId;
+    float hsh = hhHash12(litId + vWin.w * 17.0);
+    float slow = floor(uTime / 40.0 + hsh * 7.0);
+    float flick = hhHash12(litId + slow * 1.7 + vWin.w);
+    float litChance = uWeather.z * mix(0.34 + 0.3 * hhHash12(vec2(vWin.w, 3.3)), 0.5, officeLike);
     float lightOn = step(flick * 0.12 + hsh * 0.88, litChance);
     vec3 Vw = normalize(vHHWorld - cameraPosition);
     vec3 Nw = normalize(vHHWorldNormal);
-    vec3 Tw = normalize(cross(vec3(0.0, 1.0, 0.0), Nw));
+    // Windows only on walls; a horizontal face has no wall tangent (and must never divide by zero).
+    vec3 hhCrossT = cross(vec3(0.0, 1.0, 0.0), Nw);
+    float hhCrossL = length(hhCrossT);
+    vec3 Tw = hhCrossL > 1e-3 ? hhCrossT / hhCrossL : vec3(1.0, 0.0, 0.0);
+    float hhWallness = 1.0 - smoothstep(0.55, 0.8, abs(Nw.y));
+    glass *= hhWallness;
+    frame *= hhWallness;
+    sill *= hhWallness;
+    shutter *= hhWallness;
     vec2 gm = max(gSize * vWin.xy, vec2(0.2));
     vec3 rayT = vec3(dot(Vw, Tw) / gm.x, Vw.y / gm.y, dot(Vw, -Nw) / mix(3.2, 6.0, officeLike));
     float em;
-    vec3 room = hhInterior(gUv, rayT, vWin.w, cellId, lightOn, em);
-    vec3 avgRoom = lightOn * hhRoomColor(fract(hsh * 13.37), 1.0) * 0.55;
+    vec3 room = hhInterior(gUv, rayT, vWin.w, cellId, lightOn, officeLike, em);
+    vec3 avgRoom = lightOn * mix(hhRoomColor(fract(hsh * 13.37), 1.0), vec3(0.9, 0.9, 0.86), officeLike) * 0.55;
     room = mix(avgRoom, room, detail);
     vec3 trim = mix(hhBaseColor, vec3(0.92, 0.9, 0.86), 0.72);
     vec3 accent = HH_ACCENTS[int(mod(floor(vWin.w), 6.0))];

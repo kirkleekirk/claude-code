@@ -138,7 +138,7 @@ vec3 hhRoomColor(float h, float night) {
 
 // Interior mapping: ray-cast a box room behind the glass. Returns linear colour (unlit factor);
 // \`lightOn\` decides whether the room is lit.
-vec3 hhInterior(vec2 uv, vec3 rayT, float seed, vec2 cellId, float lightOn, out float emissive) {
+vec3 hhInterior(vec2 uv, vec3 rayT, float seed, vec2 cellId, float lightOn, float office, out float emissive) {
   vec3 p = vec3(clamp(uv, 0.0, 1.0), 0.0);
   vec3 d = rayT;
   d.z = max(d.z, 1e-3);
@@ -149,6 +149,8 @@ vec3 hhInterior(vec2 uv, vec3 rayT, float seed, vec2 cellId, float lightOn, out 
   vec3 h = p + d * t;
   float hsh = hhHash12(cellId * 1.37 + seed * 7.1);
   vec3 base = hhRoomColor(fract(hsh * 13.37), lightOn);
+  // Offices: open-plan floors in cool and warm whites, not individually decorated rooms.
+  if (office > 0.5) base = mix(vec3(0.78, 0.88, 1.0), vec3(1.0, 0.84, 0.62), step(0.62, fract(seed * 0.37 + floor(cellId.y) * 0.21)));
   float shade;
   if (t == tt.z) {
     // Back wall with a piece of furniture or art.

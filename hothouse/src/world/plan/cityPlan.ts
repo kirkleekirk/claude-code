@@ -11,6 +11,8 @@ import { RoadGraph, type RoadKind } from '../roads/RoadGraph';
 export const CAUSEWAY_Z = -820;
 export const CAUSEWAY_EAST = -125;
 export const CAUSEWAY_WEST = -712;
+/** Isla Dorada's loop road (an ellipse inside the island). */
+export const ISLA = { x: -1035, z: -820, rx: 196, rz: 140 };
 
 interface Line {
   pts: P2[];
@@ -70,6 +72,14 @@ export function buildCityGraph(): RoadGraph {
   const east = g.nodeAt(CAUSEWAY_EAST, CAUSEWAY_Z);
   const west = g.nodeAt(CAUSEWAY_WEST - 40, CAUSEWAY_Z);
   g.addEdge(east, west, 'bridge', 'The Causeway', 'harbor', [], 1);
+  // Isla Dorada: a loop road around the island's heart, joined to the Causeway.
+  const loop: P2[] = [];
+  for (let i = 0; i < 18; i++) {
+    const a = (i / 18) * Math.PI * 2;
+    loop.push([Math.round(ISLA.x + Math.cos(a) * ISLA.rx), Math.round(ISLA.z + Math.sin(a) * ISLA.rz)]);
+  }
+  g.addRoad([...loop, loop[0]!], 'street', 'Dorada Loop', 'isla');
+  g.addRoad([[CAUSEWAY_WEST - 40, CAUSEWAY_Z], loop[0]!], 'street', 'Causeway Landing', 'isla');
   g.splitCrossings();
   for (const n of g.nodes) n.signal = n.edges.length >= 4 && n.edges.some((e) => g.edges[e]!.kind !== 'street');
   g.build();

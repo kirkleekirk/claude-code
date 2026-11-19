@@ -85,7 +85,7 @@ export function buildLightPools(glows: readonly GlowCard[], shared: SharedUnifor
   const b = new MeshBuilder();
   for (const g of glows) {
     b.surface(g.color, 1, 0, g.intensity, 0);
-    const y = WALK_Y + 0.02;
+    const y = (g.y > 0 ? g.y : WALK_Y) + 0.02;
     const r = g.radius;
     b.quad([g.x + r, y, g.z - r], [g.x - r, y, g.z - r], [g.x - r, y, g.z + r], [g.x + r, y, g.z + r], [1, -1, -1, 1]);
   }

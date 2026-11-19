@@ -230,6 +230,10 @@ export class Water {
     this.uShallow.value.set(cfg.shallow).lerp(STORM_SHALLOW, storm * 0.7);
     this.uMid.value.set(cfg.mid).lerp(STORM_MID, storm * 0.7);
     this.uDeep.value.set(cfg.deep).lerp(STORM_DEEP, storm * 0.6);
+    const dark = 1 - env.night * 0.62;
+    this.uShallow.value.multiplyScalar(dark);
+    this.uMid.value.multiplyScalar(dark);
+    this.uDeep.value.lerp(NIGHT_DEEP, env.night * 0.7).multiplyScalar(dark);
     this.uReflectivity.value = cfg.reflectivity;
   }
 
@@ -243,6 +247,7 @@ export class Water {
 const STORM_SHALLOW = new Color('#5C8A80');
 const STORM_MID = new Color('#2E5A5E');
 const STORM_DEEP = new Color('#14303A');
+const NIGHT_DEEP = new Color('#141032');
 
 /**
  * Square grid whose vertex spacing grows with distance from the centre (|t|^1.9 mapping): about a

@@ -29,6 +29,10 @@ const FORMS: Partial<Record<DistrictId, DistrictForm>> = {
     lotArea: [1700, 3200], front: [1.5, 4], side: 1.5, back: 3, maxDepth: 48, floors: [12, 38],
     styles: { tower: 6, apartment: 0.8, shopRow: 0.4 },
   },
+  isla: {
+    lotArea: [2600, 4600], front: [7, 14], side: 4, back: 6, maxDepth: 36, floors: [2, 3],
+    styles: { medRevival: 3, decoSmall: 1.5 },
+  },
   harbor: {
     lotArea: [1500, 3000], front: [2, 6], side: 2, back: 4, maxDepth: 50, floors: [1, 2],
     styles: { shopRow: 1 },

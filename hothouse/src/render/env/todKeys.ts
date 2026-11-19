@@ -46,16 +46,16 @@ export const BELT_COLOR = BELT;
 
 export const TOD_KEYS: readonly TodKey[] = [
   { // deep night
-    h: 0, zenith: '#060818', mid: '#0E0E32', horizon: '#1E1546', glow: '#3B3F9A', glowI: 0.15, belt: 0, skyI: 0.55,
-    key: '#A9B4F0', keyI: 0.3, fill: '#33307E', ground: '#1B1440', fillI: 0.34,
-    fogD: 0.00061, haze: 0.00023, exposure: 1.12, saturation: 1.12, contrast: 1.08,
+    h: 0, zenith: '#06051A', mid: '#110C2A', horizon: '#20133C', glow: '#3B3F9A', glowI: 0.15, belt: 0, skyI: 0.55,
+    key: '#B4AEE8', keyI: 0.3, fill: '#2E2668', ground: '#1B1440', fillI: 0.34,
+    fogD: 0.00061, haze: 0.00023, exposure: 0.86, saturation: 0.98, contrast: 1.08,
     shadowTint: '#1B1466', highTint: '#FFC9E8', tint: 0.22, bloom: 1.25, stars: 1,
-    cloudLit: '#2B2F6E', cloudDark: '#0D0F30',
+    cloudLit: '#2C2558', cloudDark: '#0D0B26',
   },
   { // pre-dawn
     h: 4.75, zenith: '#080C2A', mid: '#131A4C', horizon: '#2A2462', glow: '#5A4FB0', glowI: 0.2, belt: 0, skyI: 0.6,
     key: '#9FB4FF', keyI: 0.36, fill: '#3E459E', ground: '#1E1746', fillI: 0.52,
-    fogD: 0.00091, haze: 0.00027, exposure: 1.12, saturation: 1.08, contrast: 1.05,
+    fogD: 0.00091, haze: 0.00027, exposure: 0.86, saturation: 0.98, contrast: 1.05,
     shadowTint: '#1F1870', highTint: '#FFD0E0', tint: 0.2, bloom: 1.2, stars: 0.9,
     cloudLit: '#3A3C80', cloudDark: '#121438',
   },
@@ -125,23 +125,23 @@ export const TOD_KEYS: readonly TodKey[] = [
   { // dusk: magenta into teal, neon ignites
     h: 19.9, zenith: '#16245E', mid: '#7A3C9C', horizon: '#E0567A', glow: '#C0408A', glowI: 0.7, belt: 0.3, skyI: 0.8,
     key: '#FF6FA0', keyI: 0.3, fill: '#4A3FA8', ground: '#30225E', fillI: 0.95,
-    fogD: 0.00084, haze: 0.00031, exposure: 1.12, saturation: 1.16, contrast: 1.07,
+    fogD: 0.00084, haze: 0.00031, exposure: 1.0, saturation: 1.16, contrast: 1.07,
     shadowTint: '#2C1C74', highTint: '#FFB0D0', tint: 0.3, bloom: 1.35, stars: 0.3,
     cloudLit: '#C8508C', cloudDark: '#3A2E78',
   },
   { // blue hour
-    h: 20.5, zenith: '#0E1238', mid: '#231E5E', horizon: '#4A2A74', glow: '#5A3C9A', glowI: 0.3, belt: 0, skyI: 0.5,
+    h: 20.5, zenith: '#0C0A26', mid: '#21173F', horizon: '#3E1F5A', glow: '#5A3C9A', glowI: 0.3, belt: 0, skyI: 0.5,
     key: '#9FB4FF', keyI: 0.16, fill: '#3A3488', ground: '#221850', fillI: 0.5,
-    fogD: 0.00068, haze: 0.00025, exposure: 1.1, saturation: 1.04, contrast: 1.1,
+    fogD: 0.00068, haze: 0.00025, exposure: 0.94, saturation: 1.04, contrast: 1.1,
     shadowTint: '#1F1870', highTint: '#FFC0E0', tint: 0.25, bloom: 1.3, stars: 0.7,
-    cloudLit: '#3F3F8E', cloudDark: '#141642',
+    cloudLit: '#3A2C66', cloudDark: '#120E30',
   },
   { // night
-    h: 22, zenith: '#070818', mid: '#100F36', horizon: '#20164C', glow: '#3B3F9A', glowI: 0.15, belt: 0, skyI: 0.55,
-    key: '#A9B4F0', keyI: 0.3, fill: '#33307E', ground: '#1B1440', fillI: 0.34,
-    fogD: 0.00061, haze: 0.00023, exposure: 1.12, saturation: 1.12, contrast: 1.08,
+    h: 22, zenith: '#07061A', mid: '#120D2C', horizon: '#22143E', glow: '#3B3F9A', glowI: 0.15, belt: 0, skyI: 0.55,
+    key: '#B4AEE8', keyI: 0.3, fill: '#2E2668', ground: '#1B1440', fillI: 0.34,
+    fogD: 0.00061, haze: 0.00023, exposure: 0.86, saturation: 0.98, contrast: 1.08,
     shadowTint: '#1B1466', highTint: '#FFC9E8', tint: 0.22, bloom: 1.25, stars: 1,
-    cloudLit: '#2B2F6E', cloudDark: '#0D0F30',
+    cloudLit: '#2C2558', cloudDark: '#0D0B26',
   },
 ];
 
