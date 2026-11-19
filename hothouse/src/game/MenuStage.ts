@@ -13,11 +13,11 @@ interface Shot {
 
 /** Golden-hour views of Halcyon Bay behind the main menu. Each holds for SHOT_SECONDS. */
 const SHOTS: readonly Shot[] = [
-  { from: [-752, 2.6, -40], to: [-768, 3.4, -82], look: [-940, 6, -112], fov: 58 },
+  { from: [-640, 62, 260], to: [-662, 46, 214], look: [-930, 2, -30], fov: 52 },
   { from: [-880, 3.4, 52], to: [-905, 4.2, 30], look: [-1150, 26, 0], fov: 54 },
   { from: [-728, 15, -800], to: [-700, 18, -790], look: [0, 30, -480], fov: 46 },
   { from: [-770, 3.0, 170], to: [-762, 3.6, 120], look: [-772, 6, -60], fov: 60 },
-  { from: [-300, 9.0, -828], to: [-360, 11, -820], look: [-660, 10, -812], fov: 48 },
+  { from: [-290, 14, -846], to: [-340, 17, -842], look: [-660, 12, -812], fov: 48 },
 ];
 const SHOT_SECONDS = 14;
 

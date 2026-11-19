@@ -7,7 +7,8 @@ import { done, fail, type Result, type Vec2 } from '@/core/types';
 import { applyPreset, profileForTier, type QualityTier } from '@/render';
 import type { SaveMeta, SlotId } from '@/save';
 import { createSim, loadSim, simSaveMeta, type Sim, type SimState, type SimWorldInput } from '@/sim';
-import type { UiApi } from '@/ui/api';
+import { extendHarness } from '@/debug/harness';
+import type { PhotoModeState, UiApi } from '@/ui/api';
 import type { VehicleId } from '@/vehicles/defs';
 import { districtAt } from '@/world/plan/districts';
 import type { World } from '@/world/World';
@@ -15,6 +16,7 @@ import type { GameActions, NewGameOptions, TravelError } from './actions';
 import type { Game, GameSystem } from './Game';
 import { HudBridge } from './HudBridge';
 import { MenuStage } from './MenuStage';
+import { PhotoMode } from './PhotoMode';
 import { PlayStage } from './PlayStage';
 
 /** World-side state that goes into a save next to the sim. */
@@ -50,6 +52,7 @@ export class Session implements GameActions, GameSystem {
   titleCards = true;
   private ui: UiApi | null = null;
   private hud: HudBridge | null = null;
+  private photo: PhotoMode | null = null;
   private simAcc = 0;
   private autosaveAcc = 0;
   private readonly simWorld: SimWorldInput = {
@@ -73,6 +76,26 @@ export class Session implements GameActions, GameSystem {
   attachUi(ui: UiApi): void {
     this.ui = ui;
     this.hud = new HudBridge(ui, this.game);
+    this.photo = new PhotoMode(this.game, ui, {
+      characters: () => (this.play?.actor ? [this.play.actor.root] : []),
+    });
+    this.game.systems.push(this.photo);
+    const photo = this.photo;
+    extendHarness({
+      photoMode: () => {
+        this.enterPhotoMode();
+        return photo.isActive;
+      },
+      photoSet: (key: keyof PhotoModeState, value: never) => photo.controls.set(key, value),
+      photoCapture: async () => (await photo.controls.capture())?.size ?? 0,
+      photoExit: () => photo.controls.exit(),
+      session: () => ({ playing: !!this.play, photo: photo.isActive, playtime: Math.round(this.playtime), hasSim: !!this.sim }),
+      save: (slot: SlotId) => {
+        const r = this.saveSlot(slot);
+        return r.ok ? { ok: true, location: r.value.location, thumb: (r.value.thumb ?? '').length } : { ok: false, error: r.error };
+      },
+      load: (slot: SlotId) => this.loadSlot(slot),
+    });
   }
 
   /** Show the attract camera behind the main menu. */
@@ -115,9 +138,11 @@ export class Session implements GameActions, GameSystem {
   update(dt: number, _alpha: number, dtReal: number): void {
     const ui = this.ui;
     if (!ui) return;
-    // Menus that pause the world stop the clock; the phone slows it.
+    // Menus and Photo Mode stop the clock; the phone slows it.
     const loop = this.game.loop;
-    if (loop) loop.timeScale = ui.pausesWorld.value ? 0 : ui.top.value === 'phone' ? 0.2 : 1;
+    const photo = this.photo?.isActive ?? false;
+    if (loop) loop.timeScale = ui.pausesWorld.value || photo ? 0 : ui.top.value === 'phone' ? 0.2 : 1;
+    if (this.play && !photo && ui.top.value === null && ui.hud.visible.value && this.game.ctx.input.pressed('photoMode')) this.enterPhotoMode();
     if (this.play && dt > 0) {
       this.playtime += dt;
       this.autosaveAcc += dt;
@@ -295,7 +320,7 @@ export class Session implements GameActions, GameSystem {
   // ── modes ──────────────────────────────────────────────────────────────────
 
   enterPhotoMode(): void {
-    this.ui?.toast({ kind: 'info', title: 'Photo Mode', body: 'Coming online with the camera crew.' });
+    if (this.play && this.play.mode !== 'entering' && this.play.mode !== 'exiting') this.photo?.open();
   }
 
   enterBuildMode(): Result<void, 'notInProperty'> {
