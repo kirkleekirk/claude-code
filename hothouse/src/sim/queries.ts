@@ -10,6 +10,7 @@ import type {
 } from './api';
 import type { SimCtx } from './ctx';
 import { parseProduct, parseStack, stackValue } from './products';
+import { t } from './strings';
 import { canPlace, flowScore } from './systems/build';
 import { def as customerDef } from './systems/customers';
 import { bestStack, haggleInfo } from './systems/deals';
@@ -49,15 +50,12 @@ function vibesOf(ctx: SimCtx, district: DistrictId): Vibe[] {
   return [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([v]) => v);
 }
 
-const VIBE_LABEL: Readonly<Record<Vibe, string>> = {
-  party: 'Party', chill: 'Chill', focus: 'Focus', creative: 'Creative', night: 'Night owl', beach: 'Beach', romance: 'Romance', weird: 'Weird', sleep: 'Sleepy',
-};
 
 function forecast(ctx: SimCtx): DemandForecast[] {
   const h = ctx.world.hours;
   return DISTRICT_IDS.map((d) => {
     const demand = Math.max(0.5, Math.min(2, (ctx.mods.demand[d] ?? 1) * DISTRICT_RHYTHM[d](h)));
-    const wants = vibesOf(ctx, d).map((v) => VIBE_LABEL[v]);
+    const wants = vibesOf(ctx, d).map((v) => t(`vibe.${v}`));
     const trend: -1 | 0 | 1 = demand > 1.08 ? 1 : demand < 0.92 ? -1 : 0;
     const name = ctx.content.districts[d].name;
     const line = `${name} wants ${wants[0] ?? 'Chill'}${trend > 0 ? ' ▲' : trend < 0 ? ' ▼' : ''}`;
@@ -99,15 +97,15 @@ function nextActions(ctx: SimCtx, limit = 3): NextAction[] {
   if (!pro.done && pro.objective) add({ id: 'prologue', label: pro.objective, detail: pro.hint ?? '', icon: 'star', place: pro.place, priority: 95 });
   const raid = ctx.state.heat.raid;
   if (raid && (raid.status === 'warned' || raid.status === 'imminent')) {
-    add({ id: 'raid', label: `Prepare for the raid at ${ctx.content.properties[raid.property].name}`, detail: `Tip came in. About ${fmt.duration(raid.at - ctx.now)} left.`, icon: 'siren', place: raid.property, priority: 90 });
+    add({ id: 'raid', label: t('nextRaid', { place: ctx.content.properties[raid.property].name }), detail: t('nextRaidDetail', { time: fmt.duration(raid.at - ctx.now) }), icon: 'siren', place: raid.property, priority: 90 });
   }
   for (const r of ctx.state.requests) {
     const name = customerDef(ctx, r.customer).short;
     if (r.status === 'accepted') {
-      if (hasMatching(ctx, r.wants)) add({ id: `meet-${r.id}`, label: `Meet ${name} at ${ctx.content.places[r.place].name}`, detail: r.expiresAt ? ctx.byText(r.expiresAt) : '', icon: 'handshake', place: r.place, priority: 85 });
-      else add({ id: `make-${r.id}`, label: `Get ${r.wants.qty} ${r.wants.effects.length ? r.wants.effects.map((e) => EFFECTS[e].name).join(' or ') : 'good'} units for ${name}`, detail: 'Harvest, mix or pack the bag', icon: 'bowl', place: null, priority: 60 });
+      if (hasMatching(ctx, r.wants)) add({ id: `meet-${r.id}`, label: t('nextMeet', { name, place: ctx.content.places[r.place].name }), detail: r.expiresAt ? ctx.byText(r.expiresAt) : '', icon: 'handshake', place: r.place, priority: 85 });
+      else add({ id: `make-${r.id}`, label: t('nextMake', { n: r.wants.qty, what: r.wants.effects.length ? r.wants.effects.map((e) => EFFECTS[e].name).reduce((a, b) => t('or', { a, b })) : t('good'), name }), detail: t('nextMakeDetail'), icon: 'bowl', place: null, priority: 60 });
     } else if (r.status === 'pending') {
-      add({ id: `reply-${r.id}`, label: `Answer ${name}’s text`, detail: 'Accept, counter or decline', icon: 'chat', place: null, priority: 80 });
+      add({ id: `reply-${r.id}`, label: t('nextReply', { name }), detail: t('nextReplyDetail'), icon: 'chat', place: null, priority: 80 });
     }
   }
   for (const id of Object.keys(ctx.state.properties) as PropertyId[]) {
@@ -115,36 +113,36 @@ function nextActions(ctx: SimCtx, limit = 3): NextAction[] {
     const plants = plantsAt(ctx, id);
     const name = ctx.content.properties[id].name;
     const ripe = plants.filter((p) => p.growth >= 1).length;
-    if (ripe) add({ id: `harvest-${id}`, label: `Harvest ${ripe} ripe plant${ripe > 1 ? 's' : ''}`, detail: name, icon: 'scissors', place: id, priority: 70 });
+    if (ripe) add({ id: `harvest-${id}`, label: t(ripe > 1 ? 'nextHarvestMany' : 'nextHarvestOne', { n: ripe }), detail: name, icon: 'scissors', place: id, priority: 70 });
     const needy = plants.filter((p) => plantNeeds(ctx, p).some((n) => n === 'water' || n === 'food' || n === 'prune')).length;
-    if (needy) add({ id: `tend-${id}`, label: `Tend ${needy} plant${needy > 1 ? 's' : ''}`, detail: name, icon: 'water', place: id, priority: 65 });
+    if (needy) add({ id: `tend-${id}`, label: t(needy > 1 ? 'nextTendMany' : 'nextTendOne', { n: needy }), detail: name, icon: 'water', place: id, priority: 65 });
     const empty = emptyPots(ctx, id).length;
     if (empty) {
       const seeds = Object.keys(ctx.state.supplies).some((k) => k.startsWith('seed:') && (ctx.state.supplies[k as `seed:${string}`] ?? 0) > 0);
       add(seeds
-        ? { id: `plant-${id}`, label: `Plant ${empty} empty pot${empty > 1 ? 's' : ''}`, detail: name, icon: 'seed', place: id, priority: 55 }
-        : { id: 'seeds', label: 'Buy seeds at Sod Almighty', detail: `${empty} empty pots at ${name}`, icon: 'seed', place: 'sodAlmighty', priority: 50 });
+        ? { id: `plant-${id}`, label: t(empty > 1 ? 'nextPlantMany' : 'nextPlantOne', { n: empty }), detail: name, icon: 'seed', place: id, priority: 55 }
+        : { id: 'seeds', label: t('nextSeeds'), detail: t('nextSeedsDetail', { n: empty, place: name }), icon: 'seed', place: 'sodAlmighty', priority: 50 });
     }
   }
   const upgrade = upgradeListings(ctx).filter((u) => !u.owned && !u.locked && u.affordable).sort((a, b) => a.cost - b.cost)[0];
-  if (upgrade) add({ id: `upgrade-${upgrade.id}`, label: `Buy ${upgrade.name}`, detail: upgrade.line, icon: upgrade.icon, place: null, priority: 45 });
+  if (upgrade) add({ id: `upgrade-${upgrade.id}`, label: t('nextUpgrade', { name: upgrade.name }), detail: upgrade.line, icon: upgrade.icon, place: null, priority: 45 });
   for (const id of Object.keys(ctx.state.missions.progress) as Array<keyof typeof MISSIONS>) {
     if (ctx.state.missions.progress[id].status === 'available' && !ctx.state.missions.active) {
-      add({ id: `mission-${id}`, label: `New job: ${MISSIONS[id].title}`, detail: MISSIONS[id].blurb, icon: 'star', place: null, priority: 40 });
+      add({ id: `mission-${id}`, label: t('nextMission', { title: MISSIONS[id].title }), detail: MISSIONS[id].blurb, icon: 'star', place: null, priority: 40 });
       break;
     }
   }
   for (const c of Object.values(ctx.state.crew)) {
     if (c.status === 'upset' || c.status === 'needsSupplies' || (c.status === 'quit' && c.winBackUntil !== null && c.winBackUntil > ctx.now)) {
-      add({ id: `crew-${c.id}`, label: `${c.name} needs attention`, detail: c.status === 'needsSupplies' ? 'Out of supplies' : c.status === 'quit' ? 'Quit — win them back' : 'Morale is low', icon: 'crew', place: null, priority: 35 });
+      add({ id: `crew-${c.id}`, label: t('nextCrew', { name: c.name }), detail: t(c.status === 'needsSupplies' ? 'nextCrewSupplies' : c.status === 'quit' ? 'nextCrewQuit' : 'nextCrewMorale'), icon: 'crew', place: null, priority: 35 });
     }
   }
   const debt = ctx.state.money.debt;
   if (!debt.settled && debt.nextCheckDay > 0 && debt.paid < debt.expectedByCheck) {
-    add({ id: 'debt', label: `Pay Vale ${fmt.money(debt.expectedByCheck - debt.paid)} by day ${debt.nextCheckDay}`, detail: `${fmt.money(remainingDebt(ctx))} left in total`, icon: 'bank', place: null, priority: 30 });
+    add({ id: 'debt', label: t('nextDebt', { amount: fmt.money(debt.expectedByCheck - debt.paid), day: debt.nextCheckDay }), detail: t('nextDebtDetail', { amount: fmt.money(remainingDebt(ctx)) }), icon: 'bank', place: null, priority: 30 });
   }
   if (ctx.isUnlocked('feature:samples') && ctx.content.customerList.some((c) => c.unlock.via === 'sample' && !ctx.state.customers[c.id].unlocked)) {
-    add({ id: 'samples', label: 'Hand out a free sample', detail: 'Strangers become regulars', icon: 'gift', place: null, priority: 20 });
+    add({ id: 'samples', label: t('nextSample'), detail: t('nextSampleDetail'), icon: 'gift', place: null, priority: 20 });
   }
   add({ id: 'idle', label: idleNote(ctx), detail: '', icon: 'leaf', place: null, priority: 10 });
   return out.sort((a, b) => b.priority - a.priority).slice(0, Math.max(1, limit));
@@ -169,11 +167,11 @@ function operations(ctx: SimCtx): PropertyStatus[] {
     const thirsty = plants.filter((p) => p.water < 0.22).length;
     const ripe = plants.filter((p) => p.growth >= 1).length;
     if (st.owned) {
-      if (ripe) alerts.push(`${ripe} ripe`);
-      if (thirsty) alerts.push(`${thirsty} thirsty`);
-      if (st.lockdownUntil > ctx.now) alerts.push('Lockdown');
-      if (ctx.state.heat.raid?.property === id && (ctx.state.heat.raid.status === 'warned' || ctx.state.heat.raid.status === 'imminent')) alerts.push('Raid coming');
-      if (ctx.totalUnits(id) >= stashCapacity(ctx, id)) alerts.push('Stash full');
+      if (ripe) alerts.push(t('alertRipe', { n: ripe }));
+      if (thirsty) alerts.push(t('alertThirsty', { n: thirsty }));
+      if (st.lockdownUntil > ctx.now) alerts.push(t('alertLockdown'));
+      if (ctx.state.heat.raid?.property === id && (ctx.state.heat.raid.status === 'warned' || ctx.state.heat.raid.status === 'imminent')) alerts.push(t('alertRaid'));
+      if (ctx.totalUnits(id) >= stashCapacity(ctx, id)) alerts.push(t('alertStashFull'));
     }
     return {
       id, owned: st.owned, plants: plants.length, ripe, thirsty, growing: plants.length - ripe,

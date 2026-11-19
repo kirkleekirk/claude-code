@@ -649,8 +649,8 @@ export class Bot {
       if (pot - this.saveFor > def.price * 1.15 + this.profile.buffer) {
         this.ui(8);
         if (sim.cmd.buyProperty(id).ok) this.report.properties++;
+        break;
       }
-      break;
     }
     for (const id of FRONT_PLAN) {
       if (sim.state.fronts[id].owned) continue;

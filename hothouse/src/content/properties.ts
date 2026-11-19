@@ -112,7 +112,7 @@ export const PROPERTIES: Readonly<Record<PropertyId, PropertyDef>> = {
     ],
   },
   harborWarehouse: {
-    id: 'harborWarehouse', name: 'Harbor Warehouse 7', rank: 6, price: 30000, currency: 'clean',
+    id: 'harborWarehouse', name: 'Harbor Warehouse 7', rank: 6, price: 24000, currency: 'clean',
     grid: { w: 18, h: 12 }, doors: [[0, 5], [0, 6], [17, 5], [17, 6], [8, 11], [9, 11]],
     blocked: [[6, 4], [6, 7], [11, 4], [11, 7]],
     start: [
