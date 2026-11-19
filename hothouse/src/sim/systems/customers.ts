@@ -307,8 +307,9 @@ export function tickCustomers(ctx: SimCtx, dt: number): void {
   s.requests = s.requests.filter((r) => r.status === 'pending' || r.status === 'accepted' || ctx.now - r.createdAt < 900);
   if (changed || before !== s.requests.length) ctx.bump('requests');
 
-  // New requests only after the prologue, and never during set-pieces.
+  // New requests and walk-ups only after the prologue, and never during set-pieces.
   if (s.story.beats.prologueDone === undefined || ctx.world.busy) return;
+  tickWalkUps(ctx);
   const flags = s.story.flags;
   const next = typeof flags.nextRequestAt === 'number' ? flags.nextRequestAt : ctx.now + 20;
   if (ctx.now < next) {
@@ -322,7 +323,6 @@ export function tickCustomers(ctx: SimCtx, dt: number): void {
   const pool = ctx.content.customerList;
   const pick = ctx.rng.weighted(pool, (d) => requestWeight(ctx, d));
   if (pick) createRequest(ctx, pick.id);
-  tickWalkUps(ctx);
 }
 
 // ── walk-ups ────────────────────────────────────────────────────────────────
@@ -347,9 +347,11 @@ function tickWalkUps(ctx: SimCtx): void {
   const flags = ctx.state.story.flags;
   const ready = typeof flags.nextWalkUpAt === 'number' ? flags.nextWalkUpAt : 0;
   if (ctx.now < ready) return;
-  flags.nextWalkUpAt = ctx.now + REQUESTS.walkUpCooldown * ctx.rng.range(0.8, 1.3);
+  // Only roll where somebody actually hangs out, so arriving at a busy spot pays off quickly.
   const cands = walkUpCandidates(ctx, w.place);
-  if (cands.length === 0 || !ctx.rng.chance(REQUESTS.walkUpChance)) return;
+  if (cands.length === 0) return;
+  flags.nextWalkUpAt = ctx.now + REQUESTS.walkUpCooldown * ctx.rng.range(0.8, 1.3);
+  if (!ctx.rng.chance(REQUESTS.walkUpChance)) return;
   const pick = ctx.rng.weighted(cands, (c) => c.weight);
   if (pick) ctx.emit('sim:walkUp', { customer: pick.customer, place: w.place });
 }
