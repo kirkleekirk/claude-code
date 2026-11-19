@@ -109,7 +109,7 @@ export function SettingsBody({ initialTab = 'graphics', compact = false }: { ini
       </ScrollArea>
       <footer class="hh-panel-foot">
         <div class="hh-panel-hints">
-          <ActionHint action="uiTabPrev" size="sm">{tc('tabsHint')}</ActionHint>
+          <ActionHint action="uiTabPrev" also="uiTabNext" size="sm">{tc('tabsHint')}</ActionHint>
           <ActionHint action="uiBack" size="sm">{tc('back')}</ActionHint>
         </div>
         <Button

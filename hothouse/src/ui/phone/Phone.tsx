@@ -208,7 +208,7 @@ function PhoneScreen({ closing }: { closing: boolean }) {
         </div>
       </div>
       <div class="hh-phone-hints" aria-hidden="true">
-        <ActionHint action="uiTabPrev" size="sm">{tc('tabsHint')}</ActionHint>
+        <ActionHint action="uiTabPrev" also="uiTabNext" size="sm">{tc('tabsHint')}</ActionHint>
         <ActionHint action="uiBack" size="sm">{tc('back')}</ActionHint>
       </div>
     </div>

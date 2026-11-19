@@ -11,8 +11,10 @@ export interface HairLayers {
   back: string[];
   /** Over the head. */
   front: string[];
-  /** Thin strokes over the hair (parts, waves, braids). */
+  /** Thin strokes over the hair (parts, waves). */
   detail: string[];
+  /** Thin strokes on the back hair (braid plaits), hidden by the head and shoulders like the hair itself. */
+  backDetail: string[];
   /** Darker hair texture (shaved sides, buzz). */
   shade: string[];
   /** Hat shapes with their own fills, drawn last. */
@@ -168,18 +170,28 @@ function addExtra(L: HairLayers, f: FaceShape, b: number, r: Recipe): void {
     case 'locs':
       for (const s of strands(100 - f.cheek * b - 12, 100 + f.cheek * b + 12, 96, 230, 9, 10, 2)) L.back.push(s);
       break;
-    case 'braids':
-      for (const s of strands(100 - f.cheek * b - 14, 100 + f.cheek * b + 14, 96, 238, 11, 8, 0.8)) L.back.push(s);
-      for (let y = 110; y < 236; y += 12) L.detail.push(`M${100 - f.cheek * b - 14} ${y}h${(f.cheek * b + 14) * 2}`);
+    case 'braids': {
+      const x0 = 100 - f.cheek * b - 14;
+      const x1 = 100 + f.cheek * b + 14;
+      const n = 11;
+      for (const s of strands(x0, x1, 96, 238, n, 8, 0.8)) L.back.push(s);
+      // A plait mark on every strand, alternating direction like a three-strand braid.
+      for (let i = 0; i < n; i++) {
+        const x = x0 + ((x1 - x0) * (i + 0.5)) / n;
+        for (let y = 104, k = 0; y < 232; y += 9, k++) L.backDetail.push(`M${x - 3} ${y + (k % 2 ? 3 : 0)}l6 ${k % 2 ? -3 : 3}`);
+      }
       break;
+    }
     case 'cornrows':
       for (let i = -3; i <= 3; i++) L.detail.push(smoothOpen([[100 + i * 8.5, r.line + 1], [100 + i * 8, top + 12], [100 + i * 6.5, top + 2]]));
       break;
     case 'waves': {
+      // One long sinuous line down each side: short zigzags read as UI chevrons.
       const x = f.cheek * b + 9;
-      for (let y = 132; y < 214; y += 24) {
-        L.detail.push(smoothOpen([[100 + x - 3, y], [100 + x + 4, y + 8], [100 + x - 2, y + 16]]));
-        L.detail.push(smoothOpen([[100 - x + 3, y], [100 - x - 4, y + 8], [100 - x + 2, y + 16]]));
+      for (const side of [-1, 1]) {
+        const pts: Pt[] = [];
+        for (let k = 0, y = 122; y <= 214; k++, y += 9) pts.push([100 + side * (x + Math.sin(k * 1.25) * 3), y]);
+        L.detail.push(smoothOpen(pts));
       }
       break;
     }
@@ -301,7 +313,7 @@ function hat(index: number, f: FaceShape, b: number, c: string, dark: string): H
 }
 
 export function hairLayers(styleIndex: number, f: FaceShape, breadth: number): HairLayers {
-  const L: HairLayers = { back: [], front: [], detail: [], shade: [], hat: [], bald: false };
+  const L: HairLayers = { back: [], front: [], detail: [], backDetail: [], shade: [], hat: [], bald: false };
   const style = HAIR_STYLES[styleIndex] ?? HAIR_STYLES[1]!;
   if (style.kind === 'bald') {
     L.bald = true;

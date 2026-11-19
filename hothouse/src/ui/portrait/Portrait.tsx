@@ -384,6 +384,9 @@ export function Portrait({ appearance: a, expression = 'neutral', size = '6rem',
         <circle cx="128" cy="86" r="76" fill={`url(#${pid}-sun)`} />
 
         {hair.back.map((d, i) => <path key={`b${i}`} d={d} fill={hairShade} />)}
+        {hair.backDetail.length > 0 && (
+          <path d={hair.backDetail.join('')} fill="none" stroke={hairC} stroke-width="1.4" stroke-linecap="round" stroke-opacity=".55" />
+        )}
 
         <path d="M86 140h28v58H86z" fill={`url(#${pid}-neck)`} />
         {outfitLayers(outfit, shoulder, skin, skinShade, pid)}

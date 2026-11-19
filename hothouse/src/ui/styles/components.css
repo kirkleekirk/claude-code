@@ -111,6 +111,24 @@
 .hh-ui .hh-action-hint-label {
   font-weight: 650;
 }
+.hh-ui .hh-action-hint > .hh-glyph + .hh-glyph { margin-left: -0.25em; }
+
+/* Corner check on a chosen card, so a selection never reads as the focus ring. */
+.hh-ui .hh-pick-check {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  display: grid;
+  place-items: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 50%;
+  color: var(--on-lime);
+  background: var(--lime);
+  box-shadow: 0 2px 6px rgba(7, 4, 20, 0.4);
+  animation: hh-pop-in var(--t-med) var(--ease-out) both;
+  pointer-events: none;
+}
 
 /* ── buttons ────────────────────────────────────────────────────────────── */
 

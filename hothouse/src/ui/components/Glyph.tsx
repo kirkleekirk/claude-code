@@ -97,10 +97,11 @@ export function Glyph({ action, size = 'md', all = false }: { action: ActionId; 
 }
 
 /** Glyph + verb, the standard prompt token: "[E] Harvest". */
-export function ActionHint({ action, children, size = 'md' }: { action: ActionId; children: ComponentChildren; size?: 'sm' | 'md' | 'lg' }) {
+export function ActionHint({ action, also, children, size = 'md' }: { action: ActionId; also?: ActionId; children: ComponentChildren; size?: 'sm' | 'md' | 'lg' }) {
   return (
     <span class="hh-action-hint">
       <Glyph action={action} size={size} />
+      {also && <Glyph action={also} size={size} />}
       <span class="hh-action-hint-label">{children}</span>
     </span>
   );

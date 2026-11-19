@@ -3,6 +3,7 @@ import { OUTFITS, PLAYER_LOOKS, type Appearance } from '@/content/appearance';
 import type { Difficulty } from '@/game/actions';
 import { Button } from '../components/Button';
 import { Field, SegmentedView, stepOption, type Option } from '../components/controls';
+import { Icon } from '../icons/Icon';
 import { useFocusScope, useSound, useUi } from '../core/context';
 import { Portrait } from '../portrait/Portrait';
 import { tc } from '../strings/common';
@@ -13,6 +14,14 @@ const DIFFICULTIES: readonly Option<Difficulty>[] = [
   { value: 'classic', label: tMenu('difficulty.classic') },
   { value: 'sweaty', label: tMenu('difficulty.sweaty') },
 ];
+
+function PickCheck() {
+  return (
+    <span class="hh-pick-check" aria-hidden="true">
+      <Icon name="check" size="0.85rem" strokeWidth={3} />
+    </span>
+  );
+}
 
 function lookWithOutfit(look: number, palette: number): Appearance {
   const l = PLAYER_LOOKS[look]!;
@@ -36,6 +45,7 @@ function LookCard({ index, selected, onPick }: { index: number; selected: boolea
     >
       <Portrait appearance={look.base} framing="head" shape="circle" size="4.25rem" blink={false} seed={index * 7 + 3} />
       <span class="hh-look-name">{look.name}</span>
+      {selected && <PickCheck />}
     </button>
   );
 }
@@ -58,6 +68,7 @@ function OutfitSwatch({ look, slot, selected, onPick }: { look: number; slot: nu
         {outfit.colors.slice(0, 3).map((c, i) => <i key={i} style={{ background: c }} />)}
       </span>
       <span class="hh-swatch-name">{outfit.name}</span>
+      {selected && <PickCheck />}
     </button>
   );
 }
