@@ -179,8 +179,10 @@ export class PeopleStage implements Stage {
           actor.loco.moveAngle = gait.angle ?? 0;
           actor.loco.crouch = gait.crouch ?? 0;
           if (gait.jump) {
+            // The controller carries the root along the jump arc; the strip does the same.
             actor.loco.grounded = i === 5;
             actor.loco.vy = [4.5, 2, 0, -2.5, -7, 0][i]!;
+            actor.root.position.y += [0.3, 0.62, 0.72, 0.6, 0.22, 0][i]!;
           }
         }
         this.settle(1.5);

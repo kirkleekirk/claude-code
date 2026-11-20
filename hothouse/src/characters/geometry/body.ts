@@ -114,6 +114,21 @@ function torsoInflate(ctx: BodyCtx, y: number): number {
 }
 
 const _sec: Section = { w: 0, front: 0, back: 0, zc: 0 };
+const _sec2: Section = { w: 0, front: 0, back: 0, zc: 0 };
+
+/**
+ * The clothed torso's front surface at height y and lateral offset x (body space; negative z is
+ * forward). Garments that lie on the chest and belly build on it.
+ */
+export function torsoFront(ctx: BodyCtx, x: number, y: number): number {
+  const s = torsoSection(y, ctx.p, _sec2);
+  const add = torsoInflate(ctx, y);
+  const e = 2 / ctx.p.exponent;
+  // Superellipse depth at this x: |x/w|^(2/e) + |z/d|^(2/e) = 1.
+  const u = Math.min(0.999, Math.abs(x) / (s.w + add));
+  const v = (1 - u ** (2 / e)) ** (e / 2);
+  return s.zc - (s.front + add) * v;
+}
 
 export function buildTorso(ctx: BodyCtx): void {
   const { b, p, c } = ctx;
@@ -301,7 +316,7 @@ const _hp = { x: 0, y: 0, z: 0 };
 export function buildHead(ctx: BodyCtx, face: number): void {
   const { b } = ctx;
   const h = headShape(face);
-  const segU = 28, segV = 20;
+  const segU = 26, segV = 18;
   b.set(Region.HEAD, Bone.head).begin();
   const painter = (_x: number, y: number, z: number, _t: number, o: Paint) => {
     o.ao = y < HEAD.y - 0.085 && z > HEAD.z - 0.02 ? 0.8 : 1;
@@ -524,7 +539,7 @@ export function buildLeg(ctx: BodyCtx, side: 0 | 1): void {
       if (wide && s > 0.3) r = Math.max(r, 0.066 + c.pantsLoose * 0.5);
     }
     const calf = 0.008 * gauss(s, 0.56, 0.06);
-    const ring = b.hring(jx - sx * 0.008 * smoothstep(0.0, 0.42, s), jy - s, calf, r, r * 0.97, 2, 16, painter);
+    const ring = b.hring(jx - sx * 0.008 * smoothstep(0.0, 0.42, s), jy - s, calf, r, r * 0.97, 2, 14, painter);
     if (prev) b.bridge(prev, ring, true);
     else first = ring;
     prev = ring;

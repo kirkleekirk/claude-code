@@ -485,12 +485,14 @@ const C: Record<ClipId, ClipDef> = {
       P.set(Bone.chest, 0.1 * stagger, 0, 0);
       P.set(Bone.neck, -0.25 * fall, 0, 0);
       P.set(Bone.head, 0.3 * stagger - 0.2 * fall, 0.4 * fall, 0);
+      // Lying on the back: one knee up with the foot flat, the other leg out; arms splayed on
+      // the ground (on the reclined body, 'forward' points at the sky, so keep it near zero).
       for (const s of [0, 1] as const) {
         const leg = LEG[s];
-        P.set(leg[0], lerp(0.25 * stagger, s ? 0.15 : 0.55, fall), 0, (s ? 1 : -1) * 0.12 * fall);
-        P.set(leg[1], lerp(-0.5 * stagger, s ? -0.15 : -0.9, fall), 0, 0);
-        P.set(leg[2], -0.2 * fall, 0, 0);
-        arm(P, s, lerp(0.6 * stagger, s ? 0.4 : 1.0, fall), lerp(0.3 + 0.4 * stagger, s ? 0.9 : 0.5, fall), 0.4, lerp(0.6 * stagger, 0.5, fall), 0.4 * fall);
+        P.set(leg[0], lerp(0.25 * stagger, s ? -0.06 : 0.75, fall), 0, (s ? 1 : -1) * lerp(0, s ? 0.18 : 0.06, fall));
+        P.set(leg[1], lerp(-0.5 * stagger, s ? -0.12 : -1.45, fall), 0, 0);
+        P.set(leg[2], lerp(0, s ? -0.5 : 0.35, fall), 0, 0);
+        arm(P, s, lerp(0.6 * stagger, 0.06, fall), lerp(0.3 + 0.4 * stagger, s ? 1.15 : 0.75, fall), 0.4, lerp(0.6 * stagger, s ? 0.25 : 0.7, fall), 0.4 * fall);
         hand(P, s, 0, 0.4);
       }
     },
@@ -512,9 +514,9 @@ const C: Record<ClipId, ClipDef> = {
       if (kneel < 0.01) {
         for (const s of [0, 1] as const) {
           const leg = LEG[s];
-          P.set(leg[0], lerp(s ? 0.15 : 0.55, 1.2, sit), 0, (s ? 1 : -1) * 0.12);
-          P.set(leg[1], lerp(s ? -0.15 : -0.9, -1.9, sit), 0, 0);
-          P.set(leg[2], -0.2, 0, 0);
+          P.set(leg[0], lerp(s ? -0.06 : 0.75, 1.2, sit), 0, (s ? 1 : -1) * lerp(s ? 0.18 : 0.06, 0.12, sit));
+          P.set(leg[1], lerp(s ? -0.12 : -1.45, -1.9, sit), 0, 0);
+          P.set(leg[2], lerp(s ? -0.5 : 0.35, -0.2, sit), 0, 0);
         }
       } else {
         const hx = c.prop.hipX;
@@ -523,7 +525,8 @@ const C: Record<ClipId, ClipDef> = {
       }
       for (const s of [0, 1] as const) {
         const push = (1 - stand) * Math.max(sit * (1 - kneel), kneel * 0.6);
-        arm(P, s, lerp(0.6, -0.35, push) * (1 - stand), lerp(0.7, 0.3, push) * (1 - stand) + c.prop.armOut * stand, 0.2, lerp(0.5, 0.15, push) * (1 - stand) + 0.2 * stand);
+        const lieOut = s ? 1.15 : 0.75;
+        arm(P, s, lerp(lerp(0.06, 0.5, sit), -0.35, push) * (1 - stand), lerp(lerp(lieOut, 0.6, sit), 0.3, push) * (1 - stand) + c.prop.armOut * stand, 0.2, lerp(0.5, 0.15, push) * (1 - stand) + 0.2 * stand);
         hand(P, s, -0.6 * push, 0.2);
       }
     },

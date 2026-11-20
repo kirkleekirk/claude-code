@@ -208,8 +208,9 @@ export class SkinBuilder {
       const t = phase + (i / seg) * Math.PI * 2;
       const c = Math.cos(t), s = Math.sin(t);
       const k = bump ? bump(t) : 1;
-      const a = Math.sign(c) * Math.abs(c) ** e * ru * k;
-      const b = Math.sign(s) * Math.abs(s) ** e * rv * k;
+      // Plain ellipses (exponent 2) skip the powers: most rings are round.
+      const a = (e === 1 ? c : Math.sign(c) * Math.abs(c) ** e) * ru * k;
+      const b = (e === 1 ? s : Math.sign(s) * Math.abs(s) ** e) * rv * k;
       this.vertex(cx + ux * a + vx * b, cy + uy * a + vy * b, cz + uz * a + vz * b, t, painter);
     }
     return { start, count: seg, cx, cy, cz };

@@ -265,9 +265,11 @@ export class Locomotor {
       let handX = 0.04;
       // Air: arms up and out for balance.
       if (air > 0.001) {
-        fwd = lerp(fwd, 0.35 + (vy < -4 ? 0.6 : 0), air);
-        out = lerp(out, p.armOut + (vy < -4 ? 1.0 : 0.45), air);
-        elbow = lerp(elbow, 0.55, air);
+        // Rising: arms swing up for lift; falling fast: they flail up and out for balance.
+        const fall = smoothstep(-2, -6, vy);
+        fwd = lerp(fwd, lerp(0.55, 0.3, fall), air);
+        out = lerp(out, p.armOut + lerp(0.4, 1.3, fall), air);
+        elbow = lerp(elbow, lerp(0.7, 0.45, fall), air);
       }
       // Idle variants that use the arms.
       if (idleK > 0) {

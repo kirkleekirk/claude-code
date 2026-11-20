@@ -45,7 +45,7 @@ function hairline(s: ShellSpec, t: number): number {
 /** A shell over the scalp down to a hairline, closed with a rim tucked under the edge. */
 function shell(ctx: BodyCtx, h: HeadShape, s: ShellSpec, bone: number = Bone.head): Ring {
   const { b } = ctx;
-  const cols = 30, rows = s.rows ?? 11;
+  const cols = 28, rows = s.rows ?? 10;
   b.set(s.region ?? Region.HAIR, bone).begin();
   b.base.extra = s.tex ?? HairTex.SMOOTH;
   const painter = (_x: number, y: number, _z: number, _t: number, o: Paint) => {

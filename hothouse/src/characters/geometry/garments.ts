@@ -1,6 +1,6 @@
 import { clamp, lerp, smoothstep } from '@/core/math';
 import { Bone, LEG } from '../rig';
-import type { BodyCtx } from './body';
+import { torsoFront, type BodyCtx } from './body';
 import { Region } from './cloth';
 import type { Paint, Ring, SkinBuilder } from './SkinBuilder';
 
@@ -78,12 +78,15 @@ export function buildApron(ctx: BodyCtx): void {
   const cols = 7, rows = 12;
   const yTop = 1.34, yBot = 0.6;
   const halfW = 0.15 * (0.6 + 0.4 * p.waist);
+  // Lie on the chest and belly (following the real torso), then hang straight past the thighs,
+  // never closer to the body than the bust or belly above.
+  let lowest = 0;
+  for (let y = 0.92; y <= 1.2; y += 0.02) lowest = Math.min(lowest, torsoFront(ctx, 0, y));
   const zAt = (x: number, y: number) => {
-    // In front of the torso, then hanging straight past the thighs.
-    const torsoFront = -(0.098 + p.belly * 0.045 * Math.exp(-((y - 1.1) ** 2) / 0.012) + Math.max(0, p.chest - 1.02) * 0.08 * Math.exp(-((y - 1.25) ** 2) / 0.006));
-    const legFront = -0.105 - 0.01 * p.limbs;
+    const onTorso = Math.min(torsoFront(ctx, x, Math.max(y, 0.9)), torsoFront(ctx, 0, Math.max(y, 0.9)) * 0.92);
+    const legFront = -0.1 - 0.012 * p.limbs - c.pantsLoose;
     const k = smoothstep(0.98, 0.86, y);
-    return lerp(torsoFront * (1 - 0.15 * (x / halfW) ** 2), legFront, k) - 0.016;
+    return lerp(onTorso, Math.min(legFront, lowest), k) - 0.014;
   };
   const painter = (x: number, y: number, _z: number, _t: number, o: Paint) => {
     o.region = Region.APRON;

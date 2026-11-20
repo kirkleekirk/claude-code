@@ -56,10 +56,12 @@ try {
   for (const [scene, opt, hour] of cases) {
     await hh(page, 'setWeather', 'clear');
     await hh(page, 'setTime', hour);
-    const res = await hh(page, 'people', scene, opt || undefined);
+    const debugWinding = opt.endsWith('!');
+    const res = await hh(page, 'people', scene, debugWinding ? opt.slice(0, -1) || undefined : opt || undefined);
+    if (debugWinding) await hh(page, 'peopleDebug', 'winding');
     // Physics-only stepping; the capture below does the one render.
     await hh(page, 'advance', 1.45, false);
-    const name = opt ? `${scene}-${opt}` : scene;
+    const name = opt ? `${scene}-${opt.replace('!', '-winding')}` : scene;
     const file = await canvasShot(page, out('people', `${name}.png`));
     shots[name] = file;
     const stats = await hh(page, 'peopleStats');
