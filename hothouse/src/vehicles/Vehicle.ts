@@ -94,6 +94,7 @@ export class Vehicle {
   readonly assists: VehicleAssists = { traction: true, steering: true, countersteer: true };
   readonly wheels: WheelState[] = [];
   readonly material: MeshPhysicalMaterial;
+  private readonly glass: MeshPhysicalMaterial;
   readonly uPaint: IUniform<Color> = { value: new Color() };
   /** x headlights, y brake lights, z siren, w reversing. */
   readonly uLights: IUniform<Vector4> = { value: new Vector4() };
@@ -192,7 +193,12 @@ export class Vehicle {
         fragmentReplace: [['#include <lights_physical_fragment>', '#include <lights_physical_fragment>\n#ifdef USE_CLEARCOAT\nmaterial.clearcoat *= hhFlag(vSurf.w, 16.0);\n#endif']],
       },
     });
-    this.body = new Mesh(geo?.body ?? carBodyGeometry(def), this.material);
+    // Windows are a second, translucent material (geometry group 1) so drivers show through.
+    this.glass = kit.physical({
+      vertexColors: true, surfAttr: true, wet: true, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.8,
+      depthWrite: false, clearcoat: 1, clearcoatRoughness: 0.03, envMapIntensity: 0.75,
+    });
+    this.body = new Mesh(geo?.body ?? carBodyGeometry(def), [this.material, this.glass]);
     this.body.castShadow = true;
     this.body.receiveShadow = true;
     this.body.layers.set(LAYER_REFLECTED);
@@ -463,6 +469,7 @@ export class Vehicle {
       this.wheelMeshes[0]?.geometry.dispose();
     }
     kit.release(this.material);
+    kit.release(this.glass);
   }
 
   private updateGearbox(vf: number, throttle: number, dt: number): void {

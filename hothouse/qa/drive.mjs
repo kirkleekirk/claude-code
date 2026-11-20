@@ -160,14 +160,19 @@ async function course(page, id) {
   report.flip = { up: r2(s.up) };
   gate(s.up > 0.9, 'flip: still upside down after 4 s');
 
-  // Curb crossing at an angle onto a sidewalk.
-  await hh(page, 'spawnVehicle', id, -470, -60, -Math.PI / 2 + 0.5);
+  // Curbs: hop Halcyon Boulevard's raised median at 30° mid-block (no junctions, no buildings).
+  await hh(page, 'spawnVehicle', id, -370, -7, 2.62);
   await step(page, 1);
   await set(page, { throttle: 0.6 });
-  await step(page, 3);
-  s = await state(page);
-  report.curb = { up: r2(s.up), speed: r1(s.speed) };
-  gate(s.up > 0.95 && s.speed > 3, 'curb: stuck or tipped');
+  // Record the moment the car clears the median's far curb (z > 3), before it reaches the far side.
+  let cleared = null;
+  for (let i = 0; i < 16 && !cleared; i++) {
+    await step(page, 0.25);
+    s = await state(page);
+    if (s.z > 3) cleared = { t: r1((i + 1) * 0.25), up: r2(s.up), speed: r1(s.speed) };
+  }
+  report.curb = cleared ?? { t: null, up: r2(s.up), speed: r1(s.speed), z: r1(s.z) };
+  gate(!!cleared && cleared.up > 0.95 && cleared.speed > 3, `curb: stuck or tipped crossing the median (${JSON.stringify(report.curb)})`);
   await release(page);
 
   // Beauty shots on the Strand.

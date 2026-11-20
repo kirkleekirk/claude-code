@@ -5,6 +5,9 @@ import { DRIVER_WHEEL, SEAT_CUSHION } from '@/characters/ergonomics';
 import { roundedRect, slab } from '@/world/buildings/kit';
 import { seatPoint, type BodyShape, type VehicleDef } from './defs';
 
+/** How far the cabin floor sits below the belt line. */
+const CABIN_DEPTH = 0.52;
+
 /** Extra surface flags understood by the vehicle material. */
 export const CarFlag = { PAINT: 16, HEADLIGHT: 32, TAILLIGHT: 64, SIREN: 128 } as const;
 
@@ -70,7 +73,9 @@ function section(s: BodyShape, f: Frame, t: number): Array<[number, number]> {
     return true;
   };
   let tub = false;
-  if (s.convertible) tub = tubFor(s.cabin.start + 0.02, s.cabin.end, 0.52, 0.06);
+  // The cabin is a tub in the body for every car: open-top cockpits and closed cabins alike show
+  // seats, dash and driver (closed cars through translucent glass).
+  tub = tubFor(s.cabin.start + 0.02, s.cabin.end, CABIN_DEPTH, 0.06);
   if (!tub && s.bed) tub = tubFor(s.bed.t0, s.bed.t1, s.bed.wall, 0.04);
   if (!tub) pts.push([0, top + 0.01]);
   return pts;
@@ -174,10 +179,9 @@ function greenhouse(b: MeshBuilder, s: BodyShape, f: Frame, paint: boolean): voi
   pillar(c.end - 0.02, 0.07);
 }
 
-function convertibleCockpit(b: MeshBuilder, s: BodyShape, f: Frame): void {
+/** The convertible's windshield in a chrome frame, and the boot over the folded top. */
+function convertibleTop(b: MeshBuilder, s: BodyShape, f: Frame): void {
   const c = s.cabin;
-  const floorY = f.belt((c.start + c.end) / 2) - 0.52;
-  // Windshield with a chrome frame.
   const t0 = c.start, t1 = c.start + 0.07;
   const z0 = f.z(t0), z1 = f.z(t1);
   const w = f.hw(t0) - 0.08;
@@ -187,10 +191,37 @@ function convertibleCockpit(b: MeshBuilder, s: BodyShape, f: Frame): void {
   b.quad([-w, yb, z0], [-w * 0.92, yt, z1], [w * 0.92, yt, z1], [w, yb, z0]);
   b.surface('#EEF1F4', 0.12, 1, 0, SurfFlag.WET);
   b.tube([new Vector3(w, yb, z0), new Vector3(w * 0.92, yt, z1), new Vector3(-w * 0.92, yt, z1), new Vector3(-w, yb, z0)], 0.025, 5);
+  const hp = seatPoint(s);
+  b.surface('#2B2650', 0.95, 0, 0, 0);
+  cushion(b, 0, f.belt(c.end) - 0.02, hp.z + SEAT_CUSHION.back + 0.5, (f.hw(c.end) - 0.1) * 2, 0.42, 0.16, 0.12, 0);
+}
+
+/** The headliner: closed cabins are lined, so the roof reads from inside through the glass. */
+function headliner(b: MeshBuilder, s: BodyShape, f: Frame): void {
+  const c = s.cabin;
+  const y = s.height - 0.03;
+  const za = f.z(c.roofStart), zb = f.z(c.roofEnd);
+  const wa = (f.hw(c.roofStart) - 0.06) * (1 - c.tumblehome), wb = (f.hw(c.roofEnd) - 0.06) * (1 - c.tumblehome);
+  b.surface('#4A4258', 0.95, 0, 0, 0);
+  // Faces down.
+  b.quad([-wa, y, za], [-wb, y, zb], [wb, y, zb], [wa, y, za]);
+}
+
+/** Dash, seats, console and wheel, shared by every car and placed by the seat ergonomics. */
+function cockpit(b: MeshBuilder, s: BodyShape, f: Frame, closed: boolean): void {
+  const c = s.cabin;
+  const floorY = f.belt((c.start + c.end) / 2) - CABIN_DEPTH;
+  const t0 = c.start, t1 = c.start + 0.07;
+  const z1 = f.z(t1);
+  const w = f.hw(t0) - 0.08;
+  const yb = f.belt(t0);
+  const trim = closed ? '#3A3046' : '#6B3F2A';
+  const leather = closed ? '#5C4A63' : '#F2E6D6';
+  const piping = closed ? '#4C3D54' : '#E0CFB8';
   // Dash with a padded top and a gauge hood; seats under each hip point and the wheel where a
   // driver's hands fall (characters/ergonomics), so seated people line up with the cockpit.
   const hp = seatPoint(s);
-  b.surface('#6B3F2A', 0.45, 0, 0, 0);
+  b.surface(trim, 0.45, 0, 0, 0);
   cushion(b, 0, yb - 0.07, z1 + 0.13, w * 1.85, 0.26, 0.15, 0.06, 0);
   b.surface('#2A1C16', 0.6, 0, 0, 0);
   cushion(b, hp.x, yb + 0.02, z1 + 0.16, 0.34, 0.15, 0.08, 0.06, 0);
@@ -204,25 +235,24 @@ function convertibleCockpit(b: MeshBuilder, s: BodyShape, f: Frame): void {
     const back = hp.z + SEAT_CUSHION.back + 0.07;
     backZ = back;
     const cushH = Math.max(0.06, top - floorY);
-    b.surface('#F2E6D6', 0.62, 0, 0, 0);
+    b.surface(leather, 0.62, 0, 0, 0);
     cushion(b, x, floorY + cushH / 2, hp.z - 0.07, 0.5, 0.5, cushH, 0.08, 0);
     const by = top + (backH / 2) * Math.cos(recline);
     const bz = back + (backH / 2) * Math.sin(recline);
     cushion(b, x, by, bz, 0.5, backH, 0.13, [0.13, 0.13, 0.04, 0.04], Math.PI / 2 + recline);
-    b.surface('#E0CFB8', 0.7, 0, 0, 0);
+    b.surface(piping, 0.7, 0, 0, 0);
     cushion(b, x, by, bz - 0.07 * Math.cos(recline), 0.36, backH * 0.7, 0.02, 0.06, Math.PI / 2 + recline);
     // Headrest on two chrome posts.
     const topY = top + backH * Math.cos(recline), topZ = back + backH * Math.sin(recline);
     b.surface('#EEF1F4', 0.15, 1, 0, SurfFlag.WET);
     for (const px of [-0.06, 0.06]) b.tube([new Vector3(x + px, topY - 0.02, topZ), new Vector3(x + px, topY + 0.07, topZ + 0.012)], 0.009, 4);
-    b.surface('#F2E6D6', 0.62, 0, 0, 0);
+    b.surface(leather, 0.62, 0, 0, 0);
     cushion(b, x, topY + 0.14, topZ + 0.025, 0.27, 0.16, 0.1, 0.07, Math.PI / 2 + recline * 0.6);
   }
-  // Centre console and the folded top under a fabric boot behind the seats.
+  void backZ;
+  // Centre console.
   b.surface('#3A2A24', 0.7, 0, 0, 0);
   cushion(b, 0, floorY + 0.24, hp.z - 0.12, 0.16, 0.62, 0.2, 0.05, 0);
-  b.surface('#2B2650', 0.95, 0, 0, 0);
-  cushion(b, 0, f.belt(c.end) - 0.02, backZ + 0.42, (f.hw(c.end) - 0.1) * 2, 0.42, 0.16, 0.12, 0);
   // Three-spoke wheel on a short column, tilted toward the driver.
   b.surface('#1A1C22', 0.5, 0.2, 0, 0);
   const wx = hp.x, wy = hp.y + DRIVER_WHEEL.y, wz = hp.z + DRIVER_WHEEL.z;
@@ -383,8 +413,12 @@ export function carBodyGeometry(def: VehicleDef): BufferGeometry {
       else b.quad(p[0], p[1], p[2], p[3]);
     }
   }
-  if (s.convertible) convertibleCockpit(b, s, f);
-  else greenhouse(b, s, f, paint);
+  if (s.convertible) convertibleTop(b, s, f);
+  else {
+    greenhouse(b, s, f, paint);
+    headliner(b, s, f);
+  }
+  cockpit(b, s, f, !s.convertible);
   if (s.bed) pickupBed(b, s, f);
   lights(b, s, f);
   trim(b, s, f, paint);
@@ -396,7 +430,29 @@ export function carBodyGeometry(def: VehicleDef): BufferGeometry {
     b.box(0.32, s.height + 0.14, z, 0.5, 0.1, 0.26);
     b.box(-0.32, s.height + 0.14, z, 0.5, 0.1, 0.26);
   }
-  return b.build();
+  return splitGlass(b.build());
+}
+
+/**
+ * Order the body's triangles opaque-first and add two draw groups (0 = body, 1 = glass) so the
+ * windows can use a translucent material and the people inside show through.
+ */
+export function splitGlass(g: BufferGeometry): BufferGeometry {
+  const index = g.getIndex();
+  const surf = g.getAttribute('surf');
+  if (!index || !surf) return g;
+  const isGlass = (v: number) => (Math.round(surf.getW(v)) & SurfFlag.GLASS) !== 0;
+  const opaque: number[] = [];
+  const glass: number[] = [];
+  for (let i = 0; i < index.count; i += 3) {
+    const a = index.getX(i), b = index.getX(i + 1), c = index.getX(i + 2);
+    (isGlass(a) && isGlass(b) && isGlass(c) ? glass : opaque).push(a, b, c);
+  }
+  g.setIndex([...opaque, ...glass]);
+  g.clearGroups();
+  g.addGroup(0, opaque.length, 0);
+  g.addGroup(opaque.length, glass.length, 1);
+  return g;
 }
 
 /** One wheel (tyre + rim) centred at the origin, axle along X. */

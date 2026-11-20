@@ -163,6 +163,12 @@ describe('actors', () => {
     a.posture = 'drive';
     for (let k = 0; k < 40; k++) a.update(DT, 4);
     expect(seen).toContain('seated');
+    // A seated pose holds: the blend weight stays at 1 across further updates of any length.
+    const seatW = () => (a as unknown as { seatW: number }).seatW;
+    for (const dt of [DT, 0.25, DT, 1]) {
+      a.update(dt, 4);
+      expect(seatW()).toBe(1);
+    }
     a.posture = 'stand';
     for (let k = 0; k < 40; k++) a.update(DT, 4);
     expect(seen).toContain('stood');

@@ -19,6 +19,7 @@ import { createAudio } from '@/audio';
 import type { BusId } from '@/audio/api';
 import { MenuStage } from './MenuStage';
 import { Session } from './Session';
+import { createCharacters } from '@/characters';
 import { createUi } from '@/ui';
 import { openPhotoStore } from '@/save/photos';
 
@@ -129,7 +130,7 @@ export async function boot(): Promise<void> {
   }
 
   // The interface mounts first so the loading screen is the real one.
-  const session = new Session(game, null);
+  const session = new Session(game, createCharacters(kit));
   const photos = await openPhotoStore();
   const uiRoot = document.getElementById('ui');
   if (!uiRoot) throw new Error('missing #ui root');

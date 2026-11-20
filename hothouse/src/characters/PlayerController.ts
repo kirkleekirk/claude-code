@@ -224,13 +224,17 @@ export class PlayerController {
     const asked0 = Math.hypot(_mv.x, _mv.z);
     if (this.grounded && asked0 > 1e-3 && Math.hypot(mv.x, mv.z) < asked0 * 0.5) {
       const ux = _mv.x / asked0, uz = _mv.z / asked0;
-      const across = Math.max(asked0, 0.1) + 0.08;
-      const rise = this.tryStep(t, ux, uz, across);
-      if (rise > 0) {
-        mv.x = ux * across;
-        mv.z = uz * across;
-        mv.y = rise + 0.01;
-        this.stepped = rise;
+      // Land just past the edge if there is room, a little further on rounded or narrow tops.
+      for (const extra of [0.08, 0.22, 0.4]) {
+        const across = Math.max(asked0, 0.1) + extra;
+        const rise = this.tryStep(t, ux, uz, across);
+        if (rise > 0) {
+          mv.x = ux * across;
+          mv.z = uz * across;
+          mv.y = rise + 0.01;
+          this.stepped = rise;
+          break;
+        }
       }
     }
     const wasGrounded = this.grounded;

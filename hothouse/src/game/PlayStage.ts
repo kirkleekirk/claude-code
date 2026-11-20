@@ -1,5 +1,7 @@
 import { Quaternion, Vector3 } from 'three';
-import type { EngineFrame, EngineVoice, LoopHandle, StationId } from '@/audio/api';
+import type { EngineFrame, EngineVoice, LoopHandle, StationId, SurfaceKind } from '@/audio/api';
+import { BOARDWALK_Y } from '@/world/landmarks/Beachfront';
+import { PLATEAU } from '@/world/plan/coast';
 import type { Actor, CharacterFactory } from '@/characters/api';
 import { PlayerController, type FootIntent } from '@/characters/PlayerController';
 import { ThirdPersonCamera } from '@/characters/ThirdPersonCamera';
@@ -9,7 +11,7 @@ import { extendHarness } from '@/debug/harness';
 import { Query } from '@/physics';
 import { ChaseCamera } from '@/vehicles/ChaseCamera';
 import { FlowMeter, type FlowEvent } from '@/vehicles/FlowMeter';
-import { VEHICLES, type VehicleDef, type VehicleId } from '@/vehicles/defs';
+import { seatPoint, VEHICLES, type VehicleDef, type VehicleId } from '@/vehicles/defs';
 import { Vehicle } from '@/vehicles/Vehicle';
 import { districtAt } from '@/world/plan/districts';
 import { ROAD_Y } from '@/world/roads/RoadMesher';
@@ -19,7 +21,8 @@ import { Interactions } from './Interactions';
 
 type Mode = 'foot' | 'vehicle' | 'entering' | 'exiting';
 
-const ENTER_TIME = 0.6;
+/** Seconds to swing in once at the door (the walk to it scales with distance). */
+const SEAT_TIME = 0.5;
 const EXIT_TIME = 0.5;
 const BLEND_TIME = 0.55;
 /** Above this speed, leaving the car is a bail-out roll instead of a step out. */
@@ -33,14 +36,14 @@ const _from = new Vector3();
 
 /** Hip point of a seat in the car's local space (side −1 = driver, left-hand drive). */
 export function seatLocal(def: VehicleDef, side: -1 | 1, out: Vector3): Vector3 {
-  const b = def.body;
-  return out.set(side * b.width * 0.215, b.clearance + 0.3, b.length * 0.03);
+  const p = seatPoint(def.body, side < 0 ? 'driver' : 'passenger');
+  return out.set(p.x, p.y, p.z);
 }
 
-/** Where a person stands to use a door (car local space). */
+/** Where a person stands to use a door (car local space): beside the seat, clear of the body. */
 function doorLocal(def: VehicleDef, side: -1 | 1, out: Vector3): Vector3 {
   const b = def.body;
-  return out.set(side * (b.width / 2 + 0.5), 0, b.length * 0.03);
+  return out.set(side * (b.width / 2 + 0.5), 0, seatPoint(b).z);
 }
 
 interface Parked {
@@ -75,6 +78,7 @@ export class PlayStage implements Stage {
   private readonly frame: EngineFrame = { rpm: 800, throttle: 0, load: 0, speed: 0, slip: 0, surface: 'asphalt', interior: false, x: 0, y: 0, z: 0 };
   private lastImpact = 0;
   private transitionT = 0;
+  private enterWalk = 0.3;
   private side: -1 | 1 = -1;
   private bail = false;
   private crouchToggle = false;
@@ -98,8 +102,14 @@ export class PlayStage implements Stage {
     this.player = new PlayerController(ctx.physics, (x, z) => hf.depthAt(x, z), -768, ROAD_Y + 0.2, 214, 0);
     this.player.setEnabled(false);
     if (characters) {
-      this.actor = characters.create(appearance, { name: 'player', castShadow: true });
-      ctx.gfx.scene.add(this.actor.root);
+      const actor = characters.create(appearance, { name: 'player', castShadow: true });
+      this.actor = actor;
+      ctx.gfx.scene.add(actor.root);
+      actor.onEvent = (e) => {
+        if (e !== 'footL' && e !== 'footR') return;
+        const p = this.player.position;
+        ctx.audio.sfx('footstep', { x: p.x, y: p.y, z: p.z, surface: this.surfaceUnder(p.x, p.y, p.z), intensity: clamp(this.player.loco.speed / 6, 0.3, 1) });
+      };
     }
     const station = ctx.settings.peek('audio.defaultStation');
     ctx.audio.radio.setStation(station === 'off' ? null : (station as StationId));
@@ -197,6 +207,8 @@ export class PlayStage implements Stage {
     this.mode = 'entering';
     this.transitionT = 0;
     this.exitFrom.copy(this.player.renderPos);
+    const door = this.side < 0 ? _door : _v;
+    this.enterWalk = clamp(Math.hypot(door.x - p.x, door.z - p.z) / 4.2, 0.12, 0.6);
     this.player.setEnabled(false);
     this.interactions.clear();
     this.actor?.play(this.side < 0 ? 'enterVehicleL' : 'enterVehicleR');
@@ -369,7 +381,7 @@ export class PlayStage implements Stage {
       this.interactions.update(dt, p.x, p.y, p.z, this.player.yaw, input);
     } else {
       this.transitionT += dt;
-      if (this.mode === 'entering' && this.transitionT >= ENTER_TIME) this.takeWheel(this.vehicle!, this.side);
+      if (this.mode === 'entering' && this.transitionT >= this.enterWalk + SEAT_TIME) this.takeWheel(this.vehicle!, this.side);
       else if (this.mode === 'exiting' && this.transitionT >= EXIT_TIME) this.finishExit();
     }
   }
@@ -418,7 +430,8 @@ export class PlayStage implements Stage {
         this.actor.root.rotation.set(0, this.player.renderYaw, 0);
         Object.assign(this.actor.loco, this.player.loco);
       } else if (this.mode === 'vehicle' && this.vehicle) {
-        this.actor.steer = this.vehicle.controls.steer * 0.9;
+        // Hands follow the rim: about a half turn of the wheel at full lock.
+        this.actor.steer = this.vehicle.controls.steer * 1.6;
       }
       this.actor.update(dt, this.actor.root.getWorldPosition(_v).distanceTo(cam.position));
     }
@@ -429,16 +442,28 @@ export class PlayStage implements Stage {
 
   private animateEnter(): void {
     const v = this.vehicle;
-    if (!v || !this.actor) return;
-    const k = clamp(this.transitionT / ENTER_TIME, 0, 1);
+    const a = this.actor;
+    if (!v || !a) return;
     v.group.updateMatrixWorld();
     doorLocal(v.def, this.side, _door).applyMatrix4(v.group.matrixWorld);
     seatLocal(v.def, this.side, _seat).applyMatrix4(v.group.matrixWorld);
-    // Walk to the door, then swing into the seat.
-    if (k < 0.45) _v.lerpVectors(this.exitFrom, _door, smoothstep(0, 0.45, k));
-    else _v.lerpVectors(_door, _seat, smoothstep(0.45, 1, k));
-    this.actor.root.position.copy(_v);
-    this.actor.root.rotation.set(0, v.yaw + (k < 0.45 ? 0 : this.side * Math.PI * 0.5 * (1 - smoothstep(0.6, 1, k))), 0);
+    const t = this.transitionT;
+    // Walk to the door facing where we go, then turn to the car and swing into the seat.
+    const facingCar = v.yaw + this.side * Math.PI * 0.5;
+    if (t < this.enterWalk) {
+      const k = t / this.enterWalk;
+      _v.lerpVectors(this.exitFrom, _door, k);
+      a.root.position.copy(_v);
+      const dx = _door.x - this.exitFrom.x, dz = _door.z - this.exitFrom.z;
+      a.root.rotation.set(0, Math.hypot(dx, dz) > 0.2 ? Math.atan2(-dx, -dz) : facingCar, 0);
+      a.loco.speed = Math.hypot(dx, dz) / this.enterWalk;
+    } else {
+      const k = smoothstep(0, 1, (t - this.enterWalk) / SEAT_TIME);
+      _v.lerpVectors(_door, _seat, k);
+      a.root.position.copy(_v);
+      a.root.rotation.set(0, facingCar + (v.yaw - facingCar) * smoothstep(0.35, 1, k), 0);
+      a.loco.speed = 0;
+    }
   }
 
   private animateExit(): void {
@@ -447,6 +472,14 @@ export class PlayStage implements Stage {
     _from.lerpVectors(this.exitFrom, this.exitTo, k);
     this.actor.root.position.copy(_from);
     this.actor.root.rotation.set(0, (this.vehicle?.yaw ?? 0) + this.side * Math.PI * 0.5 * (1 - k * 0.6), 0);
+  }
+
+  /** What the player is standing on, for footsteps. */
+  private surfaceUnder(x: number, y: number, z: number): SurfaceKind {
+    if (this.world.interiors.at(x, y + 0.5, z)) return 'tile';
+    const ground = this.world.hf.heightAt(x, z);
+    if (ground < PLATEAU - 0.05) return y < 0.15 ? 'water' : y > BOARDWALK_Y - 0.4 ? 'wood' : 'sand';
+    return y > ROAD_Y + 0.08 ? 'concrete' : 'asphalt';
   }
 
   private updateAudio(): void {
@@ -566,6 +599,13 @@ export class PlayStage implements Stage {
         return this.mode;
       },
       groundAt: (x: number, z: number) => this.ctx.physics.groundHeight(x, z, 80, -99),
+      actorState: () => {
+        const a = this.actor;
+        if (!a) return null;
+        const w = a.root.getWorldPosition(new Vector3());
+        const inner = a as unknown as { seatW?: number; level?: number };
+        return { posture: a.posture, seatW: inner.seatW, level: inner.level, parent: a.root.parent?.name ?? null, local: a.root.position.toArray(), world: w.toArray(), visible: a.root.visible };
+      },
     });
   }
 

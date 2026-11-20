@@ -23,11 +23,12 @@ const browser = await launchBrowser();
 try {
   const { page, logs } = await openGame(browser, server.url, 'test=1&time=17.6');
 
-  // Find a curb: probe north from the westbound lane of Halcyon Boulevard until the ground steps up.
-  const X = 301.3;
+  // Find a curb: probe south from the westbound lane of Halcyon Boulevard, mid-block in Deco
+  // Row, until the ground steps up onto the raised median.
+  const X = -370.3;
   const road = await hh(page, 'groundAt', X, -4.5);
   let curbZ = null;
-  for (let z = -4.5; z < 40; z += 0.1) {
+  for (let z = -6; z < 4; z += 0.1) {
     const g = await hh(page, 'groundAt', X, z);
     if (g > road + 0.08) {
       curbZ = r2(z);

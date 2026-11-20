@@ -117,8 +117,8 @@ export const VEHICLES: Record<string, VehicleDef> = {
     body: {
       length: 5.05, width: 1.94, height: 1.82, wheelbase: 3.0, frontAxle: 0.19, track: 1.62, wheelR: 0.39, wheelW: 0.26, clearance: 0.3,
       belt: [[0, 0.82], [0.04, 1.02], [0.3, 1.1], [1, 1.1]],
-      roundness: 0.2, cabin: { start: 0.33, roofStart: 0.4, roofEnd: 0.53, end: 0.56, tumblehome: 0.08 },
-      bed: { t0: 0.57, t1: 0.98, wall: 0.5 }, chrome: true, rimStyle: 'steel', rimColor: '#DADCE0', headlights: 'quad',
+      roundness: 0.2, cabin: { start: 0.33, roofStart: 0.4, roofEnd: 0.565, end: 0.6, tumblehome: 0.08 },
+      bed: { t0: 0.61, t1: 0.98, wall: 0.5 }, chrome: true, rimStyle: 'steel', rimColor: '#DADCE0', headlights: 'quad',
       seat: { x: -0.4, y: 0.86, z: 0.06 },
     },
     handling: {

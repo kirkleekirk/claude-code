@@ -277,7 +277,10 @@ export class ActorImpl implements Actor {
     if (this.posture !== 'stand') this.seatPosture = this.posture;
     const target = this.posture === 'stand' ? 0 : 1;
     const before = this.seatW;
-    this.seatW = target > before ? Math.min(1, before + dt / 0.35) : Math.max(0, before - dt / 0.3);
+    // Hold once the target is reached (an else-branch here used to pull a seated pose back up
+    // every other frame).
+    if (target > before) this.seatW = Math.min(1, before + dt / 0.35);
+    else if (target < before) this.seatW = Math.max(0, before - dt / 0.3);
     if (before < 1 && this.seatW >= 1) this.emit('seated');
     if (before > 0 && this.seatW <= 0) this.emit('stood');
   }
