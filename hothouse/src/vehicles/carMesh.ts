@@ -1,8 +1,9 @@
 import { BufferAttribute, BufferGeometry, Matrix4, Vector3 } from 'three';
 import { curve, smoothstep } from '@/core/math';
 import { MeshBuilder, SurfFlag } from '@/render/geo/MeshBuilder';
+import { DRIVER_WHEEL, SEAT_CUSHION } from '@/characters/ergonomics';
 import { roundedRect, slab } from '@/world/buildings/kit';
-import type { BodyShape, VehicleDef } from './defs';
+import { seatPoint, type BodyShape, type VehicleDef } from './defs';
 
 /** Extra surface flags understood by the vehicle material. */
 export const CarFlag = { PAINT: 16, HEADLIGHT: 32, TAILLIGHT: 64, SIREN: 128 } as const;
@@ -69,7 +70,7 @@ function section(s: BodyShape, f: Frame, t: number): Array<[number, number]> {
     return true;
   };
   let tub = false;
-  if (s.convertible) tub = tubFor(s.cabin.start + 0.02, s.cabin.end, 0.42, 0.06);
+  if (s.convertible) tub = tubFor(s.cabin.start + 0.02, s.cabin.end, 0.52, 0.06);
   if (!tub && s.bed) tub = tubFor(s.bed.t0, s.bed.t1, s.bed.wall, 0.04);
   if (!tub) pts.push([0, top + 0.01]);
   return pts;
@@ -175,7 +176,7 @@ function greenhouse(b: MeshBuilder, s: BodyShape, f: Frame, paint: boolean): voi
 
 function convertibleCockpit(b: MeshBuilder, s: BodyShape, f: Frame): void {
   const c = s.cabin;
-  const floorY = f.belt((c.start + c.end) / 2) - 0.42;
+  const floorY = f.belt((c.start + c.end) / 2) - 0.52;
   // Windshield with a chrome frame.
   const t0 = c.start, t1 = c.start + 0.07;
   const z0 = f.z(t0), z1 = f.z(t1);
@@ -186,50 +187,57 @@ function convertibleCockpit(b: MeshBuilder, s: BodyShape, f: Frame): void {
   b.quad([-w, yb, z0], [-w * 0.92, yt, z1], [w * 0.92, yt, z1], [w, yb, z0]);
   b.surface('#EEF1F4', 0.12, 1, 0, SurfFlag.WET);
   b.tube([new Vector3(w, yb, z0), new Vector3(w * 0.92, yt, z1), new Vector3(-w * 0.92, yt, z1), new Vector3(-w, yb, z0)], 0.025, 5);
-  // Dash with a padded top and a gauge hood on the driver's side.
+  // Dash with a padded top and a gauge hood; seats under each hip point and the wheel where a
+  // driver's hands fall (characters/ergonomics), so seated people line up with the cockpit.
+  const hp = seatPoint(s);
   b.surface('#6B3F2A', 0.45, 0, 0, 0);
-  cushion(b, 0, yb - 0.06, z1 + 0.2, w * 1.85, 0.36, 0.14, 0.06, 0);
+  cushion(b, 0, yb - 0.07, z1 + 0.13, w * 1.85, 0.26, 0.15, 0.06, 0);
   b.surface('#2A1C16', 0.6, 0, 0, 0);
-  cushion(b, -0.38, yb + 0.03, z1 + 0.25, 0.36, 0.16, 0.08, 0.06, 0);
-  // Two bucket seats in cream leather: bolstered cushion, reclined back, padded headrest.
-  const seatZ = f.z(c.start + (c.end - c.start) * 0.55);
-  const recline = 0.24;
-  for (const sx of [-0.38, 0.38]) {
+  cushion(b, hp.x, yb + 0.02, z1 + 0.16, 0.34, 0.15, 0.08, 0.06, 0);
+  // Two bucket seats in cream leather: bolstered cushion, reclined back with piping, headrest.
+  const recline = 0.18;
+  const backH = 0.6;
+  let backZ = hp.z;
+  for (const sx of [-1, 1]) {
+    const x = sx * Math.abs(hp.x);
+    const top = hp.y - SEAT_CUSHION.below;
+    const back = hp.z + SEAT_CUSHION.back + 0.07;
+    backZ = back;
+    const cushH = Math.max(0.06, top - floorY);
     b.surface('#F2E6D6', 0.62, 0, 0, 0);
-    cushion(b, sx, floorY + 0.2, seatZ - 0.02, 0.5, 0.5, 0.13, 0.08, 0);
-    const backH = 0.56;
-    const by = floorY + 0.27 + (backH / 2) * Math.cos(recline);
-    const bz = seatZ + 0.25 + (backH / 2) * Math.sin(recline);
-    cushion(b, sx, by, bz, 0.5, backH, 0.13, [0.13, 0.13, 0.04, 0.04], Math.PI / 2 + recline);
-    // Piping: a slightly darker inset panel on the back's front face.
+    cushion(b, x, floorY + cushH / 2, hp.z - 0.07, 0.5, 0.5, cushH, 0.08, 0);
+    const by = top + (backH / 2) * Math.cos(recline);
+    const bz = back + (backH / 2) * Math.sin(recline);
+    cushion(b, x, by, bz, 0.5, backH, 0.13, [0.13, 0.13, 0.04, 0.04], Math.PI / 2 + recline);
     b.surface('#E0CFB8', 0.7, 0, 0, 0);
-    const n = 0.07;
-    cushion(b, sx, by + Math.sin(recline) * 0, bz - n * Math.cos(recline), 0.36, backH * 0.7, 0.02, 0.06, Math.PI / 2 + recline);
+    cushion(b, x, by, bz - 0.07 * Math.cos(recline), 0.36, backH * 0.7, 0.02, 0.06, Math.PI / 2 + recline);
     // Headrest on two chrome posts.
-    const topY = floorY + 0.27 + backH * Math.cos(recline), topZ = seatZ + 0.25 + backH * Math.sin(recline);
+    const topY = top + backH * Math.cos(recline), topZ = back + backH * Math.sin(recline);
     b.surface('#EEF1F4', 0.15, 1, 0, SurfFlag.WET);
-    for (const px of [-0.06, 0.06]) b.tube([new Vector3(sx + px, topY - 0.02, topZ), new Vector3(sx + px, topY + 0.07, topZ + 0.015)], 0.009, 4);
+    for (const px of [-0.06, 0.06]) b.tube([new Vector3(x + px, topY - 0.02, topZ), new Vector3(x + px, topY + 0.07, topZ + 0.012)], 0.009, 4);
     b.surface('#F2E6D6', 0.62, 0, 0, 0);
-    cushion(b, sx, topY + 0.14, topZ + 0.03, 0.27, 0.16, 0.1, 0.07, Math.PI / 2 + recline * 0.6);
+    cushion(b, x, topY + 0.14, topZ + 0.025, 0.27, 0.16, 0.1, 0.07, Math.PI / 2 + recline * 0.6);
   }
   // Centre console and the folded top under a fabric boot behind the seats.
   b.surface('#3A2A24', 0.7, 0, 0, 0);
-  cushion(b, 0, floorY + 0.24, seatZ - 0.1, 0.16, 0.62, 0.2, 0.05, 0);
+  cushion(b, 0, floorY + 0.24, hp.z - 0.12, 0.16, 0.62, 0.2, 0.05, 0);
   b.surface('#2B2650', 0.95, 0, 0, 0);
-  const bootZ = seatZ + 0.62;
-  cushion(b, 0, f.belt(c.end) - 0.02, bootZ, (f.hw(c.end) - 0.1) * 2, 0.42, 0.16, 0.12, 0);
+  cushion(b, 0, f.belt(c.end) - 0.02, backZ + 0.42, (f.hw(c.end) - 0.1) * 2, 0.42, 0.16, 0.12, 0);
+  // Three-spoke wheel on a short column, tilted toward the driver.
   b.surface('#1A1C22', 0.5, 0.2, 0, 0);
-  // Steering wheel on the driver's (left) side, on a short column from the dash.
+  const wx = hp.x, wy = hp.y + DRIVER_WHEEL.y, wz = hp.z + DRIVER_WHEEL.z;
+  const ct = Math.cos(DRIVER_WHEEL.tilt), st = Math.sin(DRIVER_WHEEL.tilt);
+  const R = DRIVER_WHEEL.radius;
   const ring: Vector3[] = [];
-  const wx = -0.38, wy = yb + 0.02, wz = z1 + 0.42;
   for (let i = 0; i <= 16; i++) {
     const a = (i / 16) * Math.PI * 2;
-    ring.push(new Vector3(wx + Math.cos(a) * 0.18, wy + Math.sin(a) * 0.18, wz - Math.sin(a) * 0.06));
+    ring.push(new Vector3(wx + Math.cos(a) * R, wy + Math.sin(a) * R * ct, wz + Math.sin(a) * R * st));
   }
-  b.tube(ring, 0.018, 5);
-  b.tube([new Vector3(wx, wy, wz), new Vector3(wx, wy - 0.06, wz - 0.26)], 0.03, 6);
+  b.tube(ring, 0.016, 5);
+  b.tube([new Vector3(wx, wy - 0.06, wz - 0.16), new Vector3(wx, wy, wz)], 0.022, 6);
   for (const a of [Math.PI * 0.15, Math.PI * 0.85, Math.PI * 1.5]) {
-    b.tube([new Vector3(wx, wy, wz), new Vector3(wx + Math.cos(a) * 0.17, wy + Math.sin(a) * 0.17, wz - Math.sin(a) * 0.057)], 0.011, 4);
+    const r = R * 0.94;
+    b.tube([new Vector3(wx, wy, wz), new Vector3(wx + Math.cos(a) * r, wy + Math.sin(a) * r * ct, wz + Math.sin(a) * r * st)], 0.01, 4);
   }
 }
 

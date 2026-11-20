@@ -3,6 +3,7 @@ import { flags } from '@/core/flags';
 import { GameLoop } from '@/core/loop';
 import { log } from '@/core/log';
 import { LookDevStage } from '@/debug/LookDevStage';
+import { PeopleStage } from '@/debug/PeopleStage';
 import { PipelineStage } from '@/debug/PipelineStage';
 import { installHarness } from '@/debug/harness';
 import { TimeSlicer } from '@/core/slicer';
@@ -153,8 +154,8 @@ export async function boot(): Promise<void> {
   loop.start();
   ui.setLoading(1, 'Ready');
 
-  if (flags.sandbox === 'lookdev') {
-    game.setStage(new LookDevStage(game.ctx, world));
+  if (flags.sandbox === 'lookdev' || flags.sandbox === 'people') {
+    game.setStage(flags.sandbox === 'lookdev' ? new LookDevStage(game.ctx, world) : new PeopleStage(game.ctx, world));
     ui.showFrontend('none');
     if (harness) harness.ready = true;
     return;

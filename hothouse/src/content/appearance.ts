@@ -26,7 +26,7 @@ export interface Appearance {
   /** Brow weight 0–1 and eye spacing 0–1 for expression variety. */
   brow: number;
   eyes: number;
-  /** Index into OUTFITS (generated, 72 entries). */
+  /** Index into OUTFITS (generated, 76 entries). */
   outfit: number;
   /** Accessories. */
   glasses: number; // 0 none, 1 aviators, 2 round, 3 cat-eye, 4 sport wrap, 5 readers
@@ -182,7 +182,7 @@ const OUTFIT_SHAPES: ReadonlyArray<readonly [string, TopStyle, BottomStyle, Shoe
   ['Work apron', 'apron', 'jeans', 'boots', 'plain'],
 ];
 
-/** 72 outfits: every shape crossed with four palettes chosen deterministically. */
+/** 76 outfits: every one of the 19 shapes crossed with four palettes chosen deterministically. */
 export const OUTFITS: readonly Outfit[] = (() => {
   const list: Outfit[] = [];
   const rng = new Rng('hothouse-outfits');
@@ -190,7 +190,6 @@ export const OUTFITS: readonly Outfit[] = (() => {
   for (const shape of OUTFIT_SHAPES) {
     const palettes = rng.shuffle([...OUTFIT_PALETTES.keys()]).slice(0, 4);
     for (const p of palettes) {
-      if (list.length >= 72) break;
       list.push({ id: id++, name: shape[0], top: shape[1], bottom: shape[2], shoes: shape[3], print: shape[4], colors: OUTFIT_PALETTES[p]! });
     }
   }
