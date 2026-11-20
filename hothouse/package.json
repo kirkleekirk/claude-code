@@ -1,0 +1,52 @@
+{
+  "name": "hothouse",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HOTHOUSE — a sun-drenched, neon-soaked open-world crime-empire game for the browser.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build && vite build --mode singlefile",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run && node tools/project-lint.mjs",
+    "test:watch": "vitest",
+    "lint": "node tools/project-lint.mjs",
+    "qa": "node qa/run.mjs",
+    "qa:pipeline": "node qa/pipeline.mjs",
+    "sim": "vitest run --config vitest.sim.config.ts"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.21.0",
+    "@fontsource-variable/caveat": "^5.3.0",
+    "@fontsource-variable/figtree": "^5.3.0",
+    "@fontsource-variable/fraunces": "^5.3.0",
+    "@fontsource/alfa-slab-one": "^5.3.0",
+    "@fontsource/bungee": "^5.3.0",
+    "@fontsource/knewave": "^5.3.0",
+    "@fontsource/limelight": "^5.3.0",
+    "@fontsource/monoton": "^5.3.0",
+    "@fontsource/opendyslexic": "^5.3.0",
+    "@fontsource/pacifico": "^5.3.0",
+    "@fontsource/sacramento": "^5.3.0",
+    "@fontsource/saira-stencil-one": "^5.3.0",
+    "@preact/signals": "^2.11.4",
+    "@preact/signals-core": "^1.14.5",
+    "n8ao": "^2.1.0",
+    "postprocessing": "^6.39.6",
+    "preact": "^11.2.0",
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/three": "^0.187.0",
+    "playwright": "^1.63.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
+  }
+}

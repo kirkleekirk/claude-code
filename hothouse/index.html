@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0B0720" />
+    <meta name="description" content="HOTHOUSE — grow it, brand it, own the coast. A sun-drenched, neon-soaked crime-empire game." />
+    <title>HOTHOUSE</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #0B0720; overflow: hidden; overscroll-behavior: none; }
+      #stage { position: fixed; inset: 0; }
+      #game { display: block; width: 100%; height: 100%; outline: none; touch-action: none; }
+      #ui { position: fixed; inset: 0; pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <div id="stage"><canvas id="game" tabindex="-1" aria-label="Halcyon Bay"></canvas></div>
+    <div id="ui"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
