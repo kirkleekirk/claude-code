@@ -3,6 +3,7 @@ import { yawOf } from '@/core/math';
 import { Rng } from '@/core/rng';
 import { area, distToPolyEdge, obb, pointInPoly, splitPoly, type Poly } from '../geom';
 import type { Block } from '../roads/RoadMesher';
+import { isReserved } from '../interiors';
 import type { BuildingSpec, BuildingStyle } from './styles';
 
 /** Per-district urban form. */
@@ -63,6 +64,12 @@ export function planBuildings(blocks: readonly Block[], seed: number): { specs: 
     const target = rng.range(form.lotArea[0], form.lotArea[1]);
     const parts = subdivide(block.inner, target, rng, 0);
     for (const poly of parts) {
+      // Landmarks build their own buildings on reserved ground.
+      const [cx, cz] = centroid(poly);
+      if (isReserved(cx, cz)) {
+        lots.push({ poly, block: block.id, district: block.district, frontage: false });
+        continue;
+      }
       const spec = placeOnLot(poly, block, form, rng);
       lots.push({ poly, block: block.id, district: block.district, frontage: spec !== null });
       if (spec) specs.push(spec);
@@ -170,4 +177,13 @@ function chooseStyle(form: DistrictForm, W: number, D: number, rng: Rng): Buildi
   const options = (Object.entries(form.styles) as Array<[BuildingStyle, number]>).filter(([s]) => W >= MIN_SIZE[s][0] && D >= MIN_SIZE[s][1]);
   if (options.length === 0) return W >= 8 && D >= 7 ? 'shack' : null;
   return rng.weighted(options, ([, w]) => w)?.[0] ?? null;
+}
+
+function centroid(poly: Poly): [number, number] {
+  let x = 0, z = 0;
+  for (const p of poly) {
+    x += p[0];
+    z += p[1];
+  }
+  return [x / poly.length, z / poly.length];
 }

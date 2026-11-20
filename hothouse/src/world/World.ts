@@ -23,6 +23,7 @@ import { buildPier, FerrisWheel } from './landmarks/Pier';
 import { buildCauseway } from './landmarks/Causeway';
 import { buildTerrain, rapierHeights } from './terrain/TerrainMesh';
 import { Water } from './water/Water';
+import { Interiors } from './interiors';
 
 export interface WorldBuildDeps {
   gfx: Gfx;
@@ -63,6 +64,8 @@ export class World {
   vegetation!: Vegetation;
   signage!: Signs;
   wheel!: FerrisWheel;
+  /** Walk-in interiors (indoor ambience, camera, the sim's "inside property"). */
+  readonly interiors = new Interiors();
   stats!: WorldStats;
   private readonly materials: Material[] = [];
   /** Materials not owned by the kit (custom shaders), disposed directly. */
