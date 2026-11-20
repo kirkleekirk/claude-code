@@ -88,12 +88,14 @@ colours, same expression set (`FaceExpression`).
 
 Clip clocks, `onDone` and `contact` always run, so gameplay never waits on an off-screen actor.
 
-## Budgets (measured by `tests/characters/bench.test.ts`, Node, this container)
+## Budgets (measured by `tests/characters/bench.test.ts`, Node, no other load)
 
-- Vertices per person: about 4.3k on average, 5.3k at most, test ceiling 6.5k.
-- `update` for 60 people (20 near, 20 mid, 20 far): about 0.8 ms mean, 0.95 ms p95
-  (budget 2 ms).
-- `create` once warm: about 3 ms median on a geometry cache miss; cache hits skip the build.
+- Vertices per person: about 4k on average, 5.4k at most (QA crowd maximum 5,380); test
+  ceiling 6.5k. One draw call each (plus its shadow).
+- `update` for 60 people (20 near, 20 mid, 20 far, walking, running, idling and gesturing):
+  0.45 ms mean, 0.66 ms p95 per frame (budget 2 ms).
+- `create`: 3.0 ms median when the shape is new (geometry build ~2.1 ms), ~0.7 ms when the
+  shape is cached (`appearanceKey` ignores colours, height and prints).
 - No allocation in `update` (module scratch vectors, pooled clip slots, preallocated pose buffers).
 
 ## Events
@@ -153,3 +155,6 @@ steering wheel relative to the hip point; `carMesh` builds the convertible's whe
   ground height (not in the contract yet).
 - In closed cars the vehicle glass is opaque in game, so drivers are hidden unless the glass
   is made translucent (the showcase uses a cutaway material).
+- Long-hair curtains: right beside the cheeks the inner layer can sit a few millimetres in front
+  of the outer one; those faces are culled and the outer hair shows, so nothing is visible in
+  game, but `peopleDebug('winding')` paints a thin red sliver there.

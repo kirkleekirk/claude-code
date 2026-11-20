@@ -94,7 +94,7 @@ function shell(ctx: BodyCtx, h: HeadShape, s: ShellSpec, bone: number = Bone.hea
     b.vertex(q.x, q.y, q.z, t, painter);
   }
   const rim = { start, count: cols, cx: HEAD.x, cy: HEAD.y, cz: HEAD.z };
-  if (last) b.bridge(last, rim, false);
+  if (last) b.bridge(last, rim, true);
   b.end();
   b.base.extra = 0;
   return last!;
