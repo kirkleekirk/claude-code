@@ -1,6 +1,11 @@
 import type { CharacterFactory } from '@/characters/api';
 import { PLAYER_LOOKS, type Appearance } from '@/content/appearance';
-import { DISTRICTS } from '@/content/places';
+import { DISTRICTS, PLACES, type PlaceId } from '@/content/places';
+import { signal } from '@preact/signals-core';
+import { PLACE_SPOTS } from '@/world/places';
+import { Router, type RoutePoint } from '@/world/roads/router';
+import type { GameBridge, PlayerPose, RouteView } from './bridge';
+import { buildMapData, type MapData } from './mapData';
 import { clockHours, dayTFromHours } from '@/core/clock';
 import { log } from '@/core/log';
 import { done, fail, type Result, type Vec2 } from '@/core/types';
@@ -39,11 +44,22 @@ const AUTOSAVE_SECONDS = 180;
  * bridge, and every `GameActions` call the interface makes. One instance lives for the page.
  */
 export class Session implements GameActions, GameSystem {
-  sim: Sim | null = null;
   play: PlayStage | null = null;
   /** Seconds of play in this save. */
   playtime = 0;
-  waypoint: Vec2 | string | null = null;
+  private readonly simSig = signal<Sim | null>(null);
+  private readonly mapSig = signal<MapData | null>(null);
+  private readonly playerSig = signal<PlayerPose | null>(null);
+  private readonly routeSig = signal<RouteView | null>(null);
+  /** What the interface's game apps read (see `bridge.ts`). */
+  readonly bridge: GameBridge = { sim: this.simSig, map: this.mapSig, player: this.playerSig, route: this.routeSig };
+  /** A waypoint the player set by hand; it wins over the objective's place until cleared. */
+  private manualTarget: PlaceId | Vec2 | null = null;
+  /** The target the GPS currently routes to (manual, or the objective's place). */
+  private routeTarget: PlaceId | Vec2 | null = null;
+  private router: Router | null = null;
+  private poseAcc = 0;
+  private rerouteAcc = 0;
   /**
    * Show the title card when play starts. Automated runs turn it off: the card holds a cutscene
    * input context and the UI caps its timers at 0.1 s per update, so large manual steps barely
@@ -66,6 +82,16 @@ export class Session implements GameActions, GameSystem {
   /** The city, once it has been built behind the loading screen. */
   attachWorld(world: World): void {
     this.world = world;
+    this.router = new Router(world.graph);
+    this.mapSig.value = buildMapData(world.graph);
+  }
+
+  get sim(): Sim | null {
+    return this.simSig.peek();
+  }
+
+  set sim(s: Sim | null) {
+    this.simSig.value = s;
   }
 
   private requireWorld(): World {
@@ -152,7 +178,58 @@ export class Session implements GameActions, GameSystem {
         if (!res.ok) log.warn('save', `autosave skipped: ${res.error}`);
       }
     }
-    this.hud?.update(dtReal, this.play, this.sim);
+    this.updateNavigation(dtReal);
+    this.hud?.update(dtReal, this.play, this.sim, this.routeSig.peek());
+  }
+
+  /** Player pose for the maps (10 Hz) and the GPS: follow the objective, re-route when strayed. */
+  private updateNavigation(dtReal: number): void {
+    const play = this.play;
+    if (!play) {
+      if (this.playerSig.peek()) this.playerSig.value = null;
+      if (this.routeSig.peek()) this.routeSig.value = null;
+      return;
+    }
+    const inVehicle = play.mode === 'vehicle' && !!play.vehicle;
+    const p = inVehicle ? play.vehicle!.position : play.player.position;
+    const yaw = inVehicle ? play.vehicle!.yaw : play.player.yaw;
+    this.poseAcc += dtReal;
+    if (this.poseAcc >= 0.1) {
+      this.poseAcc = 0;
+      this.playerSig.value = { x: p.x, z: p.z, yaw, inVehicle };
+    }
+    // The objective's place routes the GPS unless the player set their own waypoint.
+    const objectivePlace = this.sim?.query.objective()?.place ?? null;
+    const target = this.manualTarget ?? objectivePlace;
+    const changed = !sameTarget(target, this.routeTarget);
+    this.rerouteAcc += dtReal;
+    const route = this.routeSig.peek();
+    if (!target) {
+      this.routeTarget = null;
+      if (route) this.routeSig.value = null;
+      return;
+    }
+    const goal = typeof target === 'string' ? PLACE_SPOTS[target] : target;
+    const goalX = goal.x, goalZ = goal.z;
+    // Arrived: the line has done its job.
+    const radius = typeof target === 'string' ? PLACE_SPOTS[target as PlaceId].radius : 12;
+    if (Math.hypot(p.x - goalX, p.z - goalZ) < radius) {
+      if (route) this.routeSig.value = null;
+      this.routeTarget = target;
+      if (this.manualTarget && sameTarget(this.manualTarget, target)) this.manualTarget = null;
+      return;
+    }
+    const strayed = route ? distanceToPolyline(p.x, p.z, route.points) > 30 : true;
+    if (changed || (strayed && this.rerouteAcc > 1.5) || this.rerouteAcc > 4) {
+      this.rerouteAcc = 0;
+      this.routeTarget = target;
+      const r = this.router?.route(p.x, p.z, goalX, goalZ) ?? null;
+      const label = typeof target === 'string' ? PLACES[target as PlaceId]?.name ?? 'Waypoint' : 'Waypoint';
+      this.routeSig.value = r ? { target, label, points: r.points, remaining: r.length } : null;
+    } else if (route) {
+      const remaining = remainingAlong(p.x, p.z, route.points);
+      if (Math.abs(remaining - route.remaining) > 5) this.routeSig.value = { ...route, remaining };
+    }
   }
 
   // ── session ────────────────────────────────────────────────────────────────
@@ -286,7 +363,9 @@ export class Session implements GameActions, GameSystem {
   // ── navigation and time ────────────────────────────────────────────────────
 
   setWaypoint(target: Vec2 | string | null): void {
-    this.waypoint = target;
+    if (typeof target === 'string' && !(target in PLACE_SPOTS)) return;
+    this.manualTarget = target as PlaceId | Vec2 | null;
+    this.rerouteAcc = 10;
   }
 
   fastTravel(propertyId: string): Result<void, TravelError> {
@@ -379,4 +458,46 @@ async function timeFrames(gfx: { render(dt: number): void }, n: number): Promise
   const t0 = performance.now();
   for (let i = 0; i < n; i++) gfx.render(1 / 60);
   return (performance.now() - t0) / n;
+}
+
+function sameTarget(a: PlaceId | Vec2 | null, b: PlaceId | Vec2 | null): boolean {
+  if (a === b) return true;
+  if (!a || !b || typeof a === 'string' || typeof b === 'string') return false;
+  return a.x === b.x && a.z === b.z;
+}
+
+/** Shortest distance from a point to a polyline. */
+function distanceToPolyline(x: number, z: number, pts: readonly RoutePoint[]): number {
+  let best = Infinity;
+  for (let i = 1; i < pts.length; i++) {
+    const [ax, az] = pts[i - 1]!, [bx, bz] = pts[i]!;
+    const dx = bx - ax, dz = bz - az;
+    const l2 = dx * dx + dz * dz;
+    const t = l2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)) : 0;
+    best = Math.min(best, Math.hypot(x - (ax + dx * t), z - (az + dz * t)));
+  }
+  return best;
+}
+
+/** Metres from the point's projection onto the polyline to its end. */
+function remainingAlong(x: number, z: number, pts: readonly RoutePoint[]): number {
+  let best = Infinity, bestSeg = 0, bestT = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const [ax, az] = pts[i - 1]!, [bx, bz] = pts[i]!;
+    const dx = bx - ax, dz = bz - az;
+    const l2 = dx * dx + dz * dz;
+    const t = l2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)) : 0;
+    const d = Math.hypot(x - (ax + dx * t), z - (az + dz * t));
+    if (d < best) {
+      best = d;
+      bestSeg = i;
+      bestT = t;
+    }
+  }
+  let rem = 0;
+  for (let i = bestSeg; i < pts.length; i++) {
+    const seg = Math.hypot(pts[i]![0] - pts[i - 1]![0], pts[i]![1] - pts[i - 1]![1]);
+    rem += i === bestSeg ? seg * (1 - bestT) : seg;
+  }
+  return rem;
 }

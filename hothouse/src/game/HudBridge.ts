@@ -7,6 +7,7 @@ import { ICON_NAMES, type IconName } from '@/ui/icons/names';
 import type { FlowEvent } from '@/vehicles/FlowMeter';
 import { districtAt } from '@/world/plan/districts';
 import type { Game } from './Game';
+import type { RouteView } from './bridge';
 import type { PlayStage } from './PlayStage';
 
 const ICONS = new Set<string>(ICON_NAMES);
@@ -45,7 +46,7 @@ export class HudBridge {
     };
   }
 
-  update(dtReal: number, play: PlayStage | null, sim: Sim | null): void {
+  update(dtReal: number, play: PlayStage | null, sim: Sim | null, route: RouteView | null): void {
     this.time += dtReal;
     const hud = this.ui.hud;
     const game = this.game;
@@ -63,10 +64,12 @@ export class HudBridge {
       if (hud.cleanCash.value !== clean) hud.cleanCash.value = clean;
       const obj = sim.query.objective();
       const cur = hud.objective.value;
+      // Distance to the objective's place when the GPS is routing there, in 10 m steps.
+      const distance = obj?.place && route && route.target === obj.place ? Math.round(route.remaining / 10) * 10 : null;
       if (!obj) {
         if (cur) hud.objective.value = null;
-      } else if (!cur || cur.text !== obj.text || cur.icon !== iconFor(obj.icon)) {
-        hud.objective.value = { icon: iconFor(obj.icon), text: obj.text, distance: null };
+      } else if (!cur || cur.text !== obj.text || cur.icon !== iconFor(obj.icon) || cur.distance !== distance) {
+        hud.objective.value = { icon: iconFor(obj.icon), text: obj.text, distance };
       }
     }
 
